@@ -55,6 +55,7 @@ export type {
   // Store types
   Store,
   Listener,
+  TranslateFn,
   
   // Form types
   FieldConfig,
@@ -63,11 +64,26 @@ export type {
   CreateFormOptions,
   FormStoreApi,
   FieldProps,
+  ComputedFieldState,
+  FieldStates,
   
   // Registry types
   FormRegistryEntry,
   FormRegistry,
 } from "./core/types";
+
+// Computed fields utilities
+export {
+  computeFieldState,
+  computeAllFieldStates,
+  recomputeFieldStates,
+  shouldRecalculateField,
+  isFieldStateEqual,
+  extractErrors,
+  extractValues,
+  defaultTranslate,
+  type ComputeContext,
+} from "./core/computeFields";
 
 // React hooks
 export { useFormStore } from "./react/useFormStore";
