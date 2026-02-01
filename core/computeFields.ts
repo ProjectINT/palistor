@@ -147,9 +147,11 @@ function computeFieldValue<TValues extends Record<string, any>, K extends keyof 
 ): TValues[K] {
   const fieldConfig = config[key];
 
-  // Если в конфиге есть computed value
+  // Если в конфиге есть computed value (функция)
   if (fieldConfig && typeof fieldConfig.value === "function") {
-    return fieldConfig.value(values);
+    // Type assertion needed because TValue itself could be a Function type
+    const computeFn = fieldConfig.value as (values: TValues) => TValues[K];
+    return computeFn(values);
   }
 
   // Иначе берём из values

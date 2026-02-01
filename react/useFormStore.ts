@@ -1,7 +1,8 @@
 /**
  * useFormStore - React хук для подключения к форме Palistor
- * 
- * Возвращает полный API формы с автоматической подпиской на изменения
+ *
+ * Возвращает полный API формы с автоматической подпиской на изменения.
+ * Использует новую архитектуру с fields и dependencies.
  */
 
 "use client";
@@ -9,61 +10,113 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 
-import type { 
-  FormStoreApi, 
-  FormState, 
+import type {
+  FormStoreApi,
+  FormState,
   CreateFormOptions,
   FieldProps,
   FieldConfig,
   FormConfig,
+  TranslateFn,
+  ComputedFieldState,
 } from "../core/types";
 import { formRegistry, registerForm, unregisterForm } from "../core/registry";
-import { materializeComputed } from "../utils/materialize";
 import { setPersistedState, clearPersistedState } from "../utils/persistence";
-import { 
-  getFieldByPath, 
-  setFieldByPath, 
+import {
+  getFieldByPath,
+  setFieldByPath,
   removeFieldByPath,
-  getPathFromKey 
+  getPathFromKey,
 } from "../utils/helpers";
+
+// Actions — чистые функции для работы с состоянием
+import {
+  setFieldValue as setFieldValueAction,
+  setFieldValues as setFieldValuesAction,
+  resetForm as resetFormAction,
+  setFormLocale as setFormLocaleAction,
+  enableShowErrors,
+  setSubmitting,
+  isFormValid,
+  getVisibleFieldKeys,
+  type ActionContext,
+} from "../core/actions";
+import { defaultTranslate } from "../core/computeFields";
+
+// ============================================================================
+// Типы
+// ============================================================================
 
 /**
  * Опции для useFormStore
  */
-interface UseFormStoreOptions<TValues extends Record<string, any>> 
+interface UseFormStoreOptions<TValues extends Record<string, any>>
   extends Omit<CreateFormOptions<TValues>, "id"> {
-  /** 
+  /**
    * Автоматически удалять форму из реестра при unmount
    * По умолчанию true
    */
   autoUnregister?: boolean;
 }
 
+// ============================================================================
+// Хук
+// ============================================================================
+
 /**
  * Хук для работы с формой Palistor
- * 
+ *
  * @param id - уникальный идентификатор формы
  * @param options - опции создания формы (конфиг, defaults, и т.д.)
  * @returns API формы
- * 
+ *
  * @example
  * ```tsx
- * const { values, getFieldProps, submit } = useFormStore("my-form", {
- *   config: myFormConfig,
- *   defaults: { name: "", email: "" },
- *   onSubmit: async (values) => { ... }
+ * const form = useFormStore("payment", {
+ *   config: paymentConfig,
+ *   defaults: { paymentType: "card", cardNumber: "" },
+ *   onSubmit: async (values) => { await api.pay(values); }
  * });
+ *
+ * // Доступ к полям
+ * const cardField = form.fields.cardNumber;
+ * if (cardField.isVisible) {
+ *   return <Input {...form.getFieldProps("cardNumber")} />;
+ * }
  * ```
  */
 export function useFormStore<TValues extends Record<string, any>>(
   id: string,
   options: UseFormStoreOptions<TValues>
 ): FormStoreApi<TValues> {
-  const translate = useTranslations();
+  // Получаем translate из next-intl
+  const nextIntlTranslate = useTranslations();
+
+  // Создаём TranslateFn из next-intl
+  const translate: TranslateFn = useCallback(
+    (key: string, params?: Record<string, any>) => {
+      try {
+        return nextIntlTranslate(key, params);
+      } catch {
+        // Если ключ не найден, возвращаем его как есть
+        return key;
+      }
+    },
+    [nextIntlTranslate]
+  );
+
   const { autoUnregister = true, ...createOptions } = options;
-  
+
+  // Добавляем translate в опции
+  const fullOptions: CreateFormOptions<TValues> = {
+    id,
+    ...createOptions,
+    translate,
+    locale: options.locale ?? "en",
+  };
+
   // Регистрируем форму при первом рендере
-  const entryRef = useRef(registerForm<TValues>({ id, ...createOptions }));
+  const entryRef = useRef(registerForm<TValues>(fullOptions));
   const entry = entryRef.current;
   const { store, config } = entry;
 
@@ -73,6 +126,13 @@ export function useFormStore<TValues extends Record<string, any>>(
     store.getState,
     store.getState // SSR fallback
   );
+
+  // Создаём ActionContext
+  const actionCtx: ActionContext<TValues> = {
+    config,
+    translate,
+    locale: state.locale,
+  };
 
   // Cleanup при unmount
   useEffect(() => {
@@ -97,161 +157,109 @@ export function useFormStore<TValues extends Record<string, any>>(
   /**
    * Установить значение поля
    */
-  const setValue = useCallback(<K extends keyof TValues>(
-    key: K, 
-    value: TValues[K]
-  ) => {
-    const fieldPath = getPathFromKey(key as string);
-    const cfg = getFieldByPath(config, fieldPath) as FieldConfig<any, TValues> | undefined;
+  const setValue = useCallback(
+    <K extends keyof TValues>(key: K, value: TValues[K]) => {
+      const fieldConfig = config[key];
 
-    store.setState((prev) => {
-      let processedValue = value;
-
-      // Применяем formatter если есть
-      if (cfg?.formatter) {
-        processedValue = cfg.formatter(processedValue, prev.values);
-      }
-
-      // Если есть setter - он управляет изменением
-      if (cfg?.setter) {
-        // setter вызывает setValuesBulk внутри, который сам вызовет setState
-        // Поэтому здесь просто возвращаем prev
-        cfg.setter(processedValue, prev.values, (nextValues, fieldName) => {
-          store.setState((p) => {
-            let newValues = { ...p.values };
-            
-            for (const k of Object.keys(nextValues)) {
-              const path = getPathFromKey(k);
-              newValues = setFieldByPath(newValues, path, nextValues[k as keyof TValues]);
-            }
-
-            const materialized = materializeComputed(newValues, config);
-            
-            return {
-              ...p,
-              values: materialized,
-              dirty: JSON.stringify(materialized) !== JSON.stringify(p.initialValues),
-            };
-          });
+      // Если есть setter — используем его (для связанных изменений)
+      if (fieldConfig?.setter) {
+        fieldConfig.setter(value, store.getState().values, (nextValues) => {
+          store.setState((prev) =>
+            setFieldValuesAction(prev, nextValues, actionCtx)
+          );
         });
-        
-        return prev;
+        return;
       }
 
-      const previousValue = getFieldByPath(prev.values, fieldPath);
+      // Обычное обновление через чистую функцию
+      store.setState((prev) => setFieldValueAction(prev, key, value, actionCtx));
 
-      // No-op если значение не изменилось
-      if (Object.is(previousValue, processedValue)) {
-        return prev;
-      }
-
-      let newValues = setFieldByPath(prev.values, fieldPath, processedValue) as TValues;
-      newValues = materializeComputed(newValues, config);
-
-      // Live валидация после первого submit
-      let newErrors = prev.errors;
-      
-      if (prev.showErrors) {
-        newErrors = { ...prev.errors };
-        const error = validateSingleField(fieldPath, newValues, config, translate);
-        
-        if (error) {
-          newErrors = setFieldByPath(newErrors, fieldPath, error) as typeof newErrors;
-        } else {
-          newErrors = removeFieldByPath(newErrors, fieldPath) as typeof newErrors;
-        }
-      }
-
-      // onChange callback
+      // onChange callback (async)
       if (options.onChange) {
+        const currentState = store.getState();
+        const previousValue = state.values[key];
+
         Promise.resolve(
           options.onChange({
             fieldKey: key,
-            newValue: processedValue,
+            newValue: value,
             previousValue,
-            allValues: newValues,
+            allValues: currentState.values,
           })
-        ).then((result) => {
-          if (result) {
-            store.setState((p) => ({
-              ...p,
-              values: materializeComputed({ ...p.values, ...result }, config),
-            }));
-          }
-        }).catch((err) => {
-          // eslint-disable-next-line no-console
-          console.error("[Palistor] onChange error:", err);
-        });
+        )
+          .then((result) => {
+            if (result) {
+              store.setState((prev) =>
+                setFieldValuesAction(prev, result, actionCtx)
+              );
+            }
+          })
+          .catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[Palistor] onChange error:", err);
+          });
       }
-
-      return {
-        ...prev,
-        values: newValues,
-        errors: newErrors,
-        dirty: JSON.stringify(newValues) !== JSON.stringify(prev.initialValues),
-      };
-    });
-  }, [store, config, options.onChange, translate]);
+    },
+    [store, config, actionCtx, options.onChange, state.values]
+  );
 
   /**
    * Сбросить форму
    */
-  const reset = useCallback((next?: Partial<TValues>) => {
-    const merged = materializeComputed(
-      { ...options.defaults, ...next } as TValues,
-      config
-    );
+  const reset = useCallback(
+    (next?: Partial<TValues>) => {
+      store.setState((prev) =>
+        resetFormAction(prev, next, options.defaults, actionCtx)
+      );
 
-    store.setState({
-      values: merged,
-      errors: {},
-      submitting: false,
-      dirty: false,
-      showErrors: false,
-      initialValues: merged,
-    });
-
-    // Очищаем черновик
-    if (options.persistId) {
-      clearPersistedState(options.persistId);
-    }
-  }, [store, config, options.defaults, options.persistId]);
+      // Очищаем черновик
+      if (options.persistId) {
+        clearPersistedState(options.persistId);
+      }
+    },
+    [store, options.defaults, options.persistId, actionCtx]
+  );
 
   /**
-   * Валидация одного поля
+   * Изменить локаль
    */
-  const validateField = useCallback((key: keyof TValues) => {
-    const fieldPath = getPathFromKey(key as string);
+  const setLocale = useCallback(
+    (newLocale: string) => {
+      const newCtx: ActionContext<TValues> = {
+        ...actionCtx,
+        locale: newLocale,
+      };
+      store.setState((prev) => setFormLocaleAction(prev, newLocale, newCtx));
+    },
+    [store, actionCtx]
+  );
 
-    store.setState((prev) => {
-      const error = validateSingleField(fieldPath, prev.values, config, translate);
-      let newErrors = { ...prev.errors };
-
-      if (error) {
-        newErrors = setFieldByPath(newErrors, fieldPath, error) as typeof newErrors;
-      } else {
-        newErrors = removeFieldByPath(newErrors, fieldPath) as typeof newErrors;
-      }
-
-      return { ...prev, errors: newErrors };
-    });
-  }, [store, config, translate]);
+  /**
+   * Валидация одного поля (запускает пересчёт)
+   */
+  const validateField = useCallback(
+    (key: keyof TValues) => {
+      // Просто перезаписываем значение — это запустит пересчёт с валидацией
+      store.setState((prev) => {
+        // Включаем показ ошибок и пересчитываем
+        const withErrors = enableShowErrors(prev, actionCtx);
+        return withErrors;
+      });
+    },
+    [store, actionCtx]
+  );
 
   /**
    * Валидация всей формы
    */
   const validateForm = useCallback((): boolean => {
+    // Включаем показ ошибок — это пересчитает все fields с валидацией
+    store.setState((prev) => enableShowErrors(prev, actionCtx));
+
+    // Проверяем результат
     const currentState = store.getState();
-    const { errors, hasErrors } = validateAllFields(currentState.values, config, translate);
-
-    store.setState((prev) => ({
-      ...prev,
-      errors,
-      showErrors: true,
-    }));
-
-    return !hasErrors;
-  }, [store, config, translate]);
+    return isFormValid(currentState);
+  }, [store, actionCtx]);
 
   /**
    * Отправка формы
@@ -263,29 +271,26 @@ export function useFormStore<TValues extends Record<string, any>>(
     if (options.beforeSubmit) {
       try {
         vals = await options.beforeSubmit(vals);
-        vals = materializeComputed(vals, config);
+        // Обновляем values если они изменились
+        store.setState((prev) => setFieldValuesAction(prev, vals, actionCtx));
       } catch {
         return;
       }
     }
 
-    // Включаем показ ошибок
-    store.setState((prev) => ({ ...prev, showErrors: true, values: vals }));
+    // Включаем показ ошибок и валидируем
+    store.setState((prev) => enableShowErrors(prev, actionCtx));
 
-    // Валидация
-    const { errors, hasErrors } = validateAllFields(vals, config, translate);
-    
-    store.setState((prev) => ({ ...prev, errors }));
-
-    if (hasErrors) {
+    const currentState = store.getState();
+    if (!isFormValid(currentState)) {
       return;
     }
 
     // Отправка
-    store.setState((prev) => ({ ...prev, submitting: true }));
+    store.setState((prev) => setSubmitting(prev, true));
 
     try {
-      const data = await options.onSubmit?.(vals);
+      const data = await options.onSubmit?.(currentState.values);
       await options.afterSubmit?.(data, reset);
 
       // Очищаем черновик после успешной отправки
@@ -293,227 +298,62 @@ export function useFormStore<TValues extends Record<string, any>>(
         clearPersistedState(options.persistId);
       }
     } finally {
-      store.setState((prev) => ({ ...prev, submitting: false }));
+      store.setState((prev) => setSubmitting(prev, false));
     }
-  }, [store, config, options, translate, reset]);
+  }, [store, actionCtx, options, reset]);
 
   /**
    * Получить список видимых полей
    */
   const getVisibleFields = useCallback((): Array<keyof TValues & string> => {
-    const visibleKeys: Array<keyof TValues & string> = [];
-    const currentValues = store.getState().values;
-
-    const processKeys = (
-      cfg: FormConfig<any> | undefined, 
-      vals: any, 
-      prefix = ""
-    ) => {
-      if (!cfg) return;
-
-      for (const k of Object.keys(cfg)) {
-        const fieldCfg = cfg[k];
-        const fullKey = prefix ? `${prefix}.${k}` : k;
-
-        // Проверяем видимость
-        const isVisible = fieldCfg?.isVisible === undefined
-          ? true
-          : typeof fieldCfg.isVisible === "function"
-            ? fieldCfg.isVisible(currentValues)
-            : !!fieldCfg.isVisible;
-
-        if (!isVisible) continue;
-
-        visibleKeys.push(fullKey as any);
-
-        // Рекурсия для вложенных
-        if (fieldCfg?.nested && typeof vals?.[k] === "object" && vals[k] !== null) {
-          processKeys(fieldCfg as any, vals[k], fullKey);
-        }
-      }
-    };
-
-    processKeys(config, currentValues);
-
-    return visibleKeys.length > 0 
-      ? visibleKeys 
-      : Object.keys(currentValues) as Array<keyof TValues & string>;
-  }, [store, config]);
+    return getVisibleFieldKeys(store.getState());
+  }, [store]);
 
   /**
-   * Получить пропсы для поля (HeroUI-совместимые)
+   * Получить пропсы для UI компонента (HeroUI-совместимые)
    */
-  const getFieldProps = useCallback(<K extends keyof TValues>(
-    pathOrKey: K
-  ): FieldProps<TValues[K]> => {
-    const keyStr = pathOrKey as string;
-    const fieldPath = getPathFromKey(keyStr);
-    const currentState = store.getState();
+  const getFieldProps = useCallback(
+    <K extends keyof TValues>(key: K): FieldProps<TValues[K]> => {
+      const currentState = store.getState();
+      const fieldState = currentState.fields[key];
 
-    const currentValue = getFieldByPath(currentState.values, fieldPath) ?? "";
-    const currentError = getFieldByPath(currentState.errors, fieldPath);
-    const cfg = getFieldByPath(config, fieldPath) as FieldConfig<any, TValues> | undefined;
-
-    if (!cfg) {
-      throw new Error(`[Palistor] No field config found for key: ${keyStr}`);
-    }
-
-    const compute = <U>(
-      rule?: U | ((vals: TValues) => U), 
-      fallback?: U
-    ): U | undefined => {
-      if (typeof rule === "function") return (rule as any)(currentState.values);
-      if (rule !== undefined) return rule as U;
-      return fallback;
-    };
-
-    // Вычисляем isRequired для UI
-    const computeRequiredFlag = (): boolean => {
-      const r = cfg.isRequired;
-      if (typeof r === "boolean") return r;
-      if (typeof r === "function") {
-        const res = r(currentState.values);
-        return typeof res === "boolean" ? res : !!res;
+      if (!fieldState) {
+        throw new Error(`[Palistor] No field state found for key: ${String(key)}`);
       }
-      if (typeof r === "string") return true;
-      return false;
-    };
 
-    // Переводим label/placeholder/description
-    const translateField = (
-      field: string | ((t: any, s?: any) => string) | undefined
-    ): string | undefined => {
-      if (typeof field === "function") return field(translate, undefined);
-      if (typeof field === "string") return translate(field);
-      return undefined;
-    };
-
-    return {
-      value: currentValue as TValues[K],
-      onValueChange: (val: TValues[K]) => setValue(pathOrKey, val),
-      isDisabled: 
-        currentState.submitting ||
-        !!compute(cfg.isReadOnly, false) ||
-        !!compute(cfg.isDisabled, false),
-      isReadOnly: !!compute(cfg.isReadOnly, false),
-      isRequired: computeRequiredFlag(),
-      isInvalid: !!(currentState.showErrors && currentError),
-      errorMessage: currentState.showErrors ? (currentError as string | undefined) : undefined,
-      label: translateField(cfg.label),
-      placeholder: translateField(cfg.placeholder),
-      description: translateField(cfg.description),
-    };
-  }, [store, config, translate, setValue]);
+      // Расширяем ComputedFieldState до FieldProps
+      return {
+        ...fieldState,
+        onValueChange: (val: TValues[K]) => setValue(key, val),
+        isInvalid: !!(currentState.showErrors && fieldState.error),
+        errorMessage: currentState.showErrors ? fieldState.error : undefined,
+        // Добавляем isDisabled при submitting
+        isDisabled: fieldState.isDisabled || currentState.submitting,
+      };
+    },
+    [store, setValue]
+  );
 
   // ============================================================================
   // Return API
   // ============================================================================
 
   return {
+    // Данные
     values: state.values,
+    fields: state.fields,
     errors: state.errors,
     submitting: state.submitting,
     dirty: state.dirty,
+
+    // Actions
     setValue,
     reset,
+    setLocale,
     submit,
     validateField,
     validateForm,
     getVisibleFields,
     getFieldProps,
   };
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Валидация одного поля
- */
-function validateSingleField<TValues extends Record<string, any>>(
-  fieldPath: string[],
-  values: TValues,
-  config: FormConfig<TValues>,
-  translate: (key: string) => string
-): string | undefined {
-  const cfg = getFieldByPath(config, fieldPath) as FieldConfig<any, TValues> | undefined;
-  
-  if (!cfg) return undefined;
-
-  const fieldValue = getFieldByPath(values, fieldPath);
-
-  // Проверка required
-  const getRequiredMessage = (): string | undefined => {
-    const r = cfg.isRequired;
-    if (typeof r === "string") return r;
-    if (typeof r === "function") {
-      const res = r(values);
-      return typeof res === "string" && res ? res : undefined;
-    }
-    return undefined;
-  };
-
-  const isEmpty = 
-    fieldValue == null || 
-    fieldValue === "" || 
-    (Array.isArray(fieldValue) && fieldValue.length === 0);
-
-  const requiredMessage = isEmpty ? getRequiredMessage() : undefined;
-
-  if (requiredMessage) {
-    return translate(requiredMessage);
-  }
-
-  // Custom validation
-  if (cfg.validate) {
-    const error = cfg.validate(fieldValue, values);
-    if (error) {
-      return translate(error);
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Валидация всех полей формы
- */
-function validateAllFields<TValues extends Record<string, any>>(
-  values: TValues,
-  config: FormConfig<TValues>,
-  translate: (key: string) => string
-): { errors: Partial<Record<keyof TValues, string>>; hasErrors: boolean } {
-  const errors: Partial<Record<keyof TValues, string>> = {};
-  let hasErrors = false;
-
-  const validateLevel = (
-    cfg: FormConfig<any>,
-    vals: any,
-    errs: any,
-    path: string[] = []
-  ) => {
-    for (const key of Object.keys(cfg)) {
-      const fieldCfg = cfg[key];
-      const currentPath = [...path, key];
-
-      // Рекурсия для вложенных
-      if (fieldCfg?.nested && typeof vals[key] === "object" && vals[key] !== null) {
-        if (!errs[key]) errs[key] = {};
-        validateLevel(fieldCfg as any, vals[key], errs[key], currentPath);
-        continue;
-      }
-
-      const error = validateSingleField(currentPath, values, config, translate);
-      
-      if (error) {
-        errs[key] = error;
-        hasErrors = true;
-      }
-    }
-  };
-
-  validateLevel(config, values, errors);
-
-  return { errors, hasErrors };
 }

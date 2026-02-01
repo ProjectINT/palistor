@@ -1,29 +1,32 @@
 /**
  * Глобальный реестр форм Palistor
- * 
+ *
  * Позволяет:
  * - Регистрировать формы с уникальным ID
  * - Получать доступ к любой форме по ID из любого места
  * - Автоматически создавать store для каждой формы
  */
 
-import type { 
-  FormRegistry, 
-  FormRegistryEntry, 
-  CreateFormOptions, 
-  FormState 
+import type {
+  FormRegistry,
+  FormRegistryEntry,
+  CreateFormOptions,
+  FormState,
+  TranslateFn,
 } from "./types";
 import { createStore } from "./createStore";
-import { materializeComputed, mergeState } from "../utils/materialize";
+import { mergeState } from "../utils/materialize";
 import { getPersistedState } from "../utils/persistence.ts";
+import { createInitialState, type ActionContext } from "./actions";
+import { defaultTranslate } from "./computeFields";
 
 /**
  * Создаёт начальное состояние формы
  */
-function createInitialFormState<TValues extends Record<string, any>>(
+function buildInitialFormState<TValues extends Record<string, any>>(
   options: CreateFormOptions<TValues>
 ): FormState<TValues> {
-  const { defaults, initial, config, persistId } = options;
+  const { defaults, initial, config, persistId, locale = "en", translate = defaultTranslate } = options;
 
   // Загружаем черновик из localStorage если есть
   const persisted = persistId ? getPersistedState<Partial<TValues>>(persistId) : {};
@@ -31,17 +34,15 @@ function createInitialFormState<TValues extends Record<string, any>>(
   // Мержим: defaults <- persisted <- initial
   const merged = mergeState(defaults, persisted, initial);
 
-  // Материализуем computed поля
-  const values = materializeComputed(merged, config);
-
-  return {
-    values,
-    errors: {},
-    submitting: false,
-    dirty: false,
-    showErrors: false,
-    initialValues: values,
+  // Создаём контекст для actions
+  const ctx: ActionContext<TValues> = {
+    config,
+    translate,
+    locale,
   };
+
+  // Используем чистую функцию createInitialState
+  return createInitialState(merged, undefined, ctx);
 }
 
 /**
@@ -63,7 +64,7 @@ function createFormRegistry(): FormRegistry {
     }
 
     // Создаём начальное состояние
-    const initialState = createInitialFormState(options);
+    const initialState = buildInitialFormState(options);
 
     // Создаём store для формы
     const store = createStore<FormState<TValues>>(initialState);

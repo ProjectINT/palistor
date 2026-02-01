@@ -85,10 +85,34 @@ export {
   type ComputeContext,
 } from "./core/computeFields";
 
+// Actions — чистые функции для работы с состоянием
+export {
+  createInitialState,
+  setFieldValue,
+  setFieldValues,
+  resetForm,
+  setFormLocale,
+  enableShowErrors,
+  setSubmitting,
+  hasErrors,
+  isFormValid,
+  getVisibleFieldKeys,
+  computeDirty,
+  type ActionContext,
+} from "./core/actions";
+
 // React hooks
 export { useFormStore } from "./react/useFormStore";
 export { useSelector, shallowEqual } from "./react/useSelector";
-export { useFieldValue, useFieldError } from "./react/useFieldValue";
+
+// Field hooks — оптимизированная подписка на отдельные поля
+export {
+  useFieldState,
+  useFieldValue,
+  useFieldError,
+  useFieldVisible,
+  useSetFieldValue,
+} from "./react/useField";
 
 // Utils
 export { 
