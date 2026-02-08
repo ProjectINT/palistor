@@ -13,7 +13,9 @@
  * - Computed values (value as function)
  */
 
+import { createForm } from "@palistor";
 import type { FormConfig, TranslateFn } from "@palistor";
+import { useTranslations } from "next-intl";
 import { computed } from "./computed";
 import { card } from "./card";
 
@@ -127,3 +129,14 @@ export const paymentFormDefaults: PaymentFormValues = {
   quantity: 1,
   total: 100,
 };
+
+// ============================================================================
+// createForm — новый API
+// ============================================================================
+
+export const { useForm: usePaymentForm } = createForm<PaymentFormValues>({
+  config: paymentFormConfig,
+  defaults: paymentFormDefaults,
+  translateFunction: useTranslations,
+  type: "PaymentDemo",
+});

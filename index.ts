@@ -1,54 +1,55 @@
 /**
  * Palistor - State Manager для форм
- * 
- * Особенности:
- * - Внешний store (не React state) для лучшего перформанса
- * - Глобальный реестр форм с доступом по ID
- * - Каждая форма - независимый модуль со своим конфигом
- * - Совместимость с текущим GenericFormProvider API
- * - Селекторы для минимизации ре-рендеров
- * - Поддержка localStorage persistence
- * 
+ *
+ * Архитектура: createForm + useForm(id)
+ *
+ * createForm() вызывается на уровне модуля — задаёт статическую конфигурацию.
+ * useForm(id) вызывается в React-компоненте — привязывает к экземпляру.
+ *
  * @example
- * ```tsx
- * // Использование в компоненте
- * import { useFormStore } from "@/modules/palistor";
- * 
- * const { values, getFieldProps, submit } = useFormStore("order-form", {
- *   config: orderFormConfig,
- *   defaults: { amount: 0, customer: "" },
- *   onSubmit: async (values) => {
- *     await api.createOrder(values);
- *   }
+ * ```ts
+ * // config/orderForm.ts — модульный уровень
+ * import { createForm } from 'palistor';
+ * import { useTranslations } from 'next-intl';
+ *
+ * export const { useForm } = createForm<OrderValues>({
+ *   config: orderConfig,
+ *   defaults: orderDefaults,
+ *   translateFunction: useTranslations,
+ *   type: "Order",
  * });
- * 
- * return (
- *   <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
- *     <Input {...getFieldProps("amount")} />
- *     <Input {...getFieldProps("customer")} />
- *     <button type="submit">Create Order</button>
- *   </form>
- * );
  * ```
- * 
- * @example
+ *
  * ```tsx
- * // Доступ к форме из другого места по ID
- * import { getForm } from "@/modules/palistor";
- * 
- * const orderForm = getForm("order-form");
- * const currentValues = orderForm?.store.getState().values;
+ * // Корневой компонент — передаёт initial и колбэки
+ * const { getFieldProps, submit } = useForm(order?.id ?? "NewOrder", {
+ *   initial: order,
+ *   onSubmit: async (values) => { await api.saveOrder(values); },
+ * });
+ *
+ * return <Input {...getFieldProps("name")} />;
+ * ```
+ *
+ * ```tsx
+ * // Вложенный компонент — подключается к существующему store
+ * const { getFieldProps } = useForm(orderId);
+ *
+ * return <Input {...getFieldProps("name")} />;
  * ```
  */
 
-// Core
+// ============================================================================
+// Главный API — createForm
+// ============================================================================
+
+export { createForm, getFormStore, hasFormStore, removeFormStore, getRegistryKeys } from "./core/createForm";
+export type { CreateFormConfig, UseFormOptions, UseFormReturn } from "./core/createForm";
+
+// ============================================================================
+// Core (low-level)
+// ============================================================================
+
 export { createStore } from "./core/createStore";
-export { 
-  formRegistry, 
-  registerForm, 
-  getForm, 
-  unregisterForm 
-} from "./core/registry";
 
 // Types
 export type {
@@ -56,20 +57,15 @@ export type {
   Store,
   Listener,
   TranslateFn,
-  
+
   // Form types
   FieldConfig,
   FormConfig,
   FormState,
-  CreateFormOptions,
-  FormStoreApi,
   FieldProps,
   ComputedFieldState,
   FieldStates,
-  
-  // Registry types
-  FormRegistryEntry,
-  FormRegistry,
+  InputValueType,
 } from "./core/types";
 
 // Computed fields utilities
@@ -101,27 +97,23 @@ export {
   type ActionContext,
 } from "./core/actions";
 
-// React hooks
-export { useFormStore } from "./react/useFormStore";
+// ============================================================================
+// React (low-level escape hatch)
+// ============================================================================
+
 export { useSelector, shallowEqual } from "./react/useSelector";
 
-// Field hooks — оптимизированная подписка на отдельные поля
-export {
-  useFieldState,
-  useFieldValue,
-  useFieldError,
-  useFieldVisible,
-  useSetFieldValue,
-} from "./react/useField";
-
+// ============================================================================
 // Utils
-export { 
-  mergeState, 
-  materializeComputed, 
-  difference 
+// ============================================================================
+
+export {
+  mergeState,
+  materializeComputed,
+  difference,
 } from "./utils/materialize";
-export { 
-  getPersistedState, 
-  setPersistedState, 
-  clearPersistedState 
+export {
+  getPersistedState,
+  setPersistedState,
+  clearPersistedState,
 } from "./utils/persistence";

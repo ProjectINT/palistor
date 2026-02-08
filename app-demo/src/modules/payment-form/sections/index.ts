@@ -1,0 +1,11 @@
+export { PaymentTypeSection } from "./PaymentTypeSection";
+export { CardSection } from "./CardSection";
+export { BankSection } from "./BankSection";
+export { CryptoSection } from "./CryptoSection";
+export { AmountSection } from "./AmountSection";
+export { ContactSection } from "./ContactSection";
+export { AccountTypeSection } from "./AccountTypeSection";
+export { AddressSection } from "./AddressSection";
+export { CalculatorSection } from "./CalculatorSection";
+export { AgreementsSection } from "./AgreementsSection";
+export { CommentSection } from "./CommentSection";

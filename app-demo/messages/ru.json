@@ -49,7 +49,8 @@
     "price": "Цена за единицу",
     "pricePlaceholder": "0.00",
     "quantity": "Количество",
-    "total": "Итого"
+    "total": "Итого",
+    "unsavedChanges": "Есть несохранённые изменения"
   },
   "validation": {
     "required": "Обязательное поле",
@@ -100,12 +101,28 @@
   },
   "debug": {
     "stateTitle": "Состояние формы",
-    "valuesTitle": "Values",
-    "fieldsTitle": "Fields",
-    "errorsTitle": "Errors",
-    "metaTitle": "Meta",
-    "dirty": "Dirty",
-    "submitting": "Submitting",
-    "showErrors": "Show Errors"
+    "valuesTitle": "Значения",
+    "fieldsTitle": "Поля",
+    "errorsTitle": "Ошибки",
+    "metaTitle": "Мета",
+    "dirty": "Изменено",
+    "submitting": "Отправка",
+    "showErrors": "Показать ошибки"
+  },
+  "sections": {
+    "paymentType": "Способ оплаты",
+    "cardDetails": "Данные карты",
+    "bankTransfer": "Банковский перевод",
+    "crypto": "Криптовалюта",
+    "amount": "Сумма",
+    "contact": "Контактные данные",
+    "accountType": "Тип аккаунта",
+    "address": "Адрес доставки (демо каскадных зависимостей)",
+    "calculator": "Калькулятор (демо computed values)",
+    "agreements": "Соглашения",
+    "comment": "Комментарий"
+  },
+  "hooksDemo": {
+    "title": "Демонстрация хуков для отдельных полей"
   }
 }
