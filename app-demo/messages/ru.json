@@ -1,0 +1,111 @@
+{
+  "demo": {
+    "title": "Palistor Demo",
+    "subtitle": "Тестовый стенд для формы",
+    "tabs": {
+      "payment": "Форма оплаты",
+      "user": "Профиль пользователя",
+      "debug": "Debug Panel"
+    }
+  },
+  "form": {
+    "paymentType": "Тип оплаты",
+    "paymentTypePlaceholder": "Выберите способ оплаты",
+    "cardNumber": "Номер карты",
+    "cardNumberPlaceholder": "0000 0000 0000 0000",
+    "cardExpiry": "Срок действия",
+    "cardExpiryPlaceholder": "MM/YY",
+    "cardCvv": "CVV",
+    "cardCvvPlaceholder": "123",
+    "bankAccount": "Номер счёта",
+    "bankAccountPlaceholder": "Введите номер счёта",
+    "bankBik": "БИК",
+    "bankBikPlaceholder": "Введите БИК банка",
+    "cryptoWallet": "Крипто-кошелёк",
+    "cryptoWalletPlaceholder": "Введите адрес кошелька",
+    "cryptoNetwork": "Сеть",
+    "amount": "Сумма",
+    "amountPlaceholder": "Введите сумму",
+    "comment": "Комментарий",
+    "commentPlaceholder": "Введите комментарий к платежу",
+    "email": "Email",
+    "emailPlaceholder": "your@email.com",
+    "phone": "Телефон",
+    "phonePlaceholder": "+7 (___) ___-__-__",
+    "name": "Имя",
+    "namePlaceholder": "Введите ваше имя",
+    "accountType": "Тип аккаунта",
+    "companyName": "Название компании",
+    "companyNamePlaceholder": "Введите название компании",
+    "country": "Страна",
+    "countryPlaceholder": "Выберите страну",
+    "city": "Город",
+    "cityPlaceholder": "Выберите город",
+    "shippingCost": "Стоимость доставки",
+    "agreeTerms": "Соглашаюсь с условиями",
+    "agreeTermsDescription": "Вы соглашаетесь с условиями использования сервиса",
+    "newsletter": "Подписка на рассылку",
+    "newsletterDescription": "Получать новости и специальные предложения",
+    "price": "Цена за единицу",
+    "pricePlaceholder": "0.00",
+    "quantity": "Количество",
+    "total": "Итого"
+  },
+  "validation": {
+    "required": "Обязательное поле",
+    "email": "Некорректный email",
+    "phone": "Некорректный номер телефона",
+    "cardNumberInvalid": "Номер карты должен содержать 16 цифр",
+    "cardExpiryInvalid": "Некорректный срок действия",
+    "cardCvvInvalid": "CVV должен содержать 3 цифры",
+    "bankAccountInvalid": "Номер счёта должен содержать 20 цифр",
+    "bikInvalid": "БИК должен содержать 9 цифр",
+    "cryptoWalletInvalid": "Некорректный адрес кошелька",
+    "amountMin": "Минимальная сумма: {min}",
+    "companyRequired": "Для бизнес-аккаунта обязательно"
+  },
+  "paymentTypes": {
+    "card": "Банковская карта",
+    "bank": "Банковский перевод",
+    "crypto": "Криптовалюта"
+  },
+  "accountTypes": {
+    "personal": "Личный",
+    "business": "Бизнес"
+  },
+  "networks": {
+    "ethereum": "Ethereum",
+    "bitcoin": "Bitcoin",
+    "tron": "Tron"
+  },
+  "countries": {
+    "ru": "Россия",
+    "us": "США",
+    "de": "Германия"
+  },
+  "cities": {
+    "moscow": "Москва",
+    "spb": "Санкт-Петербург",
+    "kazan": "Казань",
+    "newyork": "Нью-Йорк",
+    "losangeles": "Лос-Анджелес",
+    "berlin": "Берлин",
+    "munich": "Мюнхен"
+  },
+  "buttons": {
+    "submit": "Отправить",
+    "reset": "Сбросить",
+    "clear": "Очистить",
+    "pay": "Оплатить"
+  },
+  "debug": {
+    "stateTitle": "Состояние формы",
+    "valuesTitle": "Values",
+    "fieldsTitle": "Fields",
+    "errorsTitle": "Errors",
+    "metaTitle": "Meta",
+    "dirty": "Dirty",
+    "submitting": "Submitting",
+    "showErrors": "Show Errors"
+  }
+}

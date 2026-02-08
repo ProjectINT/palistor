@@ -1,0 +1,111 @@
+{
+  "demo": {
+    "title": "Palistor Demo",
+    "subtitle": "Form testing stand",
+    "tabs": {
+      "payment": "Payment Form",
+      "user": "User Profile",
+      "debug": "Debug Panel"
+    }
+  },
+  "form": {
+    "paymentType": "Payment Type",
+    "paymentTypePlaceholder": "Select payment method",
+    "cardNumber": "Card Number",
+    "cardNumberPlaceholder": "0000 0000 0000 0000",
+    "cardExpiry": "Expiry Date",
+    "cardExpiryPlaceholder": "MM/YY",
+    "cardCvv": "CVV",
+    "cardCvvPlaceholder": "123",
+    "bankAccount": "Bank Account",
+    "bankAccountPlaceholder": "Enter account number",
+    "bankBik": "BIK Code",
+    "bankBikPlaceholder": "Enter BIK code",
+    "cryptoWallet": "Crypto Wallet",
+    "cryptoWalletPlaceholder": "Enter wallet address",
+    "cryptoNetwork": "Network",
+    "amount": "Amount",
+    "amountPlaceholder": "Enter amount",
+    "comment": "Comment",
+    "commentPlaceholder": "Enter payment comment",
+    "email": "Email",
+    "emailPlaceholder": "your@email.com",
+    "phone": "Phone",
+    "phonePlaceholder": "+1 (___) ___-____",
+    "name": "Name",
+    "namePlaceholder": "Enter your name",
+    "accountType": "Account Type",
+    "companyName": "Company Name",
+    "companyNamePlaceholder": "Enter company name",
+    "country": "Country",
+    "countryPlaceholder": "Select country",
+    "city": "City",
+    "cityPlaceholder": "Select city",
+    "shippingCost": "Shipping Cost",
+    "agreeTerms": "Agree to Terms",
+    "agreeTermsDescription": "You agree to the terms of service",
+    "newsletter": "Newsletter",
+    "newsletterDescription": "Receive news and special offers",
+    "price": "Price per unit",
+    "pricePlaceholder": "0.00",
+    "quantity": "Quantity",
+    "total": "Total"
+  },
+  "validation": {
+    "required": "Required field",
+    "email": "Invalid email",
+    "phone": "Invalid phone number",
+    "cardNumberInvalid": "Card number must contain 16 digits",
+    "cardExpiryInvalid": "Invalid expiry date",
+    "cardCvvInvalid": "CVV must contain 3 digits",
+    "bankAccountInvalid": "Account number must contain 20 digits",
+    "bikInvalid": "BIK must contain 9 digits",
+    "cryptoWalletInvalid": "Invalid wallet address",
+    "amountMin": "Minimum amount: {min}",
+    "companyRequired": "Required for business account"
+  },
+  "paymentTypes": {
+    "card": "Credit Card",
+    "bank": "Bank Transfer",
+    "crypto": "Cryptocurrency"
+  },
+  "accountTypes": {
+    "personal": "Personal",
+    "business": "Business"
+  },
+  "networks": {
+    "ethereum": "Ethereum",
+    "bitcoin": "Bitcoin",
+    "tron": "Tron"
+  },
+  "countries": {
+    "ru": "Russia",
+    "us": "USA",
+    "de": "Germany"
+  },
+  "cities": {
+    "moscow": "Moscow",
+    "spb": "Saint Petersburg",
+    "kazan": "Kazan",
+    "newyork": "New York",
+    "losangeles": "Los Angeles",
+    "berlin": "Berlin",
+    "munich": "Munich"
+  },
+  "buttons": {
+    "submit": "Submit",
+    "reset": "Reset",
+    "clear": "Clear",
+    "pay": "Pay"
+  },
+  "debug": {
+    "stateTitle": "Form State",
+    "valuesTitle": "Values",
+    "fieldsTitle": "Fields",
+    "errorsTitle": "Errors",
+    "metaTitle": "Meta",
+    "dirty": "Dirty",
+    "submitting": "Submitting",
+    "showErrors": "Show Errors"
+  }
+}

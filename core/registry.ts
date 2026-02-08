@@ -16,7 +16,7 @@ import type {
 } from "./types";
 import { createStore } from "./createStore";
 import { mergeState } from "../utils/materialize";
-import { getPersistedState } from "../utils/persistence.ts";
+import { getPersistedState } from "../utils/persistence";
 import { createInitialState, type ActionContext } from "./actions";
 import { defaultTranslate } from "./computeFields";
 

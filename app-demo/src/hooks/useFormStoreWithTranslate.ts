@@ -1,38 +1,22 @@
-/**
- * useFormStore - React хук для подключения к форме Palistor
- *
- * Возвращает полный API формы с автоматической подпиской на изменения.
- * Использует новую архитектуру с fields и dependencies.
- */
-
 "use client";
 
+/**
+ * useFormStoreWithTranslate - версия useFormStore с явной передачей translate
+ * 
+ * Используется когда translate функция передаётся извне (не через next-intl внутри хука)
+ */
+
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
-import { useTranslations } from "next-intl";
 
 import type {
   FormStoreApi,
-  FormState,
   CreateFormOptions,
   FieldProps,
-  FieldConfig,
-  FormConfig,
   TranslateFn,
-  ComputedFieldState,
-  InputValueType,
-} from "../core/types";
-import { formRegistry, registerForm, unregisterForm } from "../core/registry";
-import { setPersistedState, clearPersistedState } from "../utils/persistence";
-import {
-  getFieldByPath,
-  setFieldByPath,
-  removeFieldByPath,
-  getPathFromKey,
-} from "../utils/helpers";
+} from "@palistor/core/types";
+import { registerForm, unregisterForm } from "@palistor/core/registry";
+import { setPersistedState, clearPersistedState } from "@palistor/utils/persistence";
 
-import { parseValue } from "../utils/parser";
-
-// Actions — чистые функции для работы с состоянием
 import {
   setFieldValue as setFieldValueAction,
   setFieldValues as setFieldValuesAction,
@@ -43,79 +27,40 @@ import {
   isFormValid,
   getVisibleFieldKeys,
   type ActionContext,
-} from "../core/actions";
+} from "@palistor/core/actions";
 
 // ============================================================================
 // Типы
 // ============================================================================
 
-/**
- * Опции для useFormStore
- */
 interface UseFormStoreOptions<TValues extends Record<string, any>>
   extends Omit<CreateFormOptions<TValues>, "id"> {
   /**
+   * Функция перевода (обязательна)
+   */
+  translate: TranslateFn;
+  /**
    * Автоматически удалять форму из реестра при unmount
-   * По умолчанию true
    */
   autoUnregister?: boolean;
 }
-
 
 // ============================================================================
 // Хук
 // ============================================================================
 
-/**
- * Хук для работы с формой Palistor
- *
- * @param id - уникальный идентификатор формы
- * @param options - опции создания формы (конфиг, defaults, и т.д.)
- * @returns API формы
- *
- * @example
- * ```tsx
- * const form = useFormStore("payment", {
- *   config: paymentConfig,
- *   defaults: { paymentType: "card", cardNumber: "" },
- *   onSubmit: async (values) => { await api.pay(values); }
- * });
- *
- * // Доступ к полям
- * const cardField = form.fields.cardNumber;
- * if (cardField.isVisible) {
- *   return <Input {...form.getFieldProps("cardNumber")} />;
- * }
- * ```
- */
-export function useFormStore<TValues extends Record<string, any>>(
+export function useFormStoreWithTranslate<TValues extends Record<string, any>>(
   id: string,
   options: UseFormStoreOptions<TValues>
 ): FormStoreApi<TValues> {
-  // Получаем translate из next-intl
-  const nextIntlTranslate = useTranslations();
-
-  // Создаём TranslateFn из next-intl
-  const translate: TranslateFn = useCallback(
-    (key: string, params?: Record<string, any>) => {
-      try {
-        return nextIntlTranslate(key, params);
-      } catch {
-        // Если ключ не найден, возвращаем его как есть
-        return key;
-      }
-    },
-    [nextIntlTranslate]
-  );
-
-  const { autoUnregister = true, ...createOptions } = options;
+  const { autoUnregister = true, translate, ...createOptions } = options;
 
   // Добавляем translate в опции
   const fullOptions: CreateFormOptions<TValues> = {
     id,
     ...createOptions,
     translate,
-    locale: options.locale ?? "en",
+    locale: options.locale ?? "ru",
   };
 
   // Регистрируем форму при первом рендере
@@ -127,7 +72,7 @@ export function useFormStore<TValues extends Record<string, any>>(
   const state = useSyncExternalStore(
     store.subscribe,
     store.getState,
-    store.getState // SSR fallback
+    store.getState
   );
 
   // Создаём ActionContext
@@ -157,14 +102,10 @@ export function useFormStore<TValues extends Record<string, any>>(
   // Actions
   // ============================================================================
 
-  /**
-   * Установить значение поля
-   */
   const setValue = useCallback(
     <K extends keyof TValues>(key: K, value: TValues[K]) => {
       const fieldConfig = config[key];
 
-      // Если есть setter — используем его (для связанных изменений)
       if (fieldConfig?.setter) {
         fieldConfig.setter(value, store.getState().values, (nextValues) => {
           store.setState((prev) =>
@@ -174,10 +115,8 @@ export function useFormStore<TValues extends Record<string, any>>(
         return;
       }
 
-      // Обычное обновление через чистую функцию
       store.setState((prev) => setFieldValueAction(prev, key, value, actionCtx));
 
-      // onChange callback (async)
       if (options.onChange) {
         const currentState = store.getState();
         const previousValue = state.values[key];
@@ -198,7 +137,6 @@ export function useFormStore<TValues extends Record<string, any>>(
             }
           })
           .catch((err) => {
-            // eslint-disable-next-line no-console
             console.error("[Palistor] onChange error:", err);
           });
       }
@@ -206,16 +144,12 @@ export function useFormStore<TValues extends Record<string, any>>(
     [store, config, actionCtx, options.onChange, state.values]
   );
 
-  /**
-   * Сбросить форму
-   */
   const reset = useCallback(
     (next?: Partial<TValues>) => {
       store.setState((prev) =>
         resetFormAction(prev, next, options.defaults, actionCtx)
       );
 
-      // Очищаем черновик
       if (options.persistId) {
         clearPersistedState(options.persistId);
       }
@@ -223,9 +157,6 @@ export function useFormStore<TValues extends Record<string, any>>(
     [store, options.defaults, options.persistId, actionCtx]
   );
 
-  /**
-   * Изменить локаль
-   */
   const setLocale = useCallback(
     (newLocale: string) => {
       const newCtx: ActionContext<TValues> = {
@@ -237,51 +168,31 @@ export function useFormStore<TValues extends Record<string, any>>(
     [store, actionCtx]
   );
 
-  /**
-   * Валидация одного поля (запускает пересчёт)
-   */
   const validateField = useCallback(
     (key: keyof TValues) => {
-      // Просто перезаписываем значение — это запустит пересчёт с валидацией
-      store.setState((prev) => {
-        // Включаем показ ошибок и пересчитываем
-        const withErrors = enableShowErrors(prev, actionCtx);
-        return withErrors;
-      });
+      store.setState((prev) => enableShowErrors(prev, actionCtx));
     },
     [store, actionCtx]
   );
 
-  /**
-   * Валидация всей формы
-   */
   const validateForm = useCallback((): boolean => {
-    // Включаем показ ошибок — это пересчитает все fields с валидацией
     store.setState((prev) => enableShowErrors(prev, actionCtx));
-
-    // Проверяем результат
     const currentState = store.getState();
     return isFormValid(currentState);
   }, [store, actionCtx]);
 
-  /**
-   * Отправка формы
-   */
   const submit = useCallback(async () => {
     let vals = store.getState().values;
 
-    // beforeSubmit hook
     if (options.beforeSubmit) {
       try {
         vals = await options.beforeSubmit(vals);
-        // Обновляем values если они изменились
         store.setState((prev) => setFieldValuesAction(prev, vals, actionCtx));
       } catch {
         return;
       }
     }
 
-    // Включаем показ ошибок и валидируем
     store.setState((prev) => enableShowErrors(prev, actionCtx));
 
     const currentState = store.getState();
@@ -289,14 +200,12 @@ export function useFormStore<TValues extends Record<string, any>>(
       return;
     }
 
-    // Отправка
     store.setState((prev) => setSubmitting(prev, true));
 
     try {
       const data = await options.onSubmit?.(currentState.values);
       await options.afterSubmit?.(data, reset);
 
-      // Очищаем черновик после успешной отправки
       if (options.persistId) {
         clearPersistedState(options.persistId);
       }
@@ -305,16 +214,10 @@ export function useFormStore<TValues extends Record<string, any>>(
     }
   }, [store, actionCtx, options, reset]);
 
-  /**
-   * Получить список видимых полей
-   */
   const getVisibleFields = useCallback((): Array<keyof TValues & string> => {
     return getVisibleFieldKeys(store.getState());
   }, [store]);
 
-  /**
-   * Получить пропсы для UI компонента (HeroUI-совместимые)
-   */
   const getFieldProps = useCallback(
     <K extends keyof TValues>(key: K): FieldProps<TValues[K]> => {
       const currentState = store.getState();
@@ -324,42 +227,23 @@ export function useFormStore<TValues extends Record<string, any>>(
         throw new Error(`[Palistor] No field state found for key: ${String(key)}`);
       }
 
-      // Расширяем ComputedFieldState до FieldProps
       return {
         ...fieldState,
-        onValueChange: (val: InputValueType<TValues[K]>) => {
-          const fieldConfig = config[key];
-
-          if (!fieldConfig) throw new Error(`[Palistor] No field config found for key: ${String(key)}`);
-          
-          // Парсим значение согласно dataType
-          const parsedValue = parseValue(val, fieldConfig.types.dataType);
-          // Используем спарсенное значение только если парсинг успешен
-      
-          setValue(key, parsedValue as TValues[K]);
-        },
+        onValueChange: (val: TValues[K]) => setValue(key, val),
         isInvalid: !!(currentState.showErrors && fieldState.error),
         errorMessage: currentState.showErrors ? fieldState.error : undefined,
-        // Добавляем isDisabled при submitting
         isDisabled: fieldState.isDisabled || currentState.submitting,
       };
     },
     [store, setValue]
   );
 
-  // ============================================================================
-  // Return API
-  // ============================================================================
-
   return {
-    // Данные
     values: state.values,
     fields: state.fields,
     errors: state.errors,
     submitting: state.submitting,
     dirty: state.dirty,
-
-    // Actions
     setValue,
     reset,
     setLocale,

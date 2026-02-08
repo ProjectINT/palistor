@@ -276,26 +276,23 @@ export function useSetFieldValue<TValue = any>(
 
   // Возвращаем мемоизированную функцию
   // Она не меняется между рендерами
-  return useCallback(
-    (value: TValue) => {
-      // Импортируем action здесь чтобы избежать циклических зависимостей
-      // В реальном использовании лучше передавать setValue через контекст
-      const currentEntry = getForm(formId);
-      if (!currentEntry) return;
+  return useCallback((value: TValue) => {
+    // Импортируем action здесь чтобы избежать циклических зависимостей
+    // В реальном использовании лучше передавать setValue через контекст
+    const currentEntry = getForm(formId);
+    if (!currentEntry) return;
 
-      const { store, config, options } = currentEntry;
-      const { translate, locale } = options;
+    const { store, config, options } = currentEntry;
+    const { translate, locale } = options;
 
-      // Используем action напрямую
-      const { setFieldValue } = require("../core/actions");
-      store.setState((prev: any) =>
-        setFieldValue(prev, fieldKey, value, {
-          config,
-          translate: translate ?? ((k: string) => k),
-          locale: locale ?? "en",
-        })
-      );
-    },
-    [formId, fieldKey]
-  );
+    // Используем action напрямую
+    const { setFieldValue } = require("../core/actions");
+    store.setState((prev: any) =>
+      setFieldValue(prev, fieldKey, value, {
+        config,
+        translate: translate ?? ((k: string) => k),
+        locale: locale ?? "en",
+      })
+    );
+  }, [formId, fieldKey]);
 }

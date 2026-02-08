@@ -11,6 +11,13 @@ export type Listener = () => void;
 /** Функция перевода (i18n) */
 export type TranslateFn = (key: string, params?: Record<string, any>) => string;
 
+/**
+ * Конвертирует тип значения поля в тип для onValueChange
+ * - Если поле number → string | number (потому что Input может вернуть и то и то)
+ * - Остальные типы → как есть
+ */
+export type InputValueType<T> = T extends number ? string | number : T;
+
 export interface Store<T> {
   getState: () => T;
   setState: (next: T | ((prev: T) => T)) => void;
@@ -128,7 +135,7 @@ export interface FieldConfig<TValue = any, TValues = Record<string, any>> {
    * - ['field1'] → пересчёт при изменении field1 или себя
    * - [] → пересчёт только при изменении себя или init/reset
    */
-  dependencies?: Array<keyof TValues>;
+  dependencies?: readonly (keyof TValues)[] | (keyof TValues)[];
 
   /** Вложенные поля (для объектов) */
   nested?: boolean;
@@ -137,8 +144,8 @@ export interface FieldConfig<TValue = any, TValues = Record<string, any>> {
   componentProps?: Record<string, unknown>;
 
   /** Типизация поля (для будущей валидации по типам) */
-  types?: {
-    dataType: string;
+  types: {
+    dataType: "String" | "Number" | "Boolean" | "Date" | "Array" | "Object";
     type: string;
   };
 }
@@ -420,6 +427,7 @@ export interface CreateFormOptions<TValues extends Record<string, any>> {
  * }
  * ```
  */
+
 export interface FormStoreApi<TValues extends Record<string, any>> {
   /**
    * Текущие значения (плоский объект)
@@ -493,7 +501,7 @@ export interface FormStoreApi<TValues extends Record<string, any>> {
  */
 export interface FieldProps<TValue = any> extends ComputedFieldState<TValue> {
   /** Колбэк изменения значения (для controlled компонентов) */
-  onValueChange: (value: TValue) => void;
+  onValueChange: (value: InputValueType<TValue>) => void;
   /** Флаг наличия ошибки (HeroUI-совместимый) */
   isInvalid: boolean;
   /** Текст ошибки (алиас для error, HeroUI-совместимый) */
