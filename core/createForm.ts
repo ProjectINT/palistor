@@ -57,21 +57,20 @@ import {
 } from "../utils/persistence";
 import { parseValue } from "../utils/parser";
 
-import {
-  createInitialState,
-  setFieldValue as setFieldValueAction,
-  setFieldValues as setFieldValuesAction,
-  resetForm as resetFormAction,
-  setFormLocale as setFormLocaleAction,
-  enableShowErrors,
-  setSubmitting,
-  isFormValid,
-  getVisibleFieldKeys,
-  computeDirty,
-  type ActionContext,
-} from "./actions";
+
+import { createInitialState, type ActionContext } from "./actions/createInitialState";
+// import { createComputeContext } from "./actions/createComputeContext";
+import { enableShowErrors } from "./actions/enableShowErrors";
+import { resetForm } from "./actions/resetForm";
+import { setFieldValue } from "./actions/setFieldValue";
+import { setFieldValues } from "./actions/setFieldValues";
+import { setFormLocale } from "./actions/setFormLocale";
+import { setSubmitting } from "./actions/setSubmitting";
+import { isFormValid } from "./actions/isFormValid";
+import { getVisibleFieldKeys } from "./actions/getVisibleFieldKeys";
 
 import { defaultTranslate } from "./computeFields";
+
 
 // ============================================================================
 // Типы
@@ -339,7 +338,7 @@ export function createForm<TValues extends Record<string, any>>(
           locale: "auto",
         };
         store.setState((prev) =>
-          setFieldValuesAction(
+          setFieldValues(
             { ...prev, initialValues: { ...prev.initialValues, ...initial } as TValues },
             newValues,
             ctx
@@ -377,7 +376,7 @@ export function createForm<TValues extends Record<string, any>>(
       if (prevTranslateRef.current !== translate) {
         prevTranslateRef.current = translate;
         const ctx = getActionCtx();
-        store.setState((prev) => setFormLocaleAction(prev, "auto", ctx));
+        store.setState((prev) => setFormLocale(prev, "auto", ctx));
       }
     }, [translate, store, getActionCtx]);
 
@@ -419,7 +418,7 @@ export function createForm<TValues extends Record<string, any>>(
           const currentValues = store.getState().values;
           fieldConfig.setter(value, currentValues, (nextValues) => {
             store.setState((prev) =>
-              setFieldValuesAction(prev, nextValues, ctx)
+              setFieldValues(prev, nextValues, ctx)
             );
           });
           return;
@@ -428,7 +427,7 @@ export function createForm<TValues extends Record<string, any>>(
         const previousValue = store.getState().values[key];
 
         // Обычное обновление
-        store.setState((prev) => setFieldValueAction(prev, key, value, ctx));
+        store.setState((prev) => setFieldValue(prev, key, value, ctx));
 
         // onChange callback
         if (onChangeRef.current) {
@@ -444,7 +443,7 @@ export function createForm<TValues extends Record<string, any>>(
             .then((result) => {
               if (result) {
                 store.setState((prev) =>
-                  setFieldValuesAction(prev, result, ctx)
+                  setFieldValues(prev, result, ctx)
                 );
               }
             })
@@ -460,7 +459,7 @@ export function createForm<TValues extends Record<string, any>>(
     const setValues = useCallback(
       (values: Partial<TValues>) => {
         const ctx = getActionCtx();
-        store.setState((prev) => setFieldValuesAction(prev, values, ctx));
+        store.setState((prev) => setFieldValues(prev, values, ctx));
       },
       [store, getActionCtx]
     );
@@ -468,7 +467,7 @@ export function createForm<TValues extends Record<string, any>>(
     const reset = useCallback(
       (next?: Partial<TValues>) => {
         const ctx = getActionCtx();
-        store.setState((prev) => resetFormAction(prev, next, defaults, ctx));
+        store.setState((prev) => resetForm(prev, next, defaults, ctx));
 
         // Очищаем черновик
         if (persistKey) {
@@ -486,7 +485,7 @@ export function createForm<TValues extends Record<string, any>>(
       if (beforeSubmitRef.current) {
         try {
           vals = await beforeSubmitRef.current(vals);
-          store.setState((prev) => setFieldValuesAction(prev, vals, ctx));
+          store.setState((prev) => setFieldValues(prev, vals, ctx));
         } catch {
           return;
         }
