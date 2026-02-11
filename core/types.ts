@@ -115,8 +115,8 @@ export interface FieldConfig<TValue = any, TValues = Record<string, any>> {
     setValues: (next: Partial<TValues>, fieldName: keyof TValues) => void
   ) => void;
 
-  /** Флаг обязательности - boolean, string (сообщение) или функция */
-  isRequired?: boolean | string | ((values: TValues) => boolean | string);
+  /** Флаг обязательности - boolean или функция */
+  isRequired?: boolean | ((values: TValues) => boolean);
 
   /** Флаг только для чтения */
   isReadOnly?: boolean | ((values: TValues) => boolean);
