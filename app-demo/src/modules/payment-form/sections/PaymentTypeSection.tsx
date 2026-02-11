@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { Select, SelectItem } from "@heroui/react";
 
-import { Select } from "@/components/ui";
 import { Section } from "@/modules/shared/Section";
 import { PAYMENT_TYPE_OPTIONS } from "../constants";
 import { usePaymentForm, type PaymentType } from "@/config/paymentForm";
@@ -15,16 +15,24 @@ export function PaymentTypeSection({ formId }: PaymentTypeSectionProps) {
   const t = useTranslations();
   const { getFieldProps, setValue } = usePaymentForm(formId);
 
+  const paymentTypeProps = getFieldProps("paymentType");
+  
   return (
     <Section title={t("sections.paymentType")}>
       <Select
-        {...getFieldProps("paymentType")}
-        options={PAYMENT_TYPE_OPTIONS.map((o) => ({
-          ...o,
-          label: t(o.label),
-        }))}
-        onValueChange={(v) => setValue("paymentType", v as PaymentType)}
-      />
+        {...paymentTypeProps}
+        selectedKeys={paymentTypeProps.value ? [paymentTypeProps.value] : []}
+        onSelectionChange={(keys) => {
+          const value = Array.from(keys)[0] as PaymentType;
+          setValue("paymentType", value);
+        }}
+      >
+        {PAYMENT_TYPE_OPTIONS.map((option) => (
+          <SelectItem key={option.value}>
+            {t(option.label)}
+          </SelectItem>
+        ))}
+      </Select>
     </Section>
   );
 }

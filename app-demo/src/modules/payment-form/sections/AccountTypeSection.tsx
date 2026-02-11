@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { Input, Select, SelectItem } from "@heroui/react";
 
-import { Input, Select } from "@/components/ui";
 import { Section } from "@/modules/shared/Section";
 import { ACCOUNT_TYPE_OPTIONS } from "../constants";
 import { usePaymentForm, type AccountType } from "@/config/paymentForm";
@@ -16,18 +16,29 @@ export function AccountTypeSection({ formId }: AccountTypeSectionProps) {
   const { getFieldProps, setValue } = usePaymentForm(formId);
   const isCompanyVisible = getFieldProps("companyName").isVisible;
 
+  const accountTypeProps = getFieldProps("accountType");
+  const companyNameProps = getFieldProps("companyName");
+  
   return (
     <Section title={t("sections.accountType")}>
       <div className="space-y-4">
         <Select
-          {...getFieldProps("accountType")}
-          options={ACCOUNT_TYPE_OPTIONS.map((o) => ({
-            ...o,
-            label: t(o.label),
-          }))}
-          onValueChange={(v) => setValue("accountType", v as AccountType)}
-        />
-        {isCompanyVisible && <Input {...getFieldProps("companyName")} />}
+          {...accountTypeProps}
+          selectedKeys={accountTypeProps.value ? [accountTypeProps.value] : []}
+          onSelectionChange={(keys) => {
+            const value = Array.from(keys)[0] as AccountType;
+            setValue("accountType", value);
+          }}
+        >
+          {ACCOUNT_TYPE_OPTIONS.map((option) => (
+            <SelectItem key={option.value}>
+              {t(option.label)}
+            </SelectItem>
+          ))}
+        </Select>
+        {isCompanyVisible && (
+          <Input {...companyNameProps} />
+        )}
       </div>
     </Section>
   );

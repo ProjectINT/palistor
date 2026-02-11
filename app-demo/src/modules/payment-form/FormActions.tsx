@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { Button } from "@heroui/react";
 
-import { Button } from "@/components/ui";
 import { usePaymentForm } from "@/config/paymentForm";
 
 interface FormActionsProps {
@@ -15,10 +15,20 @@ export function FormActions({ formId }: FormActionsProps) {
 
   return (
     <div className="flex gap-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-      <Button type="submit" isLoading={submitting} onClick={submit}>
+      <Button
+        type="submit"
+        color="primary"
+        isLoading={submitting}
+        onClick={submit}
+      >
         {t("buttons.pay")}
       </Button>
-      <Button type="button" variant="secondary" onClick={() => reset()}>
+      <Button
+        type="button"
+        color="default"
+        variant="flat"
+        onClick={() => reset()}
+      >
         {t("buttons.reset")}
       </Button>
       {dirty && (

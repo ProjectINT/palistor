@@ -21,8 +21,7 @@ export const accountType: Pick<FormConfig<PaymentFormValues>, 'accountType' | 'c
     label: (t: TranslateFn) => t("form.companyName"),
     placeholder: (t: TranslateFn) => t("form.companyNamePlaceholder"),
     isVisible: (values: PaymentFormValues) => values.accountType === "business",
-    isRequired: (values: PaymentFormValues) =>
-      values.accountType === "business" ? "validation.companyRequired" : false,
+    isRequired: (values: PaymentFormValues) => values.accountType === "business",
     dependencies: ["accountType"] as const,
   },
 }

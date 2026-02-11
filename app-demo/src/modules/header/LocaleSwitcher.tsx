@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui";
+import { Button } from "@heroui/react";
 
 type Locale = "ru" | "en";
 
@@ -13,14 +13,16 @@ export function LocaleSwitcher({ locale, onLocaleChange }: LocaleSwitcherProps) 
   return (
     <div className="flex gap-2">
       <Button
-        variant={locale === "ru" ? "primary" : "secondary"}
+        color={locale === "ru" ? "primary" : "default"}
+        variant={locale === "ru" ? "solid" : "flat"}
         size="sm"
         onClick={() => onLocaleChange("ru")}
       >
         🇷🇺 RU
       </Button>
       <Button
-        variant={locale === "en" ? "primary" : "secondary"}
+        color={locale === "en" ? "primary" : "default"}
+        variant={locale === "en" ? "solid" : "flat"}
         size="sm"
         onClick={() => onLocaleChange("en")}
       >
