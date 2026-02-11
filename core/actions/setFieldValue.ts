@@ -1,5 +1,6 @@
 import type { FormState } from "../types";
-import { recomputeFieldStates, extractErrors } from "../computeFields";
+import { recomputeFieldStates } from "../compute/computeFieldStates";
+import { extractErrors } from "../compute/extractors";
 import { computeDirty } from "./computeDirty";
 import { createComputeContext } from "./createComputeContext";
 import type { ActionContext } from "./createInitialState";

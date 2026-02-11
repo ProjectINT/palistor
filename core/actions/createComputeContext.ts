@@ -3,7 +3,7 @@
  */
 
 import type { ActionContext } from "./createInitialState";
-import type { ComputeContext } from "../computeFields";
+import type { ComputeContext } from "../compute/types";
 import type { FormState } from "../types";
 
 export const createComputeContext = <TValues extends Record<string, any>>(

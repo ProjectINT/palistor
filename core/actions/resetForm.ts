@@ -1,9 +1,7 @@
 import type { FormState } from "../types";
-import {
-  computeAllFieldStates,
-  type ComputeContext,
-} from "../computeFields";
+import { type ComputeContext } from "../compute/types";
 import type { ActionContext } from "./createInitialState";
+import { computeAllFieldStates } from "../compute/computeFieldStates";
 
 /**
  * Сбрасывает форму к начальному состоянию

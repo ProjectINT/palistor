@@ -69,7 +69,7 @@ import { setSubmitting } from "./actions/setSubmitting";
 import { isFormValid } from "./actions/isFormValid";
 import { getVisibleFieldKeys } from "./actions/getVisibleFieldKeys";
 
-import { defaultTranslate } from "./computeFields";
+import { defaultTranslate } from "./compute/defaultTranslate";
 
 
 // ============================================================================
@@ -106,16 +106,12 @@ export interface CreateFormConfig<TValues extends Record<string, any>> {
 export interface UseFormOptions<TValues extends Record<string, any>> {
   /** Данные с сервера — мержатся в store при каждом изменении ссылки */
   initial?: Partial<TValues>;
-
   /** Отправка формы */
   onSubmit?: (values: TValues) => Promise<any> | void;
-
   /** Трансформация перед валидацией и отправкой */
   beforeSubmit?: (values: TValues) => Promise<TValues> | TValues;
-
   /** Сайд-эффекты после успешного submit */
   afterSubmit?: (result: any, reset: () => void) => Promise<void> | void;
-
   /**
    * Вызывается при изменении любого поля ПОСЛЕ пересчёта computed.
    * Можно вернуть Partial для мержа в values.
@@ -137,37 +133,26 @@ export interface UseFormOptions<TValues extends Record<string, any>> {
 export interface UseFormReturn<TValues extends Record<string, any>> {
   /** Получить пропсы поля (хук — вызывает useSyncExternalStore) */
   getFieldProps: <K extends keyof TValues>(key: K) => FieldProps<TValues[K]>;
-
   /** Установить значение поля */
   setValue: <K extends keyof TValues>(key: K, value: TValues[K]) => void;
-
   /** Установить несколько значений */
   setValues: (values: Partial<TValues>) => void;
-
   /** Сбросить форму */
   reset: (next?: Partial<TValues>) => void;
-
   /** Отправить форму */
   submit: () => Promise<void>;
-
   /** Форма изменена */
   dirty: boolean;
-
   /** Форма отправляется */
   submitting: boolean;
-
   /** Форма валидна (нет ошибок в видимых полях) */
   isValid: boolean;
-
   /** Получить список видимых полей */
   getVisibleFields: () => Array<keyof TValues & string>;
-
   /** Текущие значения (для отладки / превью) */
   values: TValues;
-
   /** Текущие ошибки */
   errors: Partial<Record<keyof TValues, string>>;
-
   /** Computed поля */
   fields: { [K in keyof TValues]: ComputedFieldState<TValues[K]> };
 }

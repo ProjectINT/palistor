@@ -1,10 +1,9 @@
 
 import type { FormState, FormConfig, TranslateFn } from "../types";
-import {
-  computeAllFieldStates,
-  extractErrors,
-  type ComputeContext,
-} from "../computeFields";
+import { computeAllFieldStates } from "../compute/computeFieldStates";
+import { extractErrors } from "../compute/extractors";
+
+import { type ComputeContext } from "../compute/types";
 
 // ============================================================================
 // Actions — чистые функции для изменения состояния

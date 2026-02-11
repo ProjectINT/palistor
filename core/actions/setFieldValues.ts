@@ -1,11 +1,10 @@
 import type { FormState } from "../types";
-import {
-  computeAllFieldStates,
-  extractErrors,
-  type ComputeContext,
-} from "../computeFields";
+
+import { type ComputeContext } from "../compute/types";
 import { computeDirty } from "./computeDirty";
 import type { ActionContext } from "./createInitialState";
+import { computeAllFieldStates } from "../compute/computeFieldStates";
+import { extractErrors } from "../compute/extractors";
 
 /**
  * Устанавливает несколько значений сразу (batch update)
