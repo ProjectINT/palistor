@@ -6,21 +6,21 @@ import type { FieldStates } from "../types";
 
 /**
  * Извлекает errors из fieldStates
- *
- * Удобно для обратной совместимости — FormState.errors
+ * Поддерживает вложенные ключи: errors["passport.number"]
  *
  * @example
  * const errors = extractErrors(fields);
- * // → { cardNumber: 'validation.required', amount: undefined }
+ * // → { "cardNumber": "validation.required", "passport.number": "validation.required" }
  */
 export function extractErrors<TValues extends Record<string, any>>(
   fields: FieldStates<TValues>
-): Partial<Record<keyof TValues, string>> {
-  const errors: Partial<Record<keyof TValues, string>> = {};
+): Record<string, string> {
+  const errors: Record<string, string> = {};
 
-  for (const key of Object.keys(fields) as Array<keyof TValues>) {
-    if (fields[key].error) {
-      errors[key] = fields[key].error;
+  for (const key of Object.keys(fields)) {
+    const fieldState = fields[key];
+    if (fieldState?.error) {
+      errors[key] = fieldState.error;
     }
   }
 
@@ -38,8 +38,11 @@ export function extractValues<TValues extends Record<string, any>>(
 ): TValues {
   const values = {} as TValues;
 
-  for (const key of Object.keys(fields) as Array<keyof TValues>) {
-    values[key] = fields[key].value;
+  for (const key of Object.keys(fields)) {
+    const fieldState = fields[key];
+    if (fieldState) {
+      (values as any)[key] = fieldState.value;
+    }
   }
 
   return values;

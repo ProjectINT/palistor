@@ -50,7 +50,17 @@
     "pricePlaceholder": "0.00",
     "quantity": "Количество",
     "total": "Итого",
-    "unsavedChanges": "Есть несохранённые изменения"
+    "unsavedChanges": "Есть несохранённые изменения",
+    "passport": {
+      "number": "Номер паспорта",
+      "numberPlaceholder": "Введите номер паспорта",
+      "numberTooShort": "Номер паспорта слишком короткий",
+      "issueDate": "Дата выдачи",
+      "issueDateFuture": "Дата выдачи не может быть в будущем",
+      "expiryDate": "Срок действия",
+      "expiryDatePast": "Срок действия паспорта истёк",
+      "expiryDateBeforeIssue": "Срок действия должен быть позже даты выдачи"
+    }
   },
   "validation": {
     "required": "Обязательное поле",
@@ -118,6 +128,7 @@
     "contact": "Контактные данные",
     "accountType": "Тип аккаунта",
     "address": "Адрес доставки (демо каскадных зависимостей)",
+    "passport": "Данные паспорта (демо вложенных полей)",
     "calculator": "Калькулятор (демо computed values)",
     "agreements": "Соглашения",
     "comment": "Комментарий"

@@ -4,7 +4,7 @@
  * Адаптировано из GenericFormProvider
  */
 
-import type { FormConfig, FieldConfig } from "../core/types";
+import type { FormConfig } from "../core/types";
 
 /**
  * Глубокий merge объектов: defaults <- ...sources
@@ -47,58 +47,69 @@ export function mergeState<T extends Record<string, any>>(
 }
 
 /**
- * Материализует computed поля в конфиге
- * 
- * Если value в конфиге - функция, вызывает её с текущими values
+ * Материализует вычисляемые значения в форме на основе предоставленной конфигурации.
+ *
+ * Рекурсивно обрабатывает конфигурацию формы:
+ * - Для вычисляемых полей (value как функция) вызывает функцию с полным состоянием формы
+ * - Для вложенных полей (nested: true) рекурсивно обрабатывает их дочерние поля
+ * - Игнорирует ошибки вычисления, чтобы валидация могла обработать их позже
+ *
+ * @param form - Исходное состояние формы.
+ * @param config - Конфигурация формы, определяющая поля и их значения (включая функции для вычисления).
+ * @returns Новое состояние формы с материализованными вычисляемыми значениями.
  */
 export function materializeComputed<T extends Record<string, any>>(
-  values: T,
+  form: T,
   config?: FormConfig<T>
 ): T {
-  if (!config) return values;
+  if (!config) return form;
+  const next = { ...form } as T;
 
-  const result = { ...values };
-  let hasChanges = false;
+  /**
+   * Рекурсивно обрабатывает конфигурацию и материализует вычисляемые поля.
+   * @param cf - Конфигурация текущего уровня
+   * @param target - Объект, который обновляется
+   * @param rootForm - Корневой объект формы (для computed функций)
+   */
+  const processConfig = (cf: FormConfig<any>, target: any, rootForm: T) => {
+    for (const key of Object.keys(cf)) {
+      const cfg = (cf as any)[key];
 
-  // Рекурсивная обработка вложенных объектов
-  const processLevel = (
-    vals: Record<string, any>,
-    cfg: Record<string, FieldConfig<any, T>>,
-    target: Record<string, any>
-  ) => {
-    for (const key of Object.keys(cfg)) {
-      const fieldCfg = cfg[key];
-      
-      if (!fieldCfg) continue;
-
-      // Computed value
-      if (typeof fieldCfg.value === "function") {
-        const computed = fieldCfg.value(result);
-        
-        if (!Object.is(target[key], computed)) {
-          target[key] = computed;
-          hasChanges = true;
-        }
+      // Обрабатываем вложенные поля
+      if (cfg?.nested && typeof target[key] === "object" && target[key] !== null) {
+        // Создаем копию вложенного объекта для иммутабельности
+        target[key] = { ...target[key] };
+        // Рекурсивно обрабатываем дочерние поля, передавая корневую форму
+        processConfig(cfg, target[key], rootForm);
       }
+      // Вычисляемые поля: value - функция
+      else if (typeof cfg?.value === "function") {
+        try {
+          // Вызываем с полным состоянием формы (rootForm), а не с текущим уровнем
+          const computedResult = cfg.value(rootForm);
 
-      // Рекурсия для вложенных полей
-      if (
-        fieldCfg.nested &&
-        typeof vals[key] === "object" &&
-        vals[key] !== null
-      ) {
-        if (!target[key]) {
-          target[key] = {};
+          if (!computedResult?.multiValues) {
+            target[key] = computedResult;
+          } else {
+            /*
+              Добавляем возможность добавлять несколько значений сразу.
+              Существуют функции которые вычисляют сразу несколько полей формы
+              и нужно иметь возможность сразу засетить несколько полей формы,
+              для этого добавим multiValues в возвращаемый объект.
+            */
+            const { _multiValues, ...rest } = computedResult;
+            Object.assign(target, rest);
+          }
+        } catch {
+          // ignore compute errors; validation can handle later
         }
-        processLevel(vals[key], fieldCfg as any, target[key]);
       }
     }
   };
 
-  processLevel(values, config as any, result);
+  processConfig(config, next, next);
 
-  // Возвращаем тот же объект если нет изменений (для оптимизации)
-  return hasChanges ? result : values;
+  return next;
 }
 
 /**

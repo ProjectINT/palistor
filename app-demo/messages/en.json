@@ -50,7 +50,17 @@
     "pricePlaceholder": "0.00",
     "quantity": "Quantity",
     "total": "Total",
-    "unsavedChanges": "Unsaved changes"
+    "unsavedChanges": "Unsaved changes",
+    "passport": {
+      "number": "Passport Number",
+      "numberPlaceholder": "Enter passport number",
+      "numberTooShort": "Passport number is too short",
+      "issueDate": "Issue Date",
+      "issueDateFuture": "Issue date cannot be in the future",
+      "expiryDate": "Expiry Date",
+      "expiryDatePast": "Passport has expired",
+      "expiryDateBeforeIssue": "Expiry date must be after issue date"
+    }
   },
   "validation": {
     "required": "Required field",
@@ -118,6 +128,7 @@
     "contact": "Contact Information",
     "accountType": "Account Type",
     "address": "Shipping Address (cascading dependencies demo)",
+    "passport": "Passport Information (nested fields demo)",
     "calculator": "Calculator (computed values demo)",
     "agreements": "Agreements",
     "comment": "Comment"

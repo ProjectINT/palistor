@@ -56,4 +56,21 @@ export type {
   FormState,
   FieldProps,
   InputValueType,
+  NestedKeyOf,
+  NestedValueOf,
 } from "./core/types";
+
+// ============================================================================
+// Утилиты для работы с вложенными полями
+// ============================================================================
+
+export { 
+  parseFieldKey, 
+  stringifyPath, 
+  isNestedKey, 
+  getRootKey, 
+  getNestedPath,
+  isReservedFieldConfigKey,
+  getFieldConfigByPath,
+} from "./utils/pathUtils";
+export { getFieldByPath, setFieldByPath, removeFieldByPath } from "./utils/helpers";

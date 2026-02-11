@@ -44,8 +44,9 @@ import type {
   FormState,
   FieldProps,
   TranslateFn,
-  InputValueType,
   ComputedFieldState,
+  NestedKeyOf,
+  NestedValueOf,
 } from "./types";
 import { createStore } from "./createStore";
 import type { Store } from "./types";
@@ -70,6 +71,7 @@ import { isFormValid } from "./actions/isFormValid";
 import { getVisibleFieldKeys } from "./actions/getVisibleFieldKeys";
 
 import { defaultTranslate } from "./compute/defaultTranslate";
+import { getFieldConfigByPath } from "../utils/pathUtils";
 
 
 // ============================================================================
@@ -131,10 +133,21 @@ export interface UseFormOptions<TValues extends Record<string, any>> {
  * API возвращаемый useForm
  */
 export interface UseFormReturn<TValues extends Record<string, any>> {
-  /** Получить пропсы поля (хук — вызывает useSyncExternalStore) */
-  getFieldProps: <K extends keyof TValues>(key: K) => FieldProps<TValues[K]>;
-  /** Установить значение поля */
-  setValue: <K extends keyof TValues>(key: K, value: TValues[K]) => void;
+  /** Получить пропсы поля (хук — вызывает useSyncExternalStore) 
+   * Поддерживает вложенные пути с автокомплитом: getFieldProps("passport.number")
+   */
+  getFieldProps: <K extends NestedKeyOf<TValues>>(
+    key: K
+  ) => FieldProps<NestedValueOf<TValues, K>>;
+  
+  /** Установить значение поля
+   * Поддерживает вложенные пути с автокомплитом: setValue("passport.number", "123")
+   */
+  setValue: <K extends NestedKeyOf<TValues>>(
+    key: K,
+    value: NestedValueOf<TValues, K>
+  ) => void;
+  
   /** Установить несколько значений */
   setValues: (values: Partial<TValues>) => void;
   /** Сбросить форму */
@@ -148,13 +161,13 @@ export interface UseFormReturn<TValues extends Record<string, any>> {
   /** Форма валидна (нет ошибок в видимых полях) */
   isValid: boolean;
   /** Получить список видимых полей */
-  getVisibleFields: () => Array<keyof TValues & string>;
+  getVisibleFields: () => Array<string>;
   /** Текущие значения (для отладки / превью) */
   values: TValues;
   /** Текущие ошибки */
-  errors: Partial<Record<keyof TValues, string>>;
+  errors: Partial<Record<string, string>>;
   /** Computed поля */
-  fields: { [K in keyof TValues]: ComputedFieldState<TValues[K]> };
+  fields: Record<string, ComputedFieldState<any>>;
 }
 
 // ============================================================================
@@ -189,6 +202,9 @@ export function createForm<TValues extends Record<string, any>>(
   formConfig: CreateFormConfig<TValues>
 ): { useForm: (id: string, options?: UseFormOptions<TValues>) => UseFormReturn<TValues> } {
   const { config, defaults, translateFunction, type } = formConfig;
+
+  // Конфиг хранится в оригинальном вложенном виде.
+  // Рекурсивный обход выполняется в compute-функциях.
 
   /**
    * useForm — React-хук для работы с формой
@@ -394,9 +410,9 @@ export function createForm<TValues extends Record<string, any>>(
     // ====================================================================
 
     const setValue = useCallback(
-      <K extends keyof TValues>(key: K, value: TValues[K]) => {
+      (key: string, value: any) => {
         const ctx = getActionCtx();
-        const fieldConfig = config[key];
+        const fieldConfig = getFieldConfigByPath(config, key);
 
         // Если есть setter — используем его (для связанных изменений)
         if (fieldConfig?.setter) {
@@ -409,9 +425,13 @@ export function createForm<TValues extends Record<string, any>>(
           return;
         }
 
-        const previousValue = store.getState().values[key];
+        // Получаем previousValue по пути (для вложенных полей)
+        const previousValue = (() => {
+          const parts = key.split(".");
+          return parts.reduce((obj: any, k) => obj?.[k], store.getState().values);
+        })();
 
-        // Обычное обновление
+        // Обычное обновление (поддерживает вложенные пути)
         store.setState((prev) => setFieldValue(prev, key, value, ctx));
 
         // onChange callback
@@ -500,7 +520,7 @@ export function createForm<TValues extends Record<string, any>>(
       }
     }, [store, getActionCtx, reset, persistKey]);
 
-    const getVisibleFields = useCallback((): Array<keyof TValues & string> => {
+    const getVisibleFields = useCallback((): Array<string> => {
       return getVisibleFieldKeys(store.getState());
     }, [store]);
 
@@ -514,26 +534,33 @@ export function createForm<TValues extends Record<string, any>>(
     // дополнительный useSyncExternalStore. Подписка идёт через state выше.
 
     const getFieldProps = useCallback(
-      <K extends keyof TValues>(key: K): FieldProps<TValues[K]> => {
+      (key: string): FieldProps<any> => {
         const currentState = store.getState();
         const fieldState = currentState.fields[key];
 
         if (!fieldState) {
+          // Более информативная ошибка для отладки
+          const availableKeys = Object.keys(currentState.fields);
+          const configKeys = Object.keys(config);
+          
           throw new Error(
-            `[Palistor] No field state found for key: ${String(key)}`
+            `[Palistor] No field state found for key: "${key}"\n` +
+            `Available fields in state: ${availableKeys.join(", ")}\n` +
+            `Available fields in config: ${configKeys.join(", ")}\n` +
+            `Hint: For nested fields, use dot notation (e.g., "passport.number")`
           );
         }
 
         return {
           ...fieldState,
-          onValueChange: (val: InputValueType<TValues[K]>) => {
-            const fieldCfg = config[key];
+          onValueChange: (val: any) => {
+            const fieldCfg = getFieldConfigByPath(config, key);
 
             if (fieldCfg?.types?.dataType) {
               const parsedValue = parseValue(val, fieldCfg.types.dataType);
-              setValue(key, parsedValue as TValues[K]);
+              setValue(key, parsedValue);
             } else {
-              setValue(key, val as TValues[K]);
+              setValue(key, val);
             }
           },
           isInvalid: !!(currentState.showErrors && fieldState.error),

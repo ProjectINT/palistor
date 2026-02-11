@@ -5,6 +5,7 @@ import { computeDirty } from "./computeDirty";
 import type { ActionContext } from "./createInitialState";
 import { computeAllFieldStates } from "../compute/computeFieldStates";
 import { extractErrors } from "../compute/extractors";
+import { getFieldConfigByPath } from "../../utils/pathUtils";
 
 /**
  * Устанавливает несколько значений сразу (batch update)
@@ -13,9 +14,6 @@ import { extractErrors } from "../compute/extractors";
  * @param updates - объект с обновлениями { field1: value1, field2: value2 }
  * @param ctx - контекст
  * @returns новое состояние
- *
- * @example
- * const newState = setFieldValues(state, { name: 'John', age: 30 }, ctx);
  */
 export function setFieldValues<TValues extends Record<string, any>>(
   state: FormState<TValues>,
@@ -28,7 +26,7 @@ export function setFieldValues<TValues extends Record<string, any>>(
 
   for (const key of Object.keys(updates) as Array<keyof TValues>) {
     let value = updates[key] as TValues[keyof TValues];
-    const fieldConfig = ctx.config[key];
+    const fieldConfig = getFieldConfigByPath(ctx.config, key as string);
 
     // Применяем formatter
     if (fieldConfig?.formatter) {

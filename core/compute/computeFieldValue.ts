@@ -1,35 +1,39 @@
 /**
- * Вычисление значений полей с поддержкой computed values
+ * Вычисление значений полей с поддержкой computed values и вложенных путей
  */
 
-import type { FormConfig } from "../types";
+import type { FieldConfig, FormConfig } from "../types";
+import { getFieldByPath } from "../../utils/helpers";
+import { parseFieldKey, getFieldConfigByPath } from "../../utils/pathUtils";
 
 /**
- * Вычисляет value поля
+ * Вычисляет value поля с поддержкой вложенных путей
  * Поддерживает computed values: ((values) => value)
  *
- * @example
- * // Простое значение
- * computeFieldValue('cardNumber', { cardNumber: '4111' }, config) // → '4111'
+ * @param key - Путь к полю ("email" или "passport.number")
+ * @param values - Текущие значения формы
+ * @param config - Оригинальный вложенный конфиг
+ * @param fieldConfig - Конфиг поля (опционально, если уже получен)
  *
- * // Computed value
- * // config.total.value = (v) => v.price * v.quantity
- * computeFieldValue('total', { price: 100, quantity: 2 }, config) // → 200
+ * @example
+ * computeFieldValue('email', { email: 'a@b.c' }, config) // → 'a@b.c'
+ * computeFieldValue('passport.number', { passport: { number: '123' } }, config) // → '123'
+ * computeFieldValue('total', values, config) // → computed result if value is function
  */
-export function computeFieldValue<TValues extends Record<string, any>, K extends keyof TValues>(
-  key: K,
+export function computeFieldValue<TValues extends Record<string, any>>(
+  key: string,
   values: TValues,
-  config: FormConfig<TValues>
-): TValues[K] {
-  const fieldConfig = config[key];
+  config: FormConfig<TValues>,
+  fieldConfig?: FieldConfig<any, TValues>
+): any {
+  const cfg = fieldConfig ?? getFieldConfigByPath(config, key);
 
   // Если в конфиге есть computed value (функция)
-  if (fieldConfig && typeof fieldConfig.value === "function") {
-    // Type assertion needed because TValue itself could be a Function type
-    const computeFn = fieldConfig.value as (values: TValues) => TValues[K];
-    return computeFn(values);
+  if (cfg && typeof cfg.value === "function") {
+    return cfg.value(values);
   }
 
-  // Иначе берём из values
-  return values[key];
+  // Получаем значение из values по пути
+  const path = parseFieldKey(key);
+  return getFieldByPath(values, path);
 }

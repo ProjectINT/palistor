@@ -12,6 +12,9 @@ import { type ComputeContext } from "../compute/types";
 /**
  * Контекст для действий над формой
  * Содержит всё необходимое для вычисления нового состояния
+ * 
+ * config хранится в оригинальном вложенном виде.
+ * Рекурсивный обход конфига выполняется в compute-функциях.
  */
 export interface ActionContext<TValues extends Record<string, any>> {
   config: FormConfig<TValues>;
@@ -42,7 +45,7 @@ export function createInitialState<TValues extends Record<string, any>>(
   // Мержим defaults и initial
   const values = { ...defaults, ...initial } as TValues;
 
-  // Вычисляем fields для всех полей
+  // Вычисляем fields для всех полей (рекурсивный обход конфига)
   const computeCtx: ComputeContext<TValues> = {
     values,
     config: ctx.config,

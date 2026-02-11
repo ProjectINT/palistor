@@ -3,6 +3,42 @@
  */
 
 // ============================================================================
+// Nested Field Types
+// ============================================================================
+
+/**
+ * Рекурсивный тип для получения всех возможных путей к вложенным полям
+ * 
+ * @example
+ * type User = { name: string; address: { city: string; zip: number } };
+ * type Keys = NestedKeyOf<User>; 
+ * // → "name" | "address" | "address.city" | "address.zip"
+ */
+export type NestedKeyOf<T> = {
+  [K in keyof T & string]: T[K] extends Record<string, any>
+    ? T[K] extends any[]
+      ? K
+      : K | `${K}.${NestedKeyOf<T[K]>}`
+    : K;
+}[keyof T & string];
+
+/**
+ * Получает тип значения по вложенному пути
+ * 
+ * @example
+ * type User = { address: { city: string } };
+ * type City = NestedValueOf<User, "address.city">; // → string
+ */
+export type NestedValueOf<T, Path extends string> = 
+  Path extends `${infer K}.${infer Rest}`
+    ? K extends keyof T
+      ? NestedValueOf<T[K], Rest>
+      : never
+    : Path extends keyof T
+      ? T[Path]
+      : never;
+
+// ============================================================================
 // Core Store Types
 // ============================================================================
 
@@ -134,20 +170,36 @@ export interface FieldConfig<TValue = any, TValues = Record<string, any>> {
    * - undefined → пересчёт при изменении ЛЮБОГО поля
    * - ['field1'] → пересчёт при изменении field1 или себя
    * - [] → пересчёт только при изменении себя или init/reset
+   * 
+   * Поддерживает вложенные пути: dependencies: ['passport.number']
    */
-  dependencies?: readonly (keyof TValues)[] | (keyof TValues)[];
+  dependencies?: readonly string[] | string[];
 
-  /** Вложенные поля (для объектов) */
+  /** 
+   * Вложенные поля (для объектов)
+   * Если true, то остальные ключи в этом объекте - это конфиги дочерних полей
+   * 
+   * @example
+   * passport: {
+   *   nested: true,
+   *   number: { value: "", label: "Number" },
+   *   issueDate: { value: "", label: "Issue Date" }
+   * }
+   * // Доступ через: getFieldProps("passport.number")
+   */
   nested?: boolean;
 
   /** Дополнительные пропсы для компонента */
   componentProps?: Record<string, unknown>;
 
   /** Типизация поля (для будущей валидации по типам) */
-  types: {
+  types?: {
     dataType: "String" | "Number" | "Boolean" | "Date" | "Array" | "Object";
     type: string;
   };
+
+  // Индексная сигнатура для вложенных полей
+  [nestedKey: string]: any;
 }
 
 /**
@@ -211,10 +263,9 @@ export interface ComputedFieldState<TValue = any> {
 
 /**
  * Словарь вычисленных состояний всех полей
+ * Поддерживает вложенные ключи: fields["passport.number"]
  */
-export type FieldStates<TValues extends Record<string, any>> = {
-  [K in keyof TValues]: ComputedFieldState<TValues[K]>;
-};
+export type FieldStates<TValues extends Record<string, any>> = Record<string, ComputedFieldState<any>>;
 
 /**
  * Состояние одной формы
@@ -317,22 +368,22 @@ export type FieldStates<TValues extends Record<string, any>> = {
  */
 export interface FormState<TValues extends Record<string, any>> {
   /**
-   * Текущие значения полей (плоский объект)
-   * Для обратной совместимости и удобного доступа: values.fieldName
+   * Текущие значения полей (может быть вложенным объектом)
+   * Для доступа к вложенным полям: values.passport.number
    */
   values: TValues;
 
   /**
    * Вычисленное состояние каждого поля
-   * Для подписки на конкретное поле: fields.fieldName
+   * Поддерживает вложенные ключи: fields["passport.number"]
    */
   fields: FieldStates<TValues>;
 
   /**
    * Ошибки валидации
-   * Отдельно для быстрого доступа без обхода fields
+   * Поддерживает вложенные ключи: errors["passport.number"]
    */
-  errors: Partial<Record<keyof TValues, string>>;
+  errors: Record<string, string>;
 
   /** Флаг процесса отправки */
   submitting: boolean;

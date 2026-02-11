@@ -48,4 +48,12 @@ export interface PaymentFormValues {
   price: number;
   quantity: number;
   total: number;
+  
+  // Паспорт — вложенное поле (nested)
+  passport: {
+    id: string | null;
+    number: string;
+    issueDate: string;
+    expiryDate: string;
+  };
 }

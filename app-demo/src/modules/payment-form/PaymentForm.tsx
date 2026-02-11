@@ -9,6 +9,7 @@ import {
   ContactSection,
   AccountTypeSection,
   AddressSection,
+  PassportSection,
   CalculatorSection,
   AgreementsSection,
   CommentSection,
@@ -29,6 +30,7 @@ export function PaymentForm({ formId }: PaymentFormProps) {
         <PaymentTypeSection formId={formId} />
         <CardSection formId={formId} />
         <BankSection formId={formId} />
+        <PassportSection formId={formId} />
         <CryptoSection formId={formId} />
         <AmountSection formId={formId} />
         <ContactSection formId={formId} />

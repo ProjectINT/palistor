@@ -4,29 +4,25 @@ import { extractErrors } from "../compute/extractors";
 import { computeDirty } from "./computeDirty";
 import { createComputeContext } from "./createComputeContext";
 import type { ActionContext } from "./createInitialState";
+import { setFieldByPath } from "../../utils/helpers";
+import { parseFieldKey, getFieldConfigByPath } from "../../utils/pathUtils";
 
 /**
- * Устанавливает значение одного поля
+ * Устанавливает значение одного поля (поддерживает вложенные пути)
  *
  * @param state - текущее состояние
- * @param key - имя поля
+ * @param key - имя поля или путь ("passport.number")
  * @param value - новое значение
  * @param ctx - контекст
  * @returns новое состояние (или то же, если значение не изменилось)
- *
- * @example
- * const newState = setFieldValue(state, 'email', 'test@example.com', ctx);
  */
-export function setFieldValue<
-  TValues extends Record<string, any>,
-  K extends keyof TValues
->(
+export function setFieldValue<TValues extends Record<string, any>>(
   state: FormState<TValues>,
-  key: K,
-  value: TValues[K],
+  key: string,
+  value: any,
   ctx: ActionContext<TValues>
 ): FormState<TValues> {
-  const fieldConfig = ctx.config[key];
+  const fieldConfig = getFieldConfigByPath(ctx.config, key);
 
   // Применяем formatter если есть
   let processedValue = value;
@@ -34,13 +30,17 @@ export function setFieldValue<
     processedValue = fieldConfig.formatter(value, state.values);
   }
 
+  // Получаем текущее значение по пути для сравнения
+  const path = parseFieldKey(key);
+  const currentValue = path.reduce((obj: any, k) => obj?.[k], state.values);
+
   // Проверяем, изменилось ли значение
-  if (Object.is(state.values[key], processedValue)) {
+  if (Object.is(currentValue, processedValue)) {
     return state;
   }
 
-  // Создаём новые values
-  const newValues = { ...state.values, [key]: processedValue } as TValues;
+  // Создаём новые values с использованием setFieldByPath (иммутабельно)
+  const newValues = setFieldByPath(state.values, path, processedValue) as TValues;
 
   // Пересчитываем fields для зависимых полей
   const computeCtx = createComputeContext(
