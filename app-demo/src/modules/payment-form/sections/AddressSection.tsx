@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input, Select, SelectItem } from "@heroui/react";
+import { Input } from "@/components/Input";
+import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { COUNTRY_OPTIONS, CITIES_BY_COUNTRY } from "../constants";
@@ -20,50 +21,41 @@ export function AddressSection({ formId }: AddressSectionProps) {
   const shippingProps = getFieldProps("shippingCost");
   
   const country = countryProps.value as Country | undefined;
-  const isCityVisible = cityProps.isVisible;
-  const isShippingVisible = shippingProps.isVisible;
 
-  const cityOptions = country ? (CITIES_BY_COUNTRY[country] ?? []) : [];
+  const countryOptions: SelectOption[] = COUNTRY_OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.label,
+  }));
+
+  const cityOptions: SelectOption[] = country ? (CITIES_BY_COUNTRY[country] ?? []).map((option) => ({
+    value: option.value,
+    label: option.label,
+  })) : [];
 
   return (
     <Section title={t("sections.address")}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Select
           {...countryProps}
+          options={countryOptions}
+          renderLabel={(option) => t(option.label)}
           selectedKeys={countryProps.value ? [countryProps.value] : []}
           onSelectionChange={(keys) => {
             const value = Array.from(keys)[0] as "" | Country;
             setValue("country", value);
           }}
-        >
-          {COUNTRY_OPTIONS.map((option) => (
-            <SelectItem key={option.value}>
-              {t(option.label)}
-            </SelectItem>
-          ))}
-        </Select>
-        {isCityVisible && (
-          <Select
-            {...cityProps}
-            selectedKeys={cityProps.value ? [cityProps.value] : []}
-            onSelectionChange={(keys) => {
-              const value = Array.from(keys)[0] as string;
-              setValue("city", value);
-            }}
-          >
-            {cityOptions.map((option) => (
-              <SelectItem key={option.value}>
-                {t(option.label)}
-              </SelectItem>
-            ))}
-          </Select>
-        )}
-        {isShippingVisible && (
-          <Input
-            {...(({ value, isVisible, error, ...rest }) => rest)(shippingProps)}
-            value={shippingProps.value?.toString() ?? ""}
-          />
-        )}
+        />
+        <Select
+          {...cityProps}
+          options={cityOptions}
+          renderLabel={(option) => t(option.label)}
+          selectedKeys={cityProps.value ? [cityProps.value] : []}
+          onSelectionChange={(keys) => {
+            const value = Array.from(keys)[0] as string;
+            setValue("city", value);
+          }}
+        />
+        <Input {...shippingProps} />
       </div>
     </Section>
   );

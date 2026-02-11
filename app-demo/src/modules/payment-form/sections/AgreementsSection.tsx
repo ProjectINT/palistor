@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Checkbox } from "@heroui/react";
+import { Checkbox } from "@/components/Checkbox";
 
 import { Section } from "@/modules/shared/Section";
 import { usePaymentForm } from "@/config/paymentForm";
@@ -14,21 +14,21 @@ export function AgreementsSection({ formId }: AgreementsSectionProps) {
   const t = useTranslations();
   const { getFieldProps } = usePaymentForm(formId);
 
-  const { isVisible: agreeVisible, error: agreeError, value: agreeValue, ...agreeTermsProps } = getFieldProps("agreeTerms");
-  const { value: newsletterValue, isVisible: newsletterVisible, error: newsletterError, ...newsletterProps } = getFieldProps("newsletter");
+  const agreeTermsProps = getFieldProps("agreeTerms");
+  const newsletterProps = getFieldProps("newsletter");
   
   return (
     <Section title={t("sections.agreements")}>
       <div className="space-y-3">
         <Checkbox
           {...agreeTermsProps}
-          isSelected={agreeValue}
+          isSelected={agreeTermsProps.value}
         >
           {agreeTermsProps.label}
         </Checkbox>
         <Checkbox
           {...newsletterProps}
-          isSelected={newsletterValue}
+          isSelected={newsletterProps.value}
         >
           {newsletterProps.label}
         </Checkbox>

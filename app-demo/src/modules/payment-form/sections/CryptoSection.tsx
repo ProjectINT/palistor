@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input, Select, SelectItem } from "@heroui/react";
+import { Input } from "@/components/Input";
+import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { CRYPTO_NETWORK_OPTIONS } from "../constants";
@@ -16,9 +17,11 @@ export function CryptoSection({ formId }: CryptoSectionProps) {
   const { getFieldProps, setValue } = usePaymentForm(formId);
   const cryptoWalletProps = getFieldProps("cryptoWallet");
   const cryptoNetworkProps = getFieldProps("cryptoNetwork");
-  const isVisible = cryptoWalletProps.isVisible;
 
-  if (!isVisible) return null;
+  const options: SelectOption[] = CRYPTO_NETWORK_OPTIONS.map((option) => ({
+    value: option.value,
+    label: option.label,
+  }));
 
   return (
     <Section title={t("sections.crypto")}>
@@ -26,18 +29,14 @@ export function CryptoSection({ formId }: CryptoSectionProps) {
         <Input {...cryptoWalletProps} />
         <Select
           {...cryptoNetworkProps}
+          options={options}
+          renderLabel={(option) => t(option.label)}
           selectedKeys={cryptoNetworkProps.value ? [cryptoNetworkProps.value] : []}
           onSelectionChange={(keys) => {
             const value = Array.from(keys)[0] as CryptoNetwork;
             setValue("cryptoNetwork", value);
           }}
-        >
-          {CRYPTO_NETWORK_OPTIONS.map((option) => (
-            <SelectItem key={option.value}>
-              {t(option.label)}
-            </SelectItem>
-          ))}
-        </Select>
+        />
       </div>
     </Section>
   );

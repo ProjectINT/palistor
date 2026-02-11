@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button } from "@heroui/react";
+import { Button } from "@/components/Button";
 
 import { usePaymentForm } from "@/config/paymentForm";
 
