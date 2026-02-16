@@ -257,8 +257,10 @@ export interface ComputedFieldState<TValue = any> {
   placeholder?: string;
   /** Вычисленное описание */
   description?: string;
-  /** Ошибка валидации (если showErrors=true) */
-  error?: string;
+  /** Ошибка валидации */
+  error?: boolean;
+  /** Текст ошибки */
+  errorMessage?: string;
 }
 
 /**
@@ -414,13 +416,10 @@ export interface FormState<TValues extends Record<string, any>> {
  * Расширяет ComputedFieldState, добавляя:
  * - onValueChange — колбэк для изменения значения
  * - isInvalid — флаг наличия ошибки (для HeroUI)
- * - errorMessage — текст ошибки (алиас для error)
  */
 export interface FieldProps<TValue = any> extends ComputedFieldState<TValue> {
   /** Колбэк изменения значения (для controlled компонентов) */
   onValueChange: (value: InputValueType<TValue>) => void;
   /** Флаг наличия ошибки (HeroUI-совместимый) */
   isInvalid: boolean;
-  /** Текст ошибки (алиас для error, HeroUI-совместимый) */
-  errorMessage?: string;
 }

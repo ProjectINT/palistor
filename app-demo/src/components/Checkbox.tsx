@@ -7,14 +7,14 @@ interface CheckboxProps extends Omit<React.ComponentProps<typeof HeroUICheckbox>
 }
 
 export function Checkbox(props: ComputedFieldState & Partial<CheckboxProps>) {
-  const { isVisible, error, value, description, ...restProps } = props;
+  const { isVisible, error, value, description, errorMessage, ...restProps } = props;
 
   if (!isVisible) {
     return null;
   }
 
   const hasError = Boolean(error);
-  const helperText = hasError ? error : description;
+  const helperText = hasError ? errorMessage : description;
 
   return (
     <div className="flex flex-col gap-1">

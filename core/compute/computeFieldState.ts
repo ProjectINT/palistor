@@ -49,9 +49,12 @@ export function computeFieldState<TValues extends Record<string, any>>(
   const description = computeStringProp(cfg.description, translate);
 
   // Вычисляем ошибку (только если showErrors=true)
-  let error: string | undefined;
+  let error: boolean | undefined;
+  let errorMessage: string | undefined;
+
   if (showErrors && cfg.validate) {
-    error = cfg.validate(value, values);
+    errorMessage = cfg.validate(value, values);
+    error = Boolean(errorMessage);
   }
 
   return {
@@ -64,5 +67,6 @@ export function computeFieldState<TValues extends Record<string, any>>(
     placeholder,
     description,
     error,
+    errorMessage,
   };
 }

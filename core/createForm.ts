@@ -564,7 +564,7 @@ export function createForm<TValues extends Record<string, any>>(
             }
           },
           isInvalid: !!(currentState.showErrors && fieldState.error),
-          errorMessage: currentState.showErrors ? fieldState.error : undefined,
+          errorMessage: currentState.showErrors ? fieldState.errorMessage : undefined,
           isDisabled: fieldState.isDisabled || currentState.submitting,
         };
       },

@@ -19,8 +19,8 @@ export function extractErrors<TValues extends Record<string, any>>(
 
   for (const key of Object.keys(fields)) {
     const fieldState = fields[key];
-    if (fieldState?.error) {
-      errors[key] = fieldState.error;
+    if (fieldState?.error && fieldState.errorMessage) {
+      errors[key] = fieldState.errorMessage;
     }
   }
 

@@ -10,9 +10,10 @@ export function isFormValid<TValues extends Record<string, any>>(
   state: FormState<TValues>
 ): boolean {
   // Проверяем только видимые поля
-  for (const key of Object.keys(state.fields) as Array<keyof TValues>) {
+  for (const key of Object.keys(state.fields)) {
     const field = state.fields[key];
-    if (field.isVisible && field.error) {
+
+    if (field?.isVisible && field.error) {
       return false;
     }
   }

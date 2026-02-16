@@ -6,7 +6,7 @@
  */
 
 import { getFieldConfigByPath, isReservedFieldConfigKey, parseFieldKey } from "../utils/pathUtils";
-import { getFieldByPath, setFieldByPath } from "../utils/helpers";
+import { setFieldByPath } from "../utils/helpers";
 import { materializeComputed } from "../utils/materialize";
 import { computeAllFieldStates } from "./compute/computeFieldStates";
 import { recomputeFieldStates } from "./compute/computeFieldStates";
