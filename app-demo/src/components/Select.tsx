@@ -36,7 +36,10 @@ export function Select(props: ComputedFieldState & Partial<SelectProps>) {
 
   const content = options
     ? options.map((option) => (
-        <HeroUISelectItem key={option.value} isDisabled={option.isDisabled}>
+        <HeroUISelectItem
+          key={option.value}
+          isDisabled={option.isDisabled}
+        >
           {renderLabel ? renderLabel(option) : option.label}
         </HeroUISelectItem>
       ))
