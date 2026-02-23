@@ -7,7 +7,7 @@
  * (isVisible, isRequired, validate…) уже вызваны, результат — чистые значения.
  */
 export interface FieldState {
-  value: any;
+  value: unknown;
   label?: string;
   placeholder?: string;
   description?: string;
