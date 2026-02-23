@@ -1,11 +1,8 @@
-import {
-  type FieldState,
-  computeFieldState,
-  fieldStateChanged,
-} from "./compute";
+import { type FieldState } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy";
 import { registerNodes } from "./registerNodes";
+import { recomputeAll as _recomputeAll } from "./recomputeAll";
 
 export type { FieldState };
 
@@ -356,29 +353,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
-  /**
-   * Фаза 2: Пересчитать вычисленное состояние всех листовых полей.
-   * Вызывается при init и после каждого SET .value.
-   *
-   * Возвращает Set узлов, чьё состояние изменилось (для notify).
-   */
   function recomputeAll(): Set<object> {
-    const allValues = collectValues(rootConfig, nodeState);
-    const changed = new Set<object>();
-
-    for (const { node } of leafNodes) {
-      const prev = nodeState.get(node);
-      const currentValue = prev?.value ?? "";
-      const next = computeFieldState(node, currentValue, allValues);
-
-      // Проверяем, изменилось ли что-то
-      if (prev && !fieldStateChanged(prev, next)) continue;
-
-      nodeState.set(node, next);
-      changed.add(node);
-    }
-
-    return changed;
+    return _recomputeAll(rootConfig, leafNodes, nodeState);
   }
 
   // Выполняем инициализацию
@@ -408,11 +384,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   }
 
   // ─── Построение Proxy ──────────────────────────────────────────────────────
-
   const buildProxy = createBuildProxy({ proxyCache, nodeState, rootConfig, recomputeAll, notifyChanged });
 
   // ─── Подписка ──────────────────────────────────────────────────────────────
-
   const subscribe = (node: object, listener: () => void): Unsubscribe => {
     if (!nodeListeners.has(node)) nodeListeners.set(node, new Set());
     nodeListeners.get(node)!.add(listener);
@@ -425,7 +399,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   };
 
   // ─── Публичный API ─────────────────────────────────────────────────────────
-
   return {
     proxy: buildProxy(rootConfig) as ConfigProxy<TConfig>,
     subscribe,

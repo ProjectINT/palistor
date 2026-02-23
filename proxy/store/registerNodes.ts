@@ -4,14 +4,52 @@ import { type AnyConfigNode } from "./collectValues";
 import { hasComputedProps } from "./hasComputedProps";
 
 /**
+ * Служебные ключи узла конфига, которые пропускаются при обходе дерева.
+ * Зеркалит runtime-набор CONFIG_PROPS на уровне типов.
+ */
+type ConfigPropKeys =
+  | "value"
+  | "label"
+  | "placeholder"
+  | "description"
+  | "isRequired"
+  | "isReadOnly"
+  | "isDisabled"
+  | "isVisible"
+  | "error"
+  | "errorMessage"
+  | "validate"
+  | "formatter"
+  | "setter"
+  | "componentProps"
+  | "types"
+  | "dependencies";
+
+/**
+ * Рекурсивный тип начальных значений, повторяющий структуру конфига:
+ * - Служебные ключи пропускаются.
+ * - Листовые узлы (есть `value`) → тип значения (или `unknown` для функции-вычислителя).
+ * - Групповые узлы → вложенный `InitialSlice`.
+ * - Все поля опциональны.
+ */
+export type InitialSlice<TNode> = {
+  [K in keyof TNode as K extends ConfigPropKeys ? never : K]?:
+    TNode[K] extends { value: infer V }
+      ? V extends (values: any) => infer R ? R : V
+      : TNode[K] extends Record<string, any>
+        ? InitialSlice<TNode[K]>
+        : unknown;
+};
+
+/**
  * Фаза 1: Собираем все листовые узлы и устанавливаем начальные value.
  * Ещё не вычисляем computed — для этого нужны все values.
  */
 type MaybeFlag = boolean | ((values: any) => boolean) | undefined;
 
-export function registerNodes(
-  node: AnyConfigNode,
-  initialSlice: Record<string, unknown> | undefined,
+export function registerNodes<TNode extends AnyConfigNode>(
+  node: TNode,
+  initialSlice: InitialSlice<TNode> | undefined,
   leafNodes: Array<{ node: AnyConfigNode }>,
   nodeState: WeakMap<object, FieldState>,
 ) {
@@ -25,10 +63,11 @@ export function registerNodes(
       // Листовой узел: запоминаем, ставим начальный value (computed позже)
       leafNodes.push({ node: child });
 
-      const sliceValues = (initialSlice ?? {}) as Record<string, unknown>;
+      const rawSlice = initialSlice as Record<string, unknown> | undefined;
+      const sliceValues = (rawSlice ?? {}) as Record<string, unknown>;
       const rawValue = child.value;
       const configValue = typeof rawValue === "function" ? rawValue(sliceValues) : rawValue;
-      const initialValue = initialSlice?.[key] ?? configValue ?? "";
+      const initialValue = rawSlice?.[key] ?? configValue ?? "";
       nodeState.set(child, {
         value: initialValue,
         isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true),
@@ -42,7 +81,7 @@ export function registerNodes(
     // регистрируем его тоже как "виртуальный" лист
     if (!("value" in child) && hasComputedProps(child)) {
       leafNodes.push({ node: child });
-      const sliceValues = (initialSlice ?? {}) as Record<string, unknown>;
+      const sliceValues = (initialSlice as Record<string, unknown> | undefined ?? {}) as Record<string, unknown>;
       nodeState.set(child, {
         value: undefined,
         isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true),
@@ -53,6 +92,6 @@ export function registerNodes(
     }
 
     // Рекурсия в дочерние
-    registerNodes(child, initialSlice?.[key] as Record<string, unknown> | undefined, leafNodes, nodeState);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState);
   }
 }
