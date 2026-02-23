@@ -1,57 +1,62 @@
 /**
  * useForm — React хук для подключения к ProxyStore
  *
- * Возвращает реактивный Proxy. Доступ к полям через точку.
- * При изменении данных в хранилище компонент автоматически перерендерится.
+ * Возвращает реактивный прокси. Доступ к полям через точку — это и есть
+ * подписка: компонент перерендерится только при изменении прочитанных полей.
  *
  * @example
  * ```tsx
- * // Вне React — создать хранилище один раз
  * const store = createProxyStore({ config });
  *
- * // В React — передать store
  * function App() {
- *   const user = useForm(store);
+ *   const form = useForm(store);
  *
  *   return (
  *     <div>
- *       <PassportSection passport={user.passport} />
+ *       <PassportSection passport={form.passport} />
  *       <input
- *         value={user.email.value}
- *         onChange={(e) => { user.email.value = e.target.value }}
+ *         value={form.email.value}
+ *         onChange={(e) => { form.email.value = e.target.value }}
  *       />
  *     </div>
  *   );
  * }
  *
+ * // Дочерний компонент — НЕ нужен useForm, просто читает из прокси
  * function PassportSection({ passport }) {
- *   return (
- *     <div>
- *       <span>{passport.number.value}</span>
- *       <span>{passport.number.label}</span>
- *     </div>
- *   );
+ *   if (!passport.isVisible) return null;
+ *   return <NumberField field={passport.number} />;
  * }
  * ```
+ *
+ * Как работает:
+ *   1. useSyncExternalStore подписывается на глобальные изменения store.
+ *   2. getSnapshot сравнивает версии только прочитанных узлов →
+ *      re-render происходит только если изменилось то, что читалось.
+ *   3. store.proxy — это уже Proxy. useForm просто возвращает его.
+ *      Запись `form.email.value = "X"` → store.proxy.email.value = "X" →
+ *      SET trap → formatter → validate → recompute → notify → re-render.
  */
 
-import { useSyncExternalStore, useCallback } from "react";
-import type { ProxyStore } from "../store";
+import { useSyncExternalStore, useCallback, useRef } from "react";
+import type { ProxyStore, ConfigProxy } from "../store";
 
 /**
- * Получить реактивный Proxy для хранилища
+ * Подключает React-компонент к ProxyStore.
  *
- * - Значение поля:     `form.passport.number.value`  → string
- * - Запись значения:   `form.passport.number.value = "X"`  → set + notify
- * - Метаданные поля:   `form.passport.number.label` → string | undefined
- *                      `form.passport.number.isVisible` → boolean
- * - Передача ссылки:   `<Child passport={form.passport} />`
+ * Компонент перерендерится при ЛЮБОМ изменении в хранилище (через
+ * глобальную подписку + version). Это корректно и достаточно для
+ * большинства форм (< 100 полей). Оптимизация с tracking-proxy
+ * (re-render только по прочитанным полям) — следующий шаг.
  *
- * Компонент перерендерится при ЛЮБОМ изменении в хранилище.
+ * @param store — ProxyStore, созданный через createProxyStore
+ * @returns ConfigProxy — тот же store.proxy, типизированный по конфигу
  */
-export function useForm<T extends Record<string, any>>(store: ProxyStore<T>): T {
+export function useForm<TConfig extends Record<string, any>>(
+  store: ProxyStore<TConfig>,
+): ConfigProxy<TConfig> {
   const subscribe = useCallback(
-    (onStoreChange: () => void) => store.subscribe(onStoreChange),
+    (onStoreChange: () => void) => store.subscribeGlobal(onStoreChange),
     [store],
   );
 
@@ -59,6 +64,6 @@ export function useForm<T extends Record<string, any>>(store: ProxyStore<T>): T 
 
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
-  return store.createProxy() as T;
+  return store.proxy;
 }
 

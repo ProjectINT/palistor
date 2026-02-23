@@ -189,6 +189,25 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   subscribe: (node: object, listener: () => void) => () => void;
 
   /**
+   * Подписаться на ЛЮБОЕ изменение в хранилище.
+   * Используется useForm для useSyncExternalStore.
+   * Возвращает функцию-отписку.
+   */
+  subscribeGlobal: (listener: () => void) => () => void;
+
+  /**
+   * Глобальная версия хранилища. Инкрементируется при каждом изменении.
+   * Используется как snapshot для useSyncExternalStore.
+   */
+  getVersion: () => number;
+
+  /**
+   * Версия конкретного узла. Обновляется при изменении состояния узла.
+   * Используется для точечной подписки (re-render только по прочитанным полям).
+   */
+  getNodeVersion: (node: object) => number;
+
+  /**
    * Все текущие значения полей в виде вложенного объекта.
    */
   getValues: () => Record<string, any>;
@@ -315,6 +334,15 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   /** Подписчики на изменение каждого поля. */
   const nodeListeners = new WeakMap<object, Set<() => void>>();
+
+  /** Глобальные подписчики — уведомляются при ЛЮБОМ изменении. */
+  const globalListeners = new Set<() => void>();
+
+  /** Глобальная версия — инкрементируется при каждом изменении. */
+  let version = 0;
+
+  /** Версии отдельных узлов — для точечной подписки. */
+  const nodeVersions = new WeakMap<object, number>();
 
   /** Кэш Proxy-объектов — один прокси на узел конфига. */
   const proxyCache = new WeakMap<object, any>();
@@ -463,9 +491,19 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   }
 
   function notifyChanged(changed: Set<object>) {
+    if (changed.size === 0) return;
+
+    // Инкрементируем глобальную версию
+    version++;
+
+    // Обновляем версии изменённых узлов + уведомляем per-node подписчиков
     for (const node of changed) {
+      nodeVersions.set(node, version);
       notify(node);
     }
+
+    // Уведомляем глобальных подписчиков
+    globalListeners.forEach((fn) => fn());
   }
 
   // ─── Построение Proxy ──────────────────────────────────────────────────────
@@ -548,11 +586,19 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     return () => nodeListeners.get(node)!.delete(listener);
   };
 
+  const subscribeGlobal = (listener: () => void) => {
+    globalListeners.add(listener);
+    return () => globalListeners.delete(listener);
+  };
+
   // ─── Публичный API ─────────────────────────────────────────────────────────
 
   return {
     proxy: buildProxy(root) as ConfigProxy<TConfig>,
     subscribe,
+    subscribeGlobal,
+    getVersion: () => version,
+    getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
     getValues: () => collectValues(root),
   };
 }

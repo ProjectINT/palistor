@@ -3,85 +3,52 @@
 ## Что хотим
 
 ```tsx
-// ✅ Подписка на всю сущность по ID
-const user = useForm(user_id);
+// ✅ Создаём store один раз (вне React)
+const store = createProxyStore({ config, initialValues });
 
+// ✅ Подключаем в React через useForm
+const form = useForm(store);
 
-// Далее мы передаем ссылку в компонент
-
-<Component passport={user.passport}>
+// ✅ Передаём поддерево в компонент — никаких хуков внутри
+<Component passport={form.passport} />
 
 // В компоненте
-
-const { passport } = props
-
-// дальше
-
-<Number number={passport.number}>
-
-
-// ✅ Любая глубина вложенности
-
-// ✅ Зависимости для вычисляемых полей — автоматически
-cardNumber: {
-  isVisible: (v) => v.paymentType === "card",
-  // dependencies не нужны — прокси сам отследил доступ к v.paymentType
+function Component({ passport }) {
+  if (!passport.isVisible) return null;
+  return <NumberField field={passport.number} />;
 }
-```
 
-## Как это работает
-
-### `useForm(id)` → TrackingProxy
-
-```ts
-function useForm<T>(id: string): T {
-  const store = getStoreById(id);
-  const trackedPaths = useRef(new Set<string>());
-
-  return useSyncExternalStore(
-    (notify) => store.subscribe(() => {
-      // ре-рендер только если изменился хотя бы один из прочитанных путей
-      if (hasAnyPathChanged(store, trackedPaths.current)) notify();
-    }),
-    () => makeTrackingProxy(store.getState(), trackedPaths.current)
+// ✅ Листовой компонент читает всё через точку
+function NumberField({ field }) {
+  return (
+    <input
+      value={field.value}
+      placeholder={field.placeholder}
+      disabled={field.isDisabled}
+      onChange={(e) => { field.value = e.target.value }}
+    />
   );
 }
+
+// ✅ Зависимости для вычисляемых полей — пока через recomputeAll
+// (автоматический dependency tracking — следующий шаг)
+cardNumber: {
+  isVisible: (values) => values.paymentType === "card",
+}
 ```
 
-### TrackingProxy
+## Текущая архитектура
 
-Рекурсивный `Proxy`, который при каждом `get` записывает путь в `Set`:
+### Два слоя
 
-```ts
-// доступ к passport.number → записывает "passport.number"
-// доступ к user.passport   → записывает "passport" и возвращает новый прокси
+| Слой | Что делает | Файл |
+|------|-----------|------|
+| **ProxyStore** (framework-agnostic) | Хранит values + computed state, пересчитывает по конфигу, уведомляет | `proxy/store.ts` |
+| **useForm** (React integration) | Подключает компонент к store через `useSyncExternalStore` | `proxy/react/useForm.ts` |
+
+### ProxyStore
+
 ```
-
-Сравнение при обновлении store: `prev[path] === next[path]` для каждого записанного пути.
-
-### Автодепенденсии в compute
-
-Те же `TrackingProxy`-обёртки используются при вызове `isVisible(v)` / `compute(v)`:
-
-```ts
-const deps = new Set<string>();
-const proxy = makeTrackingProxy(values, deps);
-fn(proxy); // ← записываем что было прочитано
-// deps теперь содержит реальные зависимости
-```
-
-Пересчёт — только когда изменился хотя бы один путь из `deps`.
-
-## Что даёт
-
-| Сейчас | С прокси |
-|---|---|
-| `useSelector(store, s => s.values.x)` | `const f = useForm(id); f.values.x` |
-| `dependencies: ["paymentType"]` | не нужны |
-| Ручной `shallowEqual` при выборке объекта | прокси сам знает какие поля читались |
-
-
-
 Config (static)                    State (reactive, per config node)
 ┌──────────────────────┐           ┌───────────────────────────────┐
 │ passport: {          │           │ WeakMap<configNode, {         │
@@ -90,7 +57,7 @@ Config (static)                    State (reactive, per config node)
 │     value: "",       │           │   isRequired: true, ← computed│
 │     isRequired: true,│           │   error: null,      ← computed│
 │     validate: fn,    │           │   label: "Passport Number",   │
-│   }                  │           │ }>                            │
+│   }                  │           │ }>                             │
 │ }                    │           └───────────────────────────────┘
 └──────────────────────┘                       │
          │                                     │
@@ -98,5 +65,91 @@ Config (static)                    State (reactive, per config node)
                │
                │  GET .value      → state.value
                │  GET .isVisible  → state.isVisible (computed!)
-               │  SET .value = X  → update + recompute + notify
-               │  GET .number     → child proxy
+               │  SET .value = X  → formatter → validate → recompute → notify
+               │  GET .number     → child proxy (cached)
+```
+
+### Что происходит при `SET .value`
+
+```
+form.passport.number.value = "XY999"
+  │
+  ├─ 1. formatter?  → config.passport.number.formatter(value, allValues)
+  ├─ 2. store value → nodeState.set(node, { ...state, value: formatted })
+  ├─ 3. recomputeAll():
+  │     for each leaf node:
+  │       - isVisible(allValues), isRequired(allValues), ...
+  │       - validate(value, allValues) → error / errorMessage
+  │       - shallow compare prev vs next → changed set
+  ├─ 4. version++
+  ├─ 5. notify per-node listeners (changed nodes only)
+  └─ 6. notify global listeners → React re-renders
+```
+
+### useForm
+
+```ts
+function useForm<TConfig>(store: ProxyStore<TConfig>): ConfigProxy<TConfig> {
+  useSyncExternalStore(
+    store.subscribeGlobal,  // подписка на любое изменение
+    store.getVersion,       // snapshot = глобальный счётчик
+  );
+  return store.proxy;       // кэшированный Proxy (referential equality)
+}
+```
+
+Компонент перерендерится при **любом** изменении в store (глобальная подписка).
+Это корректно и достаточно для большинства форм (< 100 полей).
+
+### Ключевые решения
+
+- **WeakMap<configNode, FieldState>** — состояние привязано к объектам конфига, а не к строковым путям
+- **Proxy кэшируется** — `proxyCache: WeakMap`, один прокси на узел конфига
+- **recomputeAll()** — при каждом SET пересчитывает все поля, но уведомляет только изменённые (shallow compare)
+- **Промежуточные узлы** — группы с computed-свойствами (`passport.isVisible`) тоже регистрируются и вычисляются
+
+## Реализовано
+
+- [x] **Ядро: computed state** — `nodeState` хранит `{ value, isVisible, isRequired, error, ... }`. Функции из конфига вычисляются при init и после каждого SET.
+- [x] **SET + recompute** — запись `.value` → `formatter` → `validate` → `recomputeAll` → notify изменённых.
+- [x] **React integration** — `useForm` через `useSyncExternalStore` с глобальной подпиской.
+- [x] **Передача поддерева** — `<Component passport={form.passport} />` работает, вложенный компонент читает из того же прокси.
+
+## Следующие шаги
+
+| # | Шаг | Описание |
+|---|-----|----------|
+| 1 | **Dependency tracking** | Tracking proxy для `isVisible(values)` — автоматически определяет зависимости. `recomputeAll` → пересчёт только затронутых полей. |
+| 2 | **Granular React subscription** | Tracking proxy в `useForm` — записывает прочитанные пути, re-render только при изменении прочитанного. |
+| 3 | **setter()** | `setter(value, allValues, setValues)` — изменение нескольких полей за один проход. |
+| 4 | **Suspense / async** | `await passport` → резольвер заполняет состояние, React включает Suspense. |
+
+## API
+
+```ts
+// Создание store
+const store = createProxyStore({
+  config: passportConfig,
+  initialValues: { number: "AB123" },
+});
+
+// React
+const form = useForm(store);
+
+// Чтение (из FieldState, не из конфига)
+form.passport.number.value       // → "AB123"
+form.passport.number.isRequired  // → true (вычислено)
+form.passport.number.error       // → "required" | undefined
+form.passport.isVisible          // → true (вычислено из функции)
+
+// Запись
+form.passport.number.value = "XY999";
+// → formatter → validate → recompute → notify → re-render
+
+// Значения для submit
+store.getValues()  // → { passport: { number: "XY999" } }
+
+// Подписка (low-level)
+store.subscribe(configNode, listener)
+store.subscribeGlobal(listener)
+```
