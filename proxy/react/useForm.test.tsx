@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { render, screen } from "@testing-library/react";
-import { createProxyStore } from "../store";
+import { createProxyStore } from "../store/store";
 import { useForm } from "./useForm";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ describe("useForm", () => {
       return (
         <div>
           <span data-testid="email-value">{form.email.value}</span>
-          <span data-testid="email-error">{form.email.error ?? "none"}</span>
+          <span data-testid="email-error">{form.email.error ? "Error" : "none"}</span>
           <button onClick={() => { form.email.value = "hello@test.com"; }}>
             Set Email
           </button>
@@ -125,7 +125,7 @@ describe("useForm", () => {
     render(<TestComponent />);
 
     expect(screen.getByTestId("email-value").textContent).toBe("");
-    expect(screen.getByTestId("email-error").textContent).toBe("required");
+    expect(screen.getByTestId("email-error").textContent).toBe("Error");
 
     act(() => {
       screen.getByRole("button").click();

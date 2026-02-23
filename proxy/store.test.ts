@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createProxyStore } from "./store";
+import { createProxyStore } from "./store/store";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ describe("createProxyStore", () => {
     it("вычисляет error через validate", () => {
       const store = createProxyStore({ config: makeConfig() });
       // email пустой, validate = (v) => !v ? "required" : undefined
-      expect(store.proxy.email.error).toBe("required");
+      expect(store.proxy.email.error).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
@@ -139,13 +139,13 @@ describe("createProxyStore", () => {
 
     it("пересчитывает validate после записи", () => {
       const store = createProxyStore({ config: makeConfig() });
-      expect(store.proxy.email.error).toBe("required"); // пустой
+      expect(store.proxy.email.error).toBe(true); // пустой
 
       store.proxy.email.value = "filled";
       expect(store.proxy.email.error).toBeUndefined(); // заполнен
 
       store.proxy.email.value = "";
-      expect(store.proxy.email.error).toBe("required"); // снова пустой
+      expect(store.proxy.email.error).toBe(true); // снова пустой
     });
 
     it("пересчитывает isVisible зависимых полей", () => {

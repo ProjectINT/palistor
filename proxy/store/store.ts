@@ -1,3 +1,11 @@
+import {
+  type FieldState,
+  computeFieldState,
+  fieldStateChanged,
+} from "./compute";
+
+export type { FieldState };
+
 /**
  * ProxyStore — реактивное хранилище на основе Proxy с вычисляемым состоянием
  *
@@ -26,27 +34,6 @@
  *   proxy.passport.number.isVisible    // → true (вычислено из функции)
  *   proxy.passport.number.error        // → "required" | undefined (вычислено)
  */
-
-// ─── Вычисленное состояние поля ──────────────────────────────────────────────
-
-/**
- * Полное вычисленное состояние одного поля.
- *
- * Хранится в WeakMap<configNode, FieldState>. Все функции из конфига
- * (isVisible, isRequired, validate…) уже вызваны, результат — чистые значения.
- */
-export interface FieldState {
-  value: any;
-  label?: string;
-  placeholder?: string;
-  description?: string;
-  isRequired: boolean;
-  isReadOnly: boolean;
-  isDisabled: boolean;
-  isVisible: boolean;
-  error?: string;
-  errorMessage?: string;
-}
 
 // ─── Наборы ключей ───────────────────────────────────────────────────────────
 
@@ -79,7 +66,6 @@ const CONFIG_PROPS = new Set<string>([
   "componentProps",
   "types",
   "dependencies",
-  "nested",
 ]);
 
 // ─── Proxy-типы ──────────────────────────────────────────────────────────────
@@ -105,7 +91,7 @@ type ConfigSkipKeys =
   | "componentProps"
   | "types"
   | "dependencies"
-  | "nested";
+  | "nested"
 
 /**
  * Расширяет тип значения, чтобы допустить типичные «входные» типы форматтеров.
@@ -131,7 +117,8 @@ export interface FieldProxyNode<TValue = any> {
   isReadOnly: boolean;
   isDisabled: boolean;
   isVisible: boolean;
-  error?: string;
+  /** true если поле имеет ошибку валидации */
+  error?: boolean;
   errorMessage?: string;
 }
 
@@ -143,14 +130,27 @@ type ExtractNodeValue<T> = T extends { value: (...args: any[]) => infer R }
     : never;
 
 /**
+ * Вычисленные флаги группового узла (присутствуют, если заданы в конфиге;
+ * могут быть boolean-константой или функцией — в прокси уже разрешены).
+ */
+export interface GroupProxyNode {
+  isVisible: boolean;
+  isRequired?: boolean;
+  isReadOnly?: boolean;
+  isDisabled?: boolean;
+  error?: boolean;
+  errorMessage?: string;
+}
+
+/**
  * Рекурсивно конвертирует узел конфига в его прокси-тип:
  * - Листовой узел (есть `value`) → `FieldProxyNode<TValue>`
- * - Групповой узел              → `{ isVisible: boolean } & { дочерние поля… }`
+ * - Групповой узел              → `GroupProxyNode & { дочерние поля… }`
  */
 type ConfigNodeToProxy<T> = T extends { value: any }
   ? FieldProxyNode<ExtractNodeValue<T>>
   : T extends Record<string, any>
-    ? { isVisible: boolean } & {
+    ? GroupProxyNode & {
         [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
       }
     : never;
@@ -213,82 +213,6 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   getValues: () => Record<string, any>;
 }
 
-// ─── Вспомогательные функции ─────────────────────────────────────────────────
-
-/**
- * Вычисляет одно свойство-флаг из конфига: если это функция — вызывает с values,
- * иначе возвращает как есть. Если undefined — возвращает defaultValue.
- */
-function resolveFlag(
-  configValue: boolean | ((values: any) => boolean) | undefined,
-  values: Record<string, any>,
-  defaultValue: boolean,
-): boolean {
-  if (configValue === undefined) return defaultValue;
-  if (typeof configValue === "function") return configValue(values);
-  return configValue;
-}
-
-/**
- * Вычисляет строковое свойство (label, placeholder, description) из конфига.
- * Может быть строкой или функцией (translate, settings).
- * Пока без translate — если функция, вызываем с identity-функцией.
- */
-function resolveString(
-  configValue: string | ((translate: any, settings?: any) => string) | undefined,
-): string | undefined {
-  if (configValue === undefined) return undefined;
-  if (typeof configValue === "function") {
-    // translate-функцию пока заменяем identity — вернёт ключ как есть
-    return configValue((key: string) => key);
-  }
-  return configValue;
-}
-
-/**
- * Вычисляет полное состояние одного поля на основе конфига и текущих values.
- */
-function computeFieldState(
-  configNode: Record<string, any>,
-  currentValue: any,
-  allValues: Record<string, any>,
-): FieldState {
-  // Вычисляем флаги
-  const isVisible = resolveFlag(configNode.isVisible, allValues, true);
-  const isRequired = resolveFlag(configNode.isRequired, allValues, false);
-  const isDisabled = resolveFlag(configNode.isDisabled, allValues, false);
-  const isReadOnly = resolveFlag(configNode.isReadOnly, allValues, false);
-
-  // Строки
-  const label = resolveString(configNode.label);
-  const placeholder = resolveString(configNode.placeholder);
-  const description = resolveString(configNode.description);
-
-  // Валидация
-  let error: string | undefined;
-  let errorMessage: string | undefined;
-  if (typeof configNode.validate === "function") {
-    const result = configNode.validate(currentValue, allValues);
-    if (result) {
-      error = result;
-      errorMessage = result;
-    }
-  }
-
-  return {
-    value: currentValue,
-    isVisible,
-    isRequired,
-    isDisabled,
-    isReadOnly,
-    label,
-    placeholder,
-    description,
-    error,
-    errorMessage,
-  };
-}
-
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
 
 /**
@@ -316,7 +240,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   options: ProxyStoreOptions<TConfig>,
 ): ProxyStore<TConfig> {
   const { config, initialValues = {} } = options;
-  const root = config as Record<string, any>;
+  const rootConfig = config as Record<string, any>;
 
   // ─── Хранилища ────────────────────────────────────────────────────────────
 
@@ -444,7 +368,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
    * Возвращает Set узлов, чьё состояние изменилось (для notify).
    */
   function recomputeAll(): Set<object> {
-    const allValues = collectValues(root);
+    const allValues = collectValues(rootConfig);
     const changed = new Set<object>();
 
     for (const { node } of leafNodes) {
@@ -462,26 +386,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     return changed;
   }
 
-  /**
-   * Поверхностное сравнение двух FieldState.
-   */
-  function fieldStateChanged(a: FieldState, b: FieldState): boolean {
-    return (
-      a.value !== b.value ||
-      a.isVisible !== b.isVisible ||
-      a.isRequired !== b.isRequired ||
-      a.isDisabled !== b.isDisabled ||
-      a.isReadOnly !== b.isReadOnly ||
-      a.label !== b.label ||
-      a.placeholder !== b.placeholder ||
-      a.description !== b.description ||
-      a.error !== b.error ||
-      a.errorMessage !== b.errorMessage
-    );
-  }
-
   // Выполняем инициализацию
-  registerNodes(root, initialValues, []);
+  registerNodes(rootConfig, initialValues, []);
   recomputeAll(); // вычисляем isVisible, isRequired, error и т.д.
 
   // ─── Уведомление подписчиков ───────────────────────────────────────────────
@@ -551,7 +457,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
           // Применяем formatter, если есть
           let processedValue = newValue;
           if (typeof node.formatter === "function") {
-            const allValues = collectValues(root);
+            const allValues = collectValues(rootConfig);
             processedValue = node.formatter(newValue, allValues);
           }
 
@@ -594,12 +500,12 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // ─── Публичный API ─────────────────────────────────────────────────────────
 
   return {
-    proxy: buildProxy(root) as ConfigProxy<TConfig>,
+    proxy: buildProxy(rootConfig) as ConfigProxy<TConfig>,
     subscribe,
     subscribeGlobal,
     getVersion: () => version,
     getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
-    getValues: () => collectValues(root),
+    getValues: () => collectValues(rootConfig),
   };
 }
 

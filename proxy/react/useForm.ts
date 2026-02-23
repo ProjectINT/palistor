@@ -38,8 +38,8 @@
  *      SET trap → formatter → validate → recompute → notify → re-render.
  */
 
-import { useSyncExternalStore, useCallback, useRef } from "react";
-import type { ProxyStore, ConfigProxy } from "../store";
+import { useSyncExternalStore, useCallback } from "react";
+import type { ProxyStore, ConfigProxy } from "../store/store";
 
 /**
  * Подключает React-компонент к ProxyStore.
