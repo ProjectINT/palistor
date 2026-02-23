@@ -4,19 +4,15 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/Input";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm, fieldProps } from "@/config/paymentForm";
 
-interface CommentSectionProps {
-  formId: string;
-}
-
-export function CommentSection({ formId }: CommentSectionProps) {
+export function CommentSection() {
   const t = useTranslations();
-  const { getFieldProps } = usePaymentForm(formId);
+  const form = usePaymentForm();
 
   return (
     <Section title={t("sections.comment")}>
-      <Input {...getFieldProps("comment")} />
+      <Input {...fieldProps(form.comment)} />
     </Section>
   );
 }

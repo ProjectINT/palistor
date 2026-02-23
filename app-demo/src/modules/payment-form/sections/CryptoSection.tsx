@@ -6,17 +6,11 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { CRYPTO_NETWORK_OPTIONS } from "../constants";
-import { usePaymentForm, type CryptoNetwork } from "@/config/paymentForm";
+import { usePaymentForm, fieldProps, type CryptoNetwork } from "@/config/paymentForm";
 
-interface CryptoSectionProps {
-  formId: string;
-}
-
-export function CryptoSection({ formId }: CryptoSectionProps) {
+export function CryptoSection() {
   const t = useTranslations();
-  const { getFieldProps, setValue } = usePaymentForm(formId);
-  const cryptoWalletProps = getFieldProps("cryptoWallet");
-  const cryptoNetworkProps = getFieldProps("cryptoNetwork");
+  const form = usePaymentForm();
 
   const options: SelectOption[] = CRYPTO_NETWORK_OPTIONS.map((option) => ({
     value: option.value,
@@ -26,15 +20,15 @@ export function CryptoSection({ formId }: CryptoSectionProps) {
   return (
     <Section title={t("sections.crypto")}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input {...cryptoWalletProps} />
+        <Input {...fieldProps(form.cryptoWallet)} />
         <Select
-          {...cryptoNetworkProps}
+          {...fieldProps(form.cryptoNetwork)}
           options={options}
           renderLabel={(option) => t(option.label)}
-          selectedKeys={cryptoNetworkProps.value ? [cryptoNetworkProps.value] : []}
+          selectedKeys={form.cryptoNetwork.value ? [form.cryptoNetwork.value] : []}
           onSelectionChange={(keys) => {
             const value = Array.from(keys)[0] as CryptoNetwork;
-            setValue("cryptoNetwork", value);
+            form.cryptoNetwork.value = value;
           }}
         />
       </div>

@@ -4,24 +4,20 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/Input";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm, fieldProps } from "@/config/paymentForm";
 
-interface CardSectionProps {
-  formId: string;
-}
-
-export function CardSection({ formId }: CardSectionProps) {
+export function CardSection() {
   const t = useTranslations();
-  const { getFieldProps } = usePaymentForm(formId);
+  const form = usePaymentForm();
 
   return (
     <Section title={t("sections.cardDetails")}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-3">
-          <Input {...getFieldProps("cardNumber")} />
+          <Input {...fieldProps(form.cardNumber)} />
         </div>
-        <Input {...getFieldProps("cardExpiry")} />
-        <Input {...getFieldProps("cardCvv")} />
+        <Input {...fieldProps(form.cardExpiry)} />
+        <Input {...fieldProps(form.cardCvv)} />
       </div>
     </Section>
   );

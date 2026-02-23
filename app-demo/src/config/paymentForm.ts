@@ -13,9 +13,9 @@
  * - Computed values (value as function)
  */
 
-import { createForm } from "@palistor";
+import { createProxyStore } from "@palistor/store/store";
+import { useForm } from "@palistor/react/useForm";
 import type { FormConfig, TranslateFn } from "@palistor";
-import { useTranslations } from "next-intl";
 import { computed } from "./computed";
 import { card } from "./card";
 
@@ -143,12 +143,41 @@ export const paymentFormDefaults: PaymentFormValues = {
 };
 
 // ============================================================================
-// createForm — новый API
+// Store — новый API createProxyStore
 // ============================================================================
 
-export const { useForm: usePaymentForm } = createForm<PaymentFormValues>({
-  config: paymentFormConfig,
-  defaults: paymentFormDefaults,
-  translateFunction: useTranslations,
-  type: "PaymentDemo",
-});
+export const paymentStore = createProxyStore({ config: paymentFormConfig });
+
+/**
+ * Хук для подключения компонентов к paymentStore.
+ * Возвращает реактивный прокси — чтение поля = подписка на него.
+ *
+ * @example
+ * const form = usePaymentForm();
+ * form.email.value          // читаем
+ * form.email.value = "x"    // пишем
+ */
+export const usePaymentForm = () => useForm(paymentStore) as any;
+
+/**
+ * Преобразует узел прокси поля в объект пропсов для UI-компонентов.
+ * Читает все свойства во время рендера → tracking proxy их запишет.
+ *
+ * @example
+ * <Input {...fieldProps(form.email)} type="email" />
+ */
+export function fieldProps(field: any) {
+  return {
+    value: field.value,
+    label: field.label,
+    placeholder: field.placeholder,
+    description: field.description,
+    isVisible: field.isVisible ?? true,
+    isRequired: field.isRequired ?? false,
+    isDisabled: field.isDisabled ?? false,
+    isReadOnly: field.isReadOnly ?? false,
+    errorMessage: field.errorMessage,
+    isInvalid: Boolean(field.error),
+    onValueChange: (v: any) => { field.value = v; },
+  };
+}
