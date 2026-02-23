@@ -3,7 +3,6 @@ import { renderHook, act } from "@testing-library/react";
 import { render, screen } from "@testing-library/react";
 import { createProxyStore } from "../store/store";
 import { useForm } from "./useForm";
-import React from "react";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
 

@@ -2,118 +2,151 @@
 
 **Реактивный state manager для форм с оптимизированным рендерингом**
 
-Palistor — это легковесная библиотека для управления состоянием форм в React приложениях. Построена на принципах минимальных ре-рендеров и декларативной конфигурации полей.
+Palistor — это легковесная библиотека для управления состоянием форм в React приложениях. Построена на двухслойной proxy-архитектуре: framework-agnostic хранилище и React-интеграция с гранулярным трекингом подписок.
 
 ## Ключевые особенности
 
-- 🎯 **Точечные обновления** — компонент перерендерится только когда изменится его поле
-- 📦 **Computed Field State** — вычисляемые свойства (isVisible, isDisabled) хранятся в store
-- 🔗 **Система зависимостей** — оптимизация через явное указание зависимостей между полями
-- 🌍 **i18n поддержка** — встроенная интеграция с next-intl
-- 💾 **Persistence** — автосохранение черновиков в localStorage
-- 🧪 **Тестируемость** — чистые функции для всех операций с состоянием
+- 🎯 **Точечные обновления** — re-render только при изменении полей, которые компонент реально читал
+- 📦 **Computed Field State** — `isVisible`, `isRequired`, `error` и другие свойства пересчитываются автоматически
+- 🌲 **Вложенные структуры** — поддержка групповых узлов (`passport.number.value`) с computed-свойствами на любом уровне
+- 🔗 **Proxy API** — нативный синтаксис чтения и записи (`field.value = x`) вместо строковых ключей
+- 🧪 **Тестируемость** — framework-agnostic store, тестируется без React
 
 ## Установка
- - **В разработке**
+
+**В разработке**
 
 ---
 
 ## Быстрый старт
 
-### 1. Определите конфигурацию формы
+### 1. Определите конфигурацию
 
 ```typescript
-import type { FormConfig } from "@/modules/palistor";
+import { createProxyStore } from "@/modules/palistor";
 
-interface PaymentForm {
-  paymentType: "card" | "bank" | "crypto";
-  cardNumber: string;
-  bankAccount: string;
-  amount: number;
-}
+const store = createProxyStore({
+  config: {
+    paymentType: {
+      value: "card",
+      label: "Payment Type",
+    },
 
-const paymentConfig: FormConfig<PaymentForm> = {
-  paymentType: {
-    value: "card",
-    label: (t) => t("form.paymentType"),
-  },
+    cardNumber: {
+      value: "",
+      label: "Card Number",
+      placeholder: "0000 0000 0000 0000",
+      isVisible: (values) => values.paymentType === "card",
+      isRequired: (values) => values.paymentType === "card",
+      validate: (value, values) => {
+        if (values.paymentType === "card" && value.length < 16) {
+          return "Card number must be 16 digits";
+        }
+      },
+    },
 
-  cardNumber: {
-    value: "",
-    label: (t) => t("form.cardNumber"),
-    placeholder: (t) => t("form.cardNumberPlaceholder"),
-    // Видимость зависит от paymentType
-    isVisible: (values) => values.paymentType === "card",
-    isRequired: (values) => values.paymentType === "card",
-    // Явно указываем зависимость для оптимизации
-    dependencies: ["paymentType"],
-    // Валидация
-    validate: (value, values) => {
-      if (values.paymentType === "card" && value.length < 16) {
-        return "validation.cardNumberInvalid";
-      }
+    passport: {
+      // Групповой узел — может иметь computed-свойства
+      isVisible: (values) => values.paymentType === "bank",
+      number: {
+        value: "",
+        label: "Passport Number",
+        isRequired: true,
+      },
+      issueDate: {
+        value: "",
+        label: "Issue Date",
+      },
+    },
+
+    amount: {
+      value: 0,
+      label: "Amount",
+      isRequired: true,
     },
   },
-
-  bankAccount: {
-    value: "",
-    label: (t) => t("form.bankAccount"),
-    isVisible: (values) => values.paymentType === "bank",
-    isRequired: (values) => values.paymentType === "bank",
-    dependencies: ["paymentType"],
+  initialValues: {
+    paymentType: "card",
   },
-
-  amount: {
-    value: 0,
-    label: (t) => t("form.amount"),
-    isRequired: true,
-    // Статическое поле — пересчёт только при изменении себя
-    dependencies: [],
-  },
-};
+});
 ```
 
 ### 2. Используйте в компоненте
 
 ```tsx
-import { useFormStore } from "@/modules/palistor";
+import { useForm } from "@/modules/palistor";
 
 function PaymentForm() {
-  const form = useFormStore<PaymentForm>("payment-form", {
-    config: paymentConfig,
-    defaults: {
-      paymentType: "card",
-      cardNumber: "",
-      bankAccount: "",
-      amount: 0,
-    },
-    onSubmit: async (values) => {
-      await api.processPayment(values);
-    },
-  });
+  const form = useForm(store);
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); form.submit(); }}>
-      <Select {...form.getFieldProps("paymentType")}>
-        <Option value="card">Card</Option>
-        <Option value="bank">Bank</Option>
-      </Select>
+    <form onSubmit={(e) => { e.preventDefault(); handleSubmit(store.getValues()); }}>
+      <Select
+        value={form.paymentType.value}
+        onChange={(e) => { form.paymentType.value = e.target.value; }}
+        label={form.paymentType.label}
+      />
 
       {/* Поля автоматически скрываются/показываются */}
-      {form.fields.cardNumber.isVisible && (
-        <Input {...form.getFieldProps("cardNumber")} />
+      {form.cardNumber.isVisible && (
+        <Input
+          value={form.cardNumber.value}
+          onChange={(e) => { form.cardNumber.value = e.target.value; }}
+          label={form.cardNumber.label}
+          placeholder={form.cardNumber.placeholder}
+          required={form.cardNumber.isRequired}
+          errorMessage={form.cardNumber.errorMessage}
+        />
       )}
 
-      {form.fields.bankAccount.isVisible && (
-        <Input {...form.getFieldProps("bankAccount")} />
+      {form.passport.isVisible && (
+        <PassportSection passport={form.passport} />
       )}
 
-      <Input {...form.getFieldProps("amount")} type="number" />
-
-      <Button type="submit" isLoading={form.submitting}>
-        Pay
-      </Button>
+      <Input
+        value={form.amount.value}
+        onChange={(e) => { form.amount.value = Number(e.target.value); }}
+        type="number"
+        label={form.amount.label}
+        required={form.amount.isRequired}
+      />
     </form>
+  );
+}
+
+// Дочерний компонент — передаём поддерево через проп (tracking родителя)
+function PassportSection({ passport }) {
+  return (
+    <>
+      <Input
+        value={passport.number.value}
+        onChange={(e) => { passport.number.value = e.target.value; }}
+        label={passport.number.label}
+      />
+      <Input
+        value={passport.issueDate.value}
+        onChange={(e) => { passport.issueDate.value = e.target.value; }}
+        label={passport.issueDate.label}
+      />
+    </>
+  );
+}
+```
+
+### Изолированный re-render дочернего компонента
+
+Если дочерний компонент должен ре-рендериться независимо от родителя, используйте `useForm(subtree)`:
+
+```tsx
+function PassportSection({ passport }) {
+  const p = useForm(passport); // свой tracking, изолированный re-render
+  if (!p.isVisible) return null;
+  return (
+    <Input
+      value={p.number.value}
+      onChange={(e) => { p.number.value = e.target.value; }}
+      label={p.number.label}
+    />
   );
 }
 ```
@@ -122,227 +155,172 @@ function PaymentForm() {
 
 ## Архитектура
 
-### Структура FormState
+### Два слоя
 
-```typescript
-interface FormState<TValues> {
-  // Плоский объект значений (для обратной совместимости)
-  values: TValues;
+| Слой | Что делает | Файлы |
+|------|-----------|-------|
+| **ProxyStore** (framework-agnostic) | Хранит values + computed state в `WeakMap<configNode, FieldState>`, пересчитывает по конфигу, версионирует ноды, уведомляет подписчиков | `store/*.ts` |
+| **useForm** (React integration) | Tracking proxy + `useSyncExternalStore` — гранулярная подписка: re-render только при изменении прочитанных нод | `react/*.ts` |
 
-  // Вычисленное состояние каждого поля
-  fields: {
-    [K in keyof TValues]: {
-      value: TValues[K];
-      isVisible: boolean;
-      isDisabled: boolean;
-      isReadOnly: boolean;
-      isRequired: boolean;
-      label?: string;
-      placeholder?: string;
-      description?: string;
-      error?: string;
-    };
-  };
-
-  // Ошибки валидации
-  errors: Partial<Record<keyof TValues, string>>;
-
-  // Метаданные
-  submitting: boolean;
-  dirty: boolean;
-  showErrors: boolean;
-  locale: string;
-}
-```
-
-### Поток данных
+### Поток данных при SET
 
 ```
-setValue('paymentType', 'bank')
-    │
-    ▼
-┌─────────────────────────────────────────┐
-│ setFieldValueAction (чистая функция)    │
-│  ├── formatter(value)                   │
-│  ├── newValues = { ...values, [key] }   │
-│  └── recomputeFieldStates()             │
-└─────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────┐
-│ recomputeFieldStates                    │
-│  for each field:                        │
-│    ├── shouldRecalculateField()?        │
-│    │     └── check dependencies         │
-│    └── computeFieldState() if needed    │
-└─────────────────────────────────────────┘
-    │
-    ▼
-store.setState(newState)
-    │
-    ▼
-React: useSyncExternalStore → selective re-render
+form.passport.number.value = "XY999"
+  │
+  ├─ 1. formatter?   → config.formatter(value, allValues) → processedValue
+  ├─ 2. store value  → nodeState.set(node, { ...state, value: processedValue })
+  ├─ 3. recomputeAll():
+  │     ├─ collectValues(rootConfig, nodeState) → allValues
+  │     └─ for each leafNode:
+  │          ├─ computeFieldState(node, currentValue, allValues)
+  │          └─ fieldStateChanged(prev, next) → changed set (shallow compare)
+  ├─ 4. changed.add(currentNode) — текущий узел всегда в changed
+  ├─ 5. version++ (глобальный счётчик)
+  ├─ 6. nodeVersions.set(node, version) — только для changed-нод
+  ├─ 7. notify per-node listeners
+  └─ 8. notify global listeners → React useSyncExternalStore → re-render
 ```
 
----
+### Инициализация store
 
-## Система зависимостей (dependencies)
-
-Массив `dependencies` в конфигурации поля определяет, при изменении каких полей нужно пересчитать его состояние.
-
-| dependencies | Поведение |
-|--------------|-----------|
-| `undefined` (не указан) | Пересчёт при изменении **любого** поля |
-| `['field1', 'field2']` | Пересчёт при изменении field1, field2 **или себя** |
-| `[]` (пустой массив) | Пересчёт **только** при изменении себя или init/reset |
-
-### Пример оптимизации
-
-```typescript
-const config: FormConfig<MyForm> = {
-  // Поле-триггер — без зависимостей
-  country: { value: "US" },
-
-  // Зависит от country
-  city: {
-    value: "",
-    isVisible: (v) => v.country !== "",
-    dependencies: ["country"],
-  },
-
-  // Статическое поле — никогда не пересчитывается
-  comment: {
-    value: "",
-    label: (t) => t("form.comment"),
-    dependencies: [], // ← только при init/reset
-  },
-
-  // Сложная зависимость
-  shippingCost: {
-    value: 0,
-    isVisible: (v) => v.country !== "" && v.city !== "",
-    dependencies: ["country", "city"],
-  },
-};
 ```
+createProxyStore({ config, initialValues })
+  │
+  ├─ 1. registerNodes — рекурсивный обход дерева конфига
+  │     ├─ Листовые узлы (есть "value") → leafNodes[], начальный FieldState
+  │     ├─ Промежуточные узлы с computed-свойствами → тоже в leafNodes[]
+  │     └─ initialValues перекрывают дефолтные значения из конфига
+  │
+  ├─ 2. recomputeAll() — вычисляет isVisible, isRequired, label… для всех leafNodes
+  │
+  └─ 3. buildProxy(rootConfig) → store.proxy (кэшированный, referential equality)
+```
+
+### Паттерны подписки в React
+
+| Паттерн | Parent re-render | Child re-render | Когда использовать |
+|---------|:---:|:---:|---|
+| **Один `useForm` + пропсы вниз** | При любом прочитанном изменении | Каскадно за родителем | Простые формы |
+| **`useForm(subtree)` в child** | Только свои чтения | Только свои чтения | Сложные формы, гранулярный контроль |
+| **Проп без `useForm` (листовой)** | Через родительский tracking | Каскадно | UI-компоненты без изолированного re-render |
 
 ---
 
 ## API Reference
 
-### useFormStore
+### `createProxyStore`
 
 ```typescript
-function useFormStore<TValues>(
-  id: string,
-  options: {
-    config: FormConfig<TValues>;
-    defaults: TValues;
-    initial?: Partial<TValues>;
-    locale?: string;
-    persistId?: string;
-    onChange?: (params) => void | Partial<TValues>;
-    beforeSubmit?: (values) => TValues;
-    onSubmit?: (values) => Promise<any>;
-    afterSubmit?: (data, reset) => void;
-    autoUnregister?: boolean;
-  }
-): FormStoreApi<TValues>;
+const store = createProxyStore({
+  config: Config,           // дерево FieldConfigNode / GroupConfigNode
+  initialValues?: object,   // перекрывают value из конфига
+});
 ```
 
-**Возвращает:**
+**Методы store:**
 
-| Свойство | Тип | Описание |
-|----------|-----|----------|
-| `values` | `TValues` | Текущие значения полей |
-| `fields` | `FieldStates<TValues>` | Вычисленное состояние каждого поля |
-| `errors` | `Record<string, string>` | Ошибки валидации |
-| `dirty` | `boolean` | Форма изменена |
-| `submitting` | `boolean` | Идёт отправка |
-| `setValue(key, value)` | `function` | Установить значение |
-| `reset(values?)` | `function` | Сбросить форму |
-| `setLocale(locale)` | `function` | Сменить локаль |
-| `submit()` | `function` | Отправить форму |
-| `validateForm()` | `function` | Валидировать всю форму |
-| `getFieldProps(key)` | `function` | Получить пропсы для UI компонента |
-| `getVisibleFields()` | `function` | Список видимых полей |
+| Метод | Описание |
+|-------|----------|
+| `store.proxy` | Корневой proxy для чтения/записи значений |
+| `store.getValues()` | Собрать все текущие значения в плоский/вложенный объект |
+| `store.getVersion()` | Глобальный счётчик версий (для snapshot) |
+| `store.getNodeVersion(node)` | Версия конкретной ноды |
+| `store.subscribe(node, listener)` | Подписка на изменения конкретной ноды |
+| `store.subscribeGlobal(listener)` | Подписка на любые изменения |
 
-### Хуки для отдельных полей
+### `useForm`
 
 ```typescript
-// Полное состояние поля (все свойства)
-const field = useFieldState<string>("form-id", "fieldName");
-// → { value, isVisible, isDisabled, isRequired, label, error, ... }
+// Корневой — создаёт tracking proxy поверх store.proxy
+const form = useForm(store);
 
-// Только значение
-const value = useFieldValue<string>("form-id", "fieldName");
+// Дочерний — свой tracking поверх переданного поддерева
+const section = useForm(form.passport);
+```
 
-// Только видимость
-const isVisible = useFieldVisible("form-id", "fieldName");
+Возвращает typing proxy, типизированный как `ConfigProxy<TConfig>`:
+- Листовой узел → `FieldProxyNode<TValue>` (чтение/запись всех `FieldState`-свойств)
+- Групповой узел → `GroupProxyNode` с дочерними узлами
 
-// Только ошибка
-const error = useFieldError("form-id", "fieldName");
+### Чтение и запись через proxy
 
-// Только setter (без подписки)
-const setValue = useSetFieldValue<string>("form-id", "fieldName");
+```typescript
+// Чтение (из FieldState, реактивно через tracking)
+form.email.value          // → "user@example.com"
+form.email.isRequired     // → true
+form.email.error          // → true / undefined
+form.email.errorMessage   // → "required" / undefined
+form.email.isVisible      // → true
+form.email.label          // → "Email"
+form.email.placeholder    // → "Enter email"
+form.email.description    // → "..."
+
+form.passport.isVisible   // → false (computed на групповом узле)
+form.passport.number.value // → ""
+
+// Запись (триггерит formatter → recomputeAll → notify)
+form.email.value = "new@test.com";
+form.passport.number.value = "AB123";
 ```
 
 ---
 
 ## FieldConfig
 
+### Листовой узел (`FieldConfigNode`)
+
 ```typescript
-interface FieldConfig<TValue, TValues> {
-  // Значение
-  value?: TValue | ((values: TValues) => TValue);
+interface FieldConfigNode<TValue, TValues> {
+  value: TValue | ((values: TValues) => TValue); // обязателен
 
-  // Строковые свойства (поддерживают i18n)
-  label?: string | ((translate, settings?) => string);
-  placeholder?: string | ((translate, settings?) => string);
-  description?: string | ((translate, settings?) => string);
+  label?: string | ((values: TValues) => string);
+  placeholder?: string | ((values: TValues) => string);
+  description?: string | ((values: TValues) => string);
 
-  // Boolean свойства (могут быть функциями)
-  isVisible?: boolean | ((values: TValues) => boolean);
-  isDisabled?: boolean | ((values: TValues) => boolean);
-  isReadOnly?: boolean | ((values: TValues) => boolean);
-  isRequired?: boolean | string | ((values: TValues) => boolean | string);
+  isVisible?: boolean | ((values: TValues) => boolean);   // default: true
+  isRequired?: boolean | ((values: TValues) => boolean);  // default: false
+  isDisabled?: boolean | ((values: TValues) => boolean);  // default: false
+  isReadOnly?: boolean | ((values: TValues) => boolean);  // default: false
 
-  // Валидация
-  validate?: (value: TValue, values: TValues) => string | undefined;
+  validate?: (value: TValue, values: TValues) => string | undefined | false;
+  formatter?: (value: unknown, values: TValues) => TValue;
+  setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
 
-  // Форматирование
-  formatter?: (value: TValue, values: TValues) => TValue;
-
-  // Связанные изменения
-  setter?: (value, values, setValues) => void;
-
-  // Оптимизация
-  dependencies?: Array<keyof TValues>;
+  componentProps?: Record<string, unknown>;
+  dependencies?: readonly string[]; // зарезервировано для будущей оптимизации
 }
 ```
 
----
+### Групповой узел (`GroupConfigNode`)
 
-## Интеграция с HeroUI
+```typescript
+interface GroupConfigNode<TValues> {
+  // computed-свойства на группу (дочерние поля не затрагивают)
+  isVisible?: boolean | ((values: TValues) => boolean);
+  isRequired?: boolean | ((values: TValues) => boolean);
+  isReadOnly?: boolean | ((values: TValues) => boolean);
+  isDisabled?: boolean | ((values: TValues) => boolean);
 
-`getFieldProps()` возвращает объект, совместимый с компонентами HeroUI:
+  // далее — дочерние узлы
+  [key: string]: FieldConfigNode<any, TValues> | GroupConfigNode<TValues> | any;
+}
+```
 
-```tsx
-const props = form.getFieldProps("email");
-// {
-//   value: "test@example.com",
-//   onValueChange: (v) => setValue("email", v),
-//   isDisabled: false,
-//   isReadOnly: false,
-//   isRequired: true,
-//   isInvalid: false,
-//   errorMessage: undefined,
-//   label: "Email",
-//   placeholder: "Enter email",
-//   description: "We'll never share your email",
-// }
+### FieldState (runtime)
 
-<Input {...props} />
+```typescript
+interface FieldState {
+  value: unknown;
+  label?: string;
+  placeholder?: string;
+  description?: string;
+  isRequired: boolean;    // default: false
+  isReadOnly: boolean;    // default: false
+  isDisabled: boolean;    // default: false
+  isVisible: boolean;     // default: true
+  error?: boolean;
+  errorMessage?: string;
+}
 ```
 
 ---
@@ -351,68 +329,94 @@ const props = form.getFieldProps("email");
 
 ```
 palistor/
-├── core/
-│   ├── types.ts          # Типы
-│   ├── createStore.ts    # Базовый store
-│   ├── computeFields.ts  # Вычисление fieldStates
-│   ├── actions.ts        # Чистые функции
-│   └── registry.ts       # Глобальный реестр
+├── store/
+│   ├── store.ts              # ProxyStore — фабрика, подписки, версии
+│   ├── buildProxy.ts         # Proxy (GET/SET trap) для узлов конфига
+│   ├── compute.ts            # FieldState, computeFieldState, resolveFlag
+│   ├── collectValues.ts      # Сбор текущих значений в плоский объект
+│   ├── registerNodes.ts      # Инициализация leafNodes + nodeState
+│   ├── recomputeAll.ts       # Пересчёт computed-свойств всех полей
+│   ├── hasComputedProps.ts   # Проверка computed-свойств у промежуточных узлов
+│   └── constants.ts          # Символы + наборы FIELD_STATE_PROPS, CONFIG_PROPS
 ├── react/
-│   ├── useFormStore.ts   # Главный хук
-│   ├── useField.ts       # Хуки для полей
-│   └── useSelector.ts    # Универсальный селектор
-├── utils/
-│   ├── materialize.ts    # mergeState, difference
-│   ├── helpers.ts        # Работа с путями
-│   └── persistence.ts    # localStorage
-└── index.ts              # Публичный API
+│   ├── useForm.ts            # React-хук с tracking proxy + useSyncExternalStore
+│   └── createTrackingProxy.ts # Tracking proxy — записывает прочитанные ноды
+└── index.ts                  # Публичный API
 ```
 
 ---
 
 ## Примеры
 
-### Связанные поля (setter)
+### Computed value (вычисляемое поле)
 
 ```typescript
-const config: FormConfig<PriceForm> = {
-  price: { value: 0 },
-  quantity: { value: 1 },
-  total: {
-    // Computed value
-    value: (v) => v.price * v.quantity,
-    isReadOnly: true,
-    dependencies: ["price", "quantity"],
+const store = createProxyStore({
+  config: {
+    price: { value: 0 },
+    quantity: { value: 1 },
+    total: {
+      value: (v) => v.price * v.quantity,
+      isReadOnly: true,
+    },
   },
-};
+});
 ```
 
-### Условная валидация
+### Вложенная структура с групповым узлом
 
 ```typescript
-const config: FormConfig<UserForm> = {
-  accountType: { value: "personal" },
-  companyName: {
-    value: "",
-    isVisible: (v) => v.accountType === "business",
-    isRequired: (v) => v.accountType === "business"
-      ? "validation.companyRequired"
-      : false,
-    dependencies: ["accountType"],
+const store = createProxyStore({
+  config: {
+    accountType: { value: "personal" },
+
+    company: {
+      // computed видимость всей группы
+      isVisible: (v) => v.accountType === "business",
+
+      name: {
+        value: "",
+        label: "Company Name",
+        isRequired: (v) => v.accountType === "business",
+      },
+      taxId: {
+        value: "",
+        label: "Tax ID",
+      },
+    },
   },
-};
-```
-
-### Persistence (черновики)
-
-```typescript
-const form = useFormStore("long-form", {
-  config,
-  defaults,
-  persistId: "draft-long-form", // ← сохраняет в localStorage
 });
 
-// При перезагрузке страницы данные восстановятся
+// Использование
+const form = useForm(store);
+form.company.isVisible       // → false
+form.company.name.isRequired // → false
+form.accountType.value = "business";
+form.company.isVisible       // → true
+form.company.name.isRequired // → true
+```
+
+### setter — каскадное изменение нескольких полей
+
+```typescript
+// setter возвращает патч других полей (планируется)
+const config = {
+  country: {
+    value: "US",
+    setter: (value) => ({ city: "" }), // сброс city при смене country
+  },
+  city: { value: "" },
+};
+```
+
+### Получение значений для отправки
+
+```typescript
+const onSubmit = () => {
+  const values = store.getValues();
+  // → { accountType: "business", company: { name: "Acme", taxId: "123" } }
+  await api.submit(values);
+};
 ```
 
 ---
