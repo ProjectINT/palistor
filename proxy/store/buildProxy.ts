@@ -1,4 +1,4 @@
-import { FIELD_STATE_PROPS } from "./constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE } from "./constants";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import type { FieldState } from "./compute";
 
@@ -35,6 +35,9 @@ export function createBuildProxy({
 
     const p = new Proxy(node as Record<string, any>, {
       get(_target, key: string | symbol) {
+        // Символ для доступа к исходному config-узлу (используется tracking proxy)
+        if (key === CONFIG_NODE) return node;
+
         // Игнорируем символы (Symbol.toPrimitive, Symbol.iterator …)
         if (typeof key === "symbol") return undefined;
 
