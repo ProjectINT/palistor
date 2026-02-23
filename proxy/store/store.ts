@@ -68,11 +68,68 @@ const CONFIG_PROPS = new Set<string>([
   "dependencies",
 ]);
 
+// ─── Типы конфига ────────────────────────────────────────────────────────────
+
+/**
+ * Значение либо функция, вычисляемая из текущих значений формы.
+ * Большинство свойств конфига (isVisible, isRequired, label, …) могут быть
+ * либо статическим значением, либо функцией от всего дерева значений.
+ *
+ * @example
+ * // статическое
+ * isVisible: true
+ * // вычисляемое
+ * isVisible: (values) => values.paymentType === "bank"
+ */
+export type MaybeComputed<TResult, TValues = Record<string, any>> =
+  | TResult
+  | ((values: TValues) => TResult);
+
+/**
+ * Листовой узел конфига — описывает одно поле формы.
+ * Все свойства кроме `value` — опциональны.
+ * Любое свойство может быть константой или функцией от `TValues`.
+ *
+ * @template TValue  — тип значения поля
+ * @template TValues — форма дерева всех значений (по умолчанию Record<string,any>)
+ */
+export interface FieldConfigNode<TValue = any, TValues = Record<string, any>> {
+  value: MaybeComputed<TValue, TValues>;
+  label?: MaybeComputed<string, TValues>;
+  placeholder?: MaybeComputed<string, TValues>;
+  description?: MaybeComputed<string, TValues>;
+  isRequired?: MaybeComputed<boolean, TValues>;
+  isReadOnly?: MaybeComputed<boolean, TValues>;
+  isDisabled?: MaybeComputed<boolean, TValues>;
+  isVisible?: MaybeComputed<boolean, TValues>;
+  /** Возвращает строку с ошибкой или undefined/false если значение валидно */
+  validate?: (value: TValue, values: TValues) => string | undefined | false;
+  /** Преобразует входное значение перед сохранением (например, обрезает пробелы) */
+  formatter?: (value: unknown, values: TValues) => TValue;
+  /** Сайд-эффект записи: возвращает патч других полей */
+  setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
+  componentProps?: Record<string, any>;
+  dependencies?: string[];
+}
+
+/**
+ * Групповой (промежуточный) узел конфига.
+ * Группирует дочерние поля и сам может иметь computed-флаги видимости/состояния.
+ *
+ * @template TValues — форма дерева всех значений
+ */
+export interface GroupConfigNode<TValues = Record<string, any>> {
+  isVisible?: MaybeComputed<boolean, TValues>;
+  isRequired?: MaybeComputed<boolean, TValues>;
+  isReadOnly?: MaybeComputed<boolean, TValues>;
+  isDisabled?: MaybeComputed<boolean, TValues>;
+}
+
 // ─── Proxy-типы ──────────────────────────────────────────────────────────────
 
 /**
  * Ключи конфига, которые не являются дочерними полями (скрываются при маппинге
- * группового узла).
+ * gruppового узла).
  */
 type ConfigSkipKeys =
   | "value"
@@ -162,6 +219,30 @@ export type ConfigProxy<TConfig extends Record<string, any>> = {
   [K in keyof TConfig]: ConfigNodeToProxy<TConfig[K]>;
 };
 
+/**
+ * Рекурсивно извлекает типы значений из конфига формы.
+ * Листовые узлы (содержащие `value`) → тип значения.
+ * Групповые узлы → вложенный объект с теми же правилами.
+ * Служебные ключи (validate, formatter, …) — пропускаются.
+ */
+export type ExtractValues<T> = {
+  [K in keyof T as K extends ConfigSkipKeys ? never : K]: T[K] extends { value: any }
+    ? ExtractNodeValue<T[K]>
+    : T[K] extends Record<string, any>
+      ? ExtractValues<T[K]>
+      : never;
+};
+
+/**
+ * Глубокая опциональная версия `ExtractValues`.
+ * Используется как тип `initialValues` — все поля необязательны.
+ */
+export type DeepPartialValues<T> = {
+  [K in keyof T]?: T[K] extends Record<string, any>
+    ? DeepPartialValues<T[K]>
+    : T[K];
+};
+
 // ─── Интерфейсы ──────────────────────────────────────────────────────────────
 
 export interface ProxyStoreOptions<TConfig extends Record<string, any>> {
@@ -171,7 +252,7 @@ export interface ProxyStoreOptions<TConfig extends Record<string, any>> {
    * Стартовые значения, которые перекрывают значения по умолчанию из конфига.
    * Структура совпадает со структурой конфига, но все поля опциональны.
    */
-  initialValues?: Record<string, any>;
+  initialValues?: DeepPartialValues<ExtractValues<TConfig>>;
 }
 
 export interface ProxyStore<TConfig extends Record<string, any>> {
@@ -210,7 +291,7 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   /**
    * Все текущие значения полей в виде вложенного объекта.
    */
-  getValues: () => Record<string, any>;
+  getValues: () => ExtractValues<TConfig>;
 }
 
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
@@ -505,7 +586,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     subscribeGlobal,
     getVersion: () => version,
     getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
-    getValues: () => collectValues(rootConfig),
+    getValues: () => collectValues(rootConfig) as ExtractValues<TConfig>,
   };
 }
 
