@@ -3,8 +3,10 @@ import {
   computeFieldState,
   fieldStateChanged,
 } from "./compute";
-import { FIELD_STATE_PROPS, CONFIG_PROPS } from "./constants";
+import { CONFIG_PROPS } from "./constants";
 import { collectValues, type AnyConfigNode } from "./collectValues";
+import { hasComputedProps } from "./hasComputedProps";
+import { createBuildProxy } from "./buildProxy";
 
 export type { FieldState };
 
@@ -407,18 +409,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   }
 
   /**
-   * Проверяет, есть ли у узла вычисляемые свойства (функции isVisible, isRequired…).
-   * Нужно для промежуточных узлов-групп (passport.isVisible).
-   */
-  function hasComputedProps(node: AnyConfigNode): boolean {
-    for (const key of FIELD_STATE_PROPS) {
-      if (key === "value") continue;
-      if (node[key] !== undefined) return true;
-    }
-    return false;
-  }
-
-  /**
    * Фаза 2: Пересчитать вычисленное состояние всех листовых полей.
    * Вызывается при init и после каждого SET .value.
    *
@@ -471,74 +461,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Построение Proxy ──────────────────────────────────────────────────────
 
-  /**
-   * Proxy перехватывает:
-   *
-   * GET:
-   *   - FIELD_STATE_PROPS → из вычисленного FieldState (value, isVisible, error…)
-   *   - другой ключ → рекурсивный прокси дочернего узла
-   *
-   * SET:
-   *   - "value" → formatter → update value → recomputeAll → notify
-   *   - остальное → запрещено
-   */
-  function buildProxy(node: AnyConfigNode): any {
-    if (proxyCache.has(node)) return proxyCache.get(node);
-
-    const p = new Proxy(node as Record<string, any>, {
-      get(_target, key: string | symbol) {
-        // Игнорируем символы (Symbol.toPrimitive, Symbol.iterator …)
-        if (typeof key === "symbol") return undefined;
-
-        // Вычисленное состояние поля
-        if (FIELD_STATE_PROPS.has(key)) {
-          const state = nodeState.get(node);
-          if (state) return state[key as keyof FieldState];
-          // Для узлов без состояния (промежуточные без computed) — из конфига
-          return node[key];
-        }
-
-        // Дочерний узел → рекурсивный прокси
-        const child = node[key];
-        if (child && typeof child === "object") return buildProxy(child as AnyConfigNode);
-
-        // Примитив (функция-валидатор, строка и т.д.)
-        return child;
-      },
-
-      set(_target, key: string | symbol, newValue: unknown) {
-        if (key === "value") {
-          const state = nodeState.get(node);
-          if (!state) return false;
-
-          // Применяем formatter, если есть
-          let processedValue: unknown = newValue;
-          if (typeof node.formatter === "function") {
-            const allValues = collectValues(rootConfig, nodeState);
-            processedValue = (node.formatter as (v: unknown, vals: Record<string, unknown>) => unknown)(newValue, allValues);
-          }
-
-          // Обновляем value в state иммутабельно
-          nodeState.set(node, { ...state, value: processedValue });
-
-          // Пересчитываем состояние всех полей (validate, isVisible, …)
-          const changed = recomputeAll();
-
-          // Уведомляем подписчиков изменённых полей
-          // (текущий узел всегда считается изменённым)
-          changed.add(node);
-          notifyChanged(changed);
-
-          return true;
-        }
-        // Запись в другие свойства запрещена — конфиг иммутабелен
-        return false;
-      },
-    });
-
-    proxyCache.set(node, p);
-    return p;
-  }
+  const buildProxy = createBuildProxy({ proxyCache, nodeState, rootConfig, recomputeAll, notifyChanged });
 
   // ─── Подписка ──────────────────────────────────────────────────────────────
 
