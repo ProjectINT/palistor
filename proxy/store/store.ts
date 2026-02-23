@@ -3,10 +3,9 @@ import {
   computeFieldState,
   fieldStateChanged,
 } from "./compute";
-import { CONFIG_PROPS } from "./constants";
 import { collectValues, type AnyConfigNode } from "./collectValues";
-import { hasComputedProps } from "./hasComputedProps";
 import { createBuildProxy } from "./buildProxy";
+import { registerNodes } from "./registerNodes";
 
 export type { FieldState };
 
@@ -338,7 +337,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
    * Список всех листовых узлов конфига (для полного пересчёта).
    * Заполняется при init, используется при recompute.
    */
-  const leafNodes: Array<{ node: AnyConfigNode; path: string[] }> = [];
+  const leafNodes: Array<{ node: AnyConfigNode }> = [];
 
   /** Подписчики на изменение каждого поля. */
   const nodeListeners = new WeakMap<object, Set<() => void>>();
@@ -356,57 +355,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   const proxyCache = new WeakMap<object, unknown>();
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
-
-  /**
-   * Фаза 1: Собираем все листовые узлы и устанавливаем начальные value.
-   * Ещё не вычисляем computed — для этого нужны все values.
-   */
-  function registerNodes(
-    node: AnyConfigNode,
-    initialSlice: Record<string, unknown> | undefined,
-    path: string[],
-  ) {
-    for (const key of Object.keys(node)) {
-      if (CONFIG_PROPS.has(key)) continue;
-
-      const child = node[key] as AnyConfigNode;
-      if (!child || typeof child !== "object") continue;
-
-      const childPath = [...path, key];
-
-      if ("value" in child) {
-        // Листовой узел: запоминаем, ставим начальный value (computed позже)
-        leafNodes.push({ node: child, path: childPath });
-
-        const rawValue = child.value;
-        const initialValue = initialSlice?.[key] ?? rawValue ?? "";
-        // Временный FieldState — только value, остальное заполнится в computeAll
-        nodeState.set(child, {
-          value: initialValue,
-          isVisible: true,
-          isRequired: false,
-          isDisabled: false,
-          isReadOnly: false,
-        });
-      }
-
-      // Если промежуточный узел имеет computed-свойства (isVisible на группе),
-      // регистрируем его тоже как "виртуальный" лист
-      if (!("value" in child) && hasComputedProps(child)) {
-        leafNodes.push({ node: child, path: childPath });
-        nodeState.set(child, {
-          value: undefined,
-          isVisible: true,
-          isRequired: false,
-          isDisabled: false,
-          isReadOnly: false,
-        });
-      }
-
-      // Рекурсия в дочерние
-      registerNodes(child, initialSlice?.[key] as Record<string, unknown> | undefined, childPath);
-    }
-  }
 
   /**
    * Фаза 2: Пересчитать вычисленное состояние всех листовых полей.
@@ -434,7 +382,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   }
 
   // Выполняем инициализацию
-  registerNodes(rootConfig, initialValues, []);
+  registerNodes(rootConfig, initialValues, leafNodes, nodeState);
   recomputeAll(); // вычисляем isVisible, isRequired, error и т.д.
 
   // ─── Уведомление подписчиков ───────────────────────────────────────────────
