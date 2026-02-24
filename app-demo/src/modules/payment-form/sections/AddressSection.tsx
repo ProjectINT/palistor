@@ -6,7 +6,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { COUNTRY_OPTIONS, CITIES_BY_COUNTRY } from "../constants";
-import { usePaymentForm, fieldProps, type Country } from "@/config/paymentForm";
+import { usePaymentForm, type Country } from "@/config/paymentForm";
 
 export function AddressSection() {
   const t = useTranslations();
@@ -28,7 +28,7 @@ export function AddressSection() {
     <Section title={t("sections.address")}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Select
-          {...fieldProps(form.country)}
+          {...form.country}
           options={countryOptions}
           renderLabel={(option) => t(option.label)}
           selectedKeys={form.country.value ? [form.country.value] : []}
@@ -38,7 +38,7 @@ export function AddressSection() {
           }}
         />
         <Select
-          {...fieldProps(form.city)}
+          {...form.city}
           options={cityOptions}
           renderLabel={(option) => t(option.label)}
           selectedKeys={form.city.value ? [form.city.value] : []}
@@ -47,7 +47,7 @@ export function AddressSection() {
             form.city.value = value;
           }}
         />
-        <Input {...fieldProps(form.shippingCost)} />
+        <Input {...form.shippingCost} />
       </div>
     </Section>
   );

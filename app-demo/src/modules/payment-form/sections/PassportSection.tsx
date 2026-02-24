@@ -2,7 +2,7 @@
 
 import { Input } from "@/components/Input";
 import { Section } from "../../shared/Section";
-import { usePaymentForm, fieldProps } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/paymentForm";
 
 export function PassportSection() {
   const form = usePaymentForm();
@@ -17,17 +17,17 @@ export function PassportSection() {
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input
-          {...fieldProps(form.passport.number)}
+          {...form.passport.number}
           className="md:col-span-2"
         />
 
         <Input
-          {...fieldProps(form.passport.issueDate)}
+          {...form.passport.issueDate}
           type="date"
         />
 
         <Input
-          {...fieldProps(form.passport.expiryDate)}
+          {...form.passport.expiryDate}
           type="date"
         />
       </div>

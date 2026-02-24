@@ -159,25 +159,3 @@ export const paymentStore = createProxyStore({ config: paymentFormConfig });
  */
 export const usePaymentForm = () => useForm(paymentStore) as any;
 
-/**
- * Преобразует узел прокси поля в объект пропсов для UI-компонентов.
- * Читает все свойства во время рендера → tracking proxy их запишет.
- *
- * @example
- * <Input {...fieldProps(form.email)} type="email" />
- */
-export function fieldProps(field: any) {
-  return {
-    value: field.value,
-    label: field.label,
-    placeholder: field.placeholder,
-    description: field.description,
-    isVisible: field.isVisible ?? true,
-    isRequired: field.isRequired ?? false,
-    isDisabled: field.isDisabled ?? false,
-    isReadOnly: field.isReadOnly ?? false,
-    errorMessage: field.errorMessage,
-    isInvalid: Boolean(field.error),
-    onValueChange: (v: any) => { field.value = v; },
-  };
-}

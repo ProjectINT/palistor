@@ -6,7 +6,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { CRYPTO_NETWORK_OPTIONS } from "../constants";
-import { usePaymentForm, fieldProps, type CryptoNetwork } from "@/config/paymentForm";
+import { usePaymentForm, type CryptoNetwork } from "@/config/paymentForm";
 
 export function CryptoSection() {
   const t = useTranslations();
@@ -20,9 +20,9 @@ export function CryptoSection() {
   return (
     <Section title={t("sections.crypto")}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input {...fieldProps(form.cryptoWallet)} />
+        <Input {...form.cryptoWallet} />
         <Select
-          {...fieldProps(form.cryptoNetwork)}
+          {...form.cryptoNetwork}
           options={options}
           renderLabel={(option) => t(option.label)}
           selectedKeys={form.cryptoNetwork.value ? [form.cryptoNetwork.value] : []}

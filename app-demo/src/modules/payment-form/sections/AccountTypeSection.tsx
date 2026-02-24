@@ -6,7 +6,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { ACCOUNT_TYPE_OPTIONS } from "../constants";
-import { usePaymentForm, fieldProps, type AccountType } from "@/config/paymentForm";
+import { usePaymentForm, type AccountType } from "@/config/paymentForm";
 
 export function AccountTypeSection() {
   const t = useTranslations();
@@ -21,7 +21,7 @@ export function AccountTypeSection() {
     <Section title={t("sections.accountType")}>
       <div className="space-y-4">
         <Select
-          {...fieldProps(form.accountType)}
+          {...form.accountType}
           options={options}
           renderLabel={(option) => t(option.label)}
           selectedKeys={form.accountType.value ? [form.accountType.value] : []}
@@ -30,7 +30,7 @@ export function AccountTypeSection() {
             form.accountType.value = value;
           }}
         />
-        <Input {...fieldProps(form.companyName)} />
+        <Input {...form.companyName} />
       </div>
     </Section>
   );

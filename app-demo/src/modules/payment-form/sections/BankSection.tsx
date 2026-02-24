@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/Input";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm, fieldProps } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/paymentForm";
 
 export function BankSection() {
   const t = useTranslations();
@@ -13,8 +13,8 @@ export function BankSection() {
   return (
     <Section title={t("sections.bankTransfer")}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input {...fieldProps(form.bankAccount)} />
-        <Input {...fieldProps(form.bankBik)} />
+        <Input {...form.bankAccount} />
+        <Input {...form.bankBik} />
       </div>
     </Section>
   );

@@ -5,7 +5,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { PAYMENT_TYPE_OPTIONS } from "../constants";
-import { usePaymentForm, fieldProps, type PaymentType } from "@/config/paymentForm";
+import { usePaymentForm, type PaymentType } from "@/config/paymentForm";
 
 export function PaymentTypeSection() {
   const t = useTranslations();
@@ -19,7 +19,7 @@ export function PaymentTypeSection() {
   return (
     <Section title={t("sections.paymentType")}>
       <Select
-        {...fieldProps(form.paymentType)}
+        {...form.paymentType}
         options={options}
         renderLabel={(option) => t(option.label)}
         selectedKeys={form.paymentType.value ? [form.paymentType.value] : []}

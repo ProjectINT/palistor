@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/Input";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm, fieldProps } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/paymentForm";
 
 export function CommentSection() {
   const t = useTranslations();
@@ -12,7 +12,7 @@ export function CommentSection() {
 
   return (
     <Section title={t("sections.comment")}>
-      <Input {...fieldProps(form.comment)} />
+      <Input {...form.comment} />
     </Section>
   );
 }
