@@ -2,6 +2,7 @@ import { FIELD_STATE_PROPS, CONFIG_NODE, CONFIG_PROPS } from "./constants";
 import { type AnyConfigNode } from "./collectValues";
 import { writeValue, type WriteDeps } from "./writePipeline";
 import type { FieldState } from "./compute";
+import type { TranslateFn } from "../core/types";
 
 export interface BuildProxyDeps {
   proxyCache: WeakMap<object, unknown>;
@@ -9,6 +10,8 @@ export interface BuildProxyDeps {
   rootConfig: AnyConfigNode;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
+  /** Возвращает зарегистрированную функцию перевода (или null). */
+  getTranslator: () => TranslateFn | null;
 }
 
 /**
@@ -25,6 +28,13 @@ const INTERNAL_CONFIG_KEYS = new Set<string>([
   "dependencies",
   "nested",
 ]);
+
+/**
+ * Свойства, которые резолвятся лениво через зарегистрированный translator.
+ * Если в конфиге это функция (t) => t(«key») и translator есть —
+ * вызываем прямо в GET trap, иначе fallback на FieldState (ключ).
+ */
+const TRANSLATABLE_PROPS = new Set<string>(["label", "placeholder", "description"]);
 
 /**
  * Вычислить «публичные» ключи узла прокси для ownKeys/spread.
@@ -92,6 +102,7 @@ export function createBuildProxy({
   rootConfig,
   recomputeAll,
   notifyChanged,
+  getTranslator,
 }: BuildProxyDeps): (node: AnyConfigNode) => any {
   /** Кэш onValueChange-функций — стабильная ссылка для React-мемоизации. */
   const onValueChangeCache = new WeakMap<object, (v: unknown) => void>();
@@ -120,6 +131,15 @@ export function createBuildProxy({
 
         // Вычисленное состояние поля
         if (FIELD_STATE_PROPS.has(key)) {
+          // Ленивый резолв строковых свойств через translator
+          if (TRANSLATABLE_PROPS.has(key)) {
+            const configValue = node[key];
+            if (typeof configValue === "function") {
+              const t = getTranslator();
+              if (t) return configValue(t);
+            }
+          }
+
           const state = nodeState.get(node);
           if (state) return state[key as keyof FieldState];
           // Для узлов без состояния (промежуточные без computed) — из конфига

@@ -38,7 +38,10 @@ export function resolveFlag(
 /**
  * Вычисляет строковое свойство (label, placeholder, description) из конфига.
  * Может быть строкой или функцией (translate, settings).
- * Пока без translate — если функция, вызываем с identity-функцией.
+ *
+ * Если translator зарегистрирован — реальный резолв происходит лениво
+ * в proxy GET trap (buildProxy.ts). Здесь сохраняем fallback:
+ * для функций — вызываем с identity → возвращаем ключ перевода.
  */
 export function resolveString(
   configValue: string | ((translate: any, settings?: any) => string) | undefined,
@@ -46,7 +49,7 @@ export function resolveString(
 ): string | undefined {
   if (configValue === undefined) return undefined;
   if (typeof configValue === "function") {
-    // translate-функцию пока заменяем identity — вернёт ключ как есть
+    // identity — вернёт ключ как есть (fallback до регистрации translator)
     return configValue((v: string) => v, values);
   }
   return configValue;

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { useTranslator } from "@palistor/react/useTranslator";
+import { paymentStore } from "@/config/paymentForm";
 
 import { DemoHeader, type TabType } from "@/modules/header";
 import { PaymentForm } from "@/modules/payment-form";
@@ -13,6 +16,9 @@ import { StatePreview } from "@/modules/state-preview/StatePreview";
 // ============================================================================
 
 export default function DemoPage() {
+  const t = useTranslations();
+  useTranslator(paymentStore, t);
+
   const [activeTab, setActiveTab] = useState<TabType>("form");
 
   return (

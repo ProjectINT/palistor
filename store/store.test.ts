@@ -826,4 +826,132 @@ describe("createProxyStore", () => {
       expect(prefixListener).not.toHaveBeenCalled();
     });
   });
+
+  // ─── Translator (setTranslator / getTranslator) ───────────────────────────
+
+  describe("setTranslator / getTranslator", () => {
+    it("без translator — label-функция возвращает ключ (identity fallback)", () => {
+      const config = {
+        name: {
+          value: "",
+          label: (t: (key: string) => string) => t("form.name"),
+          placeholder: (t: (key: string) => string) => t("form.namePlaceholder"),
+        },
+      };
+      const store = createProxyStore({ config: config as any });
+      expect(store.proxy.name.label).toBe("form.name");
+      expect(store.proxy.name.placeholder).toBe("form.namePlaceholder");
+      expect(store.getTranslator()).toBeNull();
+    });
+
+    it("после setTranslator — label резолвится через translator", () => {
+      const translations: Record<string, string> = {
+        "form.name": "Имя",
+        "form.namePlaceholder": "Введите имя",
+        "form.desc": "Описание поля",
+      };
+      const t = (key: string) => translations[key] ?? key;
+
+      const config = {
+        name: {
+          value: "",
+          label: (t: (key: string) => string) => t("form.name"),
+          placeholder: (t: (key: string) => string) => t("form.namePlaceholder"),
+          description: (t: (key: string) => string) => t("form.desc"),
+        },
+      };
+      const store = createProxyStore({ config: config as any });
+
+      store.setTranslator(t);
+
+      expect(store.proxy.name.label).toBe("Имя");
+      expect(store.proxy.name.placeholder).toBe("Введите имя");
+      expect(store.proxy.name.description).toBe("Описание поля");
+      expect(store.getTranslator()).toBe(t);
+    });
+
+    it("setTranslator(null) возвращает к fallback (ключам)", () => {
+      const t = (key: string) => `[${key}]`;
+      const config = {
+        name: {
+          value: "",
+          label: (t: (key: string) => string) => t("form.name"),
+        },
+      };
+      const store = createProxyStore({ config: config as any });
+
+      store.setTranslator(t);
+      expect(store.proxy.name.label).toBe("[form.name]");
+
+      store.setTranslator(null);
+      expect(store.proxy.name.label).toBe("form.name"); // fallback to identity
+      expect(store.getTranslator()).toBeNull();
+    });
+
+    it("setTranslator инкрементирует версию и уведомляет подписчиков", () => {
+      const config = {
+        name: {
+          value: "",
+          label: (t: (key: string) => string) => t("form.name"),
+        },
+      };
+      const store = createProxyStore({ config: config as any });
+      const versionBefore = store.getVersion();
+
+      const listener = vi.fn();
+      store.subscribeGlobal(listener);
+
+      store.setTranslator((key) => `translated:${key}`);
+
+      expect(store.getVersion()).toBe(versionBefore + 1);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("setTranslator с тем же translator не вызывает лишних уведомлений", () => {
+      const t = (key: string) => key.toUpperCase();
+      const config = {
+        name: { value: "", label: (t: (key: string) => string) => t("form.name") },
+      };
+      const store = createProxyStore({ config: config as any });
+
+      store.setTranslator(t);
+      const versionAfterFirst = store.getVersion();
+
+      const listener = vi.fn();
+      store.subscribeGlobal(listener);
+
+      store.setTranslator(t); // same reference
+      expect(store.getVersion()).toBe(versionAfterFirst); // no bump
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("статические строковые label не зависят от translator", () => {
+      const config = {
+        name: { value: "", label: "Static Label" },
+      };
+      const store = createProxyStore({ config: config as any });
+
+      store.setTranslator((key) => `translated:${key}`);
+      // Статическая строка — не вызывается как функция
+      expect(store.proxy.name.label).toBe("Static Label");
+    });
+
+    it("spread корректно резолвит label через translator", () => {
+      const t = (key: string) => `[${key}]`;
+      const config = {
+        name: {
+          value: "test",
+          label: (t: (key: string) => string) => t("form.name"),
+          placeholder: (t: (key: string) => string) => t("form.namePlaceholder"),
+        },
+      };
+      const store = createProxyStore({ config: config as any });
+      store.setTranslator(t);
+
+      const spread = { ...store.proxy.name };
+      expect(spread.label).toBe("[form.name]");
+      expect(spread.placeholder).toBe("[form.namePlaceholder]");
+      expect(spread.value).toBe("test");
+    });
+  });
 });

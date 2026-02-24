@@ -3,6 +3,7 @@ import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy";
 import { registerNodes } from "./registerNodes";
 import { recomputeAll as _recomputeAll } from "./recomputeAll";
+import type { TranslateFn } from "../core/types";
 
 export type { FieldState };
 
@@ -292,6 +293,22 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * Все текущие значения полей в виде вложенного объекта.
    */
   getValues: () => ExtractValues<TConfig>;
+
+  /**
+   * Регистрирует функцию перевода (next-intl, i18next, …) для резолва
+   * label / placeholder / description.
+   *
+   * При смене транслятора — все подписанные компоненты перерендерятся
+   * с актуальными переводами.
+   *
+   * @param t — функция перевода или null для сброса
+   */
+  setTranslator: (t: TranslateFn | null) => void;
+
+  /**
+   * Возвращает текущую зарегистрированную функцию перевода (или null).
+   */
+  getTranslator: () => TranslateFn | null;
 }
 
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
@@ -352,6 +369,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   /** Кэш Proxy-объектов — один прокси на узел конфига. */
   const proxyCache = new WeakMap<object, unknown>();
 
+  /** Зарегистрированная функция перевода (label, placeholder, description). */
+  let translator: TranslateFn | null = null;
+
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
   function recomputeAll(): Set<object> {
@@ -385,8 +405,29 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     globalListeners.forEach((fn) => fn());
   }
 
+  // ─── Translator ─────────────────────────────────────────────────────────────
+
+  function setTranslator(t: TranslateFn | null) {
+    if (translator === t) return;
+    translator = t;
+
+    // Bump global + all leaf node versions → subscribed components re-render
+    version++;
+    for (const { node } of leafNodes) {
+      nodeVersions.set(node, version);
+    }
+    globalListeners.forEach((fn) => fn());
+  }
+
   // ─── Построение Proxy ──────────────────────────────────────────────────────
-  const buildProxy = createBuildProxy({ proxyCache, nodeState, rootConfig, recomputeAll, notifyChanged });
+  const buildProxy = createBuildProxy({
+    proxyCache,
+    nodeState,
+    rootConfig,
+    recomputeAll,
+    notifyChanged,
+    getTranslator: () => translator,
+  });
 
   // ─── Подписка ──────────────────────────────────────────────────────────────
   const subscribe = (node: object, listener: () => void): Unsubscribe => {
@@ -408,6 +449,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     getVersion: () => version,
     getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
     getValues: () => collectValues(rootConfig, nodeState) as ExtractValues<TConfig>,
+    setTranslator,
+    getTranslator: () => translator,
   };
 }
 
