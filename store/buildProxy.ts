@@ -1,5 +1,6 @@
 import { FIELD_STATE_PROPS, CONFIG_NODE, CONFIG_PROPS } from "./constants";
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
+import { writeValue, type WriteDeps } from "./writePipeline";
 import type { FieldState } from "./compute";
 
 export interface BuildProxyDeps {
@@ -8,40 +9,6 @@ export interface BuildProxyDeps {
   rootConfig: AnyConfigNode;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
-}
-
-/**
- * Применить патч (результат setter) к nodeState.
- * Рекурсивно обходит дерево конфига и патча, обновляя значения полей.
- * Возвращает Set узлов, значения которых были изменены патчем.
- */
-function applyPatch(
-  configNode: AnyConfigNode,
-  nodeState: WeakMap<object, FieldState>,
-  patch: Record<string, unknown>,
-  changed: Set<object> = new Set(),
-): Set<object> {
-  for (const key of Object.keys(patch)) {
-    if (CONFIG_PROPS.has(key)) continue;
-
-    const child = configNode[key] as AnyConfigNode | undefined;
-    if (!child || typeof child !== "object") continue;
-
-    const patchValue = patch[key];
-
-    if ("value" in child) {
-      // Листовой узел — обновляем value только если оно реально изменилось
-      const state = nodeState.get(child);
-      if (state && state.value !== patchValue) {
-        nodeState.set(child, { ...state, value: patchValue });
-        changed.add(child);
-      }
-    } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {
-      // Групповой узел — рекурсия
-      applyPatch(child, nodeState, patchValue as Record<string, unknown>, changed);
-    }
-  }
-  return changed;
 }
 
 /**
@@ -129,6 +96,9 @@ export function createBuildProxy({
   /** Кэш onValueChange-функций — стабильная ссылка для React-мемоизации. */
   const onValueChangeCache = new WeakMap<object, (v: unknown) => void>();
 
+  /** Зависимости write pipeline — собранные один раз для всех узлов. */
+  const writeDeps: WriteDeps = { rootConfig, nodeState, recomputeAll };
+
   function buildProxy(node: AnyConfigNode): any {
     if (proxyCache.has(node)) return proxyCache.get(node);
 
@@ -165,55 +135,15 @@ export function createBuildProxy({
       },
 
       set(_target, key: string | symbol, newValue: unknown) {
-        if (key === "value") {
-          const state = nodeState.get(node);
-          if (!state) return false;
+        if (key !== "value") return false;
 
-          // Применяем formatter, если есть
-          let processedValue: unknown = newValue;
-          if (typeof node.formatter === "function") {
-            const allValues = collectValues(rootConfig, nodeState);
-            processedValue = (node.formatter as (v: unknown, vals: Record<string, unknown>) => unknown)(
-              newValue,
-              allValues,
-            );
-          }
+        // Весь процесс записи делегирован write pipeline:
+        // format → store → setter patch → recompute → merge changed
+        const result = writeValue(node, newValue, writeDeps);
+        if (!result) return false;
 
-          // Обновляем value в state иммутабельно
-          nodeState.set(node, { ...state, value: processedValue });
-
-          // Применяем setter — сайд-эффект записи, возвращающий патч других полей
-          // applyPatch возвращает Set узлов, чьи значения были изменены патчем,
-          // чтобы позже включить их в уведомления подписчикам
-          let patchedNodes: Set<object> | undefined;
-          if (typeof node.setter === "function") {
-            const allValues = collectValues(rootConfig, nodeState);
-            const patch = (node.setter as (v: unknown, vals: Record<string, unknown>) => Record<string, unknown>)(
-              processedValue,
-              allValues,
-            );
-            if (patch && typeof patch === "object") {
-              patchedNodes = applyPatch(rootConfig, nodeState, patch);
-            }
-          }
-
-          // Пересчитываем состояние всех полей (validate, isVisible, computed values…)
-          const changed = recomputeAll();
-
-          // Объединяем: узлы из патча + узлы, изменённые recompute + текущий узел
-          if (patchedNodes) {
-            for (const n of patchedNodes) changed.add(n);
-          }
-
-          // Уведомляем подписчиков изменённых полей
-          // (текущий узел всегда считается изменённым)
-          changed.add(node);
-          notifyChanged(changed);
-
-          return true;
-        }
-        // Запись в другие свойства запрещена — конфиг иммутабелен
-        return false;
+        notifyChanged(result.changed);
+        return true;
       },
 
       /**
