@@ -1,4 +1,4 @@
-import { FIELD_STATE_PROPS, CONFIG_NODE } from "./constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, CONFIG_PROPS } from "./constants";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import type { FieldState } from "./compute";
 
@@ -8,6 +8,63 @@ export interface BuildProxyDeps {
   rootConfig: AnyConfigNode;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
+}
+
+/**
+ * Ключи конфига, которые НЕ должны утекать при spread-операции ({...proxy}).
+ * Это внутренние свойства конфига (validate, formatter, setter, …), которые
+ * могут конфликтовать с пропсами UI-компонентов (например, HeroUI Input
+ * имеет свой `validate` и вызовет конфиг-функцию с неправильными аргументами).
+ */
+const INTERNAL_CONFIG_KEYS = new Set<string>([
+  "validate",
+  "formatter",
+  "setter",
+  "types",
+  "dependencies",
+  "nested",
+]);
+
+/**
+ * Вычислить «публичные» ключи узла прокси для ownKeys/spread.
+ *
+ * Для листового узла (есть state): FIELD_STATE_PROPS + onValueChange + componentProps children.
+ * Для группового узла: FIELD_STATE_PROPS (из state, если есть) + дочерние ключи-объекты.
+ */
+function computeProxyKeys(node: AnyConfigNode, nodeState: WeakMap<object, FieldState>): string[] {
+  const isLeaf = "value" in node;
+  const keys: string[] = [];
+
+  if (isLeaf) {
+    // Листовой узел — отдаём вычисленное состояние + onValueChange
+    for (const k of FIELD_STATE_PROPS) keys.push(k);
+    keys.push("onValueChange");
+
+    // componentProps — дополнительные пропсы для UI-компонента
+    if (node.componentProps && typeof node.componentProps === "object") {
+      for (const k of Object.keys(node.componentProps as Record<string, unknown>)) {
+        keys.push(k);
+      }
+    }
+  } else {
+    // Групповой узел — состояние группы (если есть) + дочерние ключи
+    const state = nodeState.get(node);
+    if (state) {
+      // У группы могут быть isVisible, isRequired, etc.
+      for (const k of FIELD_STATE_PROPS) {
+        if ((state as any)[k] !== undefined) keys.push(k);
+      }
+    }
+
+    // Дочерние ключи-объекты (вложенные поля/группы)
+    for (const k of Object.keys(node)) {
+      if (INTERNAL_CONFIG_KEYS.has(k) || CONFIG_PROPS.has(k)) continue;
+      const child = node[k];
+      if (child && typeof child === "object") keys.push(k);
+    }
+  }
+
+  return keys;
 }
 
 /**
@@ -22,6 +79,11 @@ export interface BuildProxyDeps {
  * SET:
  *   - "value" → formatter → update value → recomputeAll → notify
  *   - остальное → запрещено
+ *
+ * OWNKEYS / GETOWNPROPERTYDESCRIPTOR:
+ *   - Контролируют, какие ключи видны при spread ({...proxy}),
+ *     Object.keys() и for...in. Скрывают внутренние ключи конфига
+ *     (validate, formatter, setter, …), которые не должны утекать как пропсы.
  */
 export function createBuildProxy({
   proxyCache,
@@ -98,6 +160,26 @@ export function createBuildProxy({
         }
         // Запись в другие свойства запрещена — конфиг иммутабелен
         return false;
+      },
+
+      /**
+       * Контролирует Object.keys(), Object.getOwnPropertyNames(), for...in, spread.
+       * Скрывает внутренние ключи конфига (validate, formatter, …),
+       * которые не должны утекать как пропсы в UI-компоненты.
+       */
+      ownKeys() {
+        return computeProxyKeys(node, nodeState);
+      },
+
+      /**
+       * Должен соответствовать ownKeys: для каждого ключа возвращаем
+       * дескриптор enumerable + configurable, иначе Proxy выбросит invariant.
+       */
+      getOwnPropertyDescriptor(_target, key: string | symbol) {
+        if (typeof key === "symbol") return undefined;
+        const keys = computeProxyKeys(node, nodeState);
+        if (!keys.includes(key)) return undefined;
+        return { configurable: true, enumerable: true, writable: true, value: p[key] };
       },
     });
 

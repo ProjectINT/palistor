@@ -356,4 +356,78 @@ describe("createProxyStore", () => {
       expect(store.proxy.name.label).toBe("form.name");
     });
   });
+
+  describe("spread proxy ({...proxy})", () => {
+    it("не утекает validate при spread листового узла", () => {
+      const store = createProxyStore({ config: makeConfig() });
+      const spread = { ...store.proxy.cardNumber };
+
+      // validate не должен быть в spread
+      expect(spread).not.toHaveProperty("validate");
+      expect(spread).not.toHaveProperty("formatter");
+      expect(spread).not.toHaveProperty("setter");
+      expect(spread).not.toHaveProperty("dependencies");
+      expect(spread).not.toHaveProperty("types");
+    });
+
+    it("spread содержит все FIELD_STATE_PROPS и onValueChange", () => {
+      const store = createProxyStore({ config: makeConfig() });
+      const spread = { ...store.proxy.email };
+
+      expect(spread).toHaveProperty("value");
+      expect(spread).toHaveProperty("label");
+      expect(spread).toHaveProperty("isVisible");
+      expect(spread).toHaveProperty("isRequired");
+      expect(spread).toHaveProperty("isDisabled");
+      expect(spread).toHaveProperty("isReadOnly");
+      expect(spread).toHaveProperty("error");
+      expect(spread).toHaveProperty("errorMessage");
+      expect(spread).toHaveProperty("onValueChange");
+    });
+
+    it("Object.keys не содержит внутренних ключей конфига", () => {
+      const store = createProxyStore({ config: makeConfig() });
+      const keys = Object.keys(store.proxy.cardNumber);
+
+      expect(keys).not.toContain("validate");
+      expect(keys).not.toContain("formatter");
+      expect(keys).not.toContain("setter");
+      expect(keys).not.toContain("dependencies");
+      expect(keys).toContain("value");
+      expect(keys).toContain("onValueChange");
+    });
+
+    it("spread группового узла содержит дочерние ключи", () => {
+      const store = createProxyStore({ config: makeConfig() });
+      const keys = Object.keys(store.proxy.passport);
+
+      expect(keys).toContain("number");
+      expect(keys).toContain("issueDate");
+      // Не содержит служебные ключи
+      expect(keys).not.toContain("validate");
+      expect(keys).not.toContain("formatter");
+    });
+
+    it("validate по-прежнему вызывается через computeFieldState (не через spread)", () => {
+      const config = {
+        paymentType: { value: "card" },
+        cardNumber: {
+          value: "",
+          validate: (v: string, values: any) => {
+            if (values.paymentType !== "card") return;
+            if (!v) return "required";
+          },
+        },
+      };
+      const store = createProxyStore({ config });
+
+      // validate работает через store
+      expect(store.proxy.cardNumber.error).toBe(true);
+      expect(store.proxy.cardNumber.errorMessage).toBe("required");
+
+      // Но НЕ утекает при spread
+      const spread = { ...store.proxy.cardNumber };
+      expect(spread).not.toHaveProperty("validate");
+    });
+  });
 });

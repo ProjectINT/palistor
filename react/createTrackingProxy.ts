@@ -105,6 +105,18 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       // Запись пробрасывается в исходный proxy (SET trap в buildProxy)
       return Reflect.set(target, key, value);
     },
+
+    /**
+     * Пробрасываем ownKeys из source proxy, чтобы spread ({...trackingProxy})
+     * возвращал те же ключи, что и store proxy (без validate, formatter, …).
+     */
+    ownKeys(target) {
+      return Reflect.ownKeys(target);
+    },
+
+    getOwnPropertyDescriptor(target, key: string | symbol) {
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
   });
 
   cache.set(sourceProxy, tracked);

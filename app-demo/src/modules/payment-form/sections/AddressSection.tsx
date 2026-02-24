@@ -28,7 +28,6 @@ export function AddressSection() {
     <Section title={t("sections.address")}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Select
-          {...form.country}
           options={countryOptions}
           renderLabel={(option) => t(option.label)}
           selectedKeys={form.country.value ? [form.country.value] : []}
@@ -36,6 +35,7 @@ export function AddressSection() {
             const value = Array.from(keys)[0] as "" | Country;
             form.country.value = value;
           }}
+          {...form.country}
         />
         <Select
           {...form.city}

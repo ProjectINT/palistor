@@ -25,7 +25,7 @@ export function FormActions() {
         type="submit"
         color="primary"
         isLoading={submitting}
-        onClick={handleSubmit}
+        onPress={handleSubmit}
       >
         {t("buttons.pay")}
       </Button>

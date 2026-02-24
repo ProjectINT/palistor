@@ -21,7 +21,6 @@ export function AccountTypeSection() {
     <Section title={t("sections.accountType")}>
       <div className="space-y-4">
         <Select
-          {...form.accountType}
           options={options}
           renderLabel={(option) => t(option.label)}
           selectedKeys={form.accountType.value ? [form.accountType.value] : []}
@@ -29,6 +28,7 @@ export function AccountTypeSection() {
             const value = Array.from(keys)[0] as AccountType;
             form.accountType.value = value;
           }}
+          {...form.accountType}
         />
         <Input {...form.companyName} />
       </div>

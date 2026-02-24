@@ -40,7 +40,7 @@ import { passport } from "./passport";
 // Конфигурация
 // ============================================================================
 
-export const paymentFormConfig: FormConfig<PaymentFormValues> = {
+export const paymentFormConfig = {
   // --------------------------------------------------------------------------
   // Тип оплаты — главный триггер для условной видимости
   // --------------------------------------------------------------------------
@@ -104,7 +104,7 @@ export const paymentFormConfig: FormConfig<PaymentFormValues> = {
     placeholder: (t: TranslateFn) => t("form.commentPlaceholder"),
     dependencies: [], // Пересчёт только при изменении себя
   },
-};
+} satisfies FormConfig<PaymentFormValues>;
 
 // ============================================================================
 // Значения по умолчанию
@@ -146,7 +146,10 @@ export const paymentFormDefaults: PaymentFormValues = {
 // Store — новый API createProxyStore
 // ============================================================================
 
-export const paymentStore = createProxyStore({ config: paymentFormConfig });
+export const paymentStore = createProxyStore({
+  config: paymentFormConfig,
+  initialValues: paymentFormDefaults,
+});
 
 /**
  * Хук для подключения компонентов к paymentStore.
