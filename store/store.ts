@@ -163,6 +163,7 @@ export interface FieldProxyNode<TValue = unknown> {
   /** true если поле имеет ошибку валидации */
   readonly error: boolean | undefined;
   readonly errorMessage: string | undefined;
+  readonly onValueChange: (v: ProxyValueType<TValue>) => void;
 }
 
 /** Извлекает тип значения из узла конфига. */

@@ -272,6 +272,77 @@ describe("createProxyStore", () => {
     });
   });
 
+  describe("onValueChange", () => {
+    it("устанавливает value через onValueChange", () => {
+      const store = createProxyStore({ config: makeConfig() });
+
+      store.proxy.email.onValueChange("hello@test.com");
+
+      expect(store.proxy.email.value).toBe("hello@test.com");
+      expect(store.getValues().email).toBe("hello@test.com");
+    });
+
+    it("onValueChange вызывает formatter", () => {
+      const store = createProxyStore({ config: makeConfig() });
+
+      store.proxy.amount.onValueChange("42");
+
+      expect(store.proxy.amount.value).toBe(42);
+    });
+
+    it("onValueChange вызывает пересчёт зависимых полей", () => {
+      const store = createProxyStore({ config: makeConfig() });
+
+      expect(store.proxy.cardNumber.isVisible).toBe(true);
+      expect(store.proxy.passport.isVisible).toBe(false);
+
+      store.proxy.paymentType.onValueChange("bank");
+
+      expect(store.proxy.cardNumber.isVisible).toBe(false);
+      expect(store.proxy.passport.isVisible).toBe(true);
+    });
+
+    it("onValueChange вызывает validate", () => {
+      const store = createProxyStore({ config: makeConfig() });
+
+      store.proxy.email.onValueChange("valid@test.com");
+      expect(store.proxy.email.error).toBeUndefined();
+
+      store.proxy.email.onValueChange("");
+      expect(store.proxy.email.error).toBe(true);
+      expect(store.proxy.email.errorMessage).toBe("required");
+    });
+
+    it("onValueChange уведомляет подписчиков", () => {
+      const store = createProxyStore({ config: makeConfig() });
+      const listener = vi.fn();
+
+      store.subscribeGlobal(listener);
+
+      store.proxy.email.onValueChange("notify@test.com");
+
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("onValueChange возвращает стабильную ссылку", () => {
+      const store = createProxyStore({ config: makeConfig() });
+
+      const fn1 = store.proxy.email.onValueChange;
+      const fn2 = store.proxy.email.onValueChange;
+
+      expect(fn1).toBe(fn2);
+    });
+
+    it("onValueChange работает для вложенных полей", () => {
+      const store = createProxyStore({ config: makeConfig() });
+
+      store.proxy.passport.number.onValueChange("AB123");
+
+      expect(store.proxy.passport.number.value).toBe("AB123");
+      expect(store.getValues().passport.number).toBe("AB123");
+    });
+  });
+
   describe("label как функция (translate)", () => {
     it("вызывает функцию для label", () => {
       const config = {

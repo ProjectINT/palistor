@@ -30,6 +30,9 @@ export function createBuildProxy({
   recomputeAll,
   notifyChanged,
 }: BuildProxyDeps): (node: AnyConfigNode) => any {
+  /** Кэш onValueChange-функций — стабильная ссылка для React-мемоизации. */
+  const onValueChangeCache = new WeakMap<object, (v: unknown) => void>();
+
   function buildProxy(node: AnyConfigNode): any {
     if (proxyCache.has(node)) return proxyCache.get(node);
 
@@ -40,6 +43,14 @@ export function createBuildProxy({
 
         // Игнорируем символы (Symbol.toPrimitive, Symbol.iterator …)
         if (typeof key === "symbol") return undefined;
+
+        // onValueChange — функциональный setter для value (стабильная ссылка)
+        if (key === "onValueChange") {
+          if (!onValueChangeCache.has(node)) {
+            onValueChangeCache.set(node, (v: unknown) => { p.value = v; });
+          }
+          return onValueChangeCache.get(node);
+        }
 
         // Вычисленное состояние поля
         if (FIELD_STATE_PROPS.has(key)) {

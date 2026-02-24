@@ -6,7 +6,7 @@ import { DemoHeader, type TabType } from "@/modules/header";
 import { PaymentForm } from "@/modules/payment-form";
 import { HooksDemo } from "@/modules/hooks-demo";
 import { DebugPanel } from "@/modules/debug-panel";
-import { StatePreview } from "@/modules/state-preview";
+import { StatePreview } from "@/modules/state-preview/StatePreview";
 
 // ============================================================================
 // Demo Page

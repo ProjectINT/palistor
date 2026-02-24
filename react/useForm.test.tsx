@@ -526,17 +526,17 @@ describe("useForm tracking (selective re-render)", () => {
 
     function A({ section }: { section: any }) {
       renderA();
-      const email = useForm(section); // независимый tracking
+      const email = useForm(section) as any; // независимый tracking
       return <span data-testid="a">{email.value}</span>;
     }
     function B({ section }: { section: any }) {
       renderB();
-      const payment = useForm(section);
+      const payment = useForm(section) as any;
       return <span data-testid="b">{payment.value}</span>;
     }
     function C({ section }: { section: any }) {
       renderC();
-      const passport = useForm(section);
+      const passport = useForm(section) as any;
       return <span data-testid="c">{passport.number.value}</span>;
     }
 
@@ -579,7 +579,7 @@ describe("useForm tracking (selective re-render)", () => {
     const store = createProxyStore({ config: makeConfig() });
 
     function EmailEditor({ emailProxy }: { emailProxy: any }) {
-      const email = useForm(emailProxy);
+      const email = useForm(emailProxy) as any;
       return (
         <div>
           <span data-testid="email-val">{email.value}</span>
@@ -604,5 +604,46 @@ describe("useForm tracking (selective re-render)", () => {
 
     expect(screen.getByTestId("email-val").textContent).toBe("subtree@test.com");
     expect(store.getValues().email).toBe("subtree@test.com");
+  });
+
+  it("onValueChange работает через tracking proxy", () => {
+    const store = createProxyStore({ config: makeConfig() });
+
+    function TestComponent() {
+      const form = useForm(store);
+      return (
+        <div>
+          <span data-testid="email-value">{form.email.value}</span>
+          <button onClick={() => form.email.onValueChange("on-change@test.com")}>
+            Set Email
+          </button>
+        </div>
+      );
+    }
+
+    render(<TestComponent />);
+    expect(screen.getByTestId("email-value").textContent).toBe("");
+
+    act(() => {
+      screen.getByRole("button").click();
+    });
+
+    expect(screen.getByTestId("email-value").textContent).toBe("on-change@test.com");
+    expect(store.getValues().email).toBe("on-change@test.com");
+  });
+
+  it("onValueChange возвращает стабильную ссылку через tracking proxy", () => {
+    const store = createProxyStore({ config: makeConfig() });
+    const fns: any[] = [];
+
+    const { rerender } = renderHook(() => {
+      const form = useForm(store);
+      fns.push(form.email.onValueChange);
+      return form;
+    });
+
+    rerender();
+
+    expect(fns[0]).toBe(fns[1]);
   });
 });
