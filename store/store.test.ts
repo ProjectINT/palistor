@@ -430,4 +430,400 @@ describe("createProxyStore", () => {
       expect(spread).not.toHaveProperty("validate");
     });
   });
+
+  describe("computed values (value как функция)", () => {
+    const makeComputedConfig = () => ({
+      price: {
+        value: 100,
+        label: "Price",
+        dependencies: [],
+      },
+      quantity: {
+        value: 1,
+        label: "Quantity",
+        dependencies: [],
+      },
+      total: {
+        value: (values: any) => values.price * values.quantity,
+        label: "Total",
+        isReadOnly: true,
+        dependencies: ["price", "quantity"],
+      },
+    });
+
+    it("вычисляет начальное computed value", () => {
+      const store = createProxyStore({ config: makeComputedConfig() });
+      expect(store.proxy.total.value).toBe(100); // 100 * 1
+    });
+
+    it("пересчитывает computed value при изменении зависимости", () => {
+      const store = createProxyStore({ config: makeComputedConfig() });
+      expect(store.proxy.total.value).toBe(100);
+
+      store.proxy.quantity.value = 5;
+      expect(store.proxy.total.value).toBe(500); // 100 * 5
+
+      store.proxy.price.value = 200;
+      expect(store.proxy.total.value).toBe(1000); // 200 * 5
+    });
+
+    it("computed value отражается в getValues()", () => {
+      const store = createProxyStore({ config: makeComputedConfig() });
+      store.proxy.price.value = 50;
+      store.proxy.quantity.value = 3;
+
+      const values = store.getValues();
+      expect(values.total).toBe(150); // 50 * 3
+    });
+
+    it("computed value доступен через isReadOnly", () => {
+      const store = createProxyStore({ config: makeComputedConfig() });
+      expect(store.proxy.total.isReadOnly).toBe(true);
+    });
+
+    it("уведомляет подписчиков при изменении computed value", () => {
+      const config = makeComputedConfig();
+      const store = createProxyStore({ config });
+      const listener = vi.fn();
+
+      store.subscribe((config as any).total, listener);
+      store.proxy.price.value = 200;
+
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it("цепочка computed: A → B → C", () => {
+      const config = {
+        base: { value: 10, dependencies: [] },
+        doubled: {
+          value: (values: any) => values.base * 2,
+          dependencies: ["base"],
+        },
+        quadrupled: {
+          value: (values: any) => values.doubled * 2,
+          dependencies: ["doubled"],
+        },
+      };
+      const store = createProxyStore({ config });
+      expect(store.proxy.doubled.value).toBe(20);
+      expect(store.proxy.quadrupled.value).toBe(40);
+
+      store.proxy.base.value = 5;
+      expect(store.proxy.doubled.value).toBe(10);
+      expect(store.proxy.quadrupled.value).toBe(20);
+    });
+
+    it("initialValues перекрывает computed для обычных полей", () => {
+      const store = createProxyStore({
+        config: makeComputedConfig(),
+        initialValues: { price: 50, quantity: 4 } as any,
+      });
+      // total пересчитывается из новых price/quantity
+      expect(store.proxy.total.value).toBe(200); // 50 * 4
+    });
+  });
+
+  describe("setter (сайд-эффект записи)", () => {
+    const makeSetterConfig = () => ({
+      paymentType: {
+        value: "card" as string,
+        label: "Payment Type",
+        setter: (value: string) => {
+          if (value === "bank") {
+            return { cardNumber: "" };
+          }
+          return {};
+        },
+      },
+      cardNumber: {
+        value: "4111111111111111",
+        label: "Card Number",
+      },
+      bankAccount: {
+        value: "",
+        label: "Bank Account",
+      },
+    });
+
+    it("setter сбрасывает значение другого поля при записи", () => {
+      const store = createProxyStore({ config: makeSetterConfig() });
+      expect(store.proxy.cardNumber.value).toBe("4111111111111111");
+
+      store.proxy.paymentType.value = "bank";
+      expect(store.proxy.paymentType.value).toBe("bank");
+      expect(store.proxy.cardNumber.value).toBe(""); // сброшено setter-ом
+    });
+
+    it("setter не трогает не указанные поля", () => {
+      const store = createProxyStore({ config: makeSetterConfig() });
+      store.proxy.bankAccount.value = "40817810099910004312";
+
+      store.proxy.paymentType.value = "bank";
+      // bankAccount не указан в patch → не тронут
+      expect(store.proxy.bankAccount.value).toBe("40817810099910004312");
+    });
+
+    it("setter + computed вместе", () => {
+      const config = {
+        price: { value: 100, dependencies: [] },
+        quantity: {
+          value: 1,
+          dependencies: [],
+          setter: (value: number) => {
+            // При установке quantity > 10 — автоматически даём скидку
+            if (value > 10) return { price: 80 };
+            return {};
+          },
+        },
+        total: {
+          value: (values: any) => values.price * values.quantity,
+          isReadOnly: true,
+          dependencies: ["price", "quantity"],
+        },
+      };
+      const store = createProxyStore({ config });
+      expect(store.proxy.total.value).toBe(100); // 100 * 1
+
+      store.proxy.quantity.value = 15;
+      // setter уменьшил price до 80, computed пересчитал total
+      expect(store.proxy.price.value).toBe(80);
+      expect(store.proxy.total.value).toBe(1200); // 80 * 15
+    });
+
+    it("setter для вложенных полей", () => {
+      const config = {
+        country: {
+          value: "ru" as string,
+          setter: (value: string) => {
+            if (value === "us") {
+              return { address: { city: "New York" } };
+            }
+            return {};
+          },
+        },
+        address: {
+          city: { value: "", label: "City" },
+          zip: { value: "", label: "ZIP" },
+        },
+      };
+      const store = createProxyStore({ config });
+
+      store.proxy.country.value = "us";
+      expect(store.proxy.address.city.value).toBe("New York");
+      expect(store.proxy.address.zip.value).toBe(""); // не тронут
+    });
+
+    it("getValues отражает изменения от setter", () => {
+      const store = createProxyStore({ config: makeSetterConfig() });
+      store.proxy.paymentType.value = "bank";
+
+      const values = store.getValues();
+      expect(values.paymentType).toBe("bank");
+      expect(values.cardNumber).toBe("");
+    });
+  });
+
+  // ─── Setter-патч: уведомления подписчиков при массовом обновлении ────────
+
+  describe("setter patch → уведомления подписчиков", () => {
+    /**
+     * Конфиг, в котором setter одного поля (currency) патчит сразу несколько
+     * других полей (symbol, decimals, nested prefix). Это позволяет проверить,
+     * что подписчики ВСЕХ затронутых полей получают уведомление за один цикл
+     * записи, без необходимости отдельного `.value = …` для каждого поля.
+     */
+    const makePatchConfig = () => ({
+      currency: {
+        value: "USD" as string,
+        label: "Currency",
+        /**
+         * setter: при смене валюты — одним патчем обновляем символ,
+         * количество десятичных знаков и вложенный префикс.
+         * Таким образом setter *заменяет* необходимость
+         * ручного вызова `.value = …` для каждого из этих полей.
+         */
+        setter: (value: string) => {
+          const presets: Record<string, { symbol: string; decimals: number; display: { prefix: string } }> = {
+            USD: { symbol: "$", decimals: 2, display: { prefix: "US" } },
+            EUR: { symbol: "€", decimals: 2, display: { prefix: "EU" } },
+            BTC: { symbol: "₿", decimals: 8, display: { prefix: "BT" } },
+          };
+          const preset = presets[value] ?? presets.USD;
+          // Патч — вложенный объект, совпадающий по структуре с конфигом
+          return {
+            symbol: preset.symbol,
+            decimals: preset.decimals,
+            display: preset.display,
+          };
+        },
+      },
+      symbol: {
+        value: "$",
+        label: "Symbol",
+      },
+      decimals: {
+        value: 2,
+        label: "Decimals",
+      },
+      display: {
+        prefix: {
+          value: "US",
+          label: "Prefix",
+        },
+      },
+    });
+
+    it("setter патчит несколько полей за одну запись — значения обновлены", () => {
+      const store = createProxyStore({ config: makePatchConfig() });
+
+      // До патча — начальные значения USD
+      expect(store.proxy.symbol.value).toBe("$");
+      expect(store.proxy.decimals.value).toBe(2);
+      expect(store.proxy.display.prefix.value).toBe("US");
+
+      // Одна запись → setter возвращает патч → все поля обновлены
+      store.proxy.currency.value = "BTC";
+
+      expect(store.proxy.currency.value).toBe("BTC");
+      expect(store.proxy.symbol.value).toBe("₿");
+      expect(store.proxy.decimals.value).toBe(8);
+      expect(store.proxy.display.prefix.value).toBe("BT");
+    });
+
+    it("подписчики ВСЕХ запатченных полей уведомлены за один цикл", () => {
+      const config = makePatchConfig();
+      const store = createProxyStore({ config });
+
+      // Подписываемся на каждое поле, затронутое патчем
+      const symbolListener = vi.fn();
+      const decimalsListener = vi.fn();
+      const prefixListener = vi.fn();
+      const currencyListener = vi.fn();
+
+      store.subscribe((config as any).symbol, symbolListener);
+      store.subscribe((config as any).decimals, decimalsListener);
+      store.subscribe((config as any).display.prefix, prefixListener);
+      store.subscribe((config as any).currency, currencyListener);
+
+      // Одна запись — setter патчит symbol, decimals, display.prefix
+      store.proxy.currency.value = "EUR";
+
+      // Все подписчики должны быть вызваны ровно один раз:
+      // — currencyListener: значение самого поля изменилось
+      // — symbolListener:   setter обновил через патч ($ → €)
+      // — decimalsListener: setter обновил через патч (2 → 2, но recompute может
+      //                     не вызвать, если значение не изменилось — проверяем ниже)
+      // — prefixListener:   setter обновил через патч (US → EU)
+      expect(currencyListener).toHaveBeenCalledTimes(1);
+      expect(symbolListener).toHaveBeenCalledTimes(1);
+      expect(prefixListener).toHaveBeenCalledTimes(1);
+
+      // decimals: 2 → 2 (не изменилось) — подписчик НЕ вызывается,
+      // потому что recomputeAll фильтрует по fieldStateChanged
+      expect(decimalsListener).not.toHaveBeenCalled();
+    });
+
+    it("глобальный подписчик уведомлён ровно один раз при патче", () => {
+      const store = createProxyStore({ config: makePatchConfig() });
+      const globalListener = vi.fn();
+
+      store.subscribeGlobal(globalListener);
+      store.proxy.currency.value = "BTC";
+
+      // Несмотря на то что setter изменил 3+ поля,
+      // глобальный подписчик вызывается ровно один раз за цикл записи
+      expect(globalListener).toHaveBeenCalledTimes(1);
+    });
+
+    it("getValues отражает все изменения от setter-патча", () => {
+      const store = createProxyStore({ config: makePatchConfig() });
+      store.proxy.currency.value = "EUR";
+
+      const values = store.getValues();
+      expect(values).toEqual({
+        currency: "EUR",
+        symbol: "€",
+        decimals: 2,
+        display: { prefix: "EU" },
+      });
+    });
+
+    it("setter-патч НЕ требует отдельного .value = для каждого поля", () => {
+      /**
+       * Ключевой сценарий: setter *заменяет* дефолтное поведение
+       * множественных записей. Вместо:
+       *
+       *   proxy.symbol.value = "₿";
+       *   proxy.decimals.value = 8;
+       *   proxy.display.prefix.value = "BT";
+       *
+       * Достаточно одной записи — setter сделает всё сам:
+       *
+       *   proxy.currency.value = "BTC";
+       */
+      const config = makePatchConfig();
+      const store = createProxyStore({ config });
+
+      // Подписчики, которые считают вызовы
+      const symbolCalls = vi.fn();
+      const decimalsCalls = vi.fn();
+      const prefixCalls = vi.fn();
+
+      store.subscribe((config as any).symbol, symbolCalls);
+      store.subscribe((config as any).decimals, decimalsCalls);
+      store.subscribe((config as any).display.prefix, prefixCalls);
+
+      // Одна запись заменяет три — setter патчит всё за раз
+      store.proxy.currency.value = "BTC";
+
+      // Значения корректны
+      expect(store.proxy.symbol.value).toBe("₿");
+      expect(store.proxy.decimals.value).toBe(8);
+      expect(store.proxy.display.prefix.value).toBe("BT");
+
+      // Подписчики вызваны — UI перерисует затронутые поля
+      expect(symbolCalls).toHaveBeenCalled();
+      expect(prefixCalls).toHaveBeenCalled();
+      // decimals тоже изменилось (2 → 8) — подписчик вызван
+      expect(decimalsCalls).toHaveBeenCalled();
+    });
+
+    it("версия узла обновляется для каждого запатченного поля", () => {
+      const config = makePatchConfig();
+      const store = createProxyStore({ config });
+
+      // Запоминаем начальные версии
+      const symbolV0 = store.getNodeVersion((config as any).symbol);
+      const prefixV0 = store.getNodeVersion((config as any).display.prefix);
+
+      store.proxy.currency.value = "BTC";
+
+      // Версии должны увеличиться — означает, что поле было затронуто
+      expect(store.getNodeVersion((config as any).symbol)).toBeGreaterThan(symbolV0);
+      expect(store.getNodeVersion((config as any).display.prefix)).toBeGreaterThan(prefixV0);
+    });
+
+    it("повторный патч с теми же значениями — подписчики НЕ вызываются", () => {
+      const config = makePatchConfig();
+      const store = createProxyStore({ config });
+
+      // Первый раз: USD → EUR
+      store.proxy.currency.value = "EUR";
+
+      const symbolListener = vi.fn();
+      const prefixListener = vi.fn();
+
+      store.subscribe((config as any).symbol, symbolListener);
+      store.subscribe((config as any).display.prefix, prefixListener);
+
+      // Второй раз: EUR → EUR (те же значения)
+      store.proxy.currency.value = "EUR";
+
+      // Значения не изменились → recomputeAll не включит их в changed →
+      // подписчики НЕ вызваны (за исключением самого currency, который
+      // всегда добавляется в changed через changed.add(node))
+      expect(symbolListener).not.toHaveBeenCalled();
+      expect(prefixListener).not.toHaveBeenCalled();
+    });
+  });
 });

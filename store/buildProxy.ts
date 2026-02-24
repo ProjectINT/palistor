@@ -11,6 +11,40 @@ export interface BuildProxyDeps {
 }
 
 /**
+ * Применить патч (результат setter) к nodeState.
+ * Рекурсивно обходит дерево конфига и патча, обновляя значения полей.
+ * Возвращает Set узлов, значения которых были изменены патчем.
+ */
+function applyPatch(
+  configNode: AnyConfigNode,
+  nodeState: WeakMap<object, FieldState>,
+  patch: Record<string, unknown>,
+  changed: Set<object> = new Set(),
+): Set<object> {
+  for (const key of Object.keys(patch)) {
+    if (CONFIG_PROPS.has(key)) continue;
+
+    const child = configNode[key] as AnyConfigNode | undefined;
+    if (!child || typeof child !== "object") continue;
+
+    const patchValue = patch[key];
+
+    if ("value" in child) {
+      // Листовой узел — обновляем value только если оно реально изменилось
+      const state = nodeState.get(child);
+      if (state && state.value !== patchValue) {
+        nodeState.set(child, { ...state, value: patchValue });
+        changed.add(child);
+      }
+    } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {
+      // Групповой узел — рекурсия
+      applyPatch(child, nodeState, patchValue as Record<string, unknown>, changed);
+    }
+  }
+  return changed;
+}
+
+/**
  * Ключи конфига, которые НЕ должны утекать при spread-операции ({...proxy}).
  * Это внутренние свойства конфига (validate, formatter, setter, …), которые
  * могут конфликтовать с пропсами UI-компонентов (например, HeroUI Input
@@ -98,7 +132,7 @@ export function createBuildProxy({
   function buildProxy(node: AnyConfigNode): any {
     if (proxyCache.has(node)) return proxyCache.get(node);
 
-    const p = new Proxy(node as Record<string, any>, {
+    const p: Record<string, any> = new Proxy(node as Record<string, any>, {
       get(_target, key: string | symbol) {
         // Символ для доступа к исходному config-узлу (используется tracking proxy)
         if (key === CONFIG_NODE) return node;
@@ -148,8 +182,28 @@ export function createBuildProxy({
           // Обновляем value в state иммутабельно
           nodeState.set(node, { ...state, value: processedValue });
 
-          // Пересчитываем состояние всех полей (validate, isVisible, …)
+          // Применяем setter — сайд-эффект записи, возвращающий патч других полей
+          // applyPatch возвращает Set узлов, чьи значения были изменены патчем,
+          // чтобы позже включить их в уведомления подписчикам
+          let patchedNodes: Set<object> | undefined;
+          if (typeof node.setter === "function") {
+            const allValues = collectValues(rootConfig, nodeState);
+            const patch = (node.setter as (v: unknown, vals: Record<string, unknown>) => Record<string, unknown>)(
+              processedValue,
+              allValues,
+            );
+            if (patch && typeof patch === "object") {
+              patchedNodes = applyPatch(rootConfig, nodeState, patch);
+            }
+          }
+
+          // Пересчитываем состояние всех полей (validate, isVisible, computed values…)
           const changed = recomputeAll();
+
+          // Объединяем: узлы из патча + узлы, изменённые recompute + текущий узел
+          if (patchedNodes) {
+            for (const n of patchedNodes) changed.add(n);
+          }
 
           // Уведомляем подписчиков изменённых полей
           // (текущий узел всегда считается изменённым)

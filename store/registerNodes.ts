@@ -50,8 +50,9 @@ type MaybeFlag = boolean | ((values: any) => boolean) | undefined;
 export function registerNodes<TNode extends AnyConfigNode>(
   node: TNode,
   initialSlice: InitialSlice<TNode> | undefined,
-  leafNodes: Array<{ node: AnyConfigNode }>,
+  leafNodes: Array<{ node: AnyConfigNode; path: string }>,
   nodeState: WeakMap<object, FieldState>,
+  parentPath = "",
 ) {
   for (const key of Object.keys(node)) {
     if (CONFIG_PROPS.has(key)) continue;
@@ -59,9 +60,11 @@ export function registerNodes<TNode extends AnyConfigNode>(
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
 
+    const path = parentPath ? `${parentPath}.${key}` : key;
+
     if ("value" in child) {
       // Листовой узел: запоминаем, ставим начальный value (computed позже)
-      leafNodes.push({ node: child });
+      leafNodes.push({ node: child, path });
 
       const rawSlice = initialSlice as Record<string, unknown> | undefined;
       const sliceValues = (rawSlice ?? {}) as Record<string, unknown>;
@@ -80,7 +83,7 @@ export function registerNodes<TNode extends AnyConfigNode>(
     // Если промежуточный узел имеет computed-свойства (isVisible на группе),
     // регистрируем его тоже как "виртуальный" лист
     if (!("value" in child) && hasComputedProps(child)) {
-      leafNodes.push({ node: child });
+      leafNodes.push({ node: child, path });
       const sliceValues = (initialSlice as Record<string, unknown> | undefined ?? {}) as Record<string, unknown>;
       nodeState.set(child, {
         value: undefined,
@@ -92,6 +95,6 @@ export function registerNodes<TNode extends AnyConfigNode>(
     }
 
     // Рекурсия в дочерние
-    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path);
   }
 }

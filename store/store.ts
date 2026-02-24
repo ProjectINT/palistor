@@ -335,7 +335,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
    * Список всех листовых узлов конфига (для полного пересчёта).
    * Заполняется при init, используется при recompute.
    */
-  const leafNodes: Array<{ node: AnyConfigNode }> = [];
+  const leafNodes: Array<{ node: AnyConfigNode; path: string }> = [];
 
   /** Подписчики на изменение каждого поля. */
   const nodeListeners = new WeakMap<object, Set<() => void>>();
@@ -360,6 +360,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // Выполняем инициализацию
   registerNodes(rootConfig, initialValues, leafNodes, nodeState);
+
   recomputeAll(); // вычисляем isVisible, isRequired, error и т.д.
 
   // ─── Уведомление подписчиков ───────────────────────────────────────────────
