@@ -4,6 +4,7 @@ import { createBuildProxy } from "./buildProxy";
 import { registerNodes } from "./registerNodes";
 import { recomputeAll as _recomputeAll } from "./recomputeAll";
 import type { TranslateFn } from "../core/types";
+import { createPersistManager, type PersistManager } from "./persist/persistManager";
 
 export type { FieldState };
 
@@ -309,6 +310,30 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * Возвращает текущую зарегистрированную функцию перевода (или null).
    */
   getTranslator: () => TranslateFn | null;
+
+  /**
+   * Менеджер персистенции — гидратация и автосохранение состояния формы.
+   *
+   * @example
+   * ```ts
+   * // Активировать персистенцию (гидратация + auto-save)
+   * await store.persist.enable({
+   *   key: "payment-form-123",
+   *   driver: localStorageDriver,
+   *   debounce: 300,
+   * });
+   *
+   * // Принудительно сохранить
+   * await store.persist.flush();
+   *
+   * // Очистить storage
+   * await store.persist.clear();
+   *
+   * // Отключить
+   * store.persist.disable();
+   * ```
+   */
+  persist: PersistManager;
 }
 
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
@@ -441,6 +466,19 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     return () => globalListeners.delete(listener);
   };
 
+  // ─── Persist ────────────────────────────────────────────────────────────────
+
+  const getValues = () => collectValues(rootConfig, nodeState) as ExtractValues<TConfig>;
+
+  const persistManager = createPersistManager({
+    rootConfig,
+    nodeState,
+    recomputeAll,
+    notifyChanged,
+    getValues: getValues as () => Record<string, unknown>,
+    subscribeGlobal,
+  });
+
   // ─── Публичный API ─────────────────────────────────────────────────────────
   return {
     proxy: buildProxy(rootConfig) as ConfigProxy<TConfig>,
@@ -448,9 +486,10 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     subscribeGlobal,
     getVersion: () => version,
     getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
-    getValues: () => collectValues(rootConfig, nodeState) as ExtractValues<TConfig>,
+    getValues,
     setTranslator,
     getTranslator: () => translator,
+    persist: persistManager,
   };
 }
 

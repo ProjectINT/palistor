@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useTranslator } from "@palistor/react/useTranslator";
+import { usePersist } from "@palistor/react/usePersist";
+import { localStorageDriver } from "@palistor/store/persist";
 import { paymentStore } from "@/config/paymentForm";
 
 import { DemoHeader, type TabType } from "@/modules/header";
@@ -18,6 +20,10 @@ import { StatePreview } from "@/modules/state-preview/StatePreview";
 export default function DemoPage() {
   const t = useTranslations();
   useTranslator(paymentStore, t);
+  usePersist(paymentStore, {
+    key: "payment-form-demo",
+    driver: localStorageDriver,
+  });
 
   const [activeTab, setActiveTab] = useState<TabType>("form");
 

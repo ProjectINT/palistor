@@ -46,6 +46,14 @@ export { createForm } from "./core/createForm";
 export type { CreateFormConfig, UseFormOptions, UseFormReturn } from "./core/createForm";
 
 // ============================================================================
+// Persist — драйверы и типы
+// ============================================================================
+
+export type { PersistDriver, PersistOptions } from "./store/persist/types";
+export type { PersistManager } from "./store/persist/persistManager";
+export { localStorageDriver, sessionStorageDriver } from "./store/persist/drivers";
+
+// ============================================================================
 // Типы для конфигурации
 // ============================================================================
 
@@ -59,18 +67,3 @@ export type {
   NestedKeyOf,
   NestedValueOf,
 } from "./core/types";
-
-// ============================================================================
-// Утилиты для работы с вложенными полями
-// ============================================================================
-
-export { 
-  parseFieldKey, 
-  stringifyPath, 
-  isNestedKey, 
-  getRootKey, 
-  getNestedPath,
-  isReservedFieldConfigKey,
-  getFieldConfigByPath,
-} from "./utils/pathUtils";
-export { getFieldByPath, setFieldByPath, removeFieldByPath } from "./utils/helpers";
