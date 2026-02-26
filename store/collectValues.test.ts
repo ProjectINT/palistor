@@ -110,7 +110,7 @@ describe("collectValues", () => {
     expect(result).not.toHaveProperty("validate");
   });
 
-  it("пропускает служебные ключи групп (isVisible, isRequired на GroupConfigNode)", () => {
+  it("пропускает служебные ключи групп (isVisible, isRequired на ConfigNode)", () => {
     const number = { value: "" };
     // Группа с isVisible — isVisible не должна попасть в values
     const passport: AnyConfigNode = {

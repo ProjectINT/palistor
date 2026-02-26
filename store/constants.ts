@@ -45,4 +45,10 @@ export const CONFIG_PROPS = new Set<string>([
   "componentProps",
   "types",
   "dependencies",
+  // Handler props (submit, reset, onChange lifecycle)
+  "onSubmit",
+  "beforeSubmit",
+  "afterSubmit",
+  "reset",
+  "onChange",
 ]);

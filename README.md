@@ -212,7 +212,7 @@ createProxyStore({ config, initialValues })
 
 ```typescript
 const store = createProxyStore({
-  config: Config,           // дерево FieldConfigNode / GroupConfigNode
+  config: Config,           // дерево ConfigNode
   initialValues?: object,   // перекрывают value из конфига
 });
 ```
@@ -267,42 +267,41 @@ form.passport.number.value = "AB123";
 
 ## FieldConfig
 
-### Листовой узел (`FieldConfigNode`)
+### Узел конфига (`ConfigNode`)
+
+Поведение узла определяется наличием свойств:
+- Есть `value` → листовой узел (поле формы)
+- Нет `value`  → групповой узел (контейнер для дочерних)
 
 ```typescript
-interface FieldConfigNode<TValue, TValues> {
-  value: TValue | ((values: TValues) => TValue); // обязателен
-
+interface ConfigNode<TValue, TValues> {
+  // ─── Поле (если есть value — узел считается листовым) ─────────
+  value?: TValue | ((values: TValues) => TValue);
   label?: string | ((values: TValues) => string);
   placeholder?: string | ((values: TValues) => string);
   description?: string | ((values: TValues) => string);
+  validate?: (value: TValue, values: TValues) => string | undefined | false;
+  formatter?: (value: unknown, values: TValues) => TValue;
+  setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
+  componentProps?: Record<string, unknown>;
+  dependencies?: readonly string[];
+  types?: FieldTypeMeta;
 
+  // ─── Общие флаги (и поле, и группа) ────────────────────
   isVisible?: boolean | ((values: TValues) => boolean);   // default: true
   isRequired?: boolean | ((values: TValues) => boolean);  // default: false
   isDisabled?: boolean | ((values: TValues) => boolean);  // default: false
   isReadOnly?: boolean | ((values: TValues) => boolean);  // default: false
 
-  validate?: (value: TValue, values: TValues) => string | undefined | false;
-  formatter?: (value: unknown, values: TValues) => TValue;
-  setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
+  // ─── Lifecycle (любой узел) ───────────────────────────────────
+  beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
+  onSubmit?: (values: TValues) => Promise<unknown> | unknown;
+  afterSubmit?: (result: unknown, actions: { reset: () => void }) => void | Promise<void>;
+  reset?: (defaults: TValues) => TValues;
+  onChange?: (info: { fieldKey: string; newValue: unknown; previousValue: unknown; allValues: TValues; }) => Partial<TValues> | void | Promise<Partial<TValues> | void>;
 
-  componentProps?: Record<string, unknown>;
-  dependencies?: readonly string[]; // зарезервировано для будущей оптимизации
-}
-```
-
-### Групповой узел (`GroupConfigNode`)
-
-```typescript
-interface GroupConfigNode<TValues> {
-  // computed-свойства на группу (дочерние поля не затрагивают)
-  isVisible?: boolean | ((values: TValues) => boolean);
-  isRequired?: boolean | ((values: TValues) => boolean);
-  isReadOnly?: boolean | ((values: TValues) => boolean);
-  isDisabled?: boolean | ((values: TValues) => boolean);
-
-  // далее — дочерние узлы
-  [key: string]: FieldConfigNode<any, TValues> | GroupConfigNode<TValues> | any;
+  // ─── Дочерние узлы (для групповых узлов) ───────────────
+  [key: string]: ConfigNode<any, TValues> | any;
 }
 ```
 

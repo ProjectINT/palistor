@@ -263,30 +263,30 @@ interface FieldState {
 ## Типизация
 
 ```ts
-// Конфиг поля
-interface FieldConfigNode<TValue, TValues> {
-  value: MaybeComputed<TValue, TValues>;
+// Универсальный узел конфига (есть value → поле, нет value → группа)
+interface ConfigNode<TValue, TValues> {
+  // Поле
+  value?: MaybeComputed<TValue, TValues>;
   label?: MaybeComputed<string, TValues>;
   placeholder?: MaybeComputed<string, TValues>;
   description?: MaybeComputed<string, TValues>;
-  isRequired?: MaybeComputed<boolean, TValues>;
-  isReadOnly?: MaybeComputed<boolean, TValues>;
-  isDisabled?: MaybeComputed<boolean, TValues>;
-  isVisible?: MaybeComputed<boolean, TValues>;
   validate?: (value: TValue, values: TValues) => string | undefined | false;
   formatter?: (value: unknown, values: TValues) => TValue;
   setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
   componentProps?: Record<string, unknown>;
   dependencies?: readonly string[];
   types?: FieldTypeMeta;
-}
-
-// Групповой узел
-interface GroupConfigNode<TValues> {
+  // Общие флаги
   isVisible?: MaybeComputed<boolean, TValues>;
   isRequired?: MaybeComputed<boolean, TValues>;
   isReadOnly?: MaybeComputed<boolean, TValues>;
   isDisabled?: MaybeComputed<boolean, TValues>;
+  // Lifecycle
+  beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
+  onSubmit?: (values: TValues) => Promise<unknown> | unknown;
+  afterSubmit?: (result: unknown, actions: { reset: () => void }) => void | Promise<void>;
+  reset?: (defaults: TValues) => TValues;
+  onChange?: (info: { ... }) => DeepPartialValues<TValues> | void | Promise<...>;
 }
 
 // Автоматическая типизация прокси

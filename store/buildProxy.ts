@@ -12,6 +12,12 @@ export interface BuildProxyDeps {
   notifyChanged: (changed: Set<object>) => void;
   /** Возвращает зарегистрированную функцию перевода (или null). */
   getTranslator: () => TranslateFn | null;
+  /** Запуск submit pipeline для группового узла. */
+  submitNode: (node: AnyConfigNode) => Promise<unknown>;
+  /** Запуск reset для группового узла. */
+  resetNode: (node: AnyConfigNode, values?: Record<string, unknown>) => void;
+  /** Fire-and-forget onChange для листового узла. */
+  onFieldChange?: (node: AnyConfigNode, newValue: unknown, previousValue: unknown) => void;
 }
 
 /**
@@ -27,6 +33,12 @@ const INTERNAL_CONFIG_KEYS = new Set<string>([
   "types",
   "dependencies",
   "nested",
+  // Handler props (submit, reset, onChange lifecycle)
+  "onSubmit",
+  "beforeSubmit",
+  "afterSubmit",
+  "reset",
+  "onChange",
 ]);
 
 /**
@@ -103,9 +115,16 @@ export function createBuildProxy({
   recomputeAll,
   notifyChanged,
   getTranslator,
+  submitNode,
+  resetNode,
+  onFieldChange,
 }: BuildProxyDeps): (node: AnyConfigNode) => any {
   /** Кэш onValueChange-функций — стабильная ссылка для React-мемоизации. */
   const onValueChangeCache = new WeakMap<object, (v: unknown) => void>();
+  /** Кэш submit-функций — стабильная ссылка для React-мемоизации. */
+  const submitCache = new WeakMap<object, () => Promise<unknown>>();
+  /** Кэш reset-функций — стабильная ссылка для React-мемоизации. */
+  const resetCache = new WeakMap<object, (values?: Record<string, unknown>) => void>();
 
   /** Зависимости write pipeline — собранные один раз для всех узлов. */
   const writeDeps: WriteDeps = { rootConfig, nodeState, recomputeAll };
@@ -127,6 +146,25 @@ export function createBuildProxy({
             onValueChangeCache.set(node, (v: unknown) => { p.value = v; });
           }
           return onValueChangeCache.get(node);
+        }
+
+        // ── Handler methods (для групповых узлов) ────────────────────────
+        if (!("value" in node)) {
+          if (key === "submitting") {
+            return nodeState.get(node)?.submitting ?? false;
+          }
+          if (key === "submit") {
+            if (!submitCache.has(node)) {
+              submitCache.set(node, () => submitNode(node));
+            }
+            return submitCache.get(node);
+          }
+          if (key === "reset") {
+            if (!resetCache.has(node)) {
+              resetCache.set(node, (values?: Record<string, unknown>) => resetNode(node, values));
+            }
+            return resetCache.get(node);
+          }
         }
 
         // Вычисленное состояние поля
@@ -157,12 +195,22 @@ export function createBuildProxy({
       set(_target, key: string | symbol, newValue: unknown) {
         if (key !== "value") return false;
 
+        // Захватываем предыдущее значение для onChange
+        const previousValue = nodeState.get(node)?.value;
+
         // Весь процесс записи делегирован write pipeline:
         // format → store → setter patch → recompute → merge changed
         const result = writeValue(node, newValue, writeDeps);
         if (!result) return false;
 
         notifyChanged(result.changed);
+
+        // Fire onChange на группах-предках (fire-and-forget, async)
+        if (onFieldChange) {
+          const actualNewValue = nodeState.get(node)?.value;
+          onFieldChange(node, actualNewValue, previousValue);
+        }
+
         return true;
       },
 

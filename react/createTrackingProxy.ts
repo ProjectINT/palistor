@@ -81,7 +81,8 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       if (typeof key === "symbol") return (target as any)[key];
 
       // Чтение состояния поля → трекинг ноды
-      if (FIELD_STATE_PROPS.has(key)) {
+      // submitting — реактивный флаг группы, тоже требует трекинга
+      if (FIELD_STATE_PROPS.has(key) || key === "submitting") {
         const configNode = (target as any)[CONFIG_NODE] as object | undefined;
         if (configNode && !refs.accessed.has(configNode)) {
           refs.accessed.add(configNode);

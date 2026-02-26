@@ -17,6 +17,8 @@ export interface FieldState {
   isVisible: boolean;
   error?: boolean;
   errorMessage?: string;
+  /** true while submit pipeline is running (group nodes only). */
+  submitting?: boolean;
 }
 
 // ─── Вспомогательные функции ─────────────────────────────────────────────────
@@ -113,6 +115,7 @@ export function fieldStateChanged(a: FieldState, b: FieldState): boolean {
     a.placeholder !== b.placeholder ||
     a.description !== b.description ||
     a.error !== b.error ||
-    a.errorMessage !== b.errorMessage
+    a.errorMessage !== b.errorMessage ||
+    a.submitting !== b.submitting
   );
 }

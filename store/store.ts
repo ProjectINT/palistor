@@ -5,8 +5,15 @@ import { registerNodes } from "./registerNodes";
 import { recomputeAll as _recomputeAll } from "./recomputeAll";
 import type { TranslateFn } from "../core/types";
 import { createPersistManager, type PersistManager } from "./persist/persistManager";
+import { buildNodeMaps } from "./nodeMap";
+import { executeReset, type ResetDeps } from "./resetPipeline";
+import { executeSubmit, SubmitResult, type SubmitDeps } from "./submitPipeline";
+import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
+import { CONFIG_PROPS } from "./constants";
 
 export type { FieldState };
+
+export type { SubmitResult } from "./submitPipeline";
 
 /** Функция отписки от подписки. */
 export type Unsubscribe = () => void;
@@ -58,14 +65,6 @@ export type MaybeComputed<TResult, TValues = Record<string, unknown>> =
   | ((values: TValues) => TResult);
 
 /**
- * Листовой узел конфига — описывает одно поле формы.
- * Все свойства кроме `value` — опциональны.
- * Любое свойство может быть константой или функцией от `TValues`.
- *
- * @template TValue  — тип значения поля
- * @template TValues — форма дерева всех значений (по умолчанию Record<string,any>)
- */
-/**
  * Метаданные типа поля (для будущей валидации по типам / кодогенерации).
  */
 export interface FieldTypeMeta {
@@ -73,15 +72,25 @@ export interface FieldTypeMeta {
   readonly type: string;
 }
 
-export interface FieldConfigNode<TValue = unknown, TValues = Record<string, unknown>> {
-  value: MaybeComputed<TValue, TValues>;
+/**
+ * Универсальный узел конфига — описывает и поле, и группу.
+ *
+ * Поведение узла определяется наличием свойств:
+ *   - Есть `value` → листовой узел (поле формы)
+ *   - Нет `value`  → групповой узел (контейнер для дочерних)
+ *
+ * Все свойства кроме `value` — опциональны.
+ * Любое computed-свойство может быть константой или функцией от `TValues`.
+ *
+ * @template TValue  — тип значения поля (актуально для листовых узлов)
+ * @template TValues — форма дерева всех значений (по умолчанию Record<string,any>)
+ */
+export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>> {
+  // ─── Поле (если есть value — узел считается листовым) ──────────────────
+  value?: MaybeComputed<TValue, TValues>;
   label?: MaybeComputed<string, TValues>;
   placeholder?: MaybeComputed<string, TValues>;
   description?: MaybeComputed<string, TValues>;
-  isRequired?: MaybeComputed<boolean, TValues>;
-  isReadOnly?: MaybeComputed<boolean, TValues>;
-  isDisabled?: MaybeComputed<boolean, TValues>;
-  isVisible?: MaybeComputed<boolean, TValues>;
   /**
    * Возвращает строку с ошибкой или falsy-значение если поле валидно.
    * `false` допускается для удобства паттерна `!v && "required"`.
@@ -97,19 +106,39 @@ export interface FieldConfigNode<TValue = unknown, TValues = Record<string, unkn
   dependencies?: readonly string[];
   /** Метаданные типа поля */
   types?: FieldTypeMeta;
-}
 
-/**
- * Групповой (промежуточный) узел конфига.
- * Группирует дочерние поля и сам может иметь computed-флаги видимости/состояния.
- *
- * @template TValues — форма дерева всех значений
- */
-export interface GroupConfigNode<TValues = Record<string, unknown>> {
-  isVisible?: MaybeComputed<boolean, TValues>;
+  // ─── Общие флаги (и поле, и группа) ───────────────────────────────────
   isRequired?: MaybeComputed<boolean, TValues>;
   isReadOnly?: MaybeComputed<boolean, TValues>;
   isDisabled?: MaybeComputed<boolean, TValues>;
+  isVisible?: MaybeComputed<boolean, TValues>;
+
+  // ─── Lifecycle (любой узел) ────────────────────────────────────────────
+  /**
+   * Трансформирует значение перед submit (не мутирует store).
+   * На листовом узле: `(value, values) → value`
+   * На групповом узле: `(values) → values`
+   */
+  beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
+  /** Callback отправки формы. Вызывается после валидации в submit pipeline. */
+  onSubmit?: (values: TValues) => Promise<unknown> | unknown;
+  /** Пост-обработка после успешного onSubmit. */
+  afterSubmit?: (
+    result: unknown,
+    actions: { reset: () => void },
+  ) => void | Promise<void>;
+  /** Трансформер для reset: принимает defaults, возвращает окончательные значения. */
+  reset?: (defaults: TValues) => TValues;
+  /**
+   * Вызывается после изменения любого поля в группе (fire-and-forget).
+   * Может вернуть патч для мержа обратно в store.
+   */
+  onChange?: (info: {
+    fieldKey: string;
+    newValue: unknown;
+    previousValue: unknown;
+    allValues: TValues;
+  }) => DeepPartialValues<TValues> | void | Promise<DeepPartialValues<TValues> | void>;
 }
 
 // ─── Proxy-типы ──────────────────────────────────────────────────────────────
@@ -135,6 +164,11 @@ type ConfigSkipKeys =
   | "componentProps"
   | "types"
   | "dependencies"
+  | "onSubmit"
+  | "beforeSubmit"
+  | "afterSubmit"
+  | "reset"
+  | "onChange"
 
 /**
  * Расширяет тип значения, чтобы допустить типичные «входные» типы форматтеров.
@@ -186,6 +220,12 @@ export interface GroupProxyNode {
   readonly isDisabled: boolean | undefined;
   readonly error: boolean | undefined;
   readonly errorMessage: string | undefined;
+  /** true пока выполняется submit pipeline. */
+  readonly submitting: boolean;
+  /** Submit pipeline: submitting → beforeSubmit → validate → onSubmit → afterSubmit. */
+  submit(): Promise<SubmitResult>;
+  /** Reset поддерево к defaults из конфига (или к переданным значениям). */
+  reset(values?: Record<string, unknown>): void;
 }
 
 /**
@@ -334,9 +374,57 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * ```
    */
   persist: PersistManager;
+
+  /**
+   * Submit root form.
+   * Lifecycle: submitting → beforeSubmit → validate → onSubmit → afterSubmit.
+   */
+  submit(): Promise<import("./submitPipeline").SubmitResult>;
+
+  /**
+   * Reset root form к defaults из конфига (или к переданным значениям).
+   */
+  reset(values?: DeepPartialValues<ExtractValues<TConfig>>): void;
 }
 
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
+
+/**
+ * Инициализирует submitting: false в nodeState для корневого и всех вложенных
+ * групповых узлов. Гарантирует, что collectValues может инжектировать $submitting.
+ */
+function initGroupSubmitting(
+  node: AnyConfigNode,
+  nodeState: WeakMap<object, FieldState>,
+) {
+  // Для текущего узла (группового) — инициализируем submitting
+  const existing = nodeState.get(node);
+  if (existing) {
+    if (existing.submitting === undefined) {
+      nodeState.set(node, { ...existing, submitting: false });
+    }
+  } else {
+    nodeState.set(node, {
+      value: undefined,
+      isVisible: true,
+      isRequired: false,
+      isDisabled: false,
+      isReadOnly: false,
+      submitting: false,
+    });
+  }
+
+  // Рекурсия в дочерние группы
+  for (const key of Object.keys(node)) {
+    if (CONFIG_PROPS.has(key)) continue;
+    const child = node[key] as AnyConfigNode;
+    if (!child || typeof child !== "object") continue;
+    // Только группы (без value)
+    if (!("value" in child)) {
+      initGroupSubmitting(child, nodeState);
+    }
+  }
+}
 
 /**
  * Создать ProxyStore с вычисляемым состоянием.
@@ -406,6 +494,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // Выполняем инициализацию
   registerNodes(rootConfig, initialValues, leafNodes, nodeState);
 
+  // Инициализируем submitting: false для корневого узла (и вложенных групп с onSubmit)
+  initGroupSubmitting(rootConfig, nodeState);
+
   recomputeAll(); // вычисляем isVisible, isRequired, error и т.д.
 
   // ─── Уведомление подписчиков ───────────────────────────────────────────────
@@ -444,6 +535,41 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     globalListeners.forEach((fn) => fn());
   }
 
+  // ─── Handlers (submit, reset, onChange) ──────────────────────────────────
+
+  const nodePaths = new WeakMap<object, string>();
+  const nodeParents = new WeakMap<object, object>();
+  buildNodeMaps(rootConfig, nodePaths, nodeParents);
+
+  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged };
+  const resetNode = (node: AnyConfigNode, values?: Record<string, unknown>) => {
+    executeReset(node, resetDeps, values);
+  };
+
+  const submitDeps: SubmitDeps = {
+    nodeState,
+    recomputeAll,
+    notifyChanged,
+    resetNode,
+  };
+  const submitNode = (node: AnyConfigNode) => executeSubmit(node, submitDeps);
+
+  const onChangeDeps: OnChangeDeps = {
+    rootConfig,
+    nodeState,
+    nodePaths,
+    nodeParents,
+    recomputeAll,
+    notifyChanged,
+  };
+  const onFieldChange = (
+    node: AnyConfigNode,
+    newValue: unknown,
+    previousValue: unknown,
+  ) => {
+    fireOnChange(node, newValue, previousValue, onChangeDeps);
+  };
+
   // ─── Построение Proxy ──────────────────────────────────────────────────────
   const buildProxy = createBuildProxy({
     proxyCache,
@@ -452,6 +578,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     recomputeAll,
     notifyChanged,
     getTranslator: () => translator,
+    submitNode,
+    resetNode,
+    onFieldChange,
   });
 
   // ─── Подписка ──────────────────────────────────────────────────────────────
@@ -468,7 +597,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Persist ────────────────────────────────────────────────────────────────
 
-  const getValues = () => collectValues(rootConfig, nodeState) as ExtractValues<TConfig>;
+  const getValues = () => collectValues(rootConfig, nodeState, true) as ExtractValues<TConfig>;
 
   const persistManager = createPersistManager({
     rootConfig,
@@ -490,6 +619,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     setTranslator,
     getTranslator: () => translator,
     persist: persistManager,
+    submit: () => submitNode(rootConfig),
+    reset: (values?: DeepPartialValues<ExtractValues<TConfig>>) =>
+      resetNode(rootConfig, values as Record<string, unknown> | undefined),
   };
 }
 
