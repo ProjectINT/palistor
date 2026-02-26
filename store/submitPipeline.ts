@@ -1,6 +1,7 @@
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { CONFIG_PROPS } from "./constants";
 import type { FieldState } from "./compute";
+import { setGroupRevalidate } from "./dirtyTracking";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -87,11 +88,13 @@ function applyLeafBeforeSubmit(
  * Submit pipeline для группового узла.
  *
  * Lifecycle:
- *   1. submitting = true → recompute → notify
+ *   1. submitting = true + revalidate = true → recompute → notify
+ *      (revalidate forces error computation for all leaves)
  *   2. Собрать текущие значения поддерева
  *   3. Применить leaf-level beforeSubmit (на snapshot, без мутации store)
  *   4. Применить group-level beforeSubmit
  *   5. Валидация всех листьев — если есть ошибки → return { success: false }
+ *      (revalidate stays true — errors will show on subsequent input)
  *   6. Вызвать onSubmit (пользовательский callback)
  *   7. Вызвать afterSubmit с результатом и reset-экшеном
  *   8. submitting = false → recompute → notify
@@ -102,11 +105,18 @@ export async function executeSubmit(
 ): Promise<SubmitResult> {
   const { nodeState, recomputeAll, notifyChanged, resetNode } = deps;
 
-  // 1. submitting = true → update nodeState → recompute → notify
+  // 1. submitting = true + revalidate = true → recompute → notify
+  //    Setting revalidate=true BEFORE recompute ensures computeFieldState
+  //    will run validation for all leaves.
   const prevState = nodeState.get(groupNode);
   nodeState.set(groupNode, { ...prevState!, submitting: true });
+
+  // Propagate revalidate=true to all descendants so validation kicks in
+  const revalidateChanged = setGroupRevalidate(groupNode, true, nodeState);
+
   const changed1 = recomputeAll();
   changed1.add(groupNode);
+  for (const n of revalidateChanged) changed1.add(n);
   notifyChanged(changed1);
 
   try {
@@ -123,7 +133,8 @@ export async function executeSubmit(
       )(values);
     }
 
-    // 5. Валидация
+    // 5. Валидация — recompute at step 1 with revalidate=true already
+    //    computed errors for all leaves. Now collect them.
     const errors: Array<{ path: string; message: string }> = [];
     const leaves = collectLeafStates(groupNode, nodeState);
     for (const { path, state } of leaves) {
@@ -133,6 +144,7 @@ export async function executeSubmit(
     }
 
     if (errors.length > 0) {
+      // revalidate stays true — subsequent input will show/clear errors in real-time
       return { success: false, errors };
     }
 

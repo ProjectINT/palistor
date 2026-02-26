@@ -124,8 +124,9 @@ describe("useForm", () => {
 
     render(<TestComponent />);
 
+    // revalidate=false по умолчанию → ошибки скрыты до submit
     expect(screen.getByTestId("email-value").textContent).toBe("");
-    expect(screen.getByTestId("email-error").textContent).toBe("Error");
+    expect(screen.getByTestId("email-error").textContent).toBe("none");
 
     act(() => {
       screen.getByRole("button").click();

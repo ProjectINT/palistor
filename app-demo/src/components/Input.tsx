@@ -12,5 +12,5 @@ export function Input(props: ComputedFieldState & Partial<InputProps>) {
     return null;
   }
 
-  return <HeroUIInput {...restProps} />;
+  return <HeroUIInput {...restProps} isInvalid={!!restProps.error} />;
 }

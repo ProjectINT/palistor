@@ -38,11 +38,11 @@
 **В PaliStor:** отсутствует полностью. Store — чистое хранилище, submit-логики нет.
 
 **Что нужно:**
-- [ ] `submit()` — метод формы с lifecycle hooks
-- [ ] `beforeSubmit(values) → values` — трансформация перед отправкой
-- [ ] `onSubmit(values) → result` — собственно отправка
-- [ ] `afterSubmit(result, reset) → void` — пост-обработка
-- [ ] Флаг `submitting` (boolean) с подпиской
+- [X] `submit()` — метод формы с lifecycle hooks
+- [X] `beforeSubmit(values) → values` — трансформация перед отправкой
+- [X] `onSubmit(values) → result` — собственно отправка
+- [X] `afterSubmit(result, reset) → void` — пост-обработка
+- [X] Флаг `submitting` (boolean) с подпиской
 - [ ] Очистка persist после успешного submit
 
 **Решение:** реализовать в `useForm` на уровне React (не в store), т.к. `onSubmit` — async колбэк из React-контекста. Store остаётся чистым хранилищем.

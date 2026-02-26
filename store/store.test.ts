@@ -85,9 +85,19 @@ describe("createProxyStore", () => {
       expect(store.proxy.passport.isVisible).toBe(false);
     });
 
-    it("вычисляет error через validate", () => {
+    it("error скрыт до первого submit (revalidate=false по умолчанию)", () => {
       const store = createProxyStore({ config: makeConfig() });
-      // email пустой, validate = (v) => !v ? "required" : undefined
+      // revalidate=false → ошибки не вычисляются, пока не было submit
+      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.errorMessage).toBeUndefined();
+    });
+
+    it("error показывается после submit (revalidate=true)", async () => {
+      const store = createProxyStore({ config: makeConfig() });
+      // Первый submit с пустым email → fail → revalidate=true
+      const result = await store.submit();
+      expect(result.success).toBe(false);
+      // Теперь ошибки видны
       expect(store.proxy.email.error).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
@@ -137,9 +147,15 @@ describe("createProxyStore", () => {
       expect(store.proxy.email.value).toBe("new@test.com");
     });
 
-    it("пересчитывает validate после записи", () => {
+    it("пересчитывает validate после записи (когда revalidate=true)", async () => {
       const store = createProxyStore({ config: makeConfig() });
-      expect(store.proxy.email.error).toBe(true); // пустой
+      // До submit — ошибок нет (revalidate=false)
+      expect(store.proxy.email.error).toBeUndefined();
+
+      // Trigger revalidate via failed submit
+      await store.submit();
+
+      expect(store.proxy.email.error).toBe(true); // пустой, revalidate=true
 
       store.proxy.email.value = "filled";
       expect(store.proxy.email.error).toBeUndefined(); // заполнен
@@ -302,8 +318,11 @@ describe("createProxyStore", () => {
       expect(store.proxy.passport.isVisible).toBe(true);
     });
 
-    it("onValueChange вызывает validate", () => {
+    it("onValueChange вызывает validate (когда revalidate=true)", async () => {
       const store = createProxyStore({ config: makeConfig() });
+
+      // Trigger revalidate via failed submit
+      await store.submit();
 
       store.proxy.email.onValueChange("valid@test.com");
       expect(store.proxy.email.error).toBeUndefined();
@@ -382,6 +401,7 @@ describe("createProxyStore", () => {
       expect(spread).toHaveProperty("isReadOnly");
       expect(spread).toHaveProperty("error");
       expect(spread).toHaveProperty("errorMessage");
+      expect(spread).toHaveProperty("dirty");
       expect(spread).toHaveProperty("onValueChange");
     });
 
@@ -408,7 +428,7 @@ describe("createProxyStore", () => {
       expect(keys).not.toContain("formatter");
     });
 
-    it("validate по-прежнему вызывается через computeFieldState (не через spread)", () => {
+    it("validate вызывается после submit (не через spread)", async () => {
       const config = {
         paymentType: { value: "card" },
         cardNumber: {
@@ -421,7 +441,11 @@ describe("createProxyStore", () => {
       };
       const store = createProxyStore({ config });
 
-      // validate работает через store
+      // До submit — ошибки не вычисляются
+      expect(store.proxy.cardNumber.error).toBeUndefined();
+
+      // После submit — revalidate=true → ошибки видны
+      await store.submit();
       expect(store.proxy.cardNumber.error).toBe(true);
       expect(store.proxy.cardNumber.errorMessage).toBe("required");
 

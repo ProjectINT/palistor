@@ -2,11 +2,14 @@ import { CONFIG_PROPS } from "./constants";
 import type { AnyConfigNode } from "./collectValues";
 import type { FieldState } from "./compute";
 import { applyPatch } from "./applyPatch";
+import { setGroupRevalidate, captureInitialValues } from "./dirtyTracking";
 
 export interface ResetDeps {
   nodeState: WeakMap<object, FieldState>;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
+  /** Optional: used to update initial snapshot after reset (for dirty tracking). */
+  initialValueMap?: WeakMap<object, unknown>;
 }
 
 /**
@@ -49,14 +52,17 @@ function collectDefaults(node: AnyConfigNode): Record<string, unknown> {
  * - Иначе собираются defaults из конфига (до reset-boundary),
  *   и если у группы есть `reset`-трансформер, он применяется к defaults.
  *
- * После записи — полный пересчёт + уведомление подписчиков.
+ * After reset:
+ * - revalidate = false (clear validation mode)
+ * - initial snapshot updated (dirty = false)
+ * - Full recompute + notify
  */
 export function executeReset(
   groupNode: AnyConfigNode,
   deps: ResetDeps,
   values?: Record<string, unknown>,
 ): void {
-  const { nodeState, recomputeAll, notifyChanged } = deps;
+  const { nodeState, recomputeAll, notifyChanged, initialValueMap } = deps;
 
   let patch: Record<string, unknown>;
 
@@ -79,8 +85,17 @@ export function executeReset(
   // Применяем патч к nodeState
   const patchChanged = applyPatch(groupNode, nodeState, patch);
 
+  // Reset revalidate to false — clear validation mode
+  const revalidateChanged = setGroupRevalidate(groupNode, false, nodeState);
+  for (const n of revalidateChanged) patchChanged.add(n);
+
   // Полный пересчёт всех вычисляемых свойств
   const recomputed = recomputeAll();
   for (const n of patchChanged) recomputed.add(n);
   notifyChanged(recomputed);
+
+  // Update initial snapshot — after reset, dirty = false
+  if (initialValueMap) {
+    captureInitialValues(groupNode, nodeState, initialValueMap);
+  }
 }

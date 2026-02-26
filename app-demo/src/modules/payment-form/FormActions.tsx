@@ -4,14 +4,22 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/Button";
 
-import { paymentStore } from "@/config/paymentForm";
+import { paymentStore, usePaymentForm } from "@/config/paymentForm";
 
 export function FormActions() {
   const t = useTranslations();
 
+  const { submit } = usePaymentForm()
+
   const handleSubmit = async () => {
     const values = paymentStore.getValues();
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const res = await submit();
+    if (res.errors.length > 0) {
+      console.error('Submit errors:', res.errors);
+      alert("Ошибка при отправке формы!\n\n" + JSON.stringify(res.errors, null, 2));
+      return;
+    }
+
     alert("Форма отправлена!\n\n" + JSON.stringify(values, null, 2));
   };
 

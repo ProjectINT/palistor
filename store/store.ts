@@ -10,6 +10,7 @@ import { executeReset, type ResetDeps } from "./resetPipeline";
 import { executeSubmit, SubmitResult, type SubmitDeps } from "./submitPipeline";
 import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
 import { CONFIG_PROPS } from "./constants";
+import { captureInitialValues, recomputeDirty } from "./dirtyTracking";
 
 export type { FieldState };
 
@@ -199,6 +200,8 @@ export interface FieldProxyNode<TValue = unknown> {
   /** true если поле имеет ошибку валидации */
   readonly error: boolean | undefined;
   readonly errorMessage: string | undefined;
+  /** true если текущее значение отличается от initial */
+  readonly dirty: boolean;
   readonly onValueChange: (v: ProxyValueType<TValue>) => void;
 }
 
@@ -222,6 +225,13 @@ export interface GroupProxyNode {
   readonly errorMessage: string | undefined;
   /** true пока выполняется submit pipeline. */
   readonly submitting: boolean;
+  /** true если хотя бы одно поле в группе отличается от initial. */
+  readonly dirty: boolean;
+  /**
+   * true после первого неудачного submit — ошибки показываются в реальном времени.
+   * false до первого submit — ошибки скрыты.
+   */
+  readonly revalidate: boolean;
   /** Submit pipeline: submitting → beforeSubmit → validate → onSubmit → afterSubmit. */
   submit(): Promise<SubmitResult>;
   /** Reset поддерево к defaults из конфига (или к переданным значениям). */
@@ -390,19 +400,21 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
 
 /**
- * Инициализирует submitting: false в nodeState для корневого и всех вложенных
- * групповых узлов. Гарантирует, что collectValues может инжектировать $submitting.
+ * Инициализирует submitting: false, dirty: false, revalidate: false
+ * в nodeState для корневого и всех вложенных групповых узлов.
  */
 function initGroupSubmitting(
   node: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
 ) {
-  // Для текущего узла (группового) — инициализируем submitting
+  // Для текущего узла (группового) — инициализируем management flags
   const existing = nodeState.get(node);
   if (existing) {
-    if (existing.submitting === undefined) {
-      nodeState.set(node, { ...existing, submitting: false });
-    }
+    const updated = { ...existing };
+    if (updated.submitting === undefined) updated.submitting = false;
+    if (updated.dirty === undefined) updated.dirty = false;
+    if (updated.revalidate === undefined) updated.revalidate = false;
+    nodeState.set(node, updated);
   } else {
     nodeState.set(node, {
       value: undefined,
@@ -411,6 +423,8 @@ function initGroupSubmitting(
       isDisabled: false,
       isReadOnly: false,
       submitting: false,
+      dirty: false,
+      revalidate: false,
     });
   }
 
@@ -485,6 +499,12 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   /** Зарегистрированная функция перевода (label, placeholder, description). */
   let translator: TranslateFn | null = null;
 
+  /**
+   * Initial values for dirty tracking.
+   * Captured after init and reset/hydrate.
+   */
+  const initialValueMap = new WeakMap<object, unknown>();
+
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
   function recomputeAll(): Set<object> {
@@ -494,10 +514,13 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // Выполняем инициализацию
   registerNodes(rootConfig, initialValues, leafNodes, nodeState);
 
-  // Инициализируем submitting: false для корневого узла (и вложенных групп с onSubmit)
+  // Инициализируем submitting/dirty/revalidate для корневого и вложенных групп
   initGroupSubmitting(rootConfig, nodeState);
 
   recomputeAll(); // вычисляем isVisible, isRequired, error и т.д.
+
+  // Capture initial values for dirty tracking (after recompute to get computed values)
+  captureInitialValues(rootConfig, nodeState, initialValueMap);
 
   // ─── Уведомление подписчиков ───────────────────────────────────────────────
 
@@ -507,6 +530,17 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   function notifyChanged(changed: Set<object>) {
     if (changed.size === 0) return;
+
+    // Recompute dirty flags for all nodes (leaf + group)
+    const dirtyResult = recomputeDirty(rootConfig, nodeState, initialValueMap);
+    for (const n of dirtyResult.changed) changed.add(n);
+
+    // Update root node dirty flag
+    const rootState = nodeState.get(rootConfig);
+    if (rootState && rootState.dirty !== dirtyResult.anyDirty) {
+      nodeState.set(rootConfig, { ...rootState, dirty: dirtyResult.anyDirty });
+      changed.add(rootConfig);
+    }
 
     // Инкрементируем глобальную версию
     version++;
@@ -541,7 +575,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   const nodeParents = new WeakMap<object, object>();
   buildNodeMaps(rootConfig, nodePaths, nodeParents);
 
-  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged };
+  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged, initialValueMap };
   const resetNode = (node: AnyConfigNode, values?: Record<string, unknown>) => {
     executeReset(node, resetDeps, values);
   };

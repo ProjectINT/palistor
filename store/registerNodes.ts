@@ -77,6 +77,8 @@ export function registerNodes<TNode extends AnyConfigNode>(
         isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false),
         isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false),
         isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false),
+        dirty: false,
+        revalidate: false,
       });
     }
 
@@ -91,6 +93,8 @@ export function registerNodes<TNode extends AnyConfigNode>(
         isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false),
         isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false),
         isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false),
+        dirty: false,
+        revalidate: false,
       });
     }
 

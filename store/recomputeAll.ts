@@ -114,7 +114,14 @@ export function recomputeAll(
   for (const { node } of leafNodes) {
     const prev = nodeState.get(node);
     const currentValue = prev?.value ?? "";
-    const next = computeFieldState(node, currentValue, allValues);
+    // Preserve revalidate flag: skip validation when revalidate is false
+    const revalidate = prev?.revalidate ?? false;
+    const next = computeFieldState(node, currentValue, allValues, revalidate);
+
+    // Preserve management flags that computeFieldState doesn't produce
+    if (prev?.submitting !== undefined) next.submitting = prev.submitting;
+    if (prev?.dirty !== undefined) next.dirty = prev.dirty;
+    if (prev?.revalidate !== undefined) next.revalidate = prev.revalidate;
 
     // Проверяем, изменилось ли что-то
     if (prev && !fieldStateChanged(prev, next)) continue;

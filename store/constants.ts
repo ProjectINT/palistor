@@ -31,6 +31,7 @@ export const FIELD_STATE_PROPS = new Set<string>([
   "isVisible",
   "error",
   "errorMessage",
+  "dirty",
 ]);
 
 /**

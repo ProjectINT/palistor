@@ -153,6 +153,12 @@ export function createBuildProxy({
           if (key === "submitting") {
             return nodeState.get(node)?.submitting ?? false;
           }
+          if (key === "dirty") {
+            return nodeState.get(node)?.dirty ?? false;
+          }
+          if (key === "revalidate") {
+            return nodeState.get(node)?.revalidate ?? false;
+          }
           if (key === "submit") {
             if (!submitCache.has(node)) {
               submitCache.set(node, () => submitNode(node));
