@@ -8,14 +8,10 @@ import { paymentStore } from "@/config/paymentForm";
 
 export function FormActions() {
   const t = useTranslations();
-  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     const values = paymentStore.getValues();
-    console.log("[onSubmit] Form values:", values);
-    setSubmitting(true);
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    setSubmitting(false);
     alert("Форма отправлена!\n\n" + JSON.stringify(values, null, 2));
   };
 
@@ -24,7 +20,6 @@ export function FormActions() {
       <Button
         type="submit"
         color="primary"
-        isLoading={submitting}
         onPress={handleSubmit}
       >
         {t("buttons.pay")}

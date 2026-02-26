@@ -16,7 +16,7 @@ export function LocaleSwitcher({ locale, onLocaleChange }: LocaleSwitcherProps) 
         color={locale === "ru" ? "primary" : "default"}
         variant={locale === "ru" ? "solid" : "flat"}
         size="sm"
-        onClick={() => onLocaleChange("ru")}
+        onPress={() => onLocaleChange("ru")}
       >
         🇷🇺 RU
       </Button>
@@ -24,7 +24,7 @@ export function LocaleSwitcher({ locale, onLocaleChange }: LocaleSwitcherProps) 
         color={locale === "en" ? "primary" : "default"}
         variant={locale === "en" ? "solid" : "flat"}
         size="sm"
-        onClick={() => onLocaleChange("en")}
+        onPress={() => onLocaleChange("en")}
       >
         🇺🇸 EN
       </Button>
