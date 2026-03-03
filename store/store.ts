@@ -12,16 +12,8 @@ import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
 import { captureInitialValues } from "./dirtyTracking";
 import { initGroupSubmitting } from "./init/initGroupSubmitting";
 import { createNotificationHub } from "./init/createNotificationHub";
-import {
-  type Resolve,
-  type NotifyFn,
-  type ResolveState,
-  type ResolveDeps,
-  initResolveStates,
-  executeResolve,
-  findResolvesToRetrigger,
-  resetResolveState,
-} from "./resolvePipeline";
+import { createResolveManager } from "./init/createResolveManager";
+import { type NotifyFn } from "./resolvePipeline";
 
 export type { FieldState };
 
@@ -521,14 +513,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   const { notifyChanged, subscribe, subscribeGlobal } = hub;
 
-  // ─── Resolve system ────────────────────────────────────────────────────────
-
-  /** Resolve states for all nodes with resolve config. */
-  const resolveStates = new Map<object, ResolveState>();
-
-  /** All resolve entries (node + resolve config). */
-  const resolveEntries = initResolveStates(rootConfig, resolveStates);
-
   // ─── Translator ─────────────────────────────────────────────────────────────
 
   function setTranslator(t: TranslateFn | null) {
@@ -547,27 +531,17 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     return notifier;
   }
 
-  // ─── Resolve helpers ────────────────────────────────────────────────────────
+  // ─── Resolve system ────────────────────────────────────────────────────────
 
-  const resolveDeps: ResolveDeps = {
+  const resolveManager = createResolveManager({
     rootConfig,
     nodeState,
-    resolveStates,
     recomputeAll,
     notifyChanged,
     getNotifier,
-    getValues: () => collectValues(rootConfig, nodeState) as Record<string, unknown>,
-  };
+  });
 
-  function triggerResolve(node: AnyConfigNode) {
-    const entry = resolveEntries.find((e: { node: AnyConfigNode; resolve: Resolve }) => e.node === node);
-    if (!entry) return;
-    executeResolve(node, entry.resolve, resolveDeps);
-  }
-
-  function getResolveState(node: AnyConfigNode): ResolveState | undefined {
-    return resolveStates.get(node);
-  }
+  const { triggerResolve, getResolveState } = resolveManager;
 
   // ─── Handlers (submit, reset, onChange) ──────────────────────────────────
 
@@ -631,23 +605,11 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // ─── Публичный API ─────────────────────────────────────────────────────────
 
   // ─── Wire resolve retrigger into notification hub ─────────────────────────
-  if (resolveEntries.length > 0) {
-    hub.setPostNotifyHook((changedPaths) => {
-      const toRetrigger = findResolvesToRetrigger(changedPaths, resolveStates, resolveEntries);
-      for (const entry of toRetrigger) {
-        resetResolveState(entry.node, resolveStates);
-        triggerResolve(entry.node);
-      }
-    });
-  }
+  const postNotifyHook = resolveManager.createPostNotifyHook();
+  if (postNotifyHook) hub.setPostNotifyHook(postNotifyHook);
 
   // ─── Launch eager resolvers (lazy: false) ──────────────────────────────────
-  for (const entry of resolveEntries) {
-    const lazy = entry.resolve.options?.lazy ?? true;
-    if (!lazy) {
-      triggerResolve(entry.node);
-    }
-  }
+  resolveManager.launchEager();
 
   return {
     proxy: buildProxy(rootConfig) as ConfigProxy<TConfig>,
