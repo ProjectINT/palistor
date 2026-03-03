@@ -9,8 +9,9 @@ import { buildNodeMaps } from "./nodeMap";
 import { executeReset, type ResetDeps } from "./resetPipeline";
 import { executeSubmit, SubmitResult, type SubmitDeps } from "./submitPipeline";
 import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
-import { CONFIG_PROPS } from "./constants";
-import { captureInitialValues, recomputeDirty } from "./dirtyTracking";
+import { captureInitialValues } from "./dirtyTracking";
+import { initGroupSubmitting } from "./init/initGroupSubmitting";
+import { createNotificationHub } from "./init/createNotificationHub";
 import {
   type Resolve,
   type NotifyFn,
@@ -429,47 +430,6 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
 // ─── Фабрика ─────────────────────────────────────────────────────────────────
 
 /**
- * Инициализирует submitting: false, dirty: false, revalidate: false
- * в nodeState для корневого и всех вложенных групповых узлов.
- */
-function initGroupSubmitting(
-  node: AnyConfigNode,
-  nodeState: WeakMap<object, FieldState>,
-) {
-  // Для текущего узла (группового) — инициализируем management flags
-  const existing = nodeState.get(node);
-  if (existing) {
-    const updated = { ...existing };
-    if (updated.submitting === undefined) updated.submitting = false;
-    if (updated.dirty === undefined) updated.dirty = false;
-    if (updated.revalidate === undefined) updated.revalidate = false;
-    nodeState.set(node, updated);
-  } else {
-    nodeState.set(node, {
-      value: undefined,
-      isVisible: true,
-      isRequired: false,
-      isDisabled: false,
-      isReadOnly: false,
-      submitting: false,
-      dirty: false,
-      revalidate: false,
-    });
-  }
-
-  // Рекурсия в дочерние группы
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
-    const child = node[key] as AnyConfigNode;
-    if (!child || typeof child !== "object") continue;
-    // Только группы (без value)
-    if (!("value" in child)) {
-      initGroupSubmitting(child, nodeState);
-    }
-  }
-}
-
-/**
  * Создать ProxyStore с вычисляемым состоянием.
  *
  * @example
@@ -510,18 +470,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
    */
   const leafNodes: Array<{ node: AnyConfigNode; path: string }> = [];
 
-  /** Подписчики на изменение каждого поля. */
-  const nodeListeners = new WeakMap<object, Set<() => void>>();
-
-  /** Глобальные подписчики — уведомляются при ЛЮБОМ изменении. */
-  const globalListeners = new Set<() => void>();
-
-  /** Глобальная версия — инкрементируется при каждом изменении. */
-  let version = 0;
-
-  /** Версии отдельных узлов — для точечной подписки. */
-  const nodeVersions = new WeakMap<object, number>();
-
   /** Кэш Proxy-объектов — один прокси на узел конфига. */
   const proxyCache = new WeakMap<object, unknown>();
 
@@ -536,6 +484,10 @@ export function createProxyStore<TConfig extends Record<string, any>>(
    * Captured after init and reset/hydrate.
    */
   const initialValueMap = new WeakMap<object, unknown>();
+
+  /** Маппинг узла → dot-путь и узла → родитель. */
+  const nodePaths = new WeakMap<object, string>();
+  const nodeParents = new WeakMap<object, object>();
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
@@ -554,6 +506,21 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // Capture initial values for dirty tracking (after recompute to get computed values)
   captureInitialValues(rootConfig, nodeState, initialValueMap);
 
+  // Строим маппинг узлов (пути + родители)
+  buildNodeMaps(rootConfig, nodePaths, nodeParents);
+
+  // ─── Notification hub ──────────────────────────────────────────────────────
+
+  const hub = createNotificationHub({
+    rootConfig,
+    nodeState,
+    initialValueMap,
+    leafNodes,
+    nodePaths,
+  });
+
+  const { notifyChanged, subscribe, subscribeGlobal } = hub;
+
   // ─── Resolve system ────────────────────────────────────────────────────────
 
   /** Resolve states for all nodes with resolve config. */
@@ -562,71 +529,12 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   /** All resolve entries (node + resolve config). */
   const resolveEntries = initResolveStates(rootConfig, resolveStates);
 
-  // ─── Уведомление подписчиков ───────────────────────────────────────────────
-
-  function notify(node: object) {
-    nodeListeners.get(node)?.forEach((fn) => fn());
-  }
-
-  function notifyChanged(changed: Set<object>) {
-    if (changed.size === 0) return;
-
-    // Recompute dirty flags for all nodes (leaf + group)
-    const dirtyResult = recomputeDirty(rootConfig, nodeState, initialValueMap);
-    for (const n of dirtyResult.changed) changed.add(n);
-
-    // Update root node dirty flag
-    const rootState = nodeState.get(rootConfig);
-    if (rootState && rootState.dirty !== dirtyResult.anyDirty) {
-      nodeState.set(rootConfig, { ...rootState, dirty: dirtyResult.anyDirty });
-      changed.add(rootConfig);
-    }
-
-    // Инкрементируем глобальную версию
-    version++;
-
-    // Обновляем версии изменённых узлов + уведомляем per-node подписчиков
-    for (const node of changed) {
-      nodeVersions.set(node, version);
-      notify(node);
-    }
-
-    // Уведомляем глобальных подписчиков
-    globalListeners.forEach((fn) => fn());
-
-    // ── Auto-deps: retrigger resolves whose dependencies changed ──────────
-    if (resolveEntries.length > 0) {
-      // Collect paths of changed nodes
-      const changedPaths = new Set<string>();
-      for (const n of changed) {
-        const p = nodePaths.get(n);
-        if (p) changedPaths.add(p);
-      }
-
-      if (changedPaths.size > 0) {
-        const toRetrigger = findResolvesToRetrigger(changedPaths, resolveStates, resolveEntries);
-        for (const entry of toRetrigger) {
-          resetResolveState(entry.node, resolveStates);
-          // Re-trigger: if the node was already accessed (resolved/error),
-          // re-run immediately (fire-and-forget)
-          triggerResolve(entry.node);
-        }
-      }
-    }
-  }
-
   // ─── Translator ─────────────────────────────────────────────────────────────
 
   function setTranslator(t: TranslateFn | null) {
     if (translator === t) return;
     translator = t;
-
-    // Bump global + all leaf node versions → subscribed components re-render
-    version++;
-    for (const { node } of leafNodes) {
-      nodeVersions.set(node, version);
-    }
-    globalListeners.forEach((fn) => fn());
+    hub.bumpLeafVersions();
   }
 
   // ─── Notifier ───────────────────────────────────────────────────────────────
@@ -662,10 +570,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   }
 
   // ─── Handlers (submit, reset, onChange) ──────────────────────────────────
-
-  const nodePaths = new WeakMap<object, string>();
-  const nodeParents = new WeakMap<object, object>();
-  buildNodeMaps(rootConfig, nodePaths, nodeParents);
 
   const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged, initialValueMap };
   const resetNode = (node: AnyConfigNode, values?: Record<string, unknown>) => {
@@ -711,18 +615,6 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     getResolveState,
   });
 
-  // ─── Подписка ──────────────────────────────────────────────────────────────
-  const subscribe = (node: object, listener: () => void): Unsubscribe => {
-    if (!nodeListeners.has(node)) nodeListeners.set(node, new Set());
-    nodeListeners.get(node)!.add(listener);
-    return () => nodeListeners.get(node)!.delete(listener);
-  };
-
-  const subscribeGlobal = (listener: () => void): Unsubscribe => {
-    globalListeners.add(listener);
-    return () => globalListeners.delete(listener);
-  };
-
   // ─── Persist ────────────────────────────────────────────────────────────────
 
   const getValues = () => collectValues(rootConfig, nodeState, true) as ExtractValues<TConfig>;
@@ -738,6 +630,17 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Публичный API ─────────────────────────────────────────────────────────
 
+  // ─── Wire resolve retrigger into notification hub ─────────────────────────
+  if (resolveEntries.length > 0) {
+    hub.setPostNotifyHook((changedPaths) => {
+      const toRetrigger = findResolvesToRetrigger(changedPaths, resolveStates, resolveEntries);
+      for (const entry of toRetrigger) {
+        resetResolveState(entry.node, resolveStates);
+        triggerResolve(entry.node);
+      }
+    });
+  }
+
   // ─── Launch eager resolvers (lazy: false) ──────────────────────────────────
   for (const entry of resolveEntries) {
     const lazy = entry.resolve.options?.lazy ?? true;
@@ -750,8 +653,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     proxy: buildProxy(rootConfig) as ConfigProxy<TConfig>,
     subscribe,
     subscribeGlobal,
-    getVersion: () => version,
-    getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
+    getVersion: hub.getVersion,
+    getNodeVersion: hub.getNodeVersion,
     getValues,
     setTranslator,
     getTranslator: () => translator,

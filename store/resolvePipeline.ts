@@ -11,7 +11,7 @@
 
 import { CONFIG_PROPS } from "./constants";
 import { applyPatch } from "./applyPatch";
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
 import { createValuesTrackingProxy, type PendingWrite } from "./createValuesTrackingProxy";
 import type { FieldState } from "./compute";
 
