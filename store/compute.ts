@@ -31,6 +31,10 @@ export interface FieldState {
    * Leaves inherit this from their parent group during recompute.
    */
   revalidate?: boolean;
+  /**
+   * true while async resolver is loading (group nodes with resolve only).
+   */
+  loading?: boolean;
 }
 
 // ─── Вспомогательные функции ─────────────────────────────────────────────────
@@ -155,6 +159,7 @@ export function fieldStateChanged(a: FieldState, b: FieldState): boolean {
     a.errorMessage !== b.errorMessage ||
     a.submitting !== b.submitting ||
     a.dirty !== b.dirty ||
-    a.revalidate !== b.revalidate
+    a.revalidate !== b.revalidate ||
+    a.loading !== b.loading
   );
 }

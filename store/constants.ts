@@ -32,6 +32,7 @@ export const FIELD_STATE_PROPS = new Set<string>([
   "error",
   "errorMessage",
   "dirty",
+  "loading",
 ]);
 
 /**
@@ -52,4 +53,7 @@ export const CONFIG_PROPS = new Set<string>([
   "afterSubmit",
   "reset",
   "onChange",
+  // Resolve props
+  "resolve",
+  "deps",
 ]);

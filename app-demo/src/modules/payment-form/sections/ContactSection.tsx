@@ -10,13 +10,10 @@ export function ContactSection() {
   const t = useTranslations();
   const form = usePaymentForm();
 
-  const { error } = { ...form.name };
-  console.log('error', error);
-
   return (
     <Section title={t("sections.contact")}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input {...form.name} error={error} />
+        <Input {...form.name} />
         <Input {...form.email} type="email" />
         <div className="md:col-span-2">
           <Input {...form.phone} type="tel" />

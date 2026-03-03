@@ -11,8 +11,20 @@ import { executeSubmit, SubmitResult, type SubmitDeps } from "./submitPipeline";
 import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
 import { CONFIG_PROPS } from "./constants";
 import { captureInitialValues, recomputeDirty } from "./dirtyTracking";
+import {
+  type Resolve,
+  type NotifyFn,
+  type ResolveState,
+  type ResolveDeps,
+  initResolveStates,
+  executeResolve,
+  findResolvesToRetrigger,
+  resetResolveState,
+} from "./resolvePipeline";
 
 export type { FieldState };
+
+export type { Resolve, NotifyFn } from "./resolvePipeline";
 
 export type { SubmitResult } from "./submitPipeline";
 
@@ -170,6 +182,8 @@ type ConfigSkipKeys =
   | "afterSubmit"
   | "reset"
   | "onChange"
+  | "resolve"
+  | "deps"
 
 /**
  * Расширяет тип значения, чтобы допустить типичные «входные» типы форматтеров.
@@ -225,6 +239,8 @@ export interface GroupProxyNode {
   readonly errorMessage: string | undefined;
   /** true пока выполняется submit pipeline. */
   readonly submitting: boolean;
+  /** true while async resolver is loading (only for nodes with resolve). */
+  readonly loading: boolean;
   /** true если хотя бы одно поле в группе отличается от initial. */
   readonly dirty: boolean;
   /**
@@ -386,6 +402,19 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   persist: PersistManager;
 
   /**
+   * Регистрирует функцию уведомления (toast, alert, …) для resolver onError.
+   * Аналог setTranslator.
+   *
+   * @param fn — функция уведомления или null для сброса
+   */
+  setNotifier: (fn: NotifyFn | null) => void;
+
+  /**
+   * Возвращает текущую зарегистрированную функцию уведомления (или null).
+   */
+  getNotifier: () => NotifyFn | null;
+
+  /**
    * Submit root form.
    * Lifecycle: submitting → beforeSubmit → validate → onSubmit → afterSubmit.
    */
@@ -499,6 +528,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   /** Зарегистрированная функция перевода (label, placeholder, description). */
   let translator: TranslateFn | null = null;
 
+  /** Зарегистрированная функция уведомления (toast, alert — для resolver onError). */
+  let notifier: NotifyFn | null = null;
+
   /**
    * Initial values for dirty tracking.
    * Captured after init and reset/hydrate.
@@ -521,6 +553,14 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // Capture initial values for dirty tracking (after recompute to get computed values)
   captureInitialValues(rootConfig, nodeState, initialValueMap);
+
+  // ─── Resolve system ────────────────────────────────────────────────────────
+
+  /** Resolve states for all nodes with resolve config. */
+  const resolveStates = new Map<object, ResolveState>();
+
+  /** All resolve entries (node + resolve config). */
+  const resolveEntries = initResolveStates(rootConfig, resolveStates);
 
   // ─── Уведомление подписчиков ───────────────────────────────────────────────
 
@@ -553,6 +593,26 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
     // Уведомляем глобальных подписчиков
     globalListeners.forEach((fn) => fn());
+
+    // ── Auto-deps: retrigger resolves whose dependencies changed ──────────
+    if (resolveEntries.length > 0) {
+      // Collect paths of changed nodes
+      const changedPaths = new Set<string>();
+      for (const n of changed) {
+        const p = nodePaths.get(n);
+        if (p) changedPaths.add(p);
+      }
+
+      if (changedPaths.size > 0) {
+        const toRetrigger = findResolvesToRetrigger(changedPaths, resolveStates, resolveEntries);
+        for (const entry of toRetrigger) {
+          resetResolveState(entry.node, resolveStates);
+          // Re-trigger: if the node was already accessed (resolved/error),
+          // re-run immediately (fire-and-forget)
+          triggerResolve(entry.node);
+        }
+      }
+    }
   }
 
   // ─── Translator ─────────────────────────────────────────────────────────────
@@ -567,6 +627,38 @@ export function createProxyStore<TConfig extends Record<string, any>>(
       nodeVersions.set(node, version);
     }
     globalListeners.forEach((fn) => fn());
+  }
+
+  // ─── Notifier ───────────────────────────────────────────────────────────────
+
+  function setNotifier(fn: NotifyFn | null) {
+    notifier = fn;
+  }
+
+  function getNotifier(): NotifyFn | null {
+    return notifier;
+  }
+
+  // ─── Resolve helpers ────────────────────────────────────────────────────────
+
+  const resolveDeps: ResolveDeps = {
+    rootConfig,
+    nodeState,
+    resolveStates,
+    recomputeAll,
+    notifyChanged,
+    getNotifier,
+    getValues: () => collectValues(rootConfig, nodeState) as Record<string, unknown>,
+  };
+
+  function triggerResolve(node: AnyConfigNode) {
+    const entry = resolveEntries.find((e: { node: AnyConfigNode; resolve: Resolve }) => e.node === node);
+    if (!entry) return;
+    executeResolve(node, entry.resolve, resolveDeps);
+  }
+
+  function getResolveState(node: AnyConfigNode): ResolveState | undefined {
+    return resolveStates.get(node);
   }
 
   // ─── Handlers (submit, reset, onChange) ──────────────────────────────────
@@ -615,6 +707,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     submitNode,
     resetNode,
     onFieldChange,
+    triggerResolve,
+    getResolveState,
   });
 
   // ─── Подписка ──────────────────────────────────────────────────────────────
@@ -643,6 +737,15 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   });
 
   // ─── Публичный API ─────────────────────────────────────────────────────────
+
+  // ─── Launch eager resolvers (lazy: false) ──────────────────────────────────
+  for (const entry of resolveEntries) {
+    const lazy = entry.resolve.options?.lazy ?? true;
+    if (!lazy) {
+      triggerResolve(entry.node);
+    }
+  }
+
   return {
     proxy: buildProxy(rootConfig) as ConfigProxy<TConfig>,
     subscribe,
@@ -652,6 +755,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     getValues,
     setTranslator,
     getTranslator: () => translator,
+    setNotifier,
+    getNotifier,
     persist: persistManager,
     submit: () => submitNode(rootConfig),
     reset: (values?: DeepPartialValues<ExtractValues<TConfig>>) =>

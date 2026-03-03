@@ -67,3 +67,10 @@ export type {
   NestedKeyOf,
   NestedValueOf,
 } from "./core/types";
+
+// ============================================================================
+// Resolve — типы и хуки
+// ============================================================================
+
+export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline";
+export { useNotifier } from "./react/useNotifier";

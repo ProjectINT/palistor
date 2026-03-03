@@ -3,6 +3,7 @@ import { type AnyConfigNode } from "./collectValues";
 import { writeValue, type WriteDeps } from "./writePipeline";
 import type { FieldState } from "./compute";
 import type { TranslateFn } from "../core/types";
+import type { ResolveState } from "./resolvePipeline";
 
 export interface BuildProxyDeps {
   proxyCache: WeakMap<object, unknown>;
@@ -18,6 +19,10 @@ export interface BuildProxyDeps {
   resetNode: (node: AnyConfigNode, values?: Record<string, unknown>) => void;
   /** Fire-and-forget onChange для листового узла. */
   onFieldChange?: (node: AnyConfigNode, newValue: unknown, previousValue: unknown) => void;
+  /** Trigger resolve for a group node with resolve config. */
+  triggerResolve?: (node: AnyConfigNode) => void;
+  /** Get resolve state for a node (undefined if no resolve). */
+  getResolveState?: (node: AnyConfigNode) => ResolveState | undefined;
 }
 
 /**
@@ -39,6 +44,9 @@ const INTERNAL_CONFIG_KEYS = new Set<string>([
   "afterSubmit",
   "reset",
   "onChange",
+  // Resolve props
+  "resolve",
+  "deps",
 ]);
 
 /**
@@ -118,6 +126,8 @@ export function createBuildProxy({
   submitNode,
   resetNode,
   onFieldChange,
+  triggerResolve,
+  getResolveState,
 }: BuildProxyDeps): (node: AnyConfigNode) => any {
   /** Кэш onValueChange-функций — стабильная ссылка для React-мемоизации. */
   const onValueChangeCache = new WeakMap<object, (v: unknown) => void>();
@@ -159,6 +169,9 @@ export function createBuildProxy({
           if (key === "revalidate") {
             return nodeState.get(node)?.revalidate ?? false;
           }
+          if (key === "loading") {
+            return nodeState.get(node)?.loading ?? false;
+          }
           if (key === "submit") {
             if (!submitCache.has(node)) {
               submitCache.set(node, () => submitNode(node));
@@ -170,6 +183,25 @@ export function createBuildProxy({
               resetCache.set(node, (values?: Record<string, unknown>) => resetNode(node, values));
             }
             return resetCache.get(node);
+          }
+
+          // ── Resolve: lazy trigger + suspense ───────────────────────────
+          if (triggerResolve && getResolveState && node.resolve) {
+            const resolveState = getResolveState(node);
+            if (resolveState) {
+              // Lazy trigger: first access to a group node with idle resolve
+              if (resolveState.status === "idle") {
+                triggerResolve(node);
+              }
+              // Suspense: throw promise if pending + suspense: true
+              if (
+                resolveState.status === "pending" &&
+                resolveState.promise &&
+                (node.resolve as any).options?.suspense === true
+              ) {
+                throw resolveState.promise;
+              }
+            }
           }
         }
 
