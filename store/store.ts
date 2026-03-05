@@ -89,10 +89,16 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   const proxyCache = new WeakMap<object, unknown>();
 
   /** Зарегистрированная функция перевода (label, placeholder, description). */
-  let translator: TranslateFn | null = null;
+  let translator: TranslateFn = (v) => v;
 
   /** Зарегистрированная функция уведомления (toast, alert — для resolver onError). */
-  let notifier: NotifyFn | null = null;
+  let notifier: NotifyFn = () => {};
+
+  /** Стабильная функция перевода, делегирует в текущий translator. */
+  const translate: TranslateFn = (key, params) => translator(key, params);
+
+  /** Стабильная функция уведомления, делегирует в текущий notifier. */
+  const notify: NotifyFn = (...args) => notifier(...args);
 
   /**
    * Initial values for dirty tracking.
@@ -139,19 +145,16 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // ─── Translator ─────────────────────────────────────────────────────────────
 
   function setTranslator(t: TranslateFn | null) {
-    if (translator === t) return;
-    translator = t;
+    const next = typeof t === "function" ? t : (v: string) => v;
+    if (translator === next) return;
+    translator = next;
     hub.bumpLeafVersions();
   }
 
-  // ─── Notifier ───────────────────────────────────────────────────────────────
+  // ─── Notifier ─────────────────────────────────────────────────────────────────────
 
   function setNotifier(fn: NotifyFn | null) {
-    notifier = fn;
-  }
-
-  function getNotifier(): NotifyFn | null {
-    return notifier;
+    notifier = typeof fn === "function" ? fn : () => {};
   }
 
   // ─── Resolve system ────────────────────────────────────────────────────────
@@ -161,7 +164,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     nodeState,
     recomputeAll,
     notifyChanged,
-    getNotifier,
+    notify,
   });
 
   const { triggerResolve, getResolveState } = resolveManager;
@@ -204,7 +207,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     rootConfig,
     recomputeAll,
     notifyChanged,
-    getTranslator: () => translator,
+    translate,
     submitNode,
     resetNode,
     onFieldChange,
@@ -244,7 +247,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     setTranslator,
     getTranslator: () => translator,
     setNotifier,
-    getNotifier,
+    getNotifier: () => notifier,
     persist: persistManager,
     submit: () => submitNode(rootConfig),
     reset: (values?: DeepPartialValues<ExtractValues<TConfig>>) =>

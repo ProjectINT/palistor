@@ -22,8 +22,8 @@ export type NotifyFn = (...args: any[]) => void;
 
 /** Error context passed to resolve.onError */
 export interface ResolveErrorContext {
-  /** Notification function from useNotifier. null if not registered. */
-  notify: NotifyFn | null;
+  /** Notification function from useNotifier. */
+  notify: NotifyFn;
 }
 
 /** Async resolver configuration for a group node. */
@@ -94,7 +94,7 @@ export interface ResolveDeps {
   resolveStates: Map<object, ResolveState>;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
-  getNotifier: () => NotifyFn | null;
+  notify: NotifyFn;
   getValues: () => Record<string, unknown>;
 }
 
@@ -199,7 +199,7 @@ export function executeResolve(
   resolve: Resolve,
   deps: ResolveDeps,
 ): Promise<unknown> {
-  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, getNotifier, getValues } = deps;
+  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, notify, getValues } = deps;
   const state = resolveStates.get(node);
   if (!state) return Promise.resolve();
 
@@ -335,7 +335,7 @@ export function executeResolve(
 
     // Call onError handler
     try {
-      resolve.onError(lastError, { notify: getNotifier() });
+      resolve.onError(lastError, { notify });
     } catch {
       // onError should not throw, but if it does — swallow
     }

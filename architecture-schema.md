@@ -248,9 +248,9 @@ options.suspense: true
 ```
 Layout:                             Config:
   useNotifier(store, notifyFn)        onError: (err, { notify }) => {
-  │                                     notify?.(err, 'CODE')
+  │                                     notify(err, 'CODE')
   └→ store.setNotifier(notifyFn)      }
-     → getNotifier() в resolveDeps
+     → notify в resolveDeps
      → ctx.notify в onError callback
 ```
 

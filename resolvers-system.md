@@ -37,7 +37,7 @@ interface Resolve<T = Record<string, unknown>> {
   /**
    * Обработчик ошибки resolver'а (вызывается после исчерпания retry).
    * `ctx.notify` — функция уведомления, зарегистрированная через useNotifier
-   * (аналог useTranslator). Если notifier не зарегистрирован — null.
+   * (аналог useTranslator). Гарантированно существует (noop по умолчанию).
    */
   onError: (error: unknown, ctx: ResolveErrorContext) => void;
 
@@ -67,8 +67,8 @@ interface Resolve<T = Record<string, unknown>> {
 
 ```ts
 interface ResolveErrorContext {
-  /** Функция уведомления, зарегистрированная через useNotifier. null если не зарегистрирована. */
-  notify: NotifyFn | null;
+  /** Функция уведомления, зарегистрированная через useNotifier. Гарантированно существует (noop по умолчанию). */
+  notify: NotifyFn;
 }
 
 /** Тип функции уведомления. Пользователь определяет сигнатуру. */
@@ -446,8 +446,8 @@ interface ResolveState {
 - Для `lazy: false` — запустить resolve сразу
 - Подключить auto-deps: при изменении зависимостей → перезапуск
 - Передать resolve-зависимости в `createBuildProxy`
-- Добавить `setNotifier(fn)` / `getNotifier()` (по аналогии с `setTranslator`/`getTranslator`)
-- Передать `getNotifier` в resolve pipeline для формирования `ResolveErrorContext`
+- `setNotifier(fn)` / `getNotifier()` в публичном API
+- Передать стабильную функцию `notify` в resolve pipeline
 
 ### ConfigNode (store.ts)
 - Добавить `resolve?: Resolve` в тип ConfigNode
@@ -480,7 +480,7 @@ interface ResolveState {
 - Добавить `"deps"` в `ConfigSkipKeys` и `CONFIG_PROPS`
 - Добавить `loading` в `GroupProxyNode`
 - Добавить `Resolve`, `ResolveErrorContext`, `NotifyFn` типы
-- Добавить `setNotifier`/`getNotifier` в `ProxyStore`
+- Добавить `setNotifier`/`getNotifier` в `ProxyStore` (гарантированно не-null)
 
 **Шаг 1.4** — Создать `react/useNotifier.ts`:
 - По аналогии с `useTranslator.ts`

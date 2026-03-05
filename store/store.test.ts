@@ -865,7 +865,7 @@ describe("createProxyStore", () => {
       const store = createProxyStore({ config: config as any });
       expect(store.proxy.name.label).toBe("form.name");
       expect(store.proxy.name.placeholder).toBe("form.namePlaceholder");
-      expect(store.getTranslator()).toBeNull();
+      expect(store.getTranslator()).toBeTypeOf("function");
     });
 
     it("после setTranslator — label резолвится через translator", () => {
@@ -909,7 +909,7 @@ describe("createProxyStore", () => {
 
       store.setTranslator(null);
       expect(store.proxy.name.label).toBe("form.name"); // fallback to identity
-      expect(store.getTranslator()).toBeNull();
+      expect(store.getTranslator()).toBeTypeOf("function");
     });
 
     it("setTranslator инкрементирует версию и уведомляет подписчиков", () => {

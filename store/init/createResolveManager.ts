@@ -18,7 +18,7 @@ export interface ResolveManagerDeps {
   nodeState: WeakMap<object, FieldState>;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
-  getNotifier: () => NotifyFn | null;
+  notify: NotifyFn;
 }
 
 export interface ResolveManager {
@@ -52,7 +52,7 @@ export interface ResolveManager {
  * - Запуск eager resolvers (lazy: false)
  */
 export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
-  const { rootConfig, nodeState, recomputeAll, notifyChanged, getNotifier } = deps;
+  const { rootConfig, nodeState, recomputeAll, notifyChanged, notify } = deps;
 
   // ─── Init ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
     resolveStates,
     recomputeAll,
     notifyChanged,
-    getNotifier,
+    notify,
     getValues: () => collectValues(rootConfig, nodeState) as Record<string, unknown>,
   };
 

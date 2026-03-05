@@ -1,12 +1,10 @@
-import { FIELD_STATE_PROPS, CONFIG_NODE } from "../constants";
+import { CONFIG_NODE } from "../constants";
 import { type AnyConfigNode } from "../collectValues";
 import { writeValue, type WriteDeps } from "../writePipeline";
 import type { FieldState } from "../compute";
 import type { TranslateFn } from "../../core/types";
 import type { ResolveState } from "../resolvePipeline";
 
-import { TRANSLATABLE_PROPS } from "./translatableProps";
-import { GROUP_BOOL_PROPS } from "./groupBoolProps";
 import { computeProxyKeys } from "./computeProxyKeys";
 import { handleLazyResolve } from "./handleLazyResolve";
 import { initProxyCaches } from "./initProxyCaches";
@@ -17,8 +15,8 @@ export interface BuildProxyDeps {
   rootConfig: AnyConfigNode;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
-  /** Возвращает зарегистрированную функцию перевода (или null). */
-  getTranslator: () => TranslateFn | null;
+  /** Функция перевода (гарантированно существует, см. store.ts). */
+  translate: TranslateFn;
   /** Запуск submit pipeline для группового узла. */
   submitNode: (node: AnyConfigNode) => Promise<unknown>;
   /** Запуск reset для группового узла. */
@@ -65,7 +63,7 @@ export function createBuildProxy({
   rootConfig,
   recomputeAll,
   notifyChanged,
-  getTranslator,
+  translate,
   submitNode,
   resetNode,
   onFieldChange,
@@ -86,43 +84,62 @@ export function createBuildProxy({
     const proxyNode: Record<string, any> = new Proxy(node as Record<string, any>, {
       get(_target, key: string | symbol) {
         if (key === CONFIG_NODE) return node;
-        const groupNode = !("value" in node);
-        if (typeof key === "symbol") return undefined;
-
-        // onValueChange — стабильный functional setter для React
-        if (key === "onValueChange") {
-          return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
+        /*
+        Любой символ кроме CONFIG_NODE не имеет смысла
+        */
+       if (typeof key === "symbol") return undefined;
+       
+       // onValueChange — стабильный functional setter для React
+       if (key === "onValueChange") {
+         return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
         }
-
+        
+        const currentNode = nodeState.get(node);
+        const isGroupNode = !("value" in node);
+        
         // ── Групповой узел: методы и состояние ───────────────────────────
-        if (groupNode) {
-          if (GROUP_BOOL_PROPS.has(key)) {
-            return nodeState.get(node)?.[key as keyof FieldState] ?? false;
+        if (isGroupNode) {
+          const handlers = {
+            "submitting": () => currentNode?.[key as keyof FieldState] ?? false,
+            "dirty": () => currentNode?.[key as keyof FieldState] ?? false,
+            "revalidate": () => currentNode?.[key as keyof FieldState] ?? false,
+            "loading": () => currentNode?.[key as keyof FieldState] ?? false,
+            "submit": () => getCached(caches.submit, node, () => () => submitNode(node)),
+            "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => resetNode(node, vals)),
           }
-          if (key === "submit") {
-            return getCached(caches.submit, node, () => () => submitNode(node));
-          }
-          if (key === "reset") {
-            return getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => resetNode(node, vals));
-          }
+
+          if (key in handlers) return handlers[key as keyof typeof handlers]();
+          
           handleLazyResolve(node, resolveDeps);
         }
 
         // ── Вычисленное состояние поля ───────────────────────────────────
-        if (FIELD_STATE_PROPS.has(key)) {
-          if (TRANSLATABLE_PROPS.has(key)) {
-            const configValue = node[key];
-            if (typeof configValue === "function") {
-              const t = getTranslator();
-              if (t) return configValue(t);
-            }
-          }
-          const state = nodeState.get(node);
-          return state ? state[key as keyof FieldState] : node[key];
-        }
+        const translatableHandler = () => {
+          const configValue = node[key];
+          if (typeof configValue === "function") return configValue(translate);
+          return currentNode ? currentNode[key as keyof FieldState] : configValue;
+        };
+
+        const fieldStateHandlers: Record<string, () => unknown> = {
+          "value":        () => currentNode ? currentNode.value        : node.value,
+          "label":        translatableHandler,
+          "placeholder":  translatableHandler,
+          "description":  translatableHandler,
+          "isRequired":   () => currentNode ? currentNode.isRequired   : node.isRequired,
+          "isReadOnly":   () => currentNode ? currentNode.isReadOnly   : node.isReadOnly,
+          "isDisabled":   () => currentNode ? currentNode.isDisabled   : node.isDisabled,
+          "isVisible":    () => currentNode ? currentNode.isVisible    : node.isVisible,
+          "error":        () => currentNode ? currentNode.error        : node.error,
+          "errorMessage": () => currentNode ? currentNode.errorMessage : node.errorMessage,
+          "dirty":        () => currentNode?.dirty,
+          "loading":      () => currentNode?.loading,
+        };
+
+        if (key in fieldStateHandlers) return fieldStateHandlers[key]();
 
         // Дочерний узел → рекурсивный прокси
         const child = node[key];
+
         if (child && typeof child === "object") return buildProxy(child as AnyConfigNode);
 
         return child;

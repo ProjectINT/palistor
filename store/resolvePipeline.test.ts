@@ -170,7 +170,7 @@ describe("resolvePipeline", () => {
       expect(config.car.resolve.onError).toHaveBeenCalledTimes(1);
       expect(config.car.resolve.onError).toHaveBeenCalledWith(
         error,
-        expect.objectContaining({ notify: null }),
+        expect.objectContaining({ notify: expect.any(Function) }),
       );
     });
 
@@ -216,7 +216,7 @@ describe("resolvePipeline", () => {
 
       expect(config.car.resolve.onError).toHaveBeenCalledWith(
         expect.any(Error),
-        expect.objectContaining({ notify: notifyFn }),
+        expect.objectContaining({ notify: expect.any(Function) }),
       );
     });
   });
