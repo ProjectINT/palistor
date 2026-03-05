@@ -69,6 +69,24 @@ export type {
 } from "./core/types";
 
 // ============================================================================
+// Типы Store (config, proxy, values)
+// ============================================================================
+
+export type {
+  MaybeComputed,
+  DeepPartialValues,
+  FieldTypeMeta,
+  ConfigNode,
+  FieldProxyNode,
+  GroupProxyNode,
+  ConfigProxy,
+  ExtractValues,
+  ProxyStoreOptions,
+  ProxyStore,
+  Unsubscribe,
+} from "./store/types";
+
+// ============================================================================
 // Resolve — типы и хуки
 // ============================================================================
 
