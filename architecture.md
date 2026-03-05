@@ -1,400 +1,188 @@
 # Palistor — Архитектура
 
-## Принятые решения
+## Слои системы
 
-- **Клиентская форма** (`"use client"`), возможность засетить начальные данные с сервера через `initial`
-- **ID формы = ID сущности** (`user.id`, `order.id`, `"NewOrder"`, `"NewClient"`)
-- **Состояние вне React**, React только подписывается через хуки
-- **`translate`** — функция с интерфейсом `(key: string, params?) => string`, не привязана к конкретной i18n библиотеке
-- **Один хук `getFieldProps(key)`** для получения пропсов с подпиской (вместо россыпи `useFieldValue`, `useFieldError` и т.д.)
-- **`onSubmit`, `onChange`** — передаются в `useForm`, не в конфиг на уровне модуля
-- **Стабильный контракт** — `useForm` всегда возвращает один и тот же API, не меняет поведение
-- **Нет PalistorProvider** — `translate` решается через `translateFunction` в `createForm`
+```
+┌─────────────────────────────────────────────────────────┐
+│                     React-компонент                      │
+│  const form = useForm(store)                            │
+│  <input value={form.email.value} />                     │
+└────────────────────┬────────────────────────────────────┘
+                     │ GET / SET
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              Tracking Proxy  (Слой 2)                   │
+│  createTrackingProxy.ts                                  │
+│  • GET FIELD_STATE_PROP → пишет config-ноду             │
+│    в refs.accessed (tracked set компонента)             │
+│  • GET дочернего узла → рекурсивный tracking proxy      │
+│  • SET → прозрачно в Store Proxy                        │
+└────────────────────┬────────────────────────────────────┘
+                     │ GET / SET
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│               Store Proxy  (Слой 1)                     │
+│  buildProxy.ts                                          │
+│  • GET FIELD_STATE_PROP → читает из nodeState           │
+│  • GET CONFIG_NODE → возвращает сам config-узел         │
+│  • GET дочернего ключа → рекурсивный store proxy        │
+│  • GET на группу с resolve (idle) → triggerResolve      │
+│  • GET на группу с resolve (pending + suspense)         │
+│    → throw promise (React Suspense)                     │
+│  • SET "value" → запускает Write Pipeline               │
+└────────────────────┬────────────────────────────────────┘
+                     │
+           ┌─────────┼──────────┐
+           ▼         │          ▼
+┌──────────────────┐ │ ┌────────────────────────────────────┐
+│  Config (static) │ │ │  nodeState: WeakMap<node,FieldState>│
+│  Неизменяемое    │ │ │  { value, isVisible, error,        │
+│  дерево узлов    │ │ │    loading, …}                     │
+└──────────────────┘ │ └────────────────────────────────────┘
+                     ▼
+          ┌──────────────────────────────────┐
+          │  resolveStates: Map<node, state> │
+          │  { status, promise, error,       │
+          │    dependencies, attempt }       │
+          └──────────────────────────────────┘
+```
 
 ---
 
-## Выбранная архитектура: createForm + useForm(id)
-
-### Идея
-
-`createForm` вызывается на уровне модуля — задаёт **статическую конфигурацию** формы (поля, дефолты, валидации, зависимости). Возвращает типизированный `useForm` хук.
-
-`useForm(id)` вызывается в React-компоненте — привязывает конфигурацию к **конкретному экземпляру** (по ID сущности). Внутри хука вызывается `translateFunction()` для получения строк. Хук сам находит или создаёт store в registry.
+## Write Pipeline
 
 ```
-createForm()                 ← модульный уровень (config/orderForm.ts)
-  ├── config, defaults       ← статика: поля, валидации, зависимости
-  ├── translateFunction      ← ссылка на хук i18n (вызовется внутри useForm)
-  ├── type                   ← "Order", "Client" — для registry key и persist
+form.email.value = "X"
   │
-  └── useForm(id)            ← React-хук (типизированный, привязан к config)
-      ├── id → registry key  ← "NewOrder" | order.id
-      ├── translate()        ← translateFunction вызывается здесь, внутри React
-      └── возвращает API     ← { getFieldProps, setValue, submit, ... }
+  ├─ 1. formatValue()       node.formatter(raw, allValues)
+  ├─ 2. storeValue()        nodeState.set(node, { ...state, value })
+  ├─ 3. runSetter()         node.setter(value, allValues) → patch → applyPatch()
+  ├─ 4. recomputeAll()      resolveFlag + validate для каждого листа → changed: Set<node>
+  └─ 5. notifyChanged()
+         ├─ recomputeDirty
+         ├─ nodeVersions[node]++ для changed-нод
+         ├─ globalListeners → useSyncExternalStore → getSnapshot()
+         ├─ onChange pipeline (fire-and-forget, поднимается к предкам)
+         └─ findResolvesToRetrigger → resetResolveState → triggerResolve
 ```
-
-### Почему не нужен PalistorProvider
-
-`createForm` принимает `translateFunction` — **ссылку на хук** (например `useTranslations`). Хук вызывается внутри `useForm`, то есть уже в React-контексте, где доступны все провайдеры.
-
-```ts
-// createForm принимает ссылку на хук (не вызов!)
-createForm({
-  translateFunction: useTranslations,
-});
-
-// useForm внутри делает:
-const t = translateFunction(); // ← вызов внутри React, NextIntlClientProvider доступен
-```
-
-Провайдер не нужен — `useForm` сам является хуком и имеет доступ ко всем контекстам выше по дереву.
 
 ---
 
-## API
+## Submit Pipeline
 
-### Конфигурация (модульный уровень)
+```
+form.submit()
+  ├─ setGroupRevalidate(true) + recomputeAll() + notifyChanged()
+  ├─ collectLeafStates() → есть ошибки? → { success: false, errors }
+  └─ applyBeforeSubmit() → node.onSubmit(values) → afterSubmit() → { success: true }
+```
+
+---
+
+## Resolve Pipeline
+
+```
+GET form.car → узел idle → triggerResolve()
+  ├─ optimisticResolver → applyPatch, loading: true, notifyChanged
+  └─ resolver(trackingProxy)         ← auto-deps: read → accessedPaths, write → buffer
+       ├─ OK  → batch flush: applyPatch(result) + buffered writes, loading: false,
+       │        status: resolved, save auto-deps, recomputeAll, notifyChanged (1 раз)
+       └─ ERR → onError(err, { notify }), loading: false, status: error
+
+Deps: явные (config) ∪ auto-deps (из tracking proxy resolver'а)
+При изменении dep: notifyChanged → findResolvesToRetrigger → resetResolveState → triggerResolve
+
+Suspense: status === "pending" → throw promise → React <Suspense> ловит
+Ошибки: НИКОГДА не бросаются — только реактивно через form.car.error
+```
+
+---
+
+## Tracking — гранулярные ре-рендеры
+
+```
+Рендер: читаем form.email.value, form.phone.value → accessed = {emailNode, phoneNode}
+
+SET form.city.value → cityNode++ → getSnapshot проверяет только accessed → не изменилось → нет ре-рендера ✓
+SET form.email.value → emailNode++ → getSnapshot → изменилось → ре-рендер ✓
+```
+
+`useForm(subtree)` в дочернем компоненте создаёт **свой** tracking proxy — независимый ре-рендер.  
+`hasNavigated` флаг: Parent, который навигирует `form.passport`, но не читает FIELD_STATE_PROPS, не ре-рендерится при изменении полей внутри passport.
+
+---
+
+## Модули
+
+```
+store/
+  store.ts              главная фабрика createProxyStore
+  buildProxy.ts         Proxy слой 1: config → FieldState + resolve trigger
+  writePipeline.ts      format → store → setter → recompute
+  resolvePipeline.ts    async resolve: init, execute, retry, auto-deps
+  submitPipeline.ts     validate → beforeSubmit → onSubmit → afterSubmit
+  recomputeAll.ts       пересчёт всех листьев после изменения
+  onChangePipeline.ts   fire-and-forget onChange для предков
+  applyPatch.ts         применение патчей к дереву
+  collectValues.ts      снапшот значений для computed/validate/resolve
+  registerNodes.ts      инициализация leafNodes + nodeState
+  dirtyTracking.ts      dirty от initial
+  nodeMap.ts            nodePaths + nodeParents
+  createValuesTrackingProxy.ts  tracking write-proxy для resolver
+  constants.ts          символы CONFIG_NODE / SOURCE_PROXY / STORE_REF,
+                        наборы FIELD_STATE_PROPS / CONFIG_PROPS
+  persist/              персистенция (localStorage и др.)
+react/
+  useForm.ts            useSyncExternalStore + tracking proxy
+  createTrackingProxy.ts  Proxy слой 2: запись accessed нод
+  usePersist.ts / useTranslator.ts / useNotifier.ts
+```
+
+---
+
+## Ключевые инварианты
+
+| Принцип | Реализация |
+|---|---|
+| Конфиг неизменяем | `rootConfig` никогда не мутируется |
+| Один прокси на узел | `proxyCache: WeakMap` |
+| Стабильные ссылки | `WeakMap`-кэши для onValueChange / submit / reset |
+| Точечные ре-рендеры | tracking proxy + `nodeVersions` |
+| Иммутабельный FieldState | `nodeState.set(node, { ...old, value: new })` |
+| Resolve без лишних ре-рендеров | batch: буфер writes + один flush + один notifyChanged |
+| Resolve дедупликация | pending status → не запускаем повторно |
+| Ошибки resolve без throw | `onError` callback + реактивные `error`/`errorMessage` |
+
+---
+
+## createForm + useForm(id)
+
+`createForm` — модульный уровень, статичная конфигурация, возвращает типизированный `useForm`.  
+`useForm(id)` — React-хук, находит или создаёт store в registry по `type:id`, вызывает `translateFunction()`.
 
 ```ts
-// config/orderForm.ts
-import { createForm } from 'palistor';
-import { useTranslations } from 'next-intl';
-import { orderConfig, orderDefaults } from './orderConfig';
-
 export const { useForm } = createForm<OrderValues>({
   config: orderConfig,
   defaults: orderDefaults,
-  translateFunction: useTranslations,
-  type: "Order",               // ← registry key: "Order:NewOrder", "Order:abc-123"
+  translateFunction: useTranslations, // ссылка на хук, вызовется внутри useForm
+  type: "Order",                      // registry key: "Order:NewOrder", "Order:abc-123"
 });
-```
 
-`type` + `id` дают уникальный ключ в registry и localStorage:
-- `"Order:NewOrder"` — черновик нового заказа
-- `"Order:abc-123"` — редактирование существующего
-
-### useForm — сигнатура
-
-```ts
-interface UseFormOptions<TValues> {
-  /** Данные с сервера — мержатся в store при каждом изменении ссылки */
-  initial?: Partial<TValues>;
-
-  /** Отправка формы */
-  onSubmit?: (values: TValues) => Promise<SubmitResult>;
-
-  /** Трансформация перед валидацией и отправкой */
-  beforeSubmit?: (values: TValues) => Promise<TValues> | TValues;
-
-  /** Сайд-эффекты после успешного submit */
-  afterSubmit?: (result: SubmitResult, reset: () => void) => Promise<void> | void;
-
-  /**
-   * Вызывается при изменении любого поля ПОСЛЕ пересчёта computed
-   * Можно вернуть Partial для мержа в values
-   */
-  onChange?: (params: OnChangeParams<TValues>) => Partial<TValues> | void | Promise<Partial<TValues> | void>;
-
-  /** Переопределить авто-persist key (по умолчанию type:id) */
-  persistId?: string;
-}
-
-// Корневой компонент — передаёт initial данные и колбэки
-const api = useForm(id, options?: UseFormOptions<TValues>);
-
-// Вложенный компонент — подключается к существующему store
-const api = useForm(id);
-```
-
-Контракт стабильный: `useForm` **всегда** возвращает одинаковый API. Разница — корневой компонент передаёт `options`, вложенные — нет. Но API один и тот же.
-
-### useForm — возвращаемый API
-
-```ts
-interface UseFormReturn<TValues> {
-  // Поля
-  getFieldProps: <K extends keyof TValues>(key: K) => FieldProps<TValues[K]>;
-
-  // Actions
-  setValue:  <K extends keyof TValues>(key: K, value: TValues[K]) => void;
-  setValues: (values: Partial<TValues>) => void;
-  reset:     (next?: Partial<TValues>) => void;
-  submit:    () => Promise<void>;
-
-  // Состояние формы (подписка)
-  dirty:      boolean;
-  submitting: boolean;
-  isValid:    boolean;
-
-  // Утилиты
-  getVisibleFields: () => Array<keyof TValues & string>;
-}
-```
-
-### FieldProps — пропсы поля
-
-```ts
-interface FieldProps<TValue> {
-  value:         TValue;
-  label?:        string;
-  placeholder?:  string;
-  description?:  string;
-  error?:        string;
-  isVisible:     boolean;
-  isDisabled:    boolean;
-  isReadOnly:    boolean;
-  isRequired:    boolean;
-  isInvalid:     boolean;
-  errorMessage?: string;
-  onValueChange: (value: InputValueType<TValue>) => void;
-}
-```
-
----
-
-## Примеры использования
-
-### Корневой компонент (инициализация с серверными данными)
-
-```tsx
-import { useForm } from '@/config/orderForm';
-
-export function OrderPage({ order }: { order?: Order }) {
-  const { getFieldProps, submit } = useForm(order?.id ?? "NewOrder", {
-    initial: order,
-    onSubmit: async (values) => {
-      const saved = await api.saveOrder(values);
-      router.push(`/orders/${saved.id}`);
-    },
-  });
-
-  return <Input {...getFieldProps("name")} />;
-}
-```
-
-### Вложенный компонент (подключение по ID)
-
-```tsx
-import { useForm } from '@/config/orderForm';
-
-export function OrderNameSection({ orderId }: { orderId: string }) {
-  const { getFieldProps } = useForm(orderId);
-
-  return <Input {...getFieldProps("name")} />;
-}
-```
-
-### Два экземпляра одной формы на странице
-
-```tsx
-// Работает из коробки — разные ID = разные stores
-<OrderForm orderId="order-1" />
-<OrderForm orderId="order-2" />
-```
-
----
-
-## Инициализация и жизненный цикл store
-
-### Когда создаётся store?
-
-При первом вызове `useForm(id)` с данным `id`. Store инициализируется из `defaults` конфига (из `createForm`). Если в `options` есть `initial` — он мержится поверх defaults.
-
-### Что если `initial` приходит позже?
-
-Типичный сценарий — данные грузятся асинхронно:
-
-```tsx
-export function OrderPage({ orderId }: { orderId: string }) {
-  const { data: order, isLoading } = useQuery(['order', orderId], fetchOrder);
-
-  const { getFieldProps, submit } = useForm(orderId, {
-    initial: order,          // ← undefined на первом рендере, объект на втором
-    onSubmit: handleSubmit,
-  });
-
-  if (isLoading) return <Skeleton />;
-  return <Input {...getFieldProps("name")} />;
-}
-```
-
-**Как это работает под капотом:**
-
-```
-Рендер 1: useForm("order-123", { initial: undefined })
-  │
-  ├── Store не существует → создаём из defaults
-  ├── initial === undefined → ничего не мержим
-  └── Store: { name: "", email: "", ... }  ← чистые defaults
-
-Рендер 2: useForm("order-123", { initial: { name: "Иван", email: "ivan@..." } })
-  │
-  ├── Store уже существует
-  ├── initial изменился (новая ссылка) → мержим в store
-  ├── НО: мержим только поля, которые пользователь НЕ менял (dirty check по полям)
-  └── Store: { name: "Иван", email: "ivan@...", ... }  ← серверные данные
-
-Рендер 3: useForm("order-123", { initial: { name: "Иван", email: "ivan@..." } })
-  │
-  ├── initial та же ссылка → ничего не делаем (Object.is check)
-  └── Store без изменений
-```
-
-`useForm` внутри отслеживает ссылку на `initial` через `useRef`. При изменении ссылки — мержит новые данные в store. Это работает как `useEffect` с `[initial]` в зависимостях, но через синхронное сравнение.
-
-### Что если пользователь уже начал заполнять?
-
-Если `initial` приходит **после** того как пользователь начал вводить — нельзя затереть его ввод. Правило:
-
-> **Серверные данные не перезаписывают dirty-поля**
-
-```
-Пользователь ввёл name = "Пётр" (поле стало dirty)
-  ↓
-initial приходит с name = "Иван"
-  ↓
-name остаётся "Пётр" (dirty), email берётся из initial (не dirty)
-```
-
-Реализация — при мерже `initial` проверяем каждое поле:
-```ts
-for (const key of Object.keys(initial)) {
-  const isDirty = !Object.is(currentValues[key], initialValues[key]);
-  if (!isDirty) {
-    // Поле не трогали → берём из initial
-    newValues[key] = initial[key];
-  }
-  // Поле dirty → оставляем как есть
-}
-```
-
-### Колбэки (onSubmit, onChange) — тоже реактивны
-
-Колбэки могут меняться между рендерами (замыкания на свежие данные). `useForm` всегда использует **последнюю версию** колбэка через `useRef`:
-
-```tsx
-// Это безопасно — onSubmit всегда вызовет актуальную версию
-const { submit } = useForm(orderId, {
-  onSubmit: async (values) => {
-    // router, queryClient и т.д. — всегда актуальные из замыкания
-    await api.save(values);
-    queryClient.invalidateQueries(['orders']);
-    router.push('/orders');
-  },
+// Корневой компонент
+const { getFieldProps, submit } = useForm(order?.id ?? "NewOrder", {
+  initial: order,       // мержится в non-dirty поля при смене ссылки
+  onSubmit, afterSubmit, onChange, beforeSubmit,
 });
+
+// Вложенный компонент — только id
+const { getFieldProps } = useForm(orderId);
 ```
 
-Под капотом:
-```ts
-// Внутри useForm
-const onSubmitRef = useRef(options?.onSubmit);
-onSubmitRef.current = options?.onSubmit; // ← обновляем каждый рендер
-
-const submit = useCallback(async () => {
-  // ...
-  await onSubmitRef.current?.(values); // ← вызываем актуальную версию
-}, []);
-```
-
-### Полный жизненный цикл
-
-```
-1. createForm({ config, defaults, type })       ← модульный уровень, один раз
-   └── Сохраняет config и defaults в замыкании
-
-2. useForm(id, { initial, onSubmit })            ← первый рендер компонента
-   ├── translateFunction() → получаем t          ← вызов хука i18n
-   ├── registry.getOrCreate(type:id, defaults)   ← создаём store если нет
-   ├── initial? → merge в store                  ← серверные данные
-   ├── onSubmit → сохраняем в ref                ← колбэк
-   └── return { getFieldProps, setValue, ... }    ← API
-
-3. initial изменился (данные загрузились)         ← ре-рендер
-   ├── useForm видит новую ссылку initial
-   ├── merge non-dirty fields                    ← безопасный мерж
-   └── store.setState → подписчики обновляются
-
-4. Пользователь работает с формой
-   ├── getFieldProps('name').onValueChange(v)    ← ввод
-   ├── setValue → store.setState → recompute     ← пересчёт зависимостей
-   └── getFieldProps подписчики → ре-рендер      ← только затронутые поля
-
-5. submit()
-   ├── beforeSubmit → transform values
-   ├── validate all visible fields
-   ├── onSubmitRef.current(values)               ← актуальный колбэк
-   └── afterSubmit → side effects
-
-6. Unmount
-   ├── Store остаётся в registry                 ← для persist / возврата
-   └── cleanup по стратегии (см. открытые вопросы)
-```
-
----
-
-## Подписка и оптимизация рендеров
-
-`getFieldProps('name')` внутри использует `useSyncExternalStore` с селектором на `state.fields[key]`. Компонент перерендеривается **только** когда меняется объект `fields.name`.
-
-Если компонент вызывает `getFieldProps` для нескольких полей — он подписан на эти поля, но **не на всю форму**.
-
-> **Важно:** `getFieldProps` — это по сути хук (внутри `useSyncExternalStore`). Вызывается на верхнем уровне компонента, не в условиях/циклах.
->
-> Вопрос: переименовать в `useFieldProps`? Явно видно что хук, но менее привычное имя.
-
----
-
-## Смена ID (создание → сохранение)
-
-Когда сервер возвращает реальный ID, компонент перемонтируется с новым ID через навигацию:
-
-```tsx
-// useForm("NewOrder") → сохранение → router.push → useForm("abc-123")
-```
-
-Под капотом:
-1. Store `"Order:NewOrder"` — остаётся (или очищается по cleanup)
-2. Store `"Order:abc-123"` — создаётся с `initial` данными из сервера
-3. Черновик `"Order:NewOrder"` очищается из localStorage
-
----
-
-## Что удалить из текущего кода
-
-| Файл | Что | Почему |
-|------|-----|--------|
-| `react/useField.ts` | `useFieldValue` | Всё через `getFieldProps` |
-| `react/useField.ts` | `useFieldError` | Всё через `getFieldProps` |
-| `react/useField.ts` | `useSetFieldValue` | `setValue` из `useForm` + использует `require()` |
-| `react/useField.ts` | `useFieldState` | Заменяется `getFieldProps` |
-| `react/useField.ts` | `useFieldVisible` | `getFieldProps(key).isVisible` |
-| `react/useFormStore.ts` | Текущий `useFormStore` | Заменяется `createForm` + `useForm` |
-
-## Что создать
-
-| Что | Где | Описание |
-|-----|-----|----------|
-| `createForm<T>(opts)` | `core/createForm.ts` | Factory — конфиг + translateFunction → `{ useForm }` |
-| `useForm(id, opts?)` | Внутри `createForm` | Хук — создаёт/находит store, возвращает API |
-| `getFieldProps(key)` | Внутри `useForm` | Подписка на поле через `useSyncExternalStore` |
-
-## Что оставить
-
-| Что | Зачем |
-|-----|-------|
-| `createStore` | Ядро — store вне React |
-| `registry` | Хранение stores по `type:id` |
-| `computeFields` | Пересчёт зависимостей |
-| `actions.ts` | Чистые функции трансформации state |
-| `useSelector` | Low-level escape hatch |
-| `types.ts` | Типы (обновить под новый API) |
-
----
-
-## Открытые вопросы
-
-1. **Именование:** `getFieldProps` vs `useFieldProps` — первое привычнее, второе честнее (это хук)
-2. **Cleanup:** когда удалять store из registry? При unmount? По таймеру? Вручную?
-3. **SSR initial data:** достаточно ли `initial` в `useForm`, или нужен серверный `prefillForm()`?
+**Ключевые решения:**
+- Состояние вне React — React подписывается через `useSyncExternalStore`
+- Нет PalistorProvider — `translateFunction` вызывается внутри `useForm` (уже в React-дереве)
+- `initial` мержится только в non-dirty поля, сравнение по ссылке (`Object.is`)
+- Колбэки (`onSubmit`, `onChange`) хранятся в `useRef` → всегда актуальная версия
+- `getFieldProps` — фактически хук (внутри `useSyncExternalStore`), не вызывать в условиях/циклах
 
 

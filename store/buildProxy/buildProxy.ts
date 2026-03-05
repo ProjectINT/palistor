@@ -84,14 +84,13 @@ export function createBuildProxy({
     const proxyNode: Record<string, any> = new Proxy(node as Record<string, any>, {
       get(_target, key: string | symbol) {
         if (key === CONFIG_NODE) return node;
-        /*
-        Любой символ кроме CONFIG_NODE не имеет смысла
-        */
-       if (typeof key === "symbol") return undefined;
        
-       // onValueChange — стабильный functional setter для React
-       if (key === "onValueChange") {
-         return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
+        // Любой символ кроме CONFIG_NODE не имеет смысла
+        if (typeof key === "symbol") return undefined;
+       
+        // onValueChange — стабильный functional setter для React
+        if (key === "onValueChange") {
+          return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
         }
         
         const currentNode = nodeState.get(node);
@@ -107,9 +106,8 @@ export function createBuildProxy({
             "submit": () => getCached(caches.submit, node, () => () => submitNode(node)),
             "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => resetNode(node, vals)),
           }
-
-          if (key in handlers) return handlers[key as keyof typeof handlers]();
           
+          if (key in handlers) return handlers[key as keyof typeof handlers]();
           handleLazyResolve(node, resolveDeps);
         }
 
@@ -154,6 +152,7 @@ export function createBuildProxy({
         // Весь процесс записи делегирован write pipeline:
         // format → store → setter patch → recompute → merge changed
         const result = writeValue(node, newValue, writeDeps);
+
         if (!result) return false;
 
         notifyChanged(result.changed);

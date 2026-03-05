@@ -25,6 +25,7 @@ export function handleLazyResolve(
   if (resolveState.status === "idle") {
     triggerResolve(node);
   }
+
   if (
     resolveState.status === "pending" &&
     resolveState.promise &&
