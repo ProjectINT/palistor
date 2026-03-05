@@ -1,0 +1,26 @@
+{
+  "name": "palistor",
+  "version": "0.0.1",
+  "description": "State manager for react",
+  "main": "index.ts",
+  "scripts": {
+    "test": "test"
+  },
+  "keywords": [
+    "state",
+    "manager",
+    "react"
+  ],
+  "author": "Yuri Palienko",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ProjectINT/palistor"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14"
+  }
+}
