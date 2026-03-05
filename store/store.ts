@@ -1,6 +1,6 @@
 import { type FieldState } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
-import { createBuildProxy } from "./buildProxy";
+import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes } from "./registerNodes";
 import { recomputeAll as _recomputeAll } from "./recomputeAll";
 import type { TranslateFn } from "../core/types";
