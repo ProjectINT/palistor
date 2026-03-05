@@ -10,7 +10,6 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
     value: 100,
     label: (t: TranslateFn) => t("form.price"),
     placeholder: (t: TranslateFn) => t("form.pricePlaceholder"),
-    dependencies: [],
   },
   quantity: {
     types: {
@@ -19,7 +18,6 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
     },
     value: 1,
     label: (t: TranslateFn) => t("form.quantity"),
-    dependencies: [],
   },
   total: {
     types: {
@@ -30,6 +28,5 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
     value: (values: PaymentFormValues) => values.price * values.quantity,
     label: (t: TranslateFn) => t("form.total"),
     isReadOnly: true,
-    dependencies: ["price", "quantity"],
   },
 };

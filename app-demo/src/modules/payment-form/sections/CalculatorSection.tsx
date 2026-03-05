@@ -6,20 +6,16 @@ import { Section } from "@/modules/shared/Section";
 import { usePaymentForm } from "@/config/paymentForm";
 import { Input } from "@/components/Input";
 
-interface CalculatorSectionProps {
-  formId: string;
-}
-
-export function CalculatorSection({ formId }: CalculatorSectionProps) {
+export function CalculatorSection() {
   const t = useTranslations();
-  const { getFieldProps } = usePaymentForm(formId);
-  
+  const form = usePaymentForm();
+
   return (
     <Section title={t("sections.calculator")}>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Input {...getFieldProps("price")} />
-        <Input {...getFieldProps("quantity")} />
-        <Input {...getFieldProps("total")} />
+        <Input {...form.price} />
+        <Input {...form.quantity} />
+        <Input {...form.total} />
       </div>
     </Section>
   );

@@ -6,31 +6,26 @@ import { Checkbox } from "@/components/Checkbox";
 import { Section } from "@/modules/shared/Section";
 import { usePaymentForm } from "@/config/paymentForm";
 
-interface AgreementsSectionProps {
-  formId: string;
-}
-
-export function AgreementsSection({ formId }: AgreementsSectionProps) {
+export function AgreementsSection() {
   const t = useTranslations();
-  const { getFieldProps } = usePaymentForm(formId);
+  const form = usePaymentForm();
 
-  const agreeTermsProps = getFieldProps("agreeTerms");
-  const newsletterProps = getFieldProps("newsletter");
-  
   return (
     <Section title={t("sections.agreements")}>
       <div className="space-y-3">
         <Checkbox
-          {...agreeTermsProps}
-          isSelected={agreeTermsProps.value}
+          {...form.agreeTerms}
+          isSelected={Boolean(form.agreeTerms.value)}
+          onChange={(e) => { form.agreeTerms.value = e.target.checked; }}
         >
-          {agreeTermsProps.label}
+          {form.agreeTerms.label}
         </Checkbox>
         <Checkbox
-          {...newsletterProps}
-          isSelected={newsletterProps.value}
+          {...form.newsletter}
+          isSelected={Boolean(form.newsletter.value)}
+          onChange={(e) => { form.newsletter.value = e.target.checked; }}
         >
-          {newsletterProps.label}
+          {form.newsletter.label}
         </Checkbox>
       </div>
     </Section>

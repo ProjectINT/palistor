@@ -4,16 +4,11 @@ import { Input } from "@/components/Input";
 import { Section } from "../../shared/Section";
 import { usePaymentForm } from "@/config/paymentForm";
 
-export function PassportSection({ formId }: { formId: string }) {
-  const { getFieldProps } = usePaymentForm(formId);
-
-  // Получаем props для вложенных полей с автокомплитом!
-  const numberProps = getFieldProps("passport.number");
-  const issueDateProps = getFieldProps("passport.issueDate");
-  const expiryDateProps = getFieldProps("passport.expiryDate");
+export function PassportSection() {
+  const form = usePaymentForm();
 
   // Паспорт виден только когда paymentType === "bank"
-  if (!numberProps.isVisible) return null;
+  if (!form.passport.isVisible) return null;
 
   return (
     <Section
@@ -22,17 +17,17 @@ export function PassportSection({ formId }: { formId: string }) {
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input
-          {...numberProps}
+          {...form.passport.number}
           className="md:col-span-2"
         />
-        
+
         <Input
-          {...issueDateProps}
+          {...form.passport.issueDate}
           type="date"
         />
-        
+
         <Input
-          {...expiryDateProps}
+          {...form.passport.expiryDate}
           type="date"
         />
       </div>

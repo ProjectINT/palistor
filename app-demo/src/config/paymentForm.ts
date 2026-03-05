@@ -13,9 +13,9 @@
  * - Computed values (value as function)
  */
 
-import { createForm } from "@palistor";
+import { createProxyStore } from "@palistor/store/store";
+import { useForm } from "@palistor/react/useForm";
 import type { FormConfig, TranslateFn } from "@palistor";
-import { useTranslations } from "next-intl";
 import { computed } from "./computed";
 import { card } from "./card";
 
@@ -40,7 +40,7 @@ import { passport } from "./passport";
 // Конфигурация
 // ============================================================================
 
-export const paymentFormConfig: FormConfig<PaymentFormValues> = {
+export const paymentFormConfig = {
   // --------------------------------------------------------------------------
   // Тип оплаты — главный триггер для условной видимости
   // --------------------------------------------------------------------------
@@ -104,7 +104,7 @@ export const paymentFormConfig: FormConfig<PaymentFormValues> = {
     placeholder: (t: TranslateFn) => t("form.commentPlaceholder"),
     dependencies: [], // Пересчёт только при изменении себя
   },
-};
+} satisfies FormConfig<PaymentFormValues>;
 
 // ============================================================================
 // Значения по умолчанию
@@ -143,12 +143,22 @@ export const paymentFormDefaults: PaymentFormValues = {
 };
 
 // ============================================================================
-// createForm — новый API
+// Store — новый API createProxyStore
 // ============================================================================
 
-export const { useForm: usePaymentForm } = createForm<PaymentFormValues>({
+export const paymentStore = createProxyStore({
   config: paymentFormConfig,
-  defaults: paymentFormDefaults,
-  translateFunction: useTranslations,
-  type: "PaymentDemo",
+  initialValues: paymentFormDefaults,
 });
+
+/**
+ * Хук для подключения компонентов к paymentStore.
+ * Возвращает реактивный прокси — чтение поля = подписка на него.
+ *
+ * @example
+ * const form = usePaymentForm();
+ * form.email.value          // читаем
+ * form.email.value = "x"    // пишем
+ */
+export const usePaymentForm = () => useForm(paymentStore) as any;
+

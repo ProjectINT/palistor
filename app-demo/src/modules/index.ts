@@ -14,4 +14,4 @@ export { HooksDemo } from "./hooks-demo";
 export { DebugPanel } from "./debug-panel";
 
 // State Preview
-export { StatePreview } from "./state-preview";
+export { StatePreview } from "./state-preview/StatePreview";

@@ -7,11 +7,7 @@ import { FieldValueDemo } from "./FieldValueDemo";
 import { FieldVisibleDemo } from "./FieldVisibleDemo";
 import { FieldErrorDemo } from "./FieldErrorDemo";
 
-interface HooksDemoProps {
-  formId: string;
-}
-
-export function HooksDemo({ formId }: HooksDemoProps) {
+export function HooksDemo() {
   const t = useTranslations();
 
   return (
@@ -21,10 +17,10 @@ export function HooksDemo({ formId }: HooksDemoProps) {
       </h2>
 
       <div className="space-y-4">
-        <FieldStateDemo formId={formId} fieldKey="paymentType" />
-        <FieldValueDemo formId={formId} fieldKey="cardNumber" />
-        <FieldVisibleDemo formId={formId} fieldKey="cardNumber" />
-        <FieldErrorDemo formId={formId} fieldKey="email" />
+        <FieldStateDemo fieldKey="paymentType" />
+        <FieldValueDemo fieldKey="cardNumber" />
+        <FieldVisibleDemo fieldKey="cardNumber" />
+        <FieldErrorDemo fieldKey="email" />
       </div>
     </div>
   );

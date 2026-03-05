@@ -46,6 +46,14 @@ export { createForm } from "./core/createForm";
 export type { CreateFormConfig, UseFormOptions, UseFormReturn } from "./core/createForm";
 
 // ============================================================================
+// Persist — драйверы и типы
+// ============================================================================
+
+export type { PersistDriver, PersistOptions } from "./store/persist/types";
+export type { PersistManager } from "./store/persist/persistManager";
+export { localStorageDriver, sessionStorageDriver } from "./store/persist/drivers";
+
+// ============================================================================
 // Типы для конфигурации
 // ============================================================================
 
@@ -61,16 +69,26 @@ export type {
 } from "./core/types";
 
 // ============================================================================
-// Утилиты для работы с вложенными полями
+// Типы Store (config, proxy, values)
 // ============================================================================
 
-export { 
-  parseFieldKey, 
-  stringifyPath, 
-  isNestedKey, 
-  getRootKey, 
-  getNestedPath,
-  isReservedFieldConfigKey,
-  getFieldConfigByPath,
-} from "./utils/pathUtils";
-export { getFieldByPath, setFieldByPath, removeFieldByPath } from "./utils/helpers";
+export type {
+  MaybeComputed,
+  DeepPartialValues,
+  FieldTypeMeta,
+  ConfigNode,
+  FieldProxyNode,
+  GroupProxyNode,
+  ConfigProxy,
+  ExtractValues,
+  ProxyStoreOptions,
+  ProxyStore,
+  Unsubscribe,
+} from "./store/types";
+
+// ============================================================================
+// Resolve — типы и хуки
+// ============================================================================
+
+export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline";
+export { useNotifier } from "./react/useNotifier";
