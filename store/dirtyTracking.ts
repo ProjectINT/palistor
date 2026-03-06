@@ -149,3 +149,77 @@ export function setGroupRevalidate(
 
   return changed;
 }
+
+// ─── Initial Snapshot Merge ──────────────────────────────────────────────────
+
+/**
+ * Incrementally merges initial values from a patch into the initialValueMap.
+ * Only updates leaf nodes whose keys are present in the patch.
+ *
+ * Called after resolver success to make resolver data part of the initial state.
+ * Optimistic resolver does NOT call this — only the real resolver result counts.
+ */
+export function mergeInitialValues(
+  node: AnyConfigNode,
+  nodeState: WeakMap<object, FieldState>,
+  initialValueMap: WeakMap<object, unknown>,
+  patch: Record<string, unknown>,
+): void {
+  for (const key of Object.keys(patch)) {
+    if (CONFIG_PROPS.has(key)) continue;
+
+    const child = node[key] as AnyConfigNode;
+    if (!child || typeof child !== "object") continue;
+
+    const patchValue = patch[key];
+
+    if ("value" in child) {
+      // Leaf node: capture current (post-applyPatch) value as initial
+      const state = nodeState.get(child);
+      if (state) {
+        initialValueMap.set(child, state.value);
+      }
+    } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {
+      // Group node: recurse into matching subtree
+      mergeInitialValues(child, nodeState, initialValueMap, patchValue as Record<string, unknown>);
+    }
+  }
+}
+
+/**
+ * Collects current initial values from the initialValueMap for a subtree.
+ * Used by reset to restore fields to their initial state.
+ *
+ * Stops at reset boundaries (child groups with their own `reset` function).
+ * Falls back to config default if a leaf has no entry in initialValueMap.
+ */
+export function collectInitialSnapshot(
+  node: AnyConfigNode,
+  initialValueMap: WeakMap<object, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const key of Object.keys(node)) {
+    if (CONFIG_PROPS.has(key)) continue;
+
+    const child = node[key] as AnyConfigNode;
+    if (!child || typeof child !== "object") continue;
+
+    if ("value" in child) {
+      // Leaf node: prefer initial snapshot, fallback to config default
+      const initial = initialValueMap.get(child);
+      if (initial !== undefined) {
+        result[key] = initial;
+      } else {
+        const raw = child.value;
+        result[key] = typeof raw === "function" ? "" : raw;
+      }
+    } else {
+      // Group node: stop at reset boundary (child has its own reset)
+      if (typeof child.reset === "function") continue;
+      result[key] = collectInitialSnapshot(child, initialValueMap);
+    }
+  }
+
+  return result;
+}

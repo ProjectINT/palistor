@@ -14,6 +14,7 @@ import { applyPatch } from "./applyPatch";
 import { type AnyConfigNode } from "./collectValues";
 import { createValuesTrackingProxy, type PendingWrite } from "./createValuesTrackingProxy";
 import type { FieldState } from "./compute";
+import { mergeInitialValues } from "./dirtyTracking";
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
@@ -96,6 +97,8 @@ export interface ResolveDeps {
   notifyChanged: (changed: Set<object>) => void;
   notify: NotifyFn;
   getValues: () => Record<string, unknown>;
+  /** Initial value snapshot for dirty tracking — updated after resolver success. */
+  initialValueMap: WeakMap<object, unknown>;
 }
 
 // ─── Initialization ──────────────────────────────────────────────────────────
@@ -199,7 +202,7 @@ export function executeResolve(
   resolve: Resolve,
   deps: ResolveDeps,
 ): Promise<unknown> {
-  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, notify, getValues } = deps;
+  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, notify, getValues, initialValueMap } = deps;
   const state = resolveStates.get(node);
   if (!state) return Promise.resolve();
 
@@ -284,6 +287,8 @@ export function executeResolve(
         // 1. Apply resolver result to node's subtree
         if (result && typeof result === "object") {
           applyPatch(node, nodeState, result as Record<string, unknown>, changed);
+          // Update initial snapshot for affected leaves (resolver data = initial state)
+          mergeInitialValues(node, nodeState, initialValueMap, result as Record<string, unknown>);
         }
 
         // 2. Flush buffered side-effects

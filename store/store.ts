@@ -165,6 +165,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     recomputeAll,
     notifyChanged,
     notify,
+    initialValueMap,
   });
 
   const { triggerResolve, getResolveState } = resolveManager;

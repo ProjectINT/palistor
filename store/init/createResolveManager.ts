@@ -19,6 +19,8 @@ export interface ResolveManagerDeps {
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
   notify: NotifyFn;
+  /** Initial value snapshot — passed to resolve pipeline for dirty tracking. */
+  initialValueMap: WeakMap<object, unknown>;
 }
 
 export interface ResolveManager {
@@ -52,7 +54,7 @@ export interface ResolveManager {
  * - Запуск eager resolvers (lazy: false)
  */
 export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
-  const { rootConfig, nodeState, recomputeAll, notifyChanged, notify } = deps;
+  const { rootConfig, nodeState, recomputeAll, notifyChanged, notify, initialValueMap } = deps;
 
   // ─── Init ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +74,7 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
     notifyChanged,
     notify,
     getValues: () => collectValues(rootConfig, nodeState) as Record<string, unknown>,
+    initialValueMap,
   };
 
   // ─── Public API ────────────────────────────────────────────────────────────

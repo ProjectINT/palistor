@@ -65,7 +65,7 @@ const config = {
     email: {
       value: '',
       isRequired: true,
-      isDisabled: this.submitting || anyLogicHere, // (Можно без this)
+      isDisabled: false,
       isVisible: (values) => values.user.name !== '',
       beforeSubmit: (value) => value.toLowerCase(),
     },
@@ -175,8 +175,6 @@ const config = {
 - [ ] Вычислять `dirty` как сравнение текущих значений с initial snapshot
 - [ ] Подписка на изменение `dirty`
 - [ ] Per-field dirty (опционально) — `changedFields`
-
-**Решение:** добавить в store `initialSnapshot` и метод `isDirty()`. Или реализовать на уровне `useForm`.
 
 ---
 
@@ -346,3 +344,27 @@ PaliStor использует **proxy-подход** (доступ через do
 Ключевое преимущество PaliStor: `proxy.passport.number.value` вместо `getFieldProps('passport.number')`. При этом spread `{...proxy.passport.number}` возвращает HeroUI-совместимые пропсы уже сейчас.
 
 Для обратной совместимости можно добавить `getFieldProps(path)` как алиас, но это **не обязательно** — proxy API удобнее.
+
+### Списки
+Нужно отдельно хранить списки.
+Списки это массивы групповых узлов.
+Потенциально они описываются тем же набором полей.
+список объявляется массивом:
+
+```ts
+const config = {
+  users: [
+    name: {
+      value: '',
+      isRequired: true,
+      beforeSubmit: (value) => value.trim(),
+    },
+    email: {
+      value: '',
+      isRequired: true,
+      isDisabled: anyLogicHere,
+      isVisible: (values) => values.user.name !== '',
+      beforeSubmit: (value) => value.toLowerCase(),
+    }
+  ]
+```

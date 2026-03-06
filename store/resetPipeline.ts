@@ -2,7 +2,7 @@ import { CONFIG_PROPS } from "./constants";
 import type { AnyConfigNode } from "./collectValues";
 import type { FieldState } from "./compute";
 import { applyPatch } from "./applyPatch";
-import { setGroupRevalidate, captureInitialValues } from "./dirtyTracking";
+import { setGroupRevalidate, captureInitialValues, collectInitialSnapshot } from "./dirtyTracking";
 
 export interface ResetDeps {
   nodeState: WeakMap<object, FieldState>;
@@ -69,17 +69,19 @@ export function executeReset(
   if (values) {
     patch = values;
   } else {
-    // Собираем defaults из конфига (до reset-boundary)
-    let defaults = collectDefaults(groupNode);
+    // Собираем начальные значения из initial snapshot (вместо defaults конфига)
+    let initial = initialValueMap
+      ? collectInitialSnapshot(groupNode, initialValueMap)
+      : collectDefaults(groupNode);
 
     // Трансформация через reset-функцию конфига (если задана)
     if (typeof groupNode.reset === "function") {
-      defaults = (groupNode.reset as (v: Record<string, unknown>) => Record<string, unknown>)(
-        defaults,
+      initial = (groupNode.reset as (v: Record<string, unknown>) => Record<string, unknown>)(
+        initial,
       );
     }
 
-    patch = defaults;
+    patch = initial;
   }
 
   // Применяем патч к nodeState
@@ -94,8 +96,9 @@ export function executeReset(
   for (const n of patchChanged) recomputed.add(n);
   notifyChanged(recomputed);
 
-  // Update initial snapshot — after reset, dirty = false
-  if (initialValueMap) {
+  // When explicit values are provided, update initial snapshot (new baseline → dirty = false).
+  // When no values (restoring to initial), snapshot already matches → no update needed.
+  if (values && initialValueMap) {
     captureInitialValues(groupNode, nodeState, initialValueMap);
   }
 }
