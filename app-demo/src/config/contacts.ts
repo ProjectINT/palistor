@@ -1,4 +1,4 @@
-import type { FormConfig } from "@palistor";
+import type { FormConfig, TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
 export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | 'name'> = {
@@ -8,8 +8,8 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
       type: "string"
     },
     value: "",
-    label: (t) => t("form.email"),
-    placeholder: (t) => t("form.emailPlaceholder"),
+    label: (t: TranslateFn) => t("form.email"),
+    placeholder: (t: TranslateFn) => t("form.emailPlaceholder"),
     isRequired: true,
     dependencies: [],
     validate: (value: string) => {
@@ -25,8 +25,8 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
       type: "string"
     },
     value: "",
-    label: (t) => t("form.phone"),
-    placeholder: (t) => t("form.phonePlaceholder"),
+    label: (t: TranslateFn) => t("form.phone"),
+    placeholder: (t: TranslateFn) => t("form.phonePlaceholder"),
     dependencies: [],
     formatter: (value) => {
       // Простой форматтер для телефона
@@ -46,8 +46,8 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
       type: "string"
     },
     value: "",
-    label: (t) => t("form.name"),
-    placeholder: (t) => t("form.namePlaceholder"),
+    label: (t: TranslateFn) => t("form.name"),
+    placeholder: (t: TranslateFn) => t("form.namePlaceholder"),
     isRequired: true,
     dependencies: [],
   },

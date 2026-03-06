@@ -1,4 +1,4 @@
-import type { FormConfig } from "@palistor";
+import type { FormConfig, TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
 export const checkboxes: Pick<FormConfig<PaymentFormValues>, 'agreeTerms' | 'newsletter'> = {
@@ -8,8 +8,8 @@ export const checkboxes: Pick<FormConfig<PaymentFormValues>, 'agreeTerms' | 'new
       type: "boolean"
     },
     value: false,
-    label: (t) => t("form.agreeTerms"),
-    description: (t) => t("form.agreeTermsDescription"),
+    label: (t: TranslateFn) => t("form.agreeTerms"),
+    description: (t: TranslateFn) => t("form.agreeTermsDescription"),
     isRequired: true,
     dependencies: [],
     validate: (value: boolean) => {
@@ -24,8 +24,8 @@ export const checkboxes: Pick<FormConfig<PaymentFormValues>, 'agreeTerms' | 'new
       type: "boolean"
     },
     value: false,
-    label: (t) => t("form.newsletter"),
-    description: (t) => t("form.newsletterDescription"),
+    label: (t: TranslateFn) => t("form.newsletter"),
+    description: (t: TranslateFn) => t("form.newsletterDescription"),
     dependencies: [],
   },
 };

@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { FormConfig } from "@palistor";
+import type { FormConfig, TranslateFn } from "@palistor";
 
 export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpiry' | 'cardCvv'> = {
   cardNumber: {
@@ -8,8 +8,8 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
       type: "string"
     },
     value: "",
-    label: (t) => t("form.cardNumber"),
-    placeholder: (t) => t("form.cardNumberPlaceholder"),
+    label: (t: TranslateFn) => t("form.cardNumber"),
+    placeholder: (t: TranslateFn) => t("form.cardNumberPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "card",
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
@@ -32,8 +32,8 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
       type: "string"
     },
     value: "",
-    label: (t) => t("form.cardExpiry"),
-    placeholder: (t) => t("form.cardExpiryPlaceholder"),
+    label: (t: TranslateFn) => t("form.cardExpiry"),
+    placeholder: (t: TranslateFn) => t("form.cardExpiryPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "card",
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
@@ -59,8 +59,8 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
       type: "string"
     },
     value: "",
-    label: (t) => t("form.cardCvv"),
-    placeholder: (t) => t("form.cardCvvPlaceholder"),
+    label: (t: TranslateFn) => t("form.cardCvv"),
+    placeholder: (t: TranslateFn) => t("form.cardCvvPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "card",
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,

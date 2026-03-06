@@ -1,5 +1,5 @@
 import type { Country, PaymentFormValues } from "./types";
-import type { FormConfig } from "@palistor";
+import type { FormConfig, TranslateFn } from "@palistor";
 
 export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | 'shippingCost'> = {
   country: {
@@ -8,8 +8,8 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
       type: "Country"
     },
     value: "",
-    label: (t) => t("form.country"),
-    placeholder: (t) => t("form.countryPlaceholder"),
+    label: (t: TranslateFn) => t("form.country"),
+    placeholder: (t: TranslateFn) => t("form.countryPlaceholder"),
     dependencies: [],
     // Setter — при изменении страны сбрасываем город
     setter: (value: string, _values: PaymentFormValues) => ({ country: value as Country | "", city: "" }),
@@ -21,8 +21,8 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
       type: "string"
     },
     value: "",
-    label: (t) => t("form.city"),
-    placeholder: (t) => t("form.cityPlaceholder"),
+    label: (t: TranslateFn) => t("form.city"),
+    placeholder: (t: TranslateFn) => t("form.cityPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.country !== "",
     isDisabled: (values: PaymentFormValues) => values.country === "",
     dependencies: ["country"],
@@ -43,7 +43,7 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
       };
       return costs[values.country as Country] ?? 0;
     },
-    label: (t) => t("form.shippingCost"),
+    label: (t: TranslateFn) => t("form.shippingCost"),
     isVisible: (values: PaymentFormValues) => values.country !== "" && values.city !== "",
     isReadOnly: true, // Вычисляемое поле
     dependencies: ["country", "city"],
