@@ -82,6 +82,8 @@ export interface FieldTypeMeta {
   readonly type: string;
 }
 
+export type { Setter } from "./writePipeline";
+
 /**
  * Универсальный узел конфига — описывает и поле, и группу.
  *

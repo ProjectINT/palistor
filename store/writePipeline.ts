@@ -74,6 +74,9 @@ export function storeValue(
  * Если setter отсутствует или вернул пустой/невалидный объект —
  * возвращает пустой Set.
  */
+
+export type Setter = (v: unknown, vals: Record<string, unknown>, prev: unknown) => Record<string, unknown>;
+
 export function runSetter(
   node: AnyConfigNode,
   processedValue: unknown,
@@ -84,7 +87,8 @@ export function runSetter(
   if (typeof node.setter !== "function") return new Set();
 
   const allValues = collectValues(rootConfig, nodeState);
-  const patch = (node.setter as (v: unknown, vals: Record<string, unknown>, prev: unknown) => Record<string, unknown>)(
+  
+  const patch = (node.setter as Setter)(
     processedValue,
     allValues,
     previousValue,
@@ -119,6 +123,7 @@ export function writeValue(
 
   // Фаза 2: Запись значения
   const stored = storeValue(node, processedValue, nodeState);
+
   if (!stored) return null;
 
   // Фаза 3: Setter — патч зависимых полей
