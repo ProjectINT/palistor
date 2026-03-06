@@ -79,13 +79,15 @@ export function runSetter(
   processedValue: unknown,
   rootConfig: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
+  previousValue?: unknown,
 ): Set<object> {
   if (typeof node.setter !== "function") return new Set();
 
   const allValues = collectValues(rootConfig, nodeState);
-  const patch = (node.setter as (v: unknown, vals: Record<string, unknown>) => Record<string, unknown>)(
+  const patch = (node.setter as (v: unknown, vals: Record<string, unknown>, prev: unknown) => Record<string, unknown>)(
     processedValue,
     allValues,
+    previousValue,
   );
 
   if (!patch || typeof patch !== "object") return new Set();
@@ -108,6 +110,7 @@ export function writeValue(
   node: AnyConfigNode,
   rawValue: unknown,
   deps: WriteDeps,
+  previousValue?: unknown,
 ): WriteResult | null {
   const { rootConfig, nodeState, recomputeAll } = deps;
 
@@ -119,7 +122,7 @@ export function writeValue(
   if (!stored) return null;
 
   // Фаза 3: Setter — патч зависимых полей
-  const patchedNodes = runSetter(node, processedValue, rootConfig, nodeState);
+  const patchedNodes = runSetter(node, processedValue, rootConfig, nodeState, previousValue);
 
   // Фаза 4: Пересчёт всех computed-свойств (validate, isVisible, …)
   const recomputedNodes = recomputeAll();

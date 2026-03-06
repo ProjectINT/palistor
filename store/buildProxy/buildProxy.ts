@@ -154,7 +154,7 @@ export function createBuildProxy({
 
         // Весь процесс записи делегирован write pipeline:
         // format → store → setter patch → recompute → merge changed
-        const result = writeValue(node, newValue, writeDeps);
+        const result = writeValue(node, newValue, writeDeps, previousValue);
 
         if (!result) return false;
 

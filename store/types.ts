@@ -109,7 +109,7 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
   /** Преобразует входное значение перед сохранением (например, обрезает пробелы) */
   formatter?: (value: string | boolean, values: TValues) => string | number | boolean;
   /** Сайд-эффект записи: возвращает патч других полей */
-  setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
+  setter?: (value: TValue, values: TValues, previousValue: TValue | undefined) => DeepPartialValues<TValues>;
   /** Дополнительные пропсы для UI-компонента */
   componentProps?: Readonly<Record<string, unknown>>;
   /** Список имён полей, при изменении которых пересчитывается состояние этого поля */

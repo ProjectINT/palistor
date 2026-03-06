@@ -230,8 +230,8 @@ describe("runSetter", () => {
 
     runSetter(node, "y", root, nodeState);
 
-    // Второй аргумент setter — snapshot значений
-    expect(setterSpy).toHaveBeenCalledWith("y", { source: "x", status: "active" });
+    // Второй аргумент setter — snapshot значений, третий — previousValue
+    expect(setterSpy).toHaveBeenCalledWith("y", { source: "x", status: "active" }, undefined);
   });
 });
 
