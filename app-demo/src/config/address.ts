@@ -12,9 +12,7 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
     placeholder: (t) => t("form.countryPlaceholder"),
     dependencies: [],
     // Setter — при изменении страны сбрасываем город
-    setter: (value: string, values: PaymentFormValues, setValues: any) => {
-      setValues({ country: value, city: "" }, "country");
-    },
+    setter: (value: string, _values: PaymentFormValues) => ({ country: value as Country | "", city: "" }),
   },
 
   city: {
