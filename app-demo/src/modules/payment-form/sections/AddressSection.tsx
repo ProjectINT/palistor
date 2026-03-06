@@ -29,9 +29,9 @@ export function AddressSection() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Select
           options={countryOptions}
-          renderLabel={(option) => t(option.label)}
+          renderLabel={(option: SelectOption) => t(option.label)}
           selectedKeys={form.country.value ? [form.country.value] : []}
-          onSelectionChange={(keys) => {
+          onSelectionChange={(keys: Set<string>) => {
             const value = Array.from(keys)[0] as "" | Country;
             form.country.value = value;
           }}
@@ -40,9 +40,9 @@ export function AddressSection() {
         <Select
           {...form.city}
           options={cityOptions}
-          renderLabel={(option) => t(option.label)}
+          renderLabel={(option: SelectOption) => t(option.label)}
           selectedKeys={form.city.value ? [form.city.value] : []}
-          onSelectionChange={(keys) => {
+          onSelectionChange={(keys: Set<string>) => {
             const value = Array.from(keys)[0] as string;
             form.city.value = value;
           }}

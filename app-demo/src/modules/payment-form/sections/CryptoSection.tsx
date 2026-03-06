@@ -24,9 +24,9 @@ export function CryptoSection() {
         <Select
           {...form.cryptoNetwork}
           options={options}
-          renderLabel={(option) => t(option.label)}
+          renderLabel={(option: SelectOption) => t(option.label)}
           selectedKeys={form.cryptoNetwork.value ? [form.cryptoNetwork.value] : []}
-          onSelectionChange={(keys) => {
+          onSelectionChange={(keys: Set<string>) => {
             const value = Array.from(keys)[0] as CryptoNetwork;
             form.cryptoNetwork.value = value;
           }}

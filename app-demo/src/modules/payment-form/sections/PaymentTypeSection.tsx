@@ -20,9 +20,9 @@ export function PaymentTypeSection() {
     <Section title={t("sections.paymentType")}>
       <Select
         options={options}
-        renderLabel={(option) => t(option.label)}
+        renderLabel={(option: SelectOption) => t(option.label)}
         selectedKeys={form.paymentType.value ? [form.paymentType.value] : []}
-        onSelectionChange={(keys) => {
+        onSelectionChange={(keys: Set<string>) => {
           const value = Array.from(keys)[0] as PaymentType;
           form.paymentType.value = value;
         }}

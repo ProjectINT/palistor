@@ -22,9 +22,9 @@ export function AccountTypeSection() {
       <div className="space-y-4">
         <Select
           options={options}
-          renderLabel={(option) => t(option.label)}
+          renderLabel={(option: SelectOption) => t(option.label)}
           selectedKeys={form.accountType.value ? [form.accountType.value] : []}
-          onSelectionChange={(keys) => {
+          onSelectionChange={(keys: Set<string>) => {
             const value = Array.from(keys)[0] as AccountType;
             form.accountType.value = value;
           }}
