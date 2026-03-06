@@ -95,6 +95,7 @@ export function computeFieldState(
   currentValue: any,
   allValues: Record<string, any>,
   revalidate = true,
+  translate?: TranslateFn,
 ): FieldState {
   // Вычисляем флаги
   const isVisible  = resolveFlag(configNode.isVisible, allValues, true);
@@ -120,7 +121,8 @@ export function computeFieldState(
     }
     // Custom validate (runs even if isRequired already failed — custom message takes priority)
     if (typeof configNode.validate === "function") {
-      const result = configNode.validate(currentValue, allValues);
+      const t: TranslateFn = translate ?? ((v: string) => v);
+      const result = configNode.validate(currentValue, allValues, t);
       if (result) {
         error = Boolean(result);
         errorMessage = result;

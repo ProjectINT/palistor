@@ -18,9 +18,11 @@
     "url": "https://github.com/ProjectINT/palistor"
   },
   "peerDependencies": {
-    "react": "^18.0.0"
+    "react": "^19"
   },
   "devDependencies": {
-    "@types/react": "^19.2.14"
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19"
   }
 }

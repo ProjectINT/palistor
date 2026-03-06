@@ -3,7 +3,7 @@ import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes } from "./registerNodes";
 import { recomputeAll as _recomputeAll } from "./recomputeAll";
-import type { TranslateFn } from "../core/types";
+import type { TranslateFn } from "./types";
 import { createPersistManager } from "./persist/persistManager";
 import { buildNodeMaps } from "./nodeMap";
 import { executeReset, type ResetDeps } from "./resetPipeline";
@@ -95,7 +95,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   let notifier: NotifyFn = () => {};
 
   /** Стабильная функция перевода, делегирует в текущий translator. */
-  const translate: TranslateFn = (key, params) => translator(key, params);
+  const translate: TranslateFn = (...args: any[]) => translator(...args);
 
   /** Стабильная функция уведомления, делегирует в текущий notifier. */
   const notify: NotifyFn = (...args) => notifier(...args);
@@ -113,7 +113,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
   function recomputeAll(): Set<object> {
-    return _recomputeAll(rootConfig, leafNodes, nodeState);
+    return _recomputeAll(rootConfig, leafNodes, nodeState, translate);
   }
 
   // Выполняем инициализацию

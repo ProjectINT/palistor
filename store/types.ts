@@ -3,8 +3,9 @@ import type { PersistManager } from "./persist/persistManager";
 /**
  * Функция перевода (next-intl, i18next, …).
  * label/placeholder/description в конфиге могут быть функцией от TranslateFn.
+ * Принимает любое количество аргументов — совместима с next-intl `t`, i18next `t` и др.
  */
-export type TranslateFn = (key: string, values?: Record<string, unknown>) => string;
+export type TranslateFn = (...args: any[]) => string;
 
 /**
  * Тип конфигурации формы: объект, где каждый ключ — узел конфига с типами TValues.
@@ -107,7 +108,7 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
    * Возвращает строку с ошибкой или falsy-значение если поле валидно.
    * `false` допускается для удобства паттерна `!v && "required"`.
    */
-  validate?: (value: TValue, values: TValues) => string | undefined | false;
+  validate?: (value: TValue, values: TValues, t: TranslateFn) => string | undefined | false;
   /** Преобразует входное значение перед сохранением (например, обрезает пробелы) */
   formatter?: (value: string | boolean, values: TValues) => string | number | boolean;
   /** Сайд-эффект записи: возвращает патч других полей */

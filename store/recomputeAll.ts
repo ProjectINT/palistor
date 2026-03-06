@@ -1,5 +1,6 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
+import type { TranslateFn } from "./types";
 
 /**
  * Топологическая сортировка computed-узлов по dependencies.
@@ -88,6 +89,7 @@ export function recomputeAll(
   rootConfig: AnyConfigNode,
   leafNodes: Array<{ node: AnyConfigNode; path: string }>,
   nodeState: WeakMap<object, FieldState>,
+  translate?: TranslateFn,
 ): Set<object> {
   // ── Фаза 1: Пересчёт computed-значений ──────────────────────────────────
   const computedEntries = leafNodes.filter(({ node }) => typeof node.value === "function");
@@ -116,7 +118,7 @@ export function recomputeAll(
     const currentValue = prev?.value ?? "";
     // Preserve revalidate flag: skip validation when revalidate is false
     const revalidate = prev?.revalidate ?? false;
-    const next = computeFieldState(node, currentValue, allValues, revalidate);
+    const next = computeFieldState(node, currentValue, allValues, revalidate, translate);
 
     // Preserve management flags that computeFieldState doesn't produce
     if (prev?.submitting !== undefined) next.submitting = prev.submitting;
