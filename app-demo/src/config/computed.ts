@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor/core/types";
+import type { TranslateFn, FormConfig } from "@palistor";
 
 export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' | 'total'> = {
   price: {

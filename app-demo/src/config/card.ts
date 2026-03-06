@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor/core/types";
+import type { TranslateFn, FormConfig } from "@palistor";
 
 export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpiry' | 'cardCvv'> = {
   cardNumber: {

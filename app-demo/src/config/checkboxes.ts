@@ -1,4 +1,4 @@
-import type { TranslateFn, FormConfig } from "@palistor/core/types";
+import type { TranslateFn, FormConfig } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
 export const checkboxes: Pick<FormConfig<PaymentFormValues>, 'agreeTerms' | 'newsletter'> = {

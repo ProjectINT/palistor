@@ -1,5 +1,5 @@
 import type { Country, PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor/core/types";
+import type { TranslateFn, FormConfig } from "@palistor";
 
 export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | 'shippingCost'> = {
   country: {

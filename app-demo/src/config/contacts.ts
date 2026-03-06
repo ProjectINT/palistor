@@ -1,4 +1,4 @@
-import type { TranslateFn, FormConfig } from "@palistor/core/types";
+import type { TranslateFn, FormConfig } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
 export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | 'name'> = {

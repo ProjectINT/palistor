@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor/core/types";
+import type { TranslateFn, FormConfig } from "@palistor";
 
 export const crypto: Pick<FormConfig<PaymentFormValues>, 'cryptoWallet' | 'cryptoNetwork'> = {
   cryptoWallet: {
