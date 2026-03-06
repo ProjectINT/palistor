@@ -28,9 +28,9 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
     label: (t) => t("form.phone"),
     placeholder: (t) => t("form.phonePlaceholder"),
     dependencies: [],
-    formatter: (value: string) => {
+    formatter: (value) => {
       // Простой форматтер для телефона
-      const digits = value.replace(/\D/g, "").slice(0, 11);
+      const digits = String(value).replace(/\D/g, "").slice(0, 11);
       if (digits.length === 0) return "";
       if (digits.length <= 1) return `+${digits}`;
       if (digits.length <= 4) return `+${digits.slice(0, 1)} (${digits.slice(1)}`;

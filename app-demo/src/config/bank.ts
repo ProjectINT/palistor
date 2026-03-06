@@ -13,7 +13,7 @@ export const bank: Pick<FormConfig<PaymentFormValues>, 'bankAccount' | 'bankBik'
     isVisible: (values: PaymentFormValues) => values.paymentType === "bank",
     isRequired: (values: PaymentFormValues) => values.paymentType === "bank",
     dependencies: ["paymentType"],
-    formatter: (value: string) => value.replace(/\D/g, "").slice(0, 20),
+    formatter: (value) => String(value).replace(/\D/g, "").slice(0, 20),
     validate: (value: string, values: PaymentFormValues) => {
       if (values.paymentType !== "bank") return;
       if (value.length < 20) {
@@ -32,7 +32,7 @@ export const bank: Pick<FormConfig<PaymentFormValues>, 'bankAccount' | 'bankBik'
     isVisible: (values: PaymentFormValues) => values.paymentType === "bank",
     isRequired: (values: PaymentFormValues) => values.paymentType === "bank",
     dependencies: ["paymentType"],
-    formatter: (value: string) => value.replace(/\D/g, "").slice(0, 9),
+    formatter: (value) => String(value).replace(/\D/g, "").slice(0, 9),
     validate: (value: string, values: PaymentFormValues) => {
       if (values.paymentType !== "bank") return;
       if (value.length < 9) {

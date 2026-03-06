@@ -37,8 +37,8 @@ export function formatValue(
   if (typeof node.formatter !== "function") return rawValue;
 
   const allValues = collectValues(rootConfig, nodeState);
-  return (node.formatter as (v: unknown, vals: Record<string, unknown>) => unknown)(
-    rawValue,
+  return (node.formatter as (v: string | boolean, vals: Record<string, unknown>) => string | number | boolean)(
+    rawValue as string | boolean,
     allValues,
   );
 }

@@ -14,8 +14,8 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
     // Форматтер — добавляем пробелы каждые 4 цифры
-    formatter: (value: string) => {
-      const digits = value.replace(/\D/g, "").slice(0, 16);
+    formatter: (value) => {
+      const digits = String(value).replace(/\D/g, "").slice(0, 16);
       return digits.replace(/(.{4})/g, "$1 ").trim();
     },
     validate: (value: string, values: PaymentFormValues) => {
@@ -37,8 +37,8 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
     isVisible: (values: PaymentFormValues) => values.paymentType === "card",
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
-    formatter: (value: string) => {
-      const digits = value.replace(/\D/g, "").slice(0, 4);
+    formatter: (value) => {
+      const digits = String(value).replace(/\D/g, "").slice(0, 4);
       if (digits.length >= 2) {
         return digits.slice(0, 2) + "/" + digits.slice(2);
       }
@@ -64,7 +64,7 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
     isVisible: (values: PaymentFormValues) => values.paymentType === "card",
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
-    formatter: (value: string) => value.replace(/\D/g, "").slice(0, 3),
+    formatter: (value) => String(value).replace(/\D/g, "").slice(0, 3),
     validate: (value: string, values: PaymentFormValues) => {
       if (values.paymentType !== "card") return;
       if (value.length < 3) {

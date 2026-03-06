@@ -107,7 +107,7 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
    */
   validate?: (value: TValue, values: TValues) => string | undefined | false;
   /** Преобразует входное значение перед сохранением (например, обрезает пробелы) */
-  formatter?: (value: unknown, values: TValues) => TValue;
+  formatter?: (value: string | boolean, values: TValues) => string | number | boolean;
   /** Сайд-эффект записи: возвращает патч других полей */
   setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
   /** Дополнительные пропсы для UI-компонента */
