@@ -21,9 +21,9 @@ export const passport: FormConfig<PaymentFormValues> = {
       label: (t: TranslateFn) => t("form.passport.number"),
       placeholder: (t: TranslateFn) => t("form.passport.numberPlaceholder"),
       isRequired: true,
-      validate: (value: string) => {
+      validate: (value: string, _values: PaymentFormValues, t: TranslateFn) => {
         if (!value || value.length < 6) {
-          return "form.passport.numberTooShort";
+          return t("form.passport.numberTooShort");
         }
         return undefined;
       },
@@ -37,14 +37,14 @@ export const passport: FormConfig<PaymentFormValues> = {
       value: "",
       label: (t: TranslateFn) => t("form.passport.issueDate"),
       isRequired: true,
-      validate: (value: string) => {
+      validate: (value: string, _values: PaymentFormValues, t: TranslateFn) => {
         if (!value) {
-          return "validation.required";
+          return t("validation.required");
         }
         // Проверяем что дата не в будущем
         const date = new Date(value);
         if (date > new Date()) {
-          return "form.passport.issueDateFuture";
+          return t("form.passport.issueDateFuture");
         }
         return undefined;
       },
@@ -57,20 +57,20 @@ export const passport: FormConfig<PaymentFormValues> = {
     expiryDate: {
       value: "",
       label: (t: TranslateFn) => t("form.passport.expiryDate"),
-      validate: (value: string, values: PaymentFormValues) => {
+      validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
         if (!value) return undefined;
         
         // Проверяем что дата не в прошлом
         const date = new Date(value);
         if (date < new Date()) {
-          return "form.passport.expiryDatePast";
+          return t("form.passport.expiryDatePast");
         }
         
         // Проверяем что дата выдачи раньше даты окончания
         if (values.passport?.issueDate) {
           const issueDate = new Date(values.passport.issueDate);
           if (date <= issueDate) {
-            return "form.passport.expiryDateBeforeIssue";
+            return t("form.passport.expiryDateBeforeIssue");
           }
         }
         

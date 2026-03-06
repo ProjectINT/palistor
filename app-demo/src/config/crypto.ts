@@ -13,10 +13,10 @@ export const crypto: Pick<FormConfig<PaymentFormValues>, 'cryptoWallet' | 'crypt
     isVisible: (values: PaymentFormValues) => values.paymentType === "crypto",
     isRequired: (values: PaymentFormValues) => values.paymentType === "crypto",
     dependencies: ["paymentType"],
-    validate: (value: string, values: PaymentFormValues) => {
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
       if (values.paymentType !== "crypto") return;
       if (value.length < 20) {
-        return "validation.cryptoWalletInvalid";
+        return t("validation.cryptoWalletInvalid");
       }
     },
   },

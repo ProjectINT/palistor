@@ -18,11 +18,11 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
       const digits = String(value).replace(/\D/g, "").slice(0, 16);
       return digits.replace(/(.{4})/g, "$1 ").trim();
     },
-    validate: (value: string, values: PaymentFormValues) => {
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
       if (values.paymentType !== "card") return;
       const digits = value.replace(/\D/g, "");
       if (digits.length < 16) {
-        return "validation.cardNumberInvalid";
+        return t("validation.cardNumberInvalid");
       }
     },
   },
@@ -44,11 +44,11 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
       }
       return digits;
     },
-    validate: (value: string, values: PaymentFormValues) => {
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
       if (values.paymentType !== "card") return;
       const digits = value.replace(/\D/g, "");
       if (digits.length < 4) {
-        return "validation.cardExpiryInvalid";
+        return t("validation.cardExpiryInvalid");
       }
     },
   },
@@ -65,10 +65,10 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
     formatter: (value) => String(value).replace(/\D/g, "").slice(0, 3),
-    validate: (value: string, values: PaymentFormValues) => {
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
       if (values.paymentType !== "card") return;
       if (value.length < 3) {
-        return "validation.cardCvvInvalid";
+        return t("validation.cardCvvInvalid");
       }
     },
   },

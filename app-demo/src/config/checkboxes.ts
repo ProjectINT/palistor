@@ -12,9 +12,9 @@ export const checkboxes: Pick<FormConfig<PaymentFormValues>, 'agreeTerms' | 'new
     description: (t: TranslateFn) => t("form.agreeTermsDescription"),
     isRequired: true,
     dependencies: [],
-    validate: (value: boolean) => {
+    validate: (value: boolean, _values: PaymentFormValues, t: TranslateFn) => {
       if (!value) {
-        return "validation.required";
+        return t("validation.required");
       }
     },
   },

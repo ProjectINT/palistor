@@ -12,9 +12,9 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
     placeholder: (t: TranslateFn) => t("form.emailPlaceholder"),
     isRequired: true,
     dependencies: [],
-    validate: (value: string) => {
+    validate: (value: string, _values: PaymentFormValues, t: TranslateFn) => {
       if (!value.includes("@")) {
-        return "validation.email";
+        return t("validation.email");
       }
     },
   },

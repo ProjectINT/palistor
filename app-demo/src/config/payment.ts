@@ -26,9 +26,9 @@ export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amoun
     placeholder: (t: TranslateFn) => t("form.amountPlaceholder"),
     isRequired: true,
     dependencies: [],
-    validate: (value: number) => {
+    validate: (value: number, _values: PaymentFormValues, t: TranslateFn) => {
       if (value <= 0) {
-        return "validation.amountMin";
+        return t("validation.amountMin");
       }
     },
   },
