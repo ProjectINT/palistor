@@ -15,6 +15,8 @@ export interface WriteDeps {
 export interface WriteResult {
   /** Все узлы, чьё состояние изменилось (для уведомления подписчиков). */
   changed: Set<object>;
+  /** True если запись пропущена — значение после форматирования совпадает с текущим. */
+  skipped?: boolean;
 }
 
 // ─── Фазы pipeline (чистые функции) ─────────────────────────────────────────
@@ -120,6 +122,12 @@ export function writeValue(
 
   // Фаза 1: Форматирование
   const processedValue = formatValue(rawValue, node, rootConfig, nodeState);
+
+  // Фаза 1.5: Проверка — значение не изменилось?
+  const currentState = nodeState.get(node);
+  if (currentState && Object.is(processedValue, currentState.value)) {
+    return { changed: new Set<object>(), skipped: true };
+  }
 
   // Фаза 2: Запись значения
   const stored = storeValue(node, processedValue, nodeState);

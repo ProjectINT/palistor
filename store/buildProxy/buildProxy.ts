@@ -158,6 +158,16 @@ export function createBuildProxy({
 
         if (!result) return false;
 
+        // Значение после форматирования совпадает с текущим — запись пропущена
+        if (result.skipped) {
+          console.warn(
+            "[Palistor] Запись пропущена: значение не изменилось. " +
+            "Возможно, ваше приложение делает лишние ре-рендеры, " +
+            "или вы пытаетесь установить значение внутри рендера.",
+          );
+          return true;
+        }
+
         notifyChanged(result.changed);
 
         // Fire onChange на группах-предках (fire-and-forget, async)

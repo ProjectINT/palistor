@@ -341,4 +341,79 @@ describe("writeValue", () => {
     expect(result!.changed.has(targetNode)).toBe(true);
     expect(nodeState.get(targetNode)!.value).toBe("new");
   });
+
+  it("возвращает skipped: true если значение не изменилось", () => {
+    const node: AnyConfigNode = { value: "hello" };
+    const root: AnyConfigNode = { field: node };
+    const nodeState = makeNodeState([[node, makeState("hello")]]);
+    const recomputeAll = vi.fn(() => new Set<object>());
+
+    const result = writeValue(node, "hello", {
+      rootConfig: root,
+      nodeState,
+      recomputeAll,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.skipped).toBe(true);
+    expect(result!.changed.size).toBe(0);
+    // recomputeAll НЕ вызван — pipeline прерван
+    expect(recomputeAll).not.toHaveBeenCalled();
+    // Значение осталось прежним
+    expect(nodeState.get(node)!.value).toBe("hello");
+  });
+
+  it("возвращает skipped: true если значение совпадает после форматирования", () => {
+    const node: AnyConfigNode = {
+      value: 42,
+      formatter: (v: unknown) => Number(v) || 0,
+    };
+    const root: AnyConfigNode = { amount: node };
+    const nodeState = makeNodeState([[node, makeState(42)]]);
+    const recomputeAll = vi.fn(() => new Set<object>());
+
+    // Передаём строку "42", formatter вернёт число 42 — совпадение
+    const result = writeValue(node, "42", {
+      rootConfig: root,
+      nodeState,
+      recomputeAll,
+    });
+
+    expect(result!.skipped).toBe(true);
+    expect(recomputeAll).not.toHaveBeenCalled();
+  });
+
+  it("не пропускает запись если значение отличается", () => {
+    const node: AnyConfigNode = { value: "hello" };
+    const root: AnyConfigNode = { field: node };
+    const nodeState = makeNodeState([[node, makeState("hello")]]);
+    const recomputeAll = vi.fn(() => new Set<object>());
+
+    const result = writeValue(node, "world", {
+      rootConfig: root,
+      nodeState,
+      recomputeAll,
+    });
+
+    expect(result!.skipped).toBeUndefined();
+    expect(result!.changed.has(node)).toBe(true);
+    expect(recomputeAll).toHaveBeenCalledOnce();
+  });
+
+  it("различает NaN корректно через Object.is", () => {
+    const node: AnyConfigNode = { value: NaN };
+    const root: AnyConfigNode = { field: node };
+    const nodeState = makeNodeState([[node, makeState(NaN)]]);
+    const recomputeAll = vi.fn(() => new Set<object>());
+
+    const result = writeValue(node, NaN, {
+      rootConfig: root,
+      nodeState,
+      recomputeAll,
+    });
+
+    // NaN === NaN через Object.is → skipped
+    expect(result!.skipped).toBe(true);
+    expect(recomputeAll).not.toHaveBeenCalled();
+  });
 });

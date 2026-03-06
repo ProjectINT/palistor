@@ -9,7 +9,7 @@ import { paymentStore, usePaymentForm } from "@/config/paymentForm";
 export function FormActions() {
   const t = useTranslations();
 
-  const { submit } = usePaymentForm()
+  const { submit } = usePaymentForm();
 
   const handleSubmit = async () => {
     const values = paymentStore.getValues();

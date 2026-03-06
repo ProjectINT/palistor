@@ -9,7 +9,7 @@ import { usePaymentForm } from "@/config/paymentForm";
 export function CommentSection() {
   const t = useTranslations();
   const form = usePaymentForm();
-
+  
   return (
     <Section title={t("sections.comment")}>
       <Input {...form.comment} />

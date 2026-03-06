@@ -33,8 +33,7 @@ export function PassportSection() {
       </div>
       
       <div className="mt-2 text-sm text-gray-500">
-        💡 Это демонстрация вложенных полей (nested fields). 
-        Доступ через точечную нотацию: <code className="bg-gray-100 px-1 rounded">passport.number</code>
+        💡 Вложенные поля (nested fields). 
       </div>
     </Section>
   );
