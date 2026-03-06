@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor";
+import type { FormConfig } from "@palistor";
 
 export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' | 'total'> = {
   price: {
@@ -8,8 +8,8 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
       type: "number"
     },
     value: 100,
-    label: (t: TranslateFn) => t("form.price"),
-    placeholder: (t: TranslateFn) => t("form.pricePlaceholder"),
+    label: (t) => t("form.price"),
+    placeholder: (t) => t("form.pricePlaceholder"),
   },
   quantity: {
     types: {
@@ -17,7 +17,7 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
       type: "number"
     },
     value: 1,
-    label: (t: TranslateFn) => t("form.quantity"),
+    label: (t) => t("form.quantity"),
   },
   total: {
     types: {
@@ -26,7 +26,7 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
     },
     // Computed value — автоматически вычисляется
     value: (values: PaymentFormValues) => values.price * values.quantity,
-    label: (t: TranslateFn) => t("form.total"),
+    label: (t) => t("form.total"),
     isReadOnly: true,
   },
 };

@@ -1,8 +1,8 @@
 import { CONFIG_NODE } from "../constants";
-import { type AnyConfigNode } from "../collectValues";
+import { collectValues, type AnyConfigNode } from "../collectValues";
 import { writeValue, type WriteDeps } from "../writePipeline";
 import type { FieldState } from "../compute";
-import type { TranslateFn } from "../../core/types";
+import type { TranslateFn } from "../types";
 import type { ResolveState } from "../resolvePipeline";
 
 import { computeProxyKeys } from "./computeProxyKeys";
@@ -114,7 +114,10 @@ export function createBuildProxy({
         // ── Вычисленное состояние поля ───────────────────────────────────
         const translatableHandler = () => {
           const configValue = node[key];
-          if (typeof configValue === "function") return configValue(translate);
+          if (typeof configValue === "function") {
+            const allValues = collectValues(rootConfig, nodeState);
+            return configValue(translate, allValues);
+          }
           return currentNode ? currentNode[key as keyof FieldState] : configValue;
         };
 

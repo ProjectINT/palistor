@@ -15,7 +15,7 @@
 
 import { createProxyStore } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
-import type { FormConfig, TranslateFn } from "@palistor";
+import type { FormConfig } from "@palistor";
 import { computed } from "./computed";
 import { card } from "./card";
 
@@ -100,8 +100,8 @@ export const paymentFormConfig = {
       type: "string"
     },
     value: "",
-    label: (t: TranslateFn) => t("form.comment"),
-    placeholder: (t: TranslateFn) => t("form.commentPlaceholder"),
+    label: (t) => t("form.comment"),
+    placeholder: (t) => t("form.commentPlaceholder"),
     dependencies: [], // Пересчёт только при изменении себя
   },
 } satisfies FormConfig<PaymentFormValues>;

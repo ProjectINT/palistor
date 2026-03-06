@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor";
+import type { FormConfig } from "@palistor";
 
 export const bank: Pick<FormConfig<PaymentFormValues>, 'bankAccount' | 'bankBik'> = {
   bankAccount: {
@@ -8,8 +8,8 @@ export const bank: Pick<FormConfig<PaymentFormValues>, 'bankAccount' | 'bankBik'
       type: "string"
     },
     value: "",
-    label: (t: TranslateFn) => t("form.bankAccount"),
-    placeholder: (t: TranslateFn) => t("form.bankAccountPlaceholder"),
+    label: (t) => t("form.bankAccount"),
+    placeholder: (t) => t("form.bankAccountPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "bank",
     isRequired: (values: PaymentFormValues) => values.paymentType === "bank",
     dependencies: ["paymentType"],
@@ -27,8 +27,8 @@ export const bank: Pick<FormConfig<PaymentFormValues>, 'bankAccount' | 'bankBik'
       type: "string"
     },
     value: "",
-    label: (t: TranslateFn) => t("form.bankBik"),
-    placeholder: (t: TranslateFn) => t("form.bankBikPlaceholder"),
+    label: (t) => t("form.bankBik"),
+    placeholder: (t) => t("form.bankBikPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "bank",
     isRequired: (values: PaymentFormValues) => values.paymentType === "bank",
     dependencies: ["paymentType"],

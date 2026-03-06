@@ -3,7 +3,7 @@
  * Демонстрирует nested структуру
  */
 
-import type { FormConfig, TranslateFn } from "@palistor";
+import type { FormConfig } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
 export const passport: FormConfig<PaymentFormValues> = {
@@ -18,8 +18,8 @@ export const passport: FormConfig<PaymentFormValues> = {
     
     number: {
       value: "",
-      label: (t: TranslateFn) => t("form.passport.number"),
-      placeholder: (t: TranslateFn) => t("form.passport.numberPlaceholder"),
+      label: (t) => t("form.passport.number"),
+      placeholder: (t) => t("form.passport.numberPlaceholder"),
       isRequired: true,
       validate: (value: string) => {
         if (!value || value.length < 6) {
@@ -35,7 +35,7 @@ export const passport: FormConfig<PaymentFormValues> = {
     
     issueDate: {
       value: "",
-      label: (t: TranslateFn) => t("form.passport.issueDate"),
+      label: (t) => t("form.passport.issueDate"),
       isRequired: true,
       validate: (value: string) => {
         if (!value) {
@@ -56,7 +56,7 @@ export const passport: FormConfig<PaymentFormValues> = {
     
     expiryDate: {
       value: "",
-      label: (t: TranslateFn) => t("form.passport.expiryDate"),
+      label: (t) => t("form.passport.expiryDate"),
       validate: (value: string, values: PaymentFormValues) => {
         if (!value) return undefined;
         

@@ -1,5 +1,5 @@
 import type { PaymentType, PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor";
+import type { FormConfig } from "@palistor";
 
 export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amount'> = {
   paymentType: {
@@ -8,7 +8,7 @@ export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amoun
       type: "PaymentType"
     },
     value: "card" as PaymentType,
-    label: (t: TranslateFn) => t("form.paymentType"),
+    label: (t) => t("form.paymentType"),
     // Пересчитывается только при изменении себя
     dependencies: [],
   },
@@ -22,8 +22,8 @@ export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amoun
       type: "number"
     },
     value: 0,
-    label: (t: TranslateFn) => t("form.amount"),
-    placeholder: (t: TranslateFn) => t("form.amountPlaceholder"),
+    label: (t) => t("form.amount"),
+    placeholder: (t) => t("form.amountPlaceholder"),
     isRequired: true,
     dependencies: [],
     validate: (value: number) => {

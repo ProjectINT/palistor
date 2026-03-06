@@ -1,4 +1,4 @@
-// ─── Вычисленное состояние поля ──────────────────────────────────────────────
+import type { TranslateFn } from "./types";
 
 /**
  * Полное вычисленное состояние одного поля.
@@ -55,14 +55,14 @@ export function resolveFlag(
 
 /**
  * Вычисляет строковое свойство (label, placeholder, description) из конфига.
- * Может быть строкой или функцией (translate, settings).
+ * Может быть строкой или функцией `(t: TranslateFn, values) => string`.
  *
  * Если translator зарегистрирован — реальный резолв происходит лениво
  * в proxy GET trap (buildProxy.ts). Здесь сохраняем fallback:
  * для функций — вызываем с identity → возвращаем ключ перевода.
  */
 export function resolveString(
-  configValue: string | ((translate: any, settings?: any) => string) | undefined,
+  configValue: string | ((t: TranslateFn, values: Record<string, any>) => string) | undefined,
   values: Record<string, any> = {},
 ): string | undefined {
   if (configValue === undefined) return undefined;

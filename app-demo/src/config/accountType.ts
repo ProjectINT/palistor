@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor";
+import type { FormConfig } from "@palistor";
 
 export const accountType: Pick<FormConfig<PaymentFormValues>, 'accountType' | 'companyName'> = {
   accountType: {
@@ -8,7 +8,7 @@ export const accountType: Pick<FormConfig<PaymentFormValues>, 'accountType' | 'c
       type: "AccountType"
     },
     value: "personal" as const,
-    label: (t: TranslateFn) => t("form.accountType"),
+    label: (t) => t("form.accountType"),
     dependencies: [] as const,
   },
 
@@ -18,8 +18,8 @@ export const accountType: Pick<FormConfig<PaymentFormValues>, 'accountType' | 'c
       type: "string"
     },
     value: "",
-    label: (t: TranslateFn) => t("form.companyName"),
-    placeholder: (t: TranslateFn) => t("form.companyNamePlaceholder"),
+    label: (t) => t("form.companyName"),
+    placeholder: (t) => t("form.companyNamePlaceholder"),
     isVisible: (values: PaymentFormValues) => values.accountType === "business",
     isRequired: (values: PaymentFormValues) => values.accountType === "business",
     dependencies: ["accountType"] as const,

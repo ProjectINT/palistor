@@ -39,13 +39,6 @@
  */
 
 // ============================================================================
-// Публичный API
-// ============================================================================
-
-export { createForm } from "./core/createForm";
-export type { CreateFormConfig, UseFormOptions, UseFormReturn } from "./core/createForm";
-
-// ============================================================================
 // Persist — драйверы и типы
 // ============================================================================
 
@@ -54,25 +47,12 @@ export type { PersistManager } from "./store/persist/persistManager";
 export { localStorageDriver, sessionStorageDriver } from "./store/persist/drivers";
 
 // ============================================================================
-// Типы для конфигурации
-// ============================================================================
-
-export type {
-  TranslateFn,
-  FieldConfig,
-  FormConfig,
-  FormState,
-  FieldProps,
-  InputValueType,
-  NestedKeyOf,
-  NestedValueOf,
-} from "./core/types";
-
-// ============================================================================
 // Типы Store (config, proxy, values)
 // ============================================================================
 
 export type {
+  TranslateFn,
+  FormConfig,
   MaybeComputed,
   DeepPartialValues,
   FieldTypeMeta,

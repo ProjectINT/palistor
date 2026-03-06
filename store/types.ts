@@ -1,5 +1,15 @@
-import type { TranslateFn } from "../core/types";
 import type { PersistManager } from "./persist/persistManager";
+
+/**
+ * Функция перевода (next-intl, i18next, …).
+ * label/placeholder/description в конфиге могут быть функцией от TranslateFn.
+ */
+export type TranslateFn = (key: string, values?: Record<string, unknown>) => string;
+
+/**
+ * Тип конфигурации формы: объект, где каждый ключ — узел конфига с типами TValues.
+ */
+export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
 import type { NotifyFn } from "./resolvePipeline";
 import type { SubmitResult } from "./submitPipeline";
 
@@ -22,6 +32,15 @@ export type Unsubscribe = () => void;
 export type MaybeComputed<TResult, TValues = Record<string, unknown>> =
   | TResult
   | ((values: TValues) => TResult);
+
+/**
+ * Используется для label / placeholder / description, которые могут быть:
+ *   - статической строкой
+ *   - `(t: TranslateFn, values: TValues) => string` — перевод + вычисление
+ */
+export type MaybeTranslatable<TResult, TValues = Record<string, unknown>> =
+  | TResult
+  | ((t: TranslateFn, values: TValues) => TResult);
 
 /**
  * Глубокая опциональная версия значений.
@@ -79,9 +98,9 @@ export interface FieldTypeMeta {
 export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>> {
   // ─── Поле (если есть value — узел считается листовым) ──────────────────
   value?: MaybeComputed<TValue, TValues>;
-  label?: MaybeComputed<string, TValues>;
-  placeholder?: MaybeComputed<string, TValues>;
-  description?: MaybeComputed<string, TValues>;
+  label?: MaybeTranslatable<string, TValues>;
+  placeholder?: MaybeTranslatable<string, TValues>;
+  description?: MaybeTranslatable<string, TValues>;
   /**
    * Возвращает строку с ошибкой или falsy-значение если поле валидно.
    * `false` допускается для удобства паттерна `!v && "required"`.

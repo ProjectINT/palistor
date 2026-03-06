@@ -1,12 +1,12 @@
 import { Checkbox as HeroUICheckbox } from "@heroui/react";
-import { ComputedFieldState } from "../../../core/types";
+import type { FieldProxyNode } from "@palistor";
 
-interface CheckboxProps extends Omit<React.ComponentProps<typeof HeroUICheckbox>, keyof ComputedFieldState> {
+interface CheckboxProps extends Omit<React.ComponentProps<typeof HeroUICheckbox>, keyof FieldProxyNode<boolean>> {
   children?: React.ReactNode;
   isSelected?: boolean;
 }
 
-export function Checkbox(props: ComputedFieldState & Partial<CheckboxProps>) {
+export function Checkbox(props: FieldProxyNode<boolean> & Partial<CheckboxProps>) {
   const { isVisible, error, value, description, errorMessage, ...restProps } = props;
 
   if (!isVisible) {

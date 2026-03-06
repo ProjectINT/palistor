@@ -1,5 +1,5 @@
 import type { PaymentFormValues } from "./types";
-import type { TranslateFn, FormConfig } from "@palistor";
+import type { FormConfig } from "@palistor";
 
 export const crypto: Pick<FormConfig<PaymentFormValues>, 'cryptoWallet' | 'cryptoNetwork'> = {
   cryptoWallet: {
@@ -8,8 +8,8 @@ export const crypto: Pick<FormConfig<PaymentFormValues>, 'cryptoWallet' | 'crypt
       type: "string"
     },
     value: "",
-    label: (t: TranslateFn) => t("form.cryptoWallet"),
-    placeholder: (t: TranslateFn) => t("form.cryptoWalletPlaceholder"),
+    label: (t) => t("form.cryptoWallet"),
+    placeholder: (t) => t("form.cryptoWalletPlaceholder"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "crypto",
     isRequired: (values: PaymentFormValues) => values.paymentType === "crypto",
     dependencies: ["paymentType"],
@@ -27,7 +27,7 @@ export const crypto: Pick<FormConfig<PaymentFormValues>, 'cryptoWallet' | 'crypt
       type: "CryptoNetwork"
     },
     value: "ethereum",
-    label: (t: TranslateFn) => t("form.cryptoNetwork"),
+    label: (t) => t("form.cryptoNetwork"),
     isVisible: (values: PaymentFormValues) => values.paymentType === "crypto",
     isRequired: (values: PaymentFormValues) => values.paymentType === "crypto",
     dependencies: ["paymentType"],
