@@ -43,7 +43,7 @@
 - [X] `onSubmit(values) → result` — собственно отправка
 - [X] `afterSubmit(result, reset) → void` — пост-обработка
 - [X] Флаг `submitting` (boolean) с подпиской
-- [ ] Очистка persist после успешного submit
+- [X] Очистка persist после успешного submit
 
 **Решение:** реализовать в `useForm` на уровне React (не в store), т.к. `onSubmit` — async колбэк из React-контекста. Store остаётся чистым хранилищем.
 

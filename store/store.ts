@@ -181,6 +181,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     recomputeAll,
     notifyChanged,
     resetNode,
+    clearPersist: () => persistManager.clear(),
   };
   const submitNode = (node: AnyConfigNode) => executeSubmit(node, submitDeps);
 

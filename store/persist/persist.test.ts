@@ -334,4 +334,73 @@ describe("PersistManager", () => {
       expect(store.proxy.email.value).toBe("key2@test.com");
     });
   });
+
+  // ─── Очистка persist после успешного submit ────────────────────────────────
+
+  describe("clear on successful submit", () => {
+    it("persist storage очищается после успешного submit", async () => {
+      const config = {
+        email: { value: "", label: "Email", isRequired: true },
+        name: { value: "", label: "Name" },
+        onSubmit: async () => ({ ok: true }),
+      };
+      const store = createProxyStore({ config });
+
+      await store.persist.enable({ key: "submit-clear", driver });
+
+      // Записываем значения
+      store.proxy.email.value = "test@test.com";
+      store.proxy.name.value = "John";
+      await store.persist.flush();
+
+      // Убеждаемся что данные в storage
+      expect(driver.storage.has("submit-clear")).toBe(true);
+
+      // Успешный submit
+      const result = await store.submit();
+      expect(result.success).toBe(true);
+
+      // Storage очищен
+      expect(driver.storage.has("submit-clear")).toBe(false);
+    });
+
+    it("persist storage НЕ очищается при неуспешном submit (validation errors)", async () => {
+      const config = {
+        email: {
+          value: "",
+          label: "Email",
+          isRequired: true,
+          validate: (v: string) => (!v ? "required" : undefined),
+        },
+        name: { value: "", label: "Name" },
+      };
+      const store = createProxyStore({ config });
+
+      await store.persist.enable({ key: "submit-fail", driver });
+
+      store.proxy.name.value = "John";
+      await store.persist.flush();
+
+      expect(driver.storage.has("submit-fail")).toBe(true);
+
+      // Submit fails из-за валидации email
+      const result = await store.submit();
+      expect(result.success).toBe(false);
+
+      // Storage НЕ очищен
+      expect(driver.storage.has("submit-fail")).toBe(true);
+    });
+
+    it("persist storage НЕ очищается если persist не активен", async () => {
+      const config = {
+        email: { value: "", label: "Email" },
+        onSubmit: async () => ({ ok: true }),
+      };
+      const store = createProxyStore({ config });
+
+      // Persist НЕ включен — submit не должен падать
+      const result = await store.submit();
+      expect(result.success).toBe(true);
+    });
+  });
 });

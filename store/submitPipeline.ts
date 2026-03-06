@@ -15,6 +15,8 @@ export interface SubmitDeps {
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
   resetNode: (groupNode: AnyConfigNode, values?: Record<string, unknown>) => void;
+  /** Очистить persist-хранилище после успешного submit. */
+  clearPersist?: () => Promise<void>;
 }
 
 // ─── Внутренние утилиты ──────────────────────────────────────────────────────
@@ -167,9 +169,14 @@ export async function executeSubmit(
       )(result, { reset });
     }
 
+    // 8. Очистка persist после успешного submit
+    if (deps.clearPersist) {
+      await deps.clearPersist();
+    }
+
     return { success: true, result };
   } finally {
-    // 8. submitting = false → update nodeState → recompute → notify
+    // 9. submitting = false → update nodeState → recompute → notify
     const finalState = nodeState.get(groupNode);
     nodeState.set(groupNode, { ...finalState!, submitting: false });
     const changed2 = recomputeAll();
