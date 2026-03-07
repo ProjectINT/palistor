@@ -122,8 +122,8 @@ export async function executeSubmit(
   notifyChanged(changed1);
 
   try {
-    // 2. Собрать значения (без $submitting — это внутреннее свойство)
-    let values = collectValues(groupNode, nodeState, true);
+    // 2. Собрать значения поддерева
+    let values = collectValues(groupNode, nodeState);
 
     // 3. Leaf-level beforeSubmit
     values = applyLeafBeforeSubmit(groupNode, values);

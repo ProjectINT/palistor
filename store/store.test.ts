@@ -389,7 +389,7 @@ describe("createProxyStore", () => {
       expect(spread).not.toHaveProperty("types");
     });
 
-    it("spread содержит все FIELD_STATE_PROPS и onValueChange", () => {
+    it("spread содержит все SPREADABLE_FIELD_STATE_PROPS и onValueChange", () => {
       const store = createProxyStore({ config: makeConfig() });
       const spread = { ...store.proxy.email };
 
@@ -401,8 +401,11 @@ describe("createProxyStore", () => {
       expect(spread).toHaveProperty("isReadOnly");
       expect(spread).toHaveProperty("error");
       expect(spread).toHaveProperty("errorMessage");
-      expect(spread).toHaveProperty("dirty");
       expect(spread).toHaveProperty("onValueChange");
+
+      // dirty и loading исключены из spread листового узла
+      expect(spread).not.toHaveProperty("dirty");
+      expect(spread).not.toHaveProperty("loading");
     });
 
     it("Object.keys не содержит внутренних ключей конфига", () => {
@@ -417,13 +420,20 @@ describe("createProxyStore", () => {
       expect(keys).toContain("onValueChange");
     });
 
-    it("spread группового узла содержит дочерние ключи", () => {
+    it("spread группового узла содержит GROUP_SPREAD_KEYS", () => {
       const store = createProxyStore({ config: makeConfig() });
       const keys = Object.keys(store.proxy.passport);
 
-      expect(keys).toContain("number");
-      expect(keys).toContain("issueDate");
-      // Не содержит служебные ключи
+      // Групповой узел спредит только служебные ключи
+      expect(keys).toContain("submitting");
+      expect(keys).toContain("dirty");
+      expect(keys).toContain("loading");
+      expect(keys).toContain("submit");
+      expect(keys).toContain("reset");
+
+      // Дочерние и внутренние ключи не попадают в spread
+      expect(keys).not.toContain("number");
+      expect(keys).not.toContain("issueDate");
       expect(keys).not.toContain("validate");
       expect(keys).not.toContain("formatter");
     });

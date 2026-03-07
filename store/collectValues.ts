@@ -25,19 +25,8 @@ export interface AnyConfigNode {
 export function collectValues(
   node: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
-  /** When true, strips $submitting from output (for public API / submit values). */
-  stripInternal = false,
 ): Record<string, unknown> {
   const result = new Map<string, unknown>();
-
-  // Инжектируем $submitting текущего узла (группы) в values,
-  // чтобы config-функции могли использовать: isDisabled: (v) => v.$submitting
-  if (!stripInternal) {
-    const nodeSt = nodeState.get(node);
-    if (nodeSt?.submitting !== undefined) {
-      result.set("$submitting", nodeSt.submitting);
-    }
-  }
 
   for (const key of Object.keys(node)) {
     // Пропускаем служебные ключи узла конфига (value, label, validate, formatter…).
@@ -55,7 +44,7 @@ export function collectValues(
       result.set(key, nodeState.get(child)?.value ?? "");
     } else {
       // Групповой узел — рекурсируем, чтобы собрать вложенные значения
-      result.set(key, collectValues(child, nodeState, stripInternal));
+      result.set(key, collectValues(child, nodeState));
     }
   }
 

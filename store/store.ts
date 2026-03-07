@@ -219,7 +219,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Persist ────────────────────────────────────────────────────────────────
 
-  const getValues = () => collectValues(rootConfig, nodeState, true) as ExtractValues<TConfig>;
+  const getValues = () => collectValues(rootConfig, nodeState) as ExtractValues<TConfig>;
 
   const persistManager = createPersistManager({
     rootConfig,
