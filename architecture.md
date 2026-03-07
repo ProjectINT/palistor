@@ -52,18 +52,19 @@
 ## Write Pipeline
 
 ```
-form.email.value = "X"
+form.email.value = "X"   (SET trap в buildProxy)
   │
   ├─ 1. formatValue()       node.formatter(raw, allValues)
+  ├─ 1.5 skip?              Object.is(formatted, current) → skipped (warn)
   ├─ 2. storeValue()        nodeState.set(node, { ...state, value })
-  ├─ 3. runSetter()         node.setter(value, allValues) → patch → applyPatch()
-  ├─ 4. recomputeAll()      resolveFlag + validate для каждого листа → changed: Set<node>
-  └─ 5. notifyChanged()
-         ├─ recomputeDirty
-         ├─ nodeVersions[node]++ для changed-нод
-         ├─ globalListeners → useSyncExternalStore → getSnapshot()
-         ├─ onChange pipeline (fire-and-forget, поднимается к предкам)
-         └─ findResolvesToRetrigger → resetResolveState → triggerResolve
+  ├─ 3. runSetter()         node.setter(value, allValues, prev) → patch → applyPatch()
+  ├─ 4. recomputeAll()      computed values (topo-sort) + computeFieldState для каждого листа
+  ├─ 5. notifyChanged()
+  │      ├─ recomputeDirty
+  │      ├─ nodeVersions[node]++ для changed-нод
+  │      ├─ globalListeners → useSyncExternalStore → getSnapshot()
+  │      └─ postNotifyHook → findResolvesToRetrigger → resetResolveState → triggerResolve
+  └─ 6. onFieldChange()     fire-and-forget onChange (поднимается к предкам)
 ```
 
 ---
@@ -71,10 +72,16 @@ form.email.value = "X"
 ## Submit Pipeline
 
 ```
-form.submit()
-  ├─ setGroupRevalidate(true) + recomputeAll() + notifyChanged()
-  ├─ collectLeafStates() → есть ошибки? → { success: false, errors }
-  └─ applyBeforeSubmit() → node.onSubmit(values) → afterSubmit() → { success: true }
+form.submit()                (executeSubmit)
+  ├─ 1. submitting = true, setGroupRevalidate(true) → recomputeAll → notifyChanged
+  ├─ 2. collectValues()
+  ├─ 3. applyLeafBeforeSubmit()   leaf-level beforeSubmit на snapshot
+  ├─ 4. group beforeSubmit()      group-level beforeSubmit
+  ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
+  ├─ 6. onSubmit(values) → result
+  ├─ 7. afterSubmit(result, { reset })
+  ├─ 8. clearPersist()
+  └─ finally: submitting = false → recomputeAll → notifyChanged
 ```
 
 ---
@@ -86,8 +93,11 @@ GET form.car → узел idle → triggerResolve()
   ├─ optimisticResolver → applyPatch, loading: true, notifyChanged
   └─ resolver(trackingProxy)         ← auto-deps: read → accessedPaths, write → buffer
        ├─ OK  → batch flush: applyPatch(result) + buffered writes, loading: false,
-       │        status: resolved, save auto-deps, recomputeAll, notifyChanged (1 раз)
-       └─ ERR → onError(err, { notify }), loading: false, status: error
+       │        status: resolved, save auto-deps, mergeInitialValues (dirty baseline),
+       │        recomputeAll, notifyChanged (1 раз)
+       ├─ ERR → retry до attempts раз (delay ms) → при исчерпании:
+       │        onError(err, { notify }), loading: false, status: error
+       └─ always: recomputeAll + notifyChanged
 
 Deps: явные (config) ∪ auto-deps (из tracking proxy resolver'а)
 При изменении dep: notifyChanged → findResolvesToRetrigger → resetResolveState → triggerResolve
@@ -117,25 +127,41 @@ SET form.email.value → emailNode++ → getSnapshot → изменилось �
 ```
 store/
   store.ts              главная фабрика createProxyStore
-  buildProxy.ts         Proxy слой 1: config → FieldState + resolve trigger
-  writePipeline.ts      format → store → setter → recompute
+  types.ts              ConfigNode, ProxyStore, ExtractValues и др.
+  compute.ts            FieldState, computeFieldState, resolveFlag
+  constants.ts          символы CONFIG_NODE / SOURCE_PROXY / STORE_REF,
+                        наборы FIELD_STATE_PROPS / CONFIG_PROPS /
+                        INTERNAL_CONFIG_KEYS / GROUP_SPREAD_KEYS
+  writePipeline.ts      format → skip? → store → setter → recompute
+  submitPipeline.ts     submitting → beforeSubmit → validate → onSubmit → afterSubmit
+  resetPipeline.ts      collectDefaults / collectInitialSnapshot → applyPatch → recompute
   resolvePipeline.ts    async resolve: init, execute, retry, auto-deps
-  submitPipeline.ts     validate → beforeSubmit → onSubmit → afterSubmit
-  recomputeAll.ts       пересчёт всех листьев после изменения
+  recomputeAll.ts       topo-sort computed + computeFieldState для всех листьев
   onChangePipeline.ts   fire-and-forget onChange для предков
   applyPatch.ts         применение патчей к дереву
   collectValues.ts      снапшот значений для computed/validate/resolve
   registerNodes.ts      инициализация leafNodes + nodeState
-  dirtyTracking.ts      dirty от initial
+  dirtyTracking.ts      dirty от initial (captureInitialValues + recomputeDirty)
   nodeMap.ts            nodePaths + nodeParents
+  hasComputedProps.ts   проверка: есть ли computed-свойства у группы
   createValuesTrackingProxy.ts  tracking write-proxy для resolver
-  constants.ts          символы CONFIG_NODE / SOURCE_PROXY / STORE_REF,
-                        наборы FIELD_STATE_PROPS / CONFIG_PROPS
-  persist/              персистенция (localStorage и др.)
+  buildProxy/
+    buildProxy.ts       Proxy слой 1: config → FieldState + resolve trigger
+    computeProxyKeys.ts ownKeys для spread (field / group)
+    handleLazyResolve.ts  lazy resolve trigger при GET группы
+    initProxyCaches.ts    WeakMap-кэши (onValueChange, submit, reset)
+    translatableProps.ts  набор {label, placeholder, description}
+  init/
+    createNotificationHub.ts  версионирование + подписки + dirty + postNotifyHook
+    createResolveManager.ts   resolve subsystem: trigger, retrigger, eager launch
+    initGroupSubmitting.ts    submitting/dirty/revalidate для групповых узлов
+  persist/              персистенция (localStorage, sessionStorage)
 react/
   useForm.ts            useSyncExternalStore + tracking proxy
   createTrackingProxy.ts  Proxy слой 2: запись accessed нод
-  usePersist.ts / useTranslator.ts / useNotifier.ts
+  useTranslator.ts      регистрация функции перевода (i18n)
+  useNotifier.ts        регистрация функции уведомлений (toast)
+  usePersist.ts         React-хук для подключения persist
 ```
 
 ---
@@ -155,34 +181,41 @@ react/
 
 ---
 
-## createForm + useForm(id)
+## createProxyStore + useForm
 
-`createForm` — модульный уровень, статичная конфигурация, возвращает типизированный `useForm`.  
-`useForm(id)` — React-хук, находит или создаёт store в registry по `type:id`, вызывает `translateFunction()`.
+`createProxyStore(options)` — фабрика, создаёт ProxyStore с конфигом и начальными значениями.  
+`useForm(store | subtree)` — React-хук, подключает компонент к store через tracking proxy.
 
 ```ts
-export const { useForm } = createForm<OrderValues>({
+// Создание store (вне React)
+const store = createProxyStore<Config>({
   config: orderConfig,
-  defaults: orderDefaults,
-  translateFunction: useTranslations, // ссылка на хук, вызовется внутри useForm
-  type: "Order",                      // registry key: "Order:NewOrder", "Order:abc-123"
+  initialValues: { email: "user@example.com" },
 });
 
 // Корневой компонент
-const { getFieldProps, submit } = useForm(order?.id ?? "NewOrder", {
-  initial: order,       // мержится в non-dirty поля при смене ссылки
-  onSubmit, afterSubmit, onChange, beforeSubmit,
-});
+function App() {
+  useTranslator(store, useTranslations());  // i18n
+  useNotifier(store, notifyError);          // toast для resolve onError
+  usePersist(store, { key: "order", driver: localStorageDriver });
 
-// Вложенный компонент — только id
-const { getFieldProps } = useForm(orderId);
+  const form = useForm(store);
+  return <PassportSection passport={form.passport} />;
+}
+
+// Вложенный компонент — принимает поддерево из пропса
+function PassportSection({ passport }) {
+  const p = useForm(passport);  // ← независимый tracking proxy
+  if (!p.isVisible) return null;
+  return <input value={p.number.value} onChange={e => { p.number.value = e.target.value }} />;
+}
 ```
 
 **Ключевые решения:**
 - Состояние вне React — React подписывается через `useSyncExternalStore`
-- Нет PalistorProvider — `translateFunction` вызывается внутри `useForm` (уже в React-дереве)
-- `initial` мержится только в non-dirty поля, сравнение по ссылке (`Object.is`)
-- Колбэки (`onSubmit`, `onChange`) хранятся в `useRef` → всегда актуальная версия
-- `getFieldProps` — фактически хук (внутри `useSyncExternalStore`), не вызывать в условиях/циклах
+- i18n / notifications подключаются хуками (`useTranslator`, `useNotifier`), не провайдером
+- `useForm(subtree)` принимает tracking proxy поддерево → независимый ре-рендер
+- Колбэки submit/reset/onChange задаются в конфиге, не при вызове useForm
+- `{...form.email}` — spread-safe: скрывает validate/formatter/setter через ownKeys
 
 
