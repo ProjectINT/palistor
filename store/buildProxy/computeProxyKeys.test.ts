@@ -19,7 +19,7 @@ describe("computeProxyKeys", () => {
   describe("leaf node (has 'value')", () => {
     it("returns FIELD_STATE_PROPS + onValueChange", () => {
       const node: AnyConfigNode = { value: "", label: "Email" };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).toContain("value");
       expect(keys).toContain("label");
       expect(keys).toContain("isRequired");
@@ -30,7 +30,7 @@ describe("computeProxyKeys", () => {
 
     it("excludes internal field-state props from spread", () => {
       const node: AnyConfigNode = { value: "", dirty: false, loading: false };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).not.toContain("dirty");
       expect(keys).not.toContain("loading");
     });
@@ -40,7 +40,7 @@ describe("computeProxyKeys", () => {
         value: "",
         componentProps: { size: "lg", variant: "bordered" },
       };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).toContain("size");
       expect(keys).toContain("variant");
       expect(keys).toContain("onValueChange");
@@ -48,7 +48,7 @@ describe("computeProxyKeys", () => {
 
     it("does not include componentProps keys if componentProps is absent", () => {
       const node: AnyConfigNode = { value: "test" };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).not.toContain("size");
     });
 
@@ -58,7 +58,7 @@ describe("computeProxyKeys", () => {
         validate: () => undefined,
         formatter: (v: any) => v,
       };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).not.toContain("validate");
       expect(keys).not.toContain("formatter");
     });
@@ -73,21 +73,20 @@ describe("computeProxyKeys", () => {
         name: child2,
         validate: () => undefined,
       };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).toEqual(["submitting", "dirty", "revalidate", "loading", "submit", "reset"]);
     });
 
     it("does not include child node keys", () => {
       const node: AnyConfigNode = { email: { value: "" }, name: { value: "" } };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).not.toContain("email");
       expect(keys).not.toContain("name");
     });
 
     it("does not include FIELD_STATE_PROPS like isVisible or isRequired", () => {
       const node: AnyConfigNode = { email: { value: "" } };
-      const nodeState = makeNodeState([[node, { isVisible: true, isRequired: false } as any]]);
-      const keys = computeProxyKeys(node, nodeState);
+      const keys = computeProxyKeys(node);
       expect(keys).not.toContain("isVisible");
       expect(keys).not.toContain("isRequired");
     });
@@ -99,7 +98,7 @@ describe("computeProxyKeys", () => {
         deps: ["email"],
         onChange: () => {},
       };
-      const keys = computeProxyKeys(node, new WeakMap());
+      const keys = computeProxyKeys(node);
       expect(keys).not.toContain("resolve");
       expect(keys).not.toContain("deps");
       expect(keys).not.toContain("onChange");
@@ -107,8 +106,8 @@ describe("computeProxyKeys", () => {
 
     it("is independent of nodeState", () => {
       const node: AnyConfigNode = { email: { value: "" } };
-      const withState = computeProxyKeys(node, makeNodeState([[node, { dirty: true, loading: true } as any]]));
-      const withoutState = computeProxyKeys(node, new WeakMap());
+      const withState = computeProxyKeys(node);
+      const withoutState = computeProxyKeys(node);
       expect(withState).toEqual(withoutState);
     });
   });

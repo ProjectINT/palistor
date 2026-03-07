@@ -1,6 +1,5 @@
 import { GROUP_SPREAD_KEYS, SPREADABLE_FIELD_STATE_PROPS } from "../constants";
 import type { AnyConfigNode } from "../collectValues";
-import type { FieldState } from "../compute";
 
 /**
  * Вычисляет, какие ключи должны быть видны в прокси для данного узла.
@@ -8,7 +7,7 @@ import type { FieldState } from "../compute";
  * Для листа: все SPREADABLE_FIELD_STATE_PROPS + keys(componentProps).
  * Для группы: GROUP_SPREAD_KEYS (submitting, dirty, loading, submit, reset, …).
  */
-export function computeProxyKeys(node: AnyConfigNode, nodeState: WeakMap<object, FieldState>): string[] {
+export function computeProxyKeys(node: AnyConfigNode): string[] {
   const isLeaf = "value" in node;
 
   return isLeaf

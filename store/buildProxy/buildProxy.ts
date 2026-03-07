@@ -189,7 +189,7 @@ export function createBuildProxy({
        * которые не должны утекать как пропсы в UI-компоненты.
        */
       ownKeys() {
-        return computeProxyKeys(node, nodeState);
+        return computeProxyKeys(node);
       },
 
       /**
@@ -198,7 +198,7 @@ export function createBuildProxy({
        */
       getOwnPropertyDescriptor(_target, key: string | symbol) {
         if (typeof key === "symbol") return undefined;
-        const keys = computeProxyKeys(node, nodeState);
+        const keys = computeProxyKeys(node);
         if (!keys.includes(key)) return undefined;
         return { configurable: true, enumerable: true, writable: true, value: proxyNode[key] };
       },
