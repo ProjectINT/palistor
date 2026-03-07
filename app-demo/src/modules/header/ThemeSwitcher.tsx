@@ -1,16 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   const isDark = theme === "dark";
+
+  if (!mounted) {
+    return (
+      <button className="relative inline-flex items-center justify-center w-10 h-10 rounded-lg" aria-label="Toggle theme" />
+    );
+  }
 
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="relative inline-flex items-center justify-center w-10 h-10 rounded-lg transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+      className="cursor-pointer relative inline-flex items-center justify-center w-10 h-10 rounded-lg transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
       aria-label="Toggle theme"
     >
       {isDark ? (
