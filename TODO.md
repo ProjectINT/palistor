@@ -208,14 +208,6 @@ const config = {
 
 **В GenericFormProvider:** `mergeState(defaults, persisted, initial)` — трёхсторонний мерж. При изменении `initial` (useEffect) — re-merge.
 
-**В PaliStor:** только `initialValues` при создании store. Нет механизма «подлить» серверные данные позже.
-
-**Что нужно:**
-- [X] `setValues(patch)`
-- [ ] Dirty-aware merge: не затирать поля, которые пользователь уже изменил
-- [ ] Реакция на изменение `initial` (на уровне `useForm` hook)
-
----
 
 ### 6. `onChange` callback
 
@@ -232,33 +224,18 @@ const config = {
 
 ---
 
-### 7. `getVisibleFields()` — список видимых полей
-
-**В GenericFormProvider:** `getVisibleFields()` — рекурсивно обходит конфиг и возвращает flat-список видимых ключей (с dot-нотацией).
-
-**В PaliStor:** отсутствует как отдельный метод. Видимость доступна per-field через `proxy.field.isVisible`.
-
-**Что нужно:**
-- [ ] `getVisibleFields(): string[]` — собрать все пути видимых полей
-- [ ] Учёт каскадной видимости (если группа невидима, дочерние тоже)
-
----
-
 ### 8. `setValues` / bulk update
+
+- [X] `setValues(patch)`
 
 **В GenericFormProvider:** `setValuesBulk(nextValues, fieldName)` — обновляет несколько полей за раз с formatters, но без setters (чтобы избежать рекурсии).
 
-**В PaliStor:** нет bulk-операции. Каждое `proxy.field.value = X` — отдельный write pipeline с полным recompute.
-
-**Что нужно:**
 - [X] `setValues(patch: Partial<Values>)` — bulk update с одним recompute
 - [X] Batch нескольких записей — один `recomputeAll` и один `notify` в конце
 
 ---
 
 ### 9. `isInvalid` в FieldState
-
-**В GenericFormProvider:** `isInvalid: !!(showErrorsAfterSubmit ? currentError : undefined)` — зависит от режима показа ошибок.
 
 **В PaliStor:** `isInvalid: boolean | undefined` в FieldState. Поле `error` переименовано в `isInvalid`.
 
@@ -269,78 +246,15 @@ const config = {
 
 ---
 
-### 10. `isRequired` со строковым сообщением
+### 10. Форм-level API (registry множественных экземпляров) И СПИСКИ
 
-**В GenericFormProvider:** `isRequired` может быть `boolean | string | (values) => boolean | string`. Строка — это сообщение об ошибке обязательного поля.
-
-**В PaliStor:** `isRequired` — `boolean | (values) => boolean`. Только флаг, без сообщения. Валидация пустых полей происходит через `validate`.
-
-**Что нужно:**
-- [ ] Расширить `isRequired` до `MaybeComputed<boolean | string>` — строка = сообщение (типы в `types.ts` ещё не обновлены)
-- [X] При validate: если поле пустое и isRequired — использовать сообщение из isRequired (или дефолтное)
-
----
-
-### 11. Форм-level API (registry множественных экземпляров)
-
-**В GenericFormProvider:** один провайдер = один экземпляр формы. Разные формы — разные провайдеры.
-
-**В PaliStor (architecture.md):** планируется `createForm(config)` → `useForm(id)` с registry по `type:id`. Один конфиг — множество экземпляров.
+**В PaliStor:** планируется `createForm(config)` → `useForm(id)` с registry по `type:id`. Один конфиг — множество экземпляров.
 
 **Что нужно:**
 - [ ] Registry stores по ключу `type:id`
-- [ ] `createForm({ config, type, translateFunction })` — фабрика
-- [ ] `useForm(id, options?)` — хук с подпиской + submit + onChange + initial merge
 - [ ] Cleanup policy: когда удалять store из registry
 
 ---
-
-## Приоритеты реализации
-
-### P0 — Минимум для замены GenericFormProvider
-1. **Reset** — `reset(values?)` на уровне store
-2. **Bulk setValues** — `setValues(patch)` с одним recompute
-3. **Submit pipeline** — в `useForm` hook
-4. **Dirty flag** — initial snapshot + isDirty
-5. **Lazy validation** — показ ошибок только после submit
-
-### P1 — Полная совместимость
-6. **Merge initial** — подливание серверных данных с dirty-check
-7. **onChange callback** — в `useForm` hook
-8. **getVisibleFields** — утилита на store или useForm
-9. **isInvalid** — в proxy
-10. **isRequired с сообщением** — расширение типа
-
-### P2 — Архитектурные улучшения
-11. **Registry + createForm** — множественные экземпляры формы
-12. **Cleanup policy** — GC неиспользуемых stores
-
----
-
-## Архитектурные решения
-
-### Где реализовывать: store vs useForm?
-
-| Функционал | Где | Почему |
-|---|---|---|
-| reset | **store** | Чистая операция над данными, не зависит от React |
-| setValues (bulk) | **store** | Оптимизация write pipeline |
-| dirty | **store** | Нужен initial snapshot, привязан к данным |
-| getVisibleFields | **store** | Обход дерева конфига, нет React-зависимостей |
-| submit pipeline | **useForm** | Async callbacks, React lifecycle |
-| onChange callback | **useForm** | Async callbacks, React refs для стабильных ссылок |
-| lazy validation | **store** (mode) + **useForm** (toggle) | Store хранит режим, useForm переключает при submit |
-| isInvalid | **store** | Вычисляется из error + validationMode |
-| merge initial | **useForm** | Реактивный `useEffect` на изменение initial prop |
-| submitting flag | **useForm** | React state, UI concern |
-
-### Совместимость API
-
-PaliStor использует **proxy-подход** (доступ через dot notation), а GenericFormProvider — **getFieldProps(path)**.
-
-Ключевое преимущество PaliStor: `proxy.passport.number.value` вместо `getFieldProps('passport.number')`. При этом spread `{...proxy.passport.number}` возвращает HeroUI-совместимые пропсы уже сейчас.
-
-Для обратной совместимости можно добавить `getFieldProps(path)` как алиас, но это **не обязательно** — proxy API удобнее.
 
 ### Списки
 Нужно отдельно хранить списки.
@@ -367,3 +281,28 @@ const config = {
 Идея в том, что внутри списков по сути лежат те же самые узлы,
 это позволит при создании новой какой то сущности, мы сможем просто ссылку добавить в список. Так это делается в react-relay connections,
 потом можно хранить разные версии списков, для фильтрации и т.д.
+
+- [ ] Списки — массивы групповых узлов
+
+Требования для списков:
+- Динамическое добавление/удаление элементов списка
+- Поддержка computed полей внутри элементов списка
+- Сохранение состояния (dirty, errors) для каждого элемента списка
+- Возможность рендерить списки в React с помощью `map` и подписываться на изменения конкретных элементов списка
+- Списки должны стать частью общего состояния. Это значит что групповой узел может быть элементом списка.
+
+Для этого скорее всего нужно использовать id, наши групповые узлы, должны иметь уникальный id,
+этот id можно будет использовать для доступа к сущности.
+
+Например, мы создаем элемент получаем с сервера ответ с объектом, ставим его в список, потом можем этот элемент редактировать, он сразу появится во всех списках где он добавлен.
+
+т.е. концентуально списки это группы ссылок на элементы со своим апи типа add/remove/getById и т.д.
+
+списки также будут иметь свои резольверы.
+
+Единственный момент касательно списков, реактивность будет не как в узлах, а только в одном элементе,
+т.е. если есть список users то нам не нужно пересчитывать состояние всего списка при изменении одного юзера.
+
+у нас получается есть функция recomputeAll нужно теперь сделать recomputeGroup(node), и ее же нужно использовать при запуске recomputeAll, потому, что по сути так оно и должно работать, через рекурсивное применение recomputeGroup к каждому узлу.
+
+

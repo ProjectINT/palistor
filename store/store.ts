@@ -114,7 +114,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
-  function recomputeAll(): Set<object> {
+  function recomputeAll(): Set<object> { // TODO не думаю, что нужно прям все пересчитывать. Нужна функция recomputeGroup(node)
     return _recomputeAll(rootConfig, leafNodes, nodeState, translate);
   }
 
