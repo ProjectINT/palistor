@@ -16,7 +16,7 @@ type ConfigPropKeys =
   | "isReadOnly"
   | "isDisabled"
   | "isVisible"
-  | "error"
+  | "isInvalid"
   | "errorMessage"
   | "validate"
   | "formatter"

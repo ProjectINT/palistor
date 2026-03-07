@@ -24,7 +24,7 @@ describe("computeProxyKeys", () => {
       expect(keys).toContain("label");
       expect(keys).toContain("isRequired");
       expect(keys).toContain("isVisible");
-      expect(keys).toContain("error");
+      expect(keys).toContain("isInvalid");
       expect(keys).toContain("onValueChange");
     });
 

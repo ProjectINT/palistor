@@ -118,7 +118,7 @@ describe("storeValue", () => {
       isRequired: true,
       isDisabled: false,
       isReadOnly: false,
-      error: true,
+      isInvalid: true,
       errorMessage: "required",
     };
     const nodeState = makeNodeState([[node, state]]);
@@ -129,7 +129,7 @@ describe("storeValue", () => {
     expect(updated.value).toBe("new");
     expect(updated.label).toBe("Email");
     expect(updated.isRequired).toBe(true);
-    expect(updated.error).toBe(true);
+    expect(updated.isInvalid).toBe(true);
     expect(updated.errorMessage).toBe("required");
   });
 });

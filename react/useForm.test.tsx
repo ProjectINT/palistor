@@ -114,7 +114,7 @@ describe("useForm", () => {
       return (
         <div>
           <span data-testid="email-value">{form.email.value}</span>
-          <span data-testid="email-error">{form.email.error ? "Error" : "none"}</span>
+          <span data-testid="email-error">{form.email.isInvalid ? "Error" : "none"}</span>
           <button onClick={() => { form.email.value = "hello@test.com"; }}>
             Set Email
           </button>

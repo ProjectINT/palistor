@@ -85,29 +85,29 @@ describe("createProxyStore", () => {
       expect(store.proxy.passport.isVisible).toBe(false);
     });
 
-    it("error скрыт до первого submit (revalidate=false по умолчанию)", () => {
+    it("isInvalid скрыт до первого submit (revalidate=false по умолчанию)", () => {
       const store = createProxyStore({ config: makeConfig() });
       // revalidate=false → ошибки не вычисляются, пока не было submit
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
       expect(store.proxy.email.errorMessage).toBeUndefined();
     });
 
-    it("error показывается после submit (revalidate=true)", async () => {
+    it("isInvalid показывается после submit (revalidate=true)", async () => {
       const store = createProxyStore({ config: makeConfig() });
       // Первый submit с пустым email → fail → revalidate=true
       const result = await store.submit();
       expect(result.success).toBe(false);
       // Теперь ошибки видны
-      expect(store.proxy.email.error).toBe(true);
+      expect(store.proxy.email.isInvalid).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
-    it("error = undefined когда валидация проходит", () => {
+    it("isInvalid = undefined когда валидация проходит", () => {
       const store = createProxyStore({
         config: makeConfig(),
         initialValues: { email: "user@test.com" } as any,
       });
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
       expect(store.proxy.email.errorMessage).toBeUndefined();
     });
 
@@ -150,18 +150,18 @@ describe("createProxyStore", () => {
     it("пересчитывает validate после записи (когда revalidate=true)", async () => {
       const store = createProxyStore({ config: makeConfig() });
       // До submit — ошибок нет (revalidate=false)
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
 
       // Trigger revalidate via failed submit
       await store.submit();
 
-      expect(store.proxy.email.error).toBe(true); // пустой, revalidate=true
+      expect(store.proxy.email.isInvalid).toBe(true); // пустой, revalidate=true
 
       store.proxy.email.value = "filled";
-      expect(store.proxy.email.error).toBeUndefined(); // заполнен
+      expect(store.proxy.email.isInvalid).toBeUndefined(); // заполнен
 
       store.proxy.email.value = "";
-      expect(store.proxy.email.error).toBe(true); // снова пустой
+      expect(store.proxy.email.isInvalid).toBe(true); // снова пустой
     });
 
     it("пересчитывает isVisible зависимых полей", () => {
@@ -325,10 +325,10 @@ describe("createProxyStore", () => {
       await store.submit();
 
       store.proxy.email.onValueChange("valid@test.com");
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
 
       store.proxy.email.onValueChange("");
-      expect(store.proxy.email.error).toBe(true);
+      expect(store.proxy.email.isInvalid).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
@@ -399,7 +399,7 @@ describe("createProxyStore", () => {
       expect(spread).toHaveProperty("isRequired");
       expect(spread).toHaveProperty("isDisabled");
       expect(spread).toHaveProperty("isReadOnly");
-      expect(spread).toHaveProperty("error");
+      expect(spread).toHaveProperty("isInvalid");
       expect(spread).toHaveProperty("errorMessage");
       expect(spread).toHaveProperty("onValueChange");
 
@@ -452,11 +452,11 @@ describe("createProxyStore", () => {
       const store = createProxyStore({ config });
 
       // До submit — ошибки не вычисляются
-      expect(store.proxy.cardNumber.error).toBeUndefined();
+      expect(store.proxy.cardNumber.isInvalid).toBeUndefined();
 
       // После submit — revalidate=true → ошибки видны
       await store.submit();
-      expect(store.proxy.cardNumber.error).toBe(true);
+      expect(store.proxy.cardNumber.isInvalid).toBe(true);
       expect(store.proxy.cardNumber.errorMessage).toBe("required");
 
       // Но НЕ утекает при spread

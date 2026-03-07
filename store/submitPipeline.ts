@@ -140,7 +140,7 @@ export async function executeSubmit(
     const errors: Array<{ path: string; message: string }> = [];
     const leaves = collectLeafStates(groupNode, nodeState);
     for (const { path, state } of leaves) {
-      if (state.error && state.errorMessage) {
+      if (state.isInvalid && state.errorMessage) {
         errors.push({ path, message: state.errorMessage });
       }
     }

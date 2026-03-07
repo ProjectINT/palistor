@@ -17,7 +17,7 @@ export function FieldStateDemo({ fieldKey }: FieldStateDemoProps) {
     isRequired: field.isRequired,
     isDisabled: field.isDisabled,
     isReadOnly: field.isReadOnly,
-    error: field.error,
+    isInvalid: field.isInvalid,
     errorMessage: field.errorMessage,
   } : null;
 

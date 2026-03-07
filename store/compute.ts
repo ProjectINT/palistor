@@ -15,7 +15,7 @@ export interface FieldState {
   isReadOnly: boolean;
   isDisabled: boolean;
   isVisible: boolean;
-  error?: boolean;
+  isInvalid?: boolean;
   errorMessage?: string;
   /** true while submit pipeline is running (group nodes only). */
   submitting?: boolean;
@@ -109,12 +109,12 @@ export function computeFieldState(
   const description = resolveString(configNode.description, allValues);
 
   // Валидация — only when revalidate is true
-  let error: boolean | undefined;
+  let isInvalid: boolean | undefined;
   let errorMessage: string | undefined;
   if (revalidate) {
-    // isRequired auto-validation: empty value → error
+    // isRequired auto-validation: empty value → isInvalid
     if (isRequired && isEmpty(currentValue)) {
-      error = true;
+      isInvalid = true;
       errorMessage = typeof configNode.isRequired === "string"
         ? configNode.isRequired
         : "required";
@@ -124,7 +124,7 @@ export function computeFieldState(
       const t: TranslateFn = translate ?? ((v: string) => v);
       const result = configNode.validate(currentValue, allValues, t);
       if (result) {
-        error = Boolean(result);
+        isInvalid = Boolean(result);
         errorMessage = result;
       }
     }
@@ -139,7 +139,7 @@ export function computeFieldState(
     label,
     placeholder,
     description,
-    error,
+    isInvalid,
     errorMessage,
   };
 }
@@ -157,7 +157,7 @@ export function fieldStateChanged(a: FieldState, b: FieldState): boolean {
     a.label !== b.label ||
     a.placeholder !== b.placeholder ||
     a.description !== b.description ||
-    a.error !== b.error ||
+    a.isInvalid !== b.isInvalid ||
     a.errorMessage !== b.errorMessage ||
     a.submitting !== b.submitting ||
     a.dirty !== b.dirty ||

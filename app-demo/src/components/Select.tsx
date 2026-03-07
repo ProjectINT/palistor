@@ -1,5 +1,5 @@
 import { Select as HeroUISelect } from "@heroui/react";
-import { ComputedFieldState } from "../../../core/types";
+import { FieldProxyNode } from "@palistor";
 import type { CollectionChildren } from "@react-types/shared";
 import { SelectItem as HeroUISelectItem } from "@heroui/react";
 
@@ -27,15 +27,15 @@ interface SelectPropsWithChildren extends SelectPropsBase {
 
 type SelectProps = SelectPropsWithOptions | SelectPropsWithChildren;
 
-export function Select(props: ComputedFieldState & Partial<SelectProps>) {
-  const { isVisible, error, value, options, renderLabel, children, ...restProps } = props;
+export function Select(props: FieldProxyNode<string> & Partial<SelectProps>) {
+  const { isVisible, isInvalid, value, options, renderLabel, children, ...restProps } = props;
 
   if (!isVisible) {
     return null;
   }
 
   const content = options
-    ? options.map((option) => (
+    ? options.map((option: SelectOption) => (
         <HeroUISelectItem
           key={option.value}
           isDisabled={option.isDisabled}

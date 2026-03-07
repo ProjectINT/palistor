@@ -84,11 +84,11 @@ describe("dirty tracking", () => {
       expect(store.proxy.address.zip.dirty).toBe(false);
     });
 
-    it("dirty appears in spread", () => {
+    it("dirty NOT appears in spread of leaf nodes", () => {
       const store = createProxyStore({ config: makeConfig() });
       const spread = { ...store.proxy.email };
-      expect(spread).toHaveProperty("dirty");
-      expect(spread.dirty).toBe(false);
+      expect(spread).not.toHaveProperty("dirty");
+      expect(spread.dirty).toBe(undefined);
     });
   });
 
@@ -142,7 +142,7 @@ describe("revalidate", () => {
     it("errors are not shown before first submit (revalidate=false)", () => {
       const store = createProxyStore({ config: makeConfig() });
       // email is empty and required, but revalidate=false
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
       expect(store.proxy.email.errorMessage).toBeUndefined();
     });
   });
@@ -161,11 +161,11 @@ describe("revalidate", () => {
 
     it("errors are shown after failed submit", async () => {
       const store = createProxyStore({ config: makeConfig() });
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
 
       await store.submit();
 
-      expect(store.proxy.email.error).toBe(true);
+      expect(store.proxy.email.isInvalid).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
@@ -173,25 +173,25 @@ describe("revalidate", () => {
       const store = createProxyStore({ config: makeConfig() });
       await store.submit(); // fail → revalidate=true
 
-      expect(store.proxy.email.error).toBe(true);
+      expect(store.proxy.email.isInvalid).toBe(true);
 
       store.proxy.email.value = "valid@test.com";
-      expect(store.proxy.email.error).toBeUndefined(); // cleared!
+      expect(store.proxy.email.isInvalid).toBeUndefined(); // cleared!
 
       store.proxy.email.value = "";
-      expect(store.proxy.email.error).toBe(true); // back to error
+      expect(store.proxy.email.isInvalid).toBe(true); // back to error
     });
 
     it("revalidate resets to false after reset()", async () => {
       const store = createProxyStore({ config: makeConfig() });
       await store.submit(); // fail → revalidate=true
 
-      expect(store.proxy.email.error).toBe(true);
+      expect(store.proxy.email.isInvalid).toBe(true);
 
       store.reset();
 
       // After reset, revalidate=false → errors hidden again
-      expect(store.proxy.email.error).toBeUndefined();
+      expect(store.proxy.email.isInvalid).toBeUndefined();
     });
   });
 
@@ -221,7 +221,7 @@ describe("revalidate", () => {
       expect(result.success).toBe(false);
 
       // user.name should show errors (revalidate=true for user group)
-      expect(store.proxy.user.name.error).toBe(true);
+      expect(store.proxy.user.name.isInvalid).toBe(true);
     });
   });
 });
@@ -241,7 +241,7 @@ describe("isRequired auto-validation", () => {
 
     await store.submit();
 
-    expect(store.proxy.name.error).toBe(true);
+    expect(store.proxy.name.isInvalid).toBe(true);
     expect(store.proxy.name.errorMessage).toBe("required");
   });
 
@@ -255,10 +255,10 @@ describe("isRequired auto-validation", () => {
     const store = createProxyStore({ config });
 
     await store.submit(); // fail → revalidate=true
-    expect(store.proxy.name.error).toBe(true);
+    expect(store.proxy.name.isInvalid).toBe(true);
 
     store.proxy.name.value = "John";
-    expect(store.proxy.name.error).toBeUndefined();
+    expect(store.proxy.name.isInvalid).toBeUndefined();
   });
 
   it("custom validate takes priority over isRequired auto-check", async () => {
@@ -274,7 +274,7 @@ describe("isRequired auto-validation", () => {
     await store.submit();
 
     // Custom validate message takes priority
-    expect(store.proxy.email.error).toBe(true);
+    expect(store.proxy.email.isInvalid).toBe(true);
     expect(store.proxy.email.errorMessage).toBe("email is required");
   });
 
@@ -288,7 +288,7 @@ describe("isRequired auto-validation", () => {
     const store = createProxyStore({ config });
 
     await store.submit();
-    expect(store.proxy.field.error).toBe(true);
+    expect(store.proxy.field.isInvalid).toBe(true);
   });
 
   it("isRequired checks whitespace-only string as empty", async () => {
@@ -301,7 +301,7 @@ describe("isRequired auto-validation", () => {
     const store = createProxyStore({ config });
 
     await store.submit();
-    expect(store.proxy.field.error).toBe(true);
+    expect(store.proxy.field.isInvalid).toBe(true);
   });
 
   it("isRequired with non-empty value has no error", async () => {
@@ -315,7 +315,7 @@ describe("isRequired auto-validation", () => {
 
     const result = await store.submit();
     expect(result.success).toBe(true);
-    expect(store.proxy.name.error).toBeUndefined();
+    expect(store.proxy.name.isInvalid).toBeUndefined();
   });
 });
 
@@ -412,18 +412,18 @@ describe("dirty + revalidate interaction", () => {
 
     store.proxy.email.value = "partial"; // dirty but valid
     expect(store.proxy.email.dirty).toBe(true);
-    expect(store.proxy.email.error).toBeUndefined(); // revalidate=false
+    expect(store.proxy.email.isInvalid).toBeUndefined(); // revalidate=false
 
     // name and address.city are still empty and required
     const result = await store.submit();
     expect(result.success).toBe(false);
 
     // Now errors show for empty required fields
-    expect(store.proxy.name.error).toBe(true);
-    expect(store.proxy.address.city.error).toBe(true);
+    expect(store.proxy.name.isInvalid).toBe(true);
+    expect(store.proxy.address.city.isInvalid).toBe(true);
 
     // email is valid — no error
-    expect(store.proxy.email.error).toBeUndefined();
+    expect(store.proxy.email.isInvalid).toBeUndefined();
   });
 
   it("reset clears both dirty and revalidate", async () => {
@@ -433,12 +433,12 @@ describe("dirty + revalidate interaction", () => {
     await store.submit(); // fail → errors visible
 
     expect(store.proxy.email.dirty).toBe(true);
-    expect(store.proxy.name.error).toBe(true); // revalidate=true
+    expect(store.proxy.name.isInvalid).toBe(true); // revalidate=true
 
     store.reset();
 
     expect(store.proxy.email.dirty).toBe(false);
-    expect(store.proxy.name.error).toBeUndefined(); // revalidate=false again
+    expect(store.proxy.name.isInvalid).toBeUndefined(); // revalidate=false again
     expect(store.proxy.email.value).toBe(""); // reset to default
   });
 });

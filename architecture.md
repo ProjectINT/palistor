@@ -36,7 +36,7 @@
            ▼         │          ▼
 ┌──────────────────┐ │ ┌────────────────────────────────────┐
 │  Config (static) │ │ │  nodeState: WeakMap<node,FieldState>│
-│  Неизменяемое    │ │ │  { value, isVisible, error,        │
+│  Неизменяемое    │ │ │  { value, isVisible, isInvalid,    │
 │  дерево узлов    │ │ │    loading, …}                     │
 └──────────────────┘ │ └────────────────────────────────────┘
                      ▼
@@ -103,7 +103,7 @@ Deps: явные (config) ∪ auto-deps (из tracking proxy resolver'а)
 При изменении dep: notifyChanged → findResolvesToRetrigger → resetResolveState → triggerResolve
 
 Suspense: status === "pending" → throw promise → React <Suspense> ловит
-Ошибки: НИКОГДА не бросаются — только реактивно через form.car.error
+Ошибки: НИКОГДА не бросаются — только реактивно через form.car.isInvalid
 ```
 
 ---
@@ -177,7 +177,7 @@ react/
 | Иммутабельный FieldState | `nodeState.set(node, { ...old, value: new })` |
 | Resolve без лишних ре-рендеров | batch: буфер writes + один flush + один notifyChanged |
 | Resolve дедупликация | pending status → не запускаем повторно |
-| Ошибки resolve без throw | `onError` callback + реактивные `error`/`errorMessage` |
+| Ошибки resolve без throw | `onError` callback + реактивные `isInvalid`/`errorMessage` |
 
 ---
 

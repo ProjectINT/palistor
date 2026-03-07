@@ -171,10 +171,10 @@ const config = {
 **В PaliStor:** отсутствует. Store не хранит «начальный snapshot» для сравнения.
 
 **Что нужно:**
-- [ ] Хранить initial snapshot значений при создании / reset / hydrate
-- [ ] Вычислять `dirty` как сравнение текущих значений с initial snapshot
-- [ ] Подписка на изменение `dirty`
-- [ ] Per-field dirty (опционально) — `changedFields`
+- [X] Хранить initial snapshot значений при создании / reset / hydrate
+- [X] Вычислять `dirty` как сравнение текущих значений с initial snapshot
+- [X] Подписка на изменение `dirty`
+- [X] Per-field dirty (опционально) — `changedFields`
 
 ---
 
@@ -185,13 +185,10 @@ const config = {
 **В PaliStor:** валидация запускается **сразу** при каждом `recomputeAll`. Нет концепции «показывать/скрывать ошибки».
 
 **Что нужно:**
-- [ ] Режим валидации: `silent` (ошибки вычисляются, но не отображаются) vs `live` (ошибки видны)
-- [ ] Переключение режима при первом submit
-- [ ] `validateAll()` — принудительная валидация всех полей
-- [ ] `validateField(key)` — валидация одного поля по требованию
-- [ ] Поле `isInvalid` в FieldState (= `error && showErrors`)
-
-**Решение:** добавить в store `validationMode: 'silent' | 'live'` и метод `setValidationMode()`. Или управлять отображением ошибок на уровне `useForm`, передавая `isInvalid` вместо `error`.
+- [X] Режим валидации: `silent` (ошибки вычисляются, но не отображаются) vs `live` (ошибки видны)
+- [X] Переключение режима при первом submit
+- [X] `validateAll()` — принудительная валидация всех полей
+- [X] Поле `isInvalid` в FieldState (= `error && showErrors`)
 
 ---
 
@@ -263,12 +260,12 @@ const config = {
 
 **В GenericFormProvider:** `isInvalid: !!(showErrorsAfterSubmit ? currentError : undefined)` — зависит от режима показа ошибок.
 
-**В PaliStor:** `error: boolean | undefined` в FieldState. Нет `isInvalid` как отдельного свойства.
+**В PaliStor:** `isInvalid: boolean | undefined` в FieldState. Поле `error` переименовано в `isInvalid`.
 
 **Что нужно:**
-- [ ] Добавить `isInvalid` в `FieldState` и `FieldProxyNode`
-- [ ] `isInvalid` = `error && validationMode === 'live'`
-- [ ] Или управлять на уровне React-хука
+- [X] Добавить `isInvalid` в `FieldState` и `FieldProxyNode`
+- [X] `isInvalid` = `error && validationMode === 'live'`
+- [X] Или управлять на уровне React-хука
 
 ---
 

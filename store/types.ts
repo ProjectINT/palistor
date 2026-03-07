@@ -172,7 +172,7 @@ type ConfigSkipKeys =
   | "isReadOnly"
   | "isDisabled"
   | "isVisible"
-  | "error"
+  | "isInvalid"
   | "errorMessage"
   | "componentProps"
   | "types"
@@ -201,7 +201,7 @@ export interface FieldProxyNode<TValue = unknown> {
   readonly isDisabled: boolean;
   readonly isVisible: boolean;
   /** true если поле имеет ошибку валидации */
-  readonly error: boolean | undefined;
+  readonly isInvalid: boolean | undefined;
   readonly errorMessage: string | undefined;
   /** true если текущее значение отличается от initial */
   readonly dirty: boolean;
@@ -229,7 +229,7 @@ export interface GroupProxyNode {
   readonly isRequired: boolean | undefined;
   readonly isReadOnly: boolean | undefined;
   readonly isDisabled: boolean | undefined;
-  readonly error: boolean | undefined;
+  readonly isInvalid: boolean | undefined;
   readonly errorMessage: string | undefined;
   /** true пока выполняется submit pipeline. */
   readonly submitting: boolean;

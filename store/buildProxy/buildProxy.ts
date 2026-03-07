@@ -130,7 +130,7 @@ export function createBuildProxy({
           "isReadOnly":   currentNode ? currentNode.isReadOnly   : node.isReadOnly,
           "isDisabled":   currentNode ? currentNode.isDisabled   : node.isDisabled,
           "isVisible":    currentNode ? currentNode.isVisible    : node.isVisible,
-          "error":        currentNode ? currentNode.error        : node.error,
+          "isInvalid":    currentNode ? currentNode.isInvalid    : node.isInvalid,
           "errorMessage": currentNode ? currentNode.errorMessage : node.errorMessage,
           "dirty":        currentNode?.dirty,
           "loading":      currentNode?.loading,

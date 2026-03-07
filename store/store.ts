@@ -61,8 +61,8 @@ export type {
  *
  * store.proxy.email.value            // → "user@example.com"
  * store.proxy.email.isRequired       // → true
- * store.proxy.email.error            // → undefined (потому что value не пустой)
- * store.proxy.email.value = ""       // → пересчёт → error = "required"
+ * store.proxy.email.isInvalid        // → undefined (потому что value не пустой)
+ * store.proxy.email.value = ""       // → пересчёт → isInvalid = true
  * store.proxy.passport.isVisible     // → false (paymentType != "bank")
  */
 export function createProxyStore<TConfig extends Record<string, any>>(

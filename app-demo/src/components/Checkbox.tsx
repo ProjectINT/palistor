@@ -7,29 +7,27 @@ interface CheckboxProps extends Omit<React.ComponentProps<typeof HeroUICheckbox>
 }
 
 export function Checkbox(props: FieldProxyNode<boolean> & Partial<CheckboxProps>) {
-  const { isVisible, error, value, description, errorMessage, ...restProps } = props;
+  const { isVisible, value, description, errorMessage, ...restProps } = props;
 
   if (!isVisible) {
     return null;
   }
 
-  const hasError = Boolean(error);
-  const helperText = hasError ? errorMessage : description;
+  const helperText = errorMessage ? errorMessage : description;
 
   return (
     <div className="flex flex-col gap-1">
       <HeroUICheckbox
         {...restProps}
-        isInvalid={hasError}
         classNames={{
           ...restProps.classNames,
-          base: `${hasError ? 'data-[invalid=true]:border-danger' : ''} ${restProps.classNames?.base || ''}`,
+          base: `${errorMessage ? 'data-[invalid=true]:border-danger' : ''} ${restProps.classNames?.base || ''}`,
         }}
       />
       {helperText && (
         <p
           className={`text-xs px-1 ${
-            hasError ? 'text-danger' : 'text-default-500'
+            errorMessage ? 'text-danger' : 'text-default-500'
           }`}
         >
           {helperText}

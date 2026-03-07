@@ -294,7 +294,7 @@ form.email.isRequired     // → boolean
 form.email.isReadOnly     // → boolean
 form.email.isDisabled     // → boolean
 form.email.isVisible      // → boolean
-form.email.error          // → boolean | undefined
+form.email.isInvalid      // → boolean | undefined
 form.email.errorMessage   // → string | undefined
 form.email.dirty          // → boolean (отличается от начального значения)
 
@@ -312,7 +312,7 @@ form.passport.isVisible     // → boolean
 form.passport.isRequired    // → boolean | undefined
 form.passport.isReadOnly    // → boolean | undefined
 form.passport.isDisabled    // → boolean | undefined
-form.passport.error         // → boolean | undefined
+form.passport.isInvalid     // → boolean | undefined
 form.passport.errorMessage  // → string | undefined
 form.passport.submitting    // → boolean (submit в процессе)
 form.passport.loading       // → boolean (async resolver загружается)
@@ -388,7 +388,7 @@ interface FieldState {
   isReadOnly: boolean;
   isDisabled: boolean;
   isVisible: boolean;
-  error?: boolean;
+  isInvalid?: boolean;
   errorMessage?: string;
   dirty?: boolean;        // лист: значение ≠ initial; группа: хоть одно поле dirty
   submitting?: boolean;   // только групповые узлы

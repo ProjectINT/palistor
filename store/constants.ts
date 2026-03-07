@@ -29,7 +29,7 @@ export const FIELD_STATE_PROPS = new Set<string>([
   "isReadOnly",
   "isDisabled",
   "isVisible",
-  "error",
+  "isInvalid",
   "errorMessage",
   "dirty",
   "loading",
