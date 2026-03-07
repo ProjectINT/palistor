@@ -1,3 +1,4 @@
+import { applyPatch } from "./applyPatch";
 import { type FieldState } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy/buildProxy";
@@ -9,6 +10,7 @@ import { buildNodeMaps } from "./nodeMap";
 import { executeReset, type ResetDeps } from "./resetPipeline";
 import { executeSubmit, type SubmitDeps } from "./submitPipeline";
 import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
+import { formatPatch } from "./writePipeline";
 import { captureInitialValues } from "./dirtyTracking";
 import { initGroupSubmitting } from "./init/initGroupSubmitting";
 import { createNotificationHub } from "./init/createNotificationHub";
@@ -177,6 +179,16 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     executeReset(node, resetDeps, values);
   };
 
+  const setValuesNode = (node: AnyConfigNode, patch: Record<string, unknown>): void => {
+    // Фаза 1: форматируем патч — каждое листовое значение проходит через formatter узла.
+    const formatted = formatPatch(node, nodeState, patch, rootConfig);
+    // Фаза 2: применяем уже отформатированный патч к nodeState.
+    const changed = applyPatch(node, nodeState, formatted);
+    const recomputed = recomputeAll();
+    for (const n of changed) recomputed.add(n);
+    notifyChanged(recomputed);
+  };
+
   const submitDeps: SubmitDeps = {
     nodeState,
     recomputeAll,
@@ -184,6 +196,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     resetNode,
     clearPersist: () => persistManager.clear(),
   };
+
   const submitNode = (node: AnyConfigNode) => executeSubmit(node, submitDeps);
 
   const onChangeDeps: OnChangeDeps = {
@@ -212,6 +225,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     translate,
     submitNode,
     resetNode,
+    setValuesNode,
     onFieldChange,
     triggerResolve,
     getResolveState,
@@ -254,6 +268,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     submit: () => submitNode(rootConfig),
     reset: (values?: DeepPartialValues<ExtractValues<TConfig>>) =>
       resetNode(rootConfig, values as Record<string, unknown> | undefined),
+    setValues: (patch: DeepPartialValues<ExtractValues<TConfig>>) =>
+      setValuesNode(rootConfig, patch as Record<string, unknown>),
   };
 }
 

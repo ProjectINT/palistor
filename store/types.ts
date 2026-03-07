@@ -246,6 +246,12 @@ export interface GroupProxyNode {
   submit(): Promise<SubmitResult>;
   /** Reset поддерево к defaults из конфига (или к переданным значениям). */
   reset(values?: Record<string, unknown>): void;
+  /**
+   * Bulk-обновление значений: применяет патч к поддереву за один recompute + notify.
+   * Без setters (чтобы избежать рекурсии) и без форматтеров.
+   * Используется для подлива серверных данных или bulk-изменений из React.
+   */
+  setValues(patch: Record<string, unknown>): void;
 }
 
 /**
@@ -263,8 +269,9 @@ type ConfigNodeToProxy<T> = T extends { value: any }
 
 /**
  * Полный прокси для конфига формы: каждый ключ маппируется в прокси-узел.
+ * Корневой прокси также включает GroupProxyNode (submit, reset, setValues, dirty, …).
  */
-export type ConfigProxy<TConfig extends Record<string, any>> = {
+export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & {
   [K in keyof TConfig]: ConfigNodeToProxy<TConfig[K]>;
 };
 
@@ -375,4 +382,10 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * Reset root form к defaults из конфига (или к переданным значениям).
    */
   reset(values?: DeepPartialValues<ExtractValues<TConfig>>): void;
+  /**
+   * Bulk-обновление значений: применяет патч ко всему store за один recompute + notify.
+   * Без setters (чтобы избежать рекурсии) и без форматтеров.
+   * Используется для подлива серверных данных или bulk-изменений из React.
+   */
+  setValues(patch: DeepPartialValues<ExtractValues<TConfig>>): void;
 }

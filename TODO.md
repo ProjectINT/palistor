@@ -196,11 +196,11 @@ const config = {
 
 **В GenericFormProvider:** `reset(next?)` — сбрасывает к defaults + optional overrides, обновляет initialRef, очищает ошибки.
 
-**В PaliStor:** отсутствует. Нет метода `reset`.
+**В PaliStor:** реализовано. `resetPipeline.ts` + `store.ts` и `GroupProxyNode.reset()`.
 
 **Что нужно:**
-- [ ] `reset(values?)` — сбросить все поля к defaults из конфига (или к переданным значениям)
-- [ ] При reset: обновить initial snapshot (dirty = false), очистить validation mode
+- [X] `reset(values?)` — сбросить все поля к defaults из конфига (или к переданным значениям)
+- [X] При reset: обновить initial snapshot (dirty = false), очистить validation mode
 
 ---
 
@@ -211,7 +211,7 @@ const config = {
 **В PaliStor:** только `initialValues` при создании store. Нет механизма «подлить» серверные данные позже.
 
 **Что нужно:**
-- [ ] `setValues(patch)` или `mergeInitial(values)` — применить внешние данные к store
+- [X] `setValues(patch)`
 - [ ] Dirty-aware merge: не затирать поля, которые пользователь уже изменил
 - [ ] Реакция на изменение `initial` (на уровне `useForm` hook)
 
@@ -221,14 +221,14 @@ const config = {
 
 **В GenericFormProvider:** `onChange({ fieldKey, newValue, previousValue, allValues })` — вызывается после каждого изменения. Может вернуть `Partial<V>` для мержа.
 
-**В PaliStor:** отсутствует. Store не имеет механизма уведомления «снаружи» о изменении поля с возможностью вернуть патч.
+**В PaliStor:** реализовано. `onChange` объявляется в конфиге узла, обрабатывается в `onChangePipeline.ts`.
 
 **Что нужно:**
-- [ ] Callback `onChange` в `useForm` options (на уровне React)
-- [ ] Передавать `{ fieldKey, newValue, previousValue, allValues }`
-- [ ] Мержить возвращённый `Partial<V>` обратно в store
+- [X] Callback `onChange` в конфиге узла (реализовано на уровне store, что мощнее чем useForm options)
+- [X] Передавать `{ fieldKey, newValue, previousValue, allValues }`
+- [X] Мержить возвращённый `Partial<V>` обратно в store
 
-**Решение:** реализовать в `useForm`, т.к. это React-специфичный callback с async-поведением. Либо добавить middleware/interceptor в store.
+**Решение:** реализовано в `onChangePipeline.ts` — fire-and-forget, поддерживает async и патч.
 
 ---
 
@@ -251,8 +251,8 @@ const config = {
 **В PaliStor:** нет bulk-операции. Каждое `proxy.field.value = X` — отдельный write pipeline с полным recompute.
 
 **Что нужно:**
-- [ ] `setValues(patch: Partial<Values>)` — bulk update с одним recompute
-- [ ] Batch нескольких записей — один `recomputeAll` и один `notify` в конце
+- [X] `setValues(patch: Partial<Values>)` — bulk update с одним recompute
+- [X] Batch нескольких записей — один `recomputeAll` и один `notify` в конце
 
 ---
 
@@ -276,8 +276,8 @@ const config = {
 **В PaliStor:** `isRequired` — `boolean | (values) => boolean`. Только флаг, без сообщения. Валидация пустых полей происходит через `validate`.
 
 **Что нужно:**
-- [ ] Расширить `isRequired` до `MaybeComputed<boolean | string>` — строка = сообщение
-- [ ] При validate: если поле пустое и isRequired — использовать сообщение из isRequired (или дефолтное)
+- [ ] Расширить `isRequired` до `MaybeComputed<boolean | string>` — строка = сообщение (типы в `types.ts` ещё не обновлены)
+- [X] При validate: если поле пустое и isRequired — использовать сообщение из isRequired (или дефолтное)
 
 ---
 

@@ -648,3 +648,171 @@ describe("useForm tracking (selective re-render)", () => {
     expect(fns[0]).toBe(fns[1]);
   });
 });
+
+// ─── setValues: bulk update ───────────────────────────────────────────────────
+
+describe("setValues", () => {
+  it("store.setValues обновляет несколько полей сразу", () => {
+    const store = createProxyStore({ config: makeConfig() });
+
+    const { result } = renderHook(() => useForm(store));
+
+    act(() => {
+      store.setValues({ email: "bulk@test.com", paymentType: "bank" });
+    });
+
+    expect(result.current.email.value).toBe("bulk@test.com");
+    expect(result.current.paymentType.value).toBe("bank");
+  });
+
+  it("store.setValues не затрагивает поля вне патча", () => {
+    const store = createProxyStore({
+      config: makeConfig(),
+      initialValues: { email: "original@test.com", paymentType: "card" },
+    });
+
+    act(() => {
+      store.setValues({ paymentType: "bank" });
+    });
+
+    const values = store.getValues();
+    expect(values.email).toBe("original@test.com");  // не тронуто
+    expect(values.paymentType).toBe("bank");         // обновлено
+  });
+
+  it("form.setValues через useForm proxy работает", () => {
+    const store = createProxyStore({ config: makeConfig() });
+
+    function TestComponent() {
+      const form = useForm(store);
+      return (
+        <div>
+          <span data-testid="email">{form.email.value}</span>
+          <span data-testid="payment">{form.paymentType.value}</span>
+          <button onClick={() => form.setValues({ email: "proxy@test.com", paymentType: "bank" })}>
+            Bulk Set
+          </button>
+        </div>
+      );
+    }
+
+    render(<TestComponent />);
+
+    act(() => {
+      screen.getByRole("button").click();
+    });
+
+    expect(screen.getByTestId("email").textContent).toBe("proxy@test.com");
+    expect(screen.getByTestId("payment").textContent).toBe("bank");
+  });
+
+  it("form.passport.setValues обновляет вложенную группу", () => {
+    const store = createProxyStore({ config: makeConfig() });
+
+    const { result } = renderHook(() => useForm(store));
+
+    act(() => {
+      result.current.passport.setValues({ number: "XY999", issueDate: "2020-01-01" });
+    });
+
+    const values = store.getValues();
+    expect(values.passport.number).toBe("XY999");
+    expect(values.passport.issueDate).toBe("2020-01-01");
+    expect(values.email).toBe(""); // root не тронут
+  });
+
+  it("setValues пересчитывает computed-свойства (isVisible)", () => {
+    const store = createProxyStore({ config: makeConfig() });
+
+    const { result } = renderHook(() => useForm(store));
+
+    expect(result.current.cardNumber.isVisible).toBe(true);
+    expect(result.current.passport.isVisible).toBe(false);
+
+    act(() => {
+      store.setValues({ paymentType: "bank" });
+    });
+
+    expect(result.current.cardNumber.isVisible).toBe(false);
+    expect(result.current.passport.isVisible).toBe(true);
+  });
+
+  it("setValues триггерит ре-рендер только для компонентов, читающих изменённые поля", () => {
+    const store = createProxyStore({ config: makeConfig() });
+    const emailRender = vi.fn();
+    const paymentRender = vi.fn();
+    const passportRender = vi.fn();
+
+    function EmailDisplay() {
+      emailRender();
+      const form = useForm(store);
+      return <span data-testid="email">{form.email.value}</span>;
+    }
+    function PaymentDisplay() {
+      paymentRender();
+      const form = useForm(store);
+      return <span data-testid="payment">{form.paymentType.value}</span>;
+    }
+    function PassportNumber() {
+      passportRender();
+      const form = useForm(store);
+      return <span data-testid="passport">{form.passport.number.value}</span>;
+    }
+
+    render(
+      <div>
+        <EmailDisplay />
+        <PaymentDisplay />
+        <PassportNumber />
+      </div>,
+    );
+
+    expect(emailRender).toHaveBeenCalledTimes(1);
+    expect(paymentRender).toHaveBeenCalledTimes(1);
+    expect(passportRender).toHaveBeenCalledTimes(1);
+
+    // Патчим только email и passport.number — paymentType не трогаем
+    act(() => {
+      store.setValues({ email: "bulk@test.com", passport: { number: "AB123" } });
+    });
+
+    expect(emailRender).toHaveBeenCalledTimes(2);   // читал email → ре-рендер
+    expect(paymentRender).toHaveBeenCalledTimes(1); // не читал изменённые → нет
+    expect(passportRender).toHaveBeenCalledTimes(2); // читал passport.number → ре-рендер
+
+    expect(screen.getByTestId("email").textContent).toBe("bulk@test.com");
+    expect(screen.getByTestId("payment").textContent).toBe("card");
+    expect(screen.getByTestId("passport").textContent).toBe("AB123");
+  });
+
+  it("setValues возвращает стабильную ссылку между рендерами", () => {
+    const store = createProxyStore({ config: makeConfig() });
+    const fns: any[] = [];
+
+    const { rerender } = renderHook(() => {
+      const form = useForm(store);
+      fns.push(form.setValues);
+      return form;
+    });
+
+    rerender();
+
+    expect(fns[0]).toBe(fns[1]);
+  });
+
+  it("store.setValues отражается в getValues()", () => {
+    const store = createProxyStore({ config: makeConfig() });
+
+    act(() => {
+      store.setValues({
+        email: "values@test.com",
+        passport: { number: "ZZ001", issueDate: "2021-06-15" },
+      });
+    });
+
+    const values = store.getValues();
+    expect(values.email).toBe("values@test.com");
+    expect(values.passport.number).toBe("ZZ001");
+    expect(values.passport.issueDate).toBe("2021-06-15");
+  });
+});

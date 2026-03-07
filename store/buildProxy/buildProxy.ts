@@ -21,6 +21,8 @@ export interface BuildProxyDeps {
   submitNode: (node: AnyConfigNode) => Promise<unknown>;
   /** Запуск reset для группового узла. */
   resetNode: (node: AnyConfigNode, values?: Record<string, unknown>) => void;
+  /** Bulk-обновление значений для группового узла (один recompute + notify). */
+  setValuesNode: (node: AnyConfigNode, patch: Record<string, unknown>) => void;
   /** Fire-and-forget onChange для листового узла. */
   onFieldChange?: (node: AnyConfigNode, newValue: unknown, previousValue: unknown) => void;
   /** Trigger resolve for a group node with resolve config. */
@@ -66,6 +68,7 @@ export function createBuildProxy({
   translate,
   submitNode,
   resetNode,
+  setValuesNode,
   onFieldChange,
   triggerResolve,
   getResolveState,
@@ -105,6 +108,7 @@ export function createBuildProxy({
             "loading": () => currentNode?.[key as keyof FieldState] ?? false,
             "submit": () => getCached(caches.submit, node, () => () => submitNode(node)),
             "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => resetNode(node, vals)),
+            "setValues": () => getCached(caches.setValues, node, () => (patch: Record<string, unknown>) => setValuesNode(node, patch)),
           }
           
           if (key in handlers) return handlers[key as keyof typeof handlers]();

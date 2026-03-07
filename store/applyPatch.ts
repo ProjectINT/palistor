@@ -32,6 +32,7 @@ export function applyPatch(
     if ("value" in child) {
       // Листовой узел — обновляем value только если оно реально изменилось
       const state = nodeState.get(child);
+
       if (state && state.value !== patchValue) {
         nodeState.set(child, { ...state, value: patchValue });
         changed.add(child);
