@@ -121,22 +121,26 @@ export function createBuildProxy({
           return currentNode ? currentNode[key as keyof FieldState] : configValue;
         };
 
-        const fieldStateHandlers: Record<string, () => unknown> = {
-          "value":        () => currentNode ? currentNode.value        : node.value,
+        const fieldStateHandlers: Record<string, (() => unknown) | unknown> = {
+          "value":        currentNode ? currentNode.value        : node.value,
           "label":        translatableHandler,
           "placeholder":  translatableHandler,
           "description":  translatableHandler,
-          "isRequired":   () => currentNode ? currentNode.isRequired   : node.isRequired,
-          "isReadOnly":   () => currentNode ? currentNode.isReadOnly   : node.isReadOnly,
-          "isDisabled":   () => currentNode ? currentNode.isDisabled   : node.isDisabled,
-          "isVisible":    () => currentNode ? currentNode.isVisible    : node.isVisible,
-          "error":        () => currentNode ? currentNode.error        : node.error,
-          "errorMessage": () => currentNode ? currentNode.errorMessage : node.errorMessage,
-          "dirty":        () => currentNode?.dirty,
-          "loading":      () => currentNode?.loading,
+          "isRequired":   currentNode ? currentNode.isRequired   : node.isRequired,
+          "isReadOnly":   currentNode ? currentNode.isReadOnly   : node.isReadOnly,
+          "isDisabled":   currentNode ? currentNode.isDisabled   : node.isDisabled,
+          "isVisible":    currentNode ? currentNode.isVisible    : node.isVisible,
+          "error":        currentNode ? currentNode.error        : node.error,
+          "errorMessage": currentNode ? currentNode.errorMessage : node.errorMessage,
+          "dirty":        currentNode?.dirty,
+          "loading":      currentNode?.loading,
         };
 
-        if (key in fieldStateHandlers) return fieldStateHandlers[key]();
+        if (key in fieldStateHandlers) {
+          const field = fieldStateHandlers[key];
+          if (typeof field === "function") return field();
+          return field;
+        }
 
         // Дочерний узел → рекурсивный прокси
         const child = node[key];

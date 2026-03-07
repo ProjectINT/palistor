@@ -28,6 +28,13 @@ describe("computeProxyKeys", () => {
       expect(keys).toContain("onValueChange");
     });
 
+    it("excludes internal field-state props from spread", () => {
+      const node: AnyConfigNode = { value: "", dirty: false, loading: false };
+      const keys = computeProxyKeys(node, new WeakMap());
+      expect(keys).not.toContain("dirty");
+      expect(keys).not.toContain("loading");
+    });
+
     it("includes componentProps keys", () => {
       const node: AnyConfigNode = {
         value: "",
@@ -58,49 +65,34 @@ describe("computeProxyKeys", () => {
   });
 
   describe("group node (no 'value')", () => {
-    it("returns child object keys, filtering out internal/config keys", () => {
+    it("returns exactly GROUP_SPREAD_KEYS", () => {
       const child1: AnyConfigNode = { value: "" };
       const child2: AnyConfigNode = { value: "x" };
       const node: AnyConfigNode = {
         email: child1,
         name: child2,
-        validate: () => undefined, // internal, should not appear
+        validate: () => undefined,
       };
       const keys = computeProxyKeys(node, new WeakMap());
-      expect(keys).toContain("email");
-      expect(keys).toContain("name");
-      expect(keys).not.toContain("validate");
+      expect(keys).toEqual(["submitting", "dirty", "revalidate", "loading", "submit", "reset"]);
     });
 
-    it("includes FIELD_STATE_PROPS from nodeState when state is present", () => {
+    it("does not include child node keys", () => {
+      const node: AnyConfigNode = { email: { value: "" }, name: { value: "" } };
+      const keys = computeProxyKeys(node, new WeakMap());
+      expect(keys).not.toContain("email");
+      expect(keys).not.toContain("name");
+    });
+
+    it("does not include FIELD_STATE_PROPS like isVisible or isRequired", () => {
       const node: AnyConfigNode = { email: { value: "" } };
       const nodeState = makeNodeState([[node, { isVisible: true, isRequired: false } as any]]);
       const keys = computeProxyKeys(node, nodeState);
-      expect(keys).toContain("isVisible");
-      expect(keys).toContain("isRequired");
-      expect(keys).toContain("email");
-    });
-
-    it("skips FIELD_STATE_PROPS that are undefined in state", () => {
-      const node: AnyConfigNode = { email: { value: "" } };
-      const nodeState = makeNodeState([[node, { isVisible: true } as any]]);
-      const keys = computeProxyKeys(node, nodeState);
-      expect(keys).toContain("isVisible");
-      // isRequired is undefined in state, should not appear
+      expect(keys).not.toContain("isVisible");
       expect(keys).not.toContain("isRequired");
     });
 
-    it("excludes non-object children (primitive config values)", () => {
-      const node: AnyConfigNode = {
-        email: { value: "" },
-        somePrimitive: "not-an-object" as any,
-      };
-      const keys = computeProxyKeys(node, new WeakMap());
-      expect(keys).toContain("email");
-      expect(keys).not.toContain("somePrimitive");
-    });
-
-    it("excludes resolve-related internal keys", () => {
+    it("does not include internal config keys", () => {
       const node: AnyConfigNode = {
         email: { value: "" },
         resolve: { resolver: async () => ({}) },
@@ -108,10 +100,16 @@ describe("computeProxyKeys", () => {
         onChange: () => {},
       };
       const keys = computeProxyKeys(node, new WeakMap());
-      expect(keys).toContain("email");
       expect(keys).not.toContain("resolve");
       expect(keys).not.toContain("deps");
       expect(keys).not.toContain("onChange");
+    });
+
+    it("is independent of nodeState", () => {
+      const node: AnyConfigNode = { email: { value: "" } };
+      const withState = computeProxyKeys(node, makeNodeState([[node, { dirty: true, loading: true } as any]]));
+      const withoutState = computeProxyKeys(node, new WeakMap());
+      expect(withState).toEqual(withoutState);
     });
   });
 });

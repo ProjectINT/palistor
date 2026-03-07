@@ -353,18 +353,20 @@ PaliStor использует **proxy-подход** (доступ через do
 
 ```ts
 const config = {
-  users: [
+  users: [{
     name: {
       value: '',
       isRequired: true,
-      beforeSubmit: (value) => value.trim(),
     },
     email: {
       value: '',
       isRequired: true,
-      isDisabled: anyLogicHere,
+      isDisabled: false,
       isVisible: (values) => values.user.name !== '',
-      beforeSubmit: (value) => value.toLowerCase(),
     }
-  ]
+  }]
 ```
+
+Идея в том, что внутри списков по сути лежат те же самые узлы,
+это позволит при создании новой какой то сущности, мы сможем просто ссылку добавить в список. Так это делается в react-relay connections,
+потом можно хранить разные версии списков, для фильтрации и т.д.
