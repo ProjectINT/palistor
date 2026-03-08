@@ -1,6 +1,8 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
+import { CONFIG_PROPS } from "./constants";
 import type { TranslateFn } from "./types";
+import type { LeafEntry, GroupLeafMap } from "./registerNodes";
 
 /**
  * Топологическая сортировка computed-узлов по dependencies.
@@ -77,20 +79,54 @@ function topologicalSortComputed(
 }
 
 /**
- * Пересчитать вычисленное состояние всех листовых полей.
- * Вызывается при init и после каждого SET .value.
+ * Рекурсивно собирает все leaf-записи поддерева группового узла.
+ *
+ * Для каждого группового узла из groupLeafMap берутся его прямые листья,
+ * затем рекурсия в дочерние группы. Листовые узлы (с "value") пропускаются —
+ * они уже учтены в leaf-list своего родителя.
+ */
+function collectGroupLeafNodes(
+  groupNode: AnyConfigNode,
+  groupLeafMap: GroupLeafMap,
+): LeafEntry[] {
+  const result: LeafEntry[] = [];
+
+  // Прямые листья этой группы (включая виртуальный лист самой группы, если есть)
+  const ownLeaves = groupLeafMap.get(groupNode);
+  if (ownLeaves) result.push(...ownLeaves);
+
+  // Рекурсия в дочерние группы
+  for (const key of Object.keys(groupNode)) {
+    if (CONFIG_PROPS.has(key)) continue;
+    const child = groupNode[key] as AnyConfigNode;
+    if (!child || typeof child !== "object") continue;
+    if ("value" in child) continue; // уже в ownLeaves родителя
+    result.push(...collectGroupLeafNodes(child, groupLeafMap));
+  }
+
+  return result;
+}
+
+/**
+ * Пересчитать вычисленное состояние поддерева одного группового узла.
  *
  * Фаза 1: Пересчитать computed-значения (value — функция) в топологическом порядке.
- * Фаза 2: Пересчитать FieldState (isVisible, isRequired, error…) для всех полей.
+ * Фаза 2: Пересчитать FieldState (isVisible, isRequired, error…) для всех полей поддерева.
+ *
+ * collectValues всегда использует rootConfig — computed и validate могут зависеть
+ * от значений вне этой группы (глобальный snapshot).
  *
  * Возвращает Set узлов, чьё состояние изменилось (для notify).
  */
-export function recomputeAll(
+export function recomputeGroup(
+  groupNode: AnyConfigNode,
   rootConfig: AnyConfigNode,
-  leafNodes: Array<{ node: AnyConfigNode; path: string }>,
+  groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
   translate?: TranslateFn,
 ): Set<object> {
+  const leafNodes = collectGroupLeafNodes(groupNode, groupLeafMap);
+
   // ── Фаза 1: Пересчёт computed-значений ──────────────────────────────────
   const computedEntries = leafNodes.filter(({ node }) => typeof node.value === "function");
   const changed = new Set<object>();
@@ -133,4 +169,19 @@ export function recomputeAll(
   }
 
   return changed;
+}
+
+/**
+ * Пересчитать вычисленное состояние всех листовых полей.
+ * Делегирует в recomputeGroup(rootConfig) — полный пересчёт всего дерева.
+ *
+ * Вызывается при init и после каждого SET .value.
+ */
+export function recomputeAll(
+  rootConfig: AnyConfigNode,
+  groupLeafMap: GroupLeafMap,
+  nodeState: WeakMap<object, FieldState>,
+  translate?: TranslateFn,
+): Set<object> {
+  return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, translate);
 }

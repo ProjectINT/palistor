@@ -2,7 +2,7 @@ import { applyPatch } from "./applyPatch";
 import { type FieldState } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy/buildProxy";
-import { registerNodes } from "./registerNodes";
+import { registerNodes, type GroupLeafMap } from "./registerNodes";
 import { recomputeAll as _recomputeAll } from "./recomputeAll";
 import type { TranslateFn } from "./types";
 import { createPersistManager } from "./persist/persistManager";
@@ -82,10 +82,16 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   const nodeState = new WeakMap<object, FieldState>();
 
   /**
-   * Список всех листовых узлов конфига (для полного пересчёта).
-   * Заполняется при init, используется при recompute.
+   * Список всех листовых узлов конфига (для bumpLeafVersions в notification hub).
+   * Заполняется при init.
    */
   const leafNodes: Array<{ node: AnyConfigNode; path: string }> = [];
+
+  /**
+   * Маппинг группового узла → массив его прямых листьев.
+   * Используется recomputeGroup для скопированного пересчёта поддерева.
+   */
+  const groupLeafMap: GroupLeafMap = new WeakMap();
 
   /** Кэш Proxy-объектов — один прокси на узел конфига. */
   const proxyCache = new WeakMap<object, unknown>();
@@ -114,12 +120,12 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
-  function recomputeAll(): Set<object> { // TODO не думаю, что нужно прям все пересчитывать. Нужна функция recomputeGroup(node)
-    return _recomputeAll(rootConfig, leafNodes, nodeState, translate);
+  function recomputeAll(): Set<object> {
+    return _recomputeAll(rootConfig, groupLeafMap, nodeState, translate);
   }
 
   // Выполняем инициализацию
-  registerNodes(rootConfig, initialValues, leafNodes, nodeState);
+  registerNodes(rootConfig, initialValues, leafNodes, nodeState, "", groupLeafMap);
 
   // Инициализируем submitting/dirty/revalidate для корневого и вложенных групп
   initGroupSubmitting(rootConfig, nodeState);
