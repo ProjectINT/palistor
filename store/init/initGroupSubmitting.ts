@@ -13,11 +13,12 @@ export function initGroupSubmitting(
   // Для текущего узла (группового) — инициализируем management flags
   const existing = nodeState.get(node);
   if (existing) {
-    const updated = { ...existing };
-    if (updated.submitting === undefined) updated.submitting = false;
-    if (updated.dirty === undefined) updated.dirty = false;
-    if (updated.revalidate === undefined) updated.revalidate = false;
-    nodeState.set(node, updated);
+    nodeState.set(node, {
+      ...existing,
+      submitting: existing.submitting ?? false,
+      dirty: existing.dirty ?? false,
+      revalidate: existing.revalidate ?? false,
+    });
   } else {
     nodeState.set(node, {
       value: undefined,
@@ -34,11 +35,8 @@ export function initGroupSubmitting(
   // Рекурсия в дочерние группы
   for (const key of Object.keys(node)) {
     if (CONFIG_PROPS.has(key)) continue;
-    const child = node[key] as AnyConfigNode;
-    if (!child || typeof child !== "object") continue;
-    // Только группы (без value)
-    if (!("value" in child)) {
-      initGroupSubmitting(child, nodeState);
-    }
+    const child = node[key];
+    if (!child || typeof child !== "object" || "value" in (child as object)) continue;
+    initGroupSubmitting(child as AnyConfigNode, nodeState);
   }
 }
