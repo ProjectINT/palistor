@@ -9,7 +9,12 @@ import type { FieldState } from "./compute";
 export interface WriteDeps {
   rootConfig: AnyConfigNode;
   nodeState: WeakMap<object, FieldState>;
-  recomputeAll: () => Set<object>;
+  /**
+   * Пересчёт состояния.
+   * - Без аргументов → полный recomputeAll
+   * - С changedNodes → таргетированный пересчёт затронутых групп
+   */
+  recomputeAll: (changedNodes?: Set<object>) => Set<object>;
 }
 
 /** Результат выполнения write pipeline. */
@@ -177,8 +182,10 @@ export function writeValue(
   // Фаза 3: Setter — патч зависимых полей
   const patchedNodes = runSetter(node, processedValue, rootConfig, nodeState, previousValue);
 
-  // Фаза 4: Пересчёт всех computed-свойств (validate, isVisible, …)
-  const recomputedNodes = recomputeAll();
+  // Фаза 4: Таргетированный пересчёт затронутых групп
+  const changedSoFar = new Set<object>([node]);
+  for (const n of patchedNodes) changedSoFar.add(n);
+  const recomputedNodes = recomputeAll(changedSoFar);
 
   // Фаза 5: Объединение всех изменённых узлов
   const changed = mergeChanged(node, patchedNodes, recomputedNodes);

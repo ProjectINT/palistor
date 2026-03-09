@@ -3,6 +3,33 @@ import { collectValues, type AnyConfigNode } from "./collectValues";
 import { CONFIG_PROPS } from "./constants";
 import type { TranslateFn } from "./types";
 import type { LeafEntry, GroupLeafMap } from "./registerNodes";
+import {
+  getNodeGroupPath,
+  getRecipientGroups,
+  resolveGroupByPath,
+} from "./groupDeps";
+
+// ─── Типы ────────────────────────────────────────────────────────────────────
+
+/**
+ * Обёртка для отслеживания кросс-групповых зависимостей.
+ * Принимает узел (для определения группы-реципиента) и сырые значения,
+ * возвращает те же значения, обёрнутые в tracking-proxy.
+ */
+export type TrackingWrap = (node: object, values: Record<string, unknown>) => Record<string, unknown>;
+
+/**
+ * Зависимости для таргетированного пересчёта.
+ */
+interface RecomputeTargetedDeps {
+  rootConfig: AnyConfigNode;
+  groupLeafMap: GroupLeafMap;
+  nodeState: WeakMap<object, FieldState>;
+  nodeParents: WeakMap<object, object>;
+  nodePaths: WeakMap<object, string>;
+  groupDeps: Set<string>;
+  translate?: TranslateFn;
+}
 
 /**
  * Топологическая сортировка computed-узлов по dependencies.
@@ -108,25 +135,26 @@ function collectGroupLeafNodes(
 }
 
 /**
- * Пересчитать вычисленное состояние поддерева одного группового узла.
+ * Пересчитать вычисленное состояние для заданного списка листовых узлов.
  *
  * Фаза 1: Пересчитать computed-значения (value — функция) в топологическом порядке.
- * Фаза 2: Пересчитать FieldState (isVisible, isRequired, error…) для всех полей поддерева.
+ * Фаза 2: Пересчитать FieldState (isVisible, isRequired, error…) для всех полей.
  *
  * collectValues всегда использует rootConfig — computed и validate могут зависеть
- * от значений вне этой группы (глобальный snapshot).
+ * от значений вне текущей группы (глобальный snapshot).
+ *
+ * @param trackingWrap — опциональная обёртка для отслеживания кросс-групповых зависимостей.
+ *                       Если передана, каждый вызов collectValues оборачивается через неё.
  *
  * Возвращает Set узлов, чьё состояние изменилось (для notify).
  */
-export function recomputeGroup(
-  groupNode: AnyConfigNode,
+function recomputeLeaves(
+  leafNodes: LeafEntry[],
   rootConfig: AnyConfigNode,
-  groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
   translate?: TranslateFn,
+  trackingWrap?: TrackingWrap,
 ): Set<object> {
-  const leafNodes = collectGroupLeafNodes(groupNode, groupLeafMap);
-
   // ── Фаза 1: Пересчёт computed-значений ──────────────────────────────────
   const computedEntries = leafNodes.filter(({ node }) => typeof node.value === "function");
   const changed = new Set<object>();
@@ -136,7 +164,8 @@ export function recomputeGroup(
 
     for (const { node } of sorted) {
       // Собираем актуальные значения (с учётом уже пересчитанных computed)
-      const currentValues = collectValues(rootConfig, nodeState);
+      const rawValues = collectValues(rootConfig, nodeState);
+      const currentValues = trackingWrap ? trackingWrap(node, rawValues) : rawValues;
       const computedValue = (node.value as (values: Record<string, unknown>) => unknown)(currentValues);
       const state = nodeState.get(node);
       if (state && state.value !== computedValue) {
@@ -147,13 +176,14 @@ export function recomputeGroup(
   }
 
   // ── Фаза 2: Пересчёт FieldState (флаги, валидация, строки) ──────────────
-  const allValues = collectValues(rootConfig, nodeState);
+  const rawAllValues = collectValues(rootConfig, nodeState);
 
   for (const { node } of leafNodes) {
     const prev = nodeState.get(node);
     const currentValue = prev?.value ?? "";
     // Preserve revalidate flag: skip validation when revalidate is false
     const revalidate = prev?.revalidate ?? false;
+    const allValues = trackingWrap ? trackingWrap(node, rawAllValues) : rawAllValues;
     const next = computeFieldState(node, currentValue, allValues, revalidate, translate);
 
     // Preserve management flags that computeFieldState doesn't produce
@@ -172,6 +202,25 @@ export function recomputeGroup(
 }
 
 /**
+ * Пересчитать вычисленное состояние поддерева одного группового узла.
+ *
+ * Собирает ВСЕ листья поддерева (рекурсивно) и делегирует в recomputeLeaves.
+ *
+ * Возвращает Set узлов, чьё состояние изменилось (для notify).
+ */
+function recomputeGroup(
+  groupNode: AnyConfigNode,
+  rootConfig: AnyConfigNode,
+  groupLeafMap: GroupLeafMap,
+  nodeState: WeakMap<object, FieldState>,
+  translate?: TranslateFn,
+  trackingWrap?: TrackingWrap,
+): Set<object> {
+  const leafNodes = collectGroupLeafNodes(groupNode, groupLeafMap);
+  return recomputeLeaves(leafNodes, rootConfig, nodeState, translate, trackingWrap);
+}
+
+/**
  * Пересчитать вычисленное состояние всех листовых полей.
  * Делегирует в recomputeGroup(rootConfig) — полный пересчёт всего дерева.
  *
@@ -182,6 +231,61 @@ export function recomputeAll(
   groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
   translate?: TranslateFn,
+  trackingWrap?: TrackingWrap,
 ): Set<object> {
-  return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, translate);
+  return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, translate, trackingWrap);
+}
+
+// ─── Таргетированный пересчёт ────────────────────────────────────────────────
+
+/**
+ * Таргетированный пересчёт: вместо пересчёта ВСЕХ групп,
+ * пересчитывает только затронутые группы + их реципиентов.
+ *
+ * Алгоритм:
+ * 1. Определить группы изменённых узлов (source groups).
+ * 2. BFS по карте зависимостей: собрать все группы-реципиенты в топологическом порядке.
+ * 3. Для каждой затронутой группы пересчитать только её OWN листья (не рекурсивно).
+ *
+ * @param changedNodes — узлы, чьи значения изменились (написанный узел + setter targets)
+ */
+export function recomputeTargeted(
+  changedNodes: Set<object>,
+  deps: RecomputeTargetedDeps,
+): Set<object> {
+  const { rootConfig, groupLeafMap, nodeState, nodeParents, nodePaths, groupDeps, translate } = deps;
+
+  // 1. Находим группы-источники изменений
+  const sourceGroups = new Set<string>();
+  for (const node of changedNodes) {
+    sourceGroups.add(getNodeGroupPath(node, nodeParents, nodePaths));
+  }
+
+  // 2. BFS — собираем все затронутые группы в порядке "сначала доноры, потом реципиенты"
+  const orderedGroups: string[] = [...sourceGroups];
+  const visited = new Set(sourceGroups);
+
+  let i = 0;
+  while (i < orderedGroups.length) {
+    const current = orderedGroups[i++];
+    const recipients = getRecipientGroups(groupDeps, current);
+    for (const r of recipients) {
+      if (!visited.has(r)) {
+        visited.add(r);
+        orderedGroups.push(r);
+      }
+    }
+  }
+
+  // 3. Пересчитываем каждую группу (только OWN листья, не рекурсивно)
+  const allChanged = new Set<object>();
+
+  for (const groupPath of orderedGroups) {
+    const groupNode = resolveGroupByPath(rootConfig, groupPath);
+    const ownLeaves = groupLeafMap.get(groupNode) ?? [];
+    const changed = recomputeLeaves(ownLeaves, rootConfig, nodeState, translate);
+    for (const n of changed) allChanged.add(n);
+  }
+
+  return allChanged;
 }

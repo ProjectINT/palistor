@@ -3,7 +3,8 @@ import { type FieldState } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
-import { recomputeAll as _recomputeAll } from "./recomputeAll";
+import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "./recomputeAll";
+import type { TrackingWrap } from "./recomputeAll";
 import type { TranslateFn } from "./types";
 import { createPersistManager } from "./persist/persistManager";
 import { buildNodeMaps } from "./nodeMap";
@@ -16,6 +17,7 @@ import { initGroupSubmitting } from "./init/initGroupSubmitting";
 import { createNotificationHub } from "./init/createNotificationHub";
 import { createResolveManager } from "./init/createResolveManager";
 import { type NotifyFn } from "./resolvePipeline";
+import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "./groupDeps";
 
 import type {
   ConfigProxy,
@@ -120,23 +122,51 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
-  function recomputeAll(): Set<object> {
-    return _recomputeAll(rootConfig, groupLeafMap, nodeState, translate);
-  }
-
   // Выполняем инициализацию
   registerNodes(rootConfig, initialValues, leafNodes, nodeState, "", groupLeafMap);
 
   // Инициализируем submitting/dirty/revalidate для корневого и вложенных групп
   initGroupSubmitting(rootConfig, nodeState);
 
-  recomputeAll(); // вычисляем isVisible, isRequired, error и т.д.
+  // Строим маппинг узлов (пути + родители) — ПЕРЕД recomputeAll,
+  // т.к. нужны для построения карты зависимостей при tracking
+  buildNodeMaps(rootConfig, nodePaths, nodeParents);
+
+  // Создаём карту зависимостей групп (self-зависимости для каждой группы)
+  const groupDeps = createGroupDeps(rootConfig, nodePaths);
+
+  // Tracking-обёртка: при первом recomputeAll перехватываем GET-доступы
+  // к значениям других групп и записываем кросс-групповые зависимости.
+  const trackingWrap: TrackingWrap = (node, values) => {
+    const recipientPath = getNodeGroupPath(node, nodeParents, nodePaths);
+    return createTrackingValues(values, recipientPath, groupDeps);
+  };
+
+  // Первый recomputeAll с tracking — строит карту зависимостей
+  _recomputeAll(rootConfig, groupLeafMap, nodeState, translate, trackingWrap);
+
+  /**
+   * Пересчитать состояние. Два режима:
+   * - changedNodes передан → таргетированный пересчёт только затронутых групп
+   * - changedNodes не передан → полный пересчёт всего дерева (init, reset, resolve)
+   */
+  function recomputeAll(changedNodes?: Set<object>): Set<object> {
+    if (changedNodes && changedNodes.size > 0) {
+      return _recomputeTargeted(changedNodes, {
+        rootConfig,
+        groupLeafMap,
+        nodeState,
+        nodeParents,
+        nodePaths,
+        groupDeps,
+        translate,
+      });
+    }
+    return _recomputeAll(rootConfig, groupLeafMap, nodeState, translate);
+  }
 
   // Capture initial values for dirty tracking (after recompute to get computed values)
   captureInitialValues(rootConfig, nodeState, initialValueMap);
-
-  // Строим маппинг узлов (пути + родители)
-  buildNodeMaps(rootConfig, nodePaths, nodeParents);
 
   // ─── Notification hub ──────────────────────────────────────────────────────
 
