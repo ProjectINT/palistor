@@ -64,6 +64,11 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
   /** All resolve entries (node + resolve config). */
   const resolveEntries = initResolveStates(rootConfig, resolveStates);
 
+  /** Map for O(1) lookup in triggerResolve. */
+  const resolveEntryMap = new Map<object, { node: AnyConfigNode; resolve: Resolve }>(
+    resolveEntries.map((e) => [e.node, e]),
+  );
+
   // ─── Deps for executeResolve ───────────────────────────────────────────────
 
   const resolveDeps: ResolveDeps = {
@@ -80,9 +85,7 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
   // ─── Public API ────────────────────────────────────────────────────────────
 
   function triggerResolve(node: AnyConfigNode) {
-    const entry = resolveEntries.find(
-      (e: { node: AnyConfigNode; resolve: Resolve }) => e.node === node,
-    );
+    const entry = resolveEntryMap.get(node);
     if (!entry) return;
     executeResolve(node, entry.resolve, resolveDeps);
   }
@@ -102,7 +105,7 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
       );
       for (const entry of toRetrigger) {
         resetResolveState(entry.node, resolveStates);
-        triggerResolve(entry.node);
+        executeResolve(entry.node, entry.resolve, resolveDeps);
       }
     };
   }
@@ -111,7 +114,7 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
     for (const entry of resolveEntries) {
       const lazy = entry.resolve.options?.lazy ?? true;
       if (!lazy) {
-        triggerResolve(entry.node);
+        executeResolve(entry.node, entry.resolve, resolveDeps);
       }
     }
   }
