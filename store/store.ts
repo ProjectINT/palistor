@@ -170,15 +170,12 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Notification hub ──────────────────────────────────────────────────────
 
-  const hub = createNotificationHub({
-    rootConfig,
-    nodeState,
-    initialValueMap,
-    leafNodes,
-    nodePaths,
-  });
+  const hub = createNotificationHub({ leafNodes, nodePaths });
 
-  const { notifyChanged, subscribe, subscribeGlobal } = hub;
+  const { subscribe, subscribeGlobal } = hub;
+
+  const notifyChanged = (changed: Set<object>) =>
+    hub.notifyChanged(changed, { rootConfig, nodeState, initialValueMap });
 
   // ─── Translator ─────────────────────────────────────────────────────────────
 

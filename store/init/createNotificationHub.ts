@@ -4,11 +4,15 @@ import { recomputeDirty } from "../dirtyTracking";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export interface NotificationHubDeps {
+/** Зависимости, необходимые для пересчёта dirty-флагов при уведомлении. */
+export interface DirtyDeps {
   rootConfig: AnyConfigNode;
   nodeState: WeakMap<object, FieldState>;
   initialValueMap: WeakMap<object, unknown>;
-  leafNodes: Array<{ node: AnyConfigNode; path: string }>;
+}
+
+export interface NotificationHubDeps {
+  leafNodes: Array<{ node: object; path: string }>;
   /** Маппинг узлов на их dot-пути (заполняется buildNodeMaps). */
   nodePaths: WeakMap<object, string>;
 }
@@ -22,7 +26,7 @@ export interface NotificationHub {
    * 4. Уведомить глобальных подписчиков
    * 5. Вызвать postNotifyHook (retrigger resolves и т.д.)
    */
-  notifyChanged: (changed: Set<object>) => void;
+  notifyChanged: (changed: Set<object>, dirtyDeps: DirtyDeps) => void;
 
   /** Подписаться на изменения конкретного узла. */
   subscribe: (node: object, listener: () => void) => () => void;
@@ -58,11 +62,10 @@ export interface NotificationHub {
  * Консолидирует:
  * - per-node и глобальные подписки
  * - версионирование (global + per-node)
- * - dirty-tracking при каждом изменении
  * - post-notify hook для внешних подсистем (resolve retrigger)
  */
 export function createNotificationHub(deps: NotificationHubDeps): NotificationHub {
-  const { rootConfig, nodeState, initialValueMap, leafNodes, nodePaths } = deps;
+  const { leafNodes, nodePaths } = deps;
 
   /** Подписчики на изменение каждого поля. */
   const nodeListeners = new WeakMap<object, Set<() => void>>();
@@ -91,10 +94,11 @@ export function createNotificationHub(deps: NotificationHubDeps): NotificationHu
 
   // ─── Public API ──────────────────────────────────────────────────────────
 
-  function notifyChanged(changed: Set<object>) {
+  function notifyChanged(changed: Set<object>, dirtyDeps: DirtyDeps) {
     if (changed.size === 0) return;
 
     // Recompute dirty flags for all nodes (leaf + group)
+    const { rootConfig, nodeState, initialValueMap } = dirtyDeps;
     const dirtyResult = recomputeDirty(rootConfig, nodeState, initialValueMap);
     for (const n of dirtyResult.changed) changed.add(n);
 
