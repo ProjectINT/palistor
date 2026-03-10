@@ -4,6 +4,7 @@ import type { FieldState } from "./compute";
 import { applyPatch } from "./applyPatch";
 import { setGroupRevalidate, captureInitialValues, collectInitialSnapshot } from "./dirtyTracking";
 import { recomputeAndNotify } from "./recomputeAll";
+import type { ValuesCache } from "./valuesCache";
 
 export interface ResetDeps {
   nodeState: WeakMap<object, FieldState>;
@@ -11,6 +12,7 @@ export interface ResetDeps {
   notifyChanged: (changed: Set<object>) => void;
   /** Optional: used to update initial snapshot after reset (for dirty tracking). */
   initialValueMap?: WeakMap<object, unknown>;
+  valuesCache: ValuesCache;
 }
 
 /**
@@ -63,7 +65,7 @@ export function executeReset(
   deps: ResetDeps,
   values?: Record<string, unknown>,
 ): void {
-  const { nodeState, recomputeAll, notifyChanged, initialValueMap } = deps;
+  const { nodeState, recomputeAll, notifyChanged, initialValueMap, valuesCache } = deps;
 
   let patch: Record<string, unknown>;
 
@@ -86,7 +88,7 @@ export function executeReset(
   }
 
   // Применяем патч к nodeState
-  const patchChanged = applyPatch(groupNode, nodeState, patch, new Set());
+  const patchChanged = applyPatch(groupNode, nodeState, patch, new Set(), valuesCache);
 
   // Reset revalidate to false — clear validation mode
   const revalidateChanged = setGroupRevalidate(groupNode, false, nodeState);

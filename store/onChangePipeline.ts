@@ -1,7 +1,8 @@
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
 import { applyPatch } from "./applyPatch";
 import type { FieldState } from "./compute";
 import { recomputeAndNotify } from "./recomputeAll";
+import type { ValuesCache } from "./valuesCache";
 
 export interface OnChangeDeps {
   rootConfig: AnyConfigNode;
@@ -10,6 +11,7 @@ export interface OnChangeDeps {
   nodeParents: WeakMap<object, object>;
   recomputeAll: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
+  valuesCache: ValuesCache;
 }
 
 /**
@@ -49,7 +51,7 @@ export function fireOnChange(
   previousValue: unknown,
   deps: OnChangeDeps,
 ): void {
-  const { rootConfig, nodeState, nodePaths, nodeParents, recomputeAll, notifyChanged } = deps;
+  const { rootConfig, nodeState, nodePaths, nodeParents, recomputeAll, notifyChanged, valuesCache } = deps;
 
   const ancestors = findOnChangeAncestors(node, nodeParents);
   if (ancestors.length === 0) return;
@@ -62,7 +64,7 @@ export function fireOnChange(
       ? nodePath.slice(ancestorPath.length + 1)
       : nodePath;
 
-    const allValues = collectValues(rootConfig, nodeState);
+    const allValues = valuesCache.values;
 
     // Fire-and-forget: не ждём результат, не блокируем pipeline
     Promise.resolve(
@@ -75,6 +77,7 @@ export function fireOnChange(
             nodeState,
             patch as Record<string, unknown>,
             new Set(),
+            valuesCache,
           );
           if (patchChanged.size > 0) {
             recomputeAndNotify(patchChanged, recomputeAll, notifyChanged);

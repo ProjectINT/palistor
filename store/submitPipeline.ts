@@ -1,7 +1,8 @@
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
 import { CONFIG_PROPS } from "./constants";
 import type { FieldState } from "./compute";
 import { setGroupRevalidate } from "./dirtyTracking";
+import type { ValuesCache } from "./valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -17,9 +18,44 @@ export interface SubmitDeps {
   resetNode: (groupNode: AnyConfigNode, values?: Record<string, unknown>) => void;
   /** Очистить persist-хранилище после успешного submit. */
   clearPersist?: () => Promise<void>;
+  /** Постоянно-актуальный кеш значений. */
+  valuesCache: ValuesCache;
+  /** Маппинг узла → dot-путь (для извлечения поддерева значений). */
+  nodePaths: WeakMap<object, string>;
+  /** Корневой конфиг (для определения root vs sub-group). */
+  rootConfig: AnyConfigNode;
 }
 
 // ─── Внутренние утилиты ──────────────────────────────────────────────────────
+
+/**
+ * Извлечь поддерево значений для группового узла из кеша.
+ * Для корня → весь кеш, для вложенной группы → вложенный объект по пути.
+ * Возвращает snapshot (копию), чтобы beforeSubmit-трансформации не мутировали кеш.
+ */
+function getSubValues(
+  cache: ValuesCache,
+  groupNode: AnyConfigNode,
+  rootConfig: AnyConfigNode,
+  nodePaths: WeakMap<object, string>,
+): Record<string, unknown> {
+  let source: Record<string, unknown>;
+  if (groupNode === rootConfig) {
+    source = cache.values;
+  } else {
+    const path = nodePaths.get(groupNode);
+    if (!path) {
+      source = cache.values;
+    } else {
+      let current: unknown = cache.values;
+      for (const segment of path.split(".")) {
+        current = (current as Record<string, unknown>)?.[segment];
+      }
+      source = (current as Record<string, unknown>) ?? {};
+    }
+  }
+  return structuredClone(source);
+}
 
 /**
  * Собирает все листовые узлы поддерева с их путями и текущим состоянием.
@@ -105,7 +141,7 @@ export async function executeSubmit(
   groupNode: AnyConfigNode,
   deps: SubmitDeps,
 ): Promise<SubmitResult> {
-  const { nodeState, recomputeAll, notifyChanged, resetNode } = deps;
+  const { nodeState, recomputeAll, notifyChanged, resetNode, valuesCache, nodePaths, rootConfig } = deps;
 
   // 1. submitting = true + revalidate = true → recompute → notify
   //    Setting revalidate=true BEFORE recompute ensures computeFieldState
@@ -123,7 +159,7 @@ export async function executeSubmit(
 
   try {
     // 2. Собрать значения поддерева
-    let values = collectValues(groupNode, nodeState);
+    let values = getSubValues(valuesCache, groupNode, rootConfig, nodePaths);
 
     // 3. Leaf-level beforeSubmit
     values = applyLeafBeforeSubmit(groupNode, values);

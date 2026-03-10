@@ -1,7 +1,7 @@
 import { applyPatch } from "./applyPatch";
 import { recomputeAndNotify } from "./recomputeAll";
 import { type FieldState } from "./compute";
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
 import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "./recomputeAll";
@@ -19,6 +19,7 @@ import { createNotificationHub } from "./init/createNotificationHub";
 import { createResolveManager } from "./init/createResolveManager";
 import { type NotifyFn } from "./resolvePipeline";
 import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "./groupDeps";
+import { buildValuesCache } from "./valuesCache";
 
 import type {
   ConfigProxy,
@@ -133,6 +134,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // т.к. нужны для построения карты зависимостей при tracking
   buildNodeMaps(rootConfig, nodePaths, nodeParents);
 
+  // Строим постоянно-актуальный кеш значений — ПОСЛЕ registerNodes
+  const valuesCache = buildValuesCache(rootConfig, nodeState);
+
   // Создаём карту зависимостей групп (self-зависимости для каждой группы)
   const groupDeps = createGroupDeps(rootConfig, nodePaths);
 
@@ -144,7 +148,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   };
 
   // Первый recomputeAll с tracking — строит карту зависимостей
-  _recomputeAll(rootConfig, groupLeafMap, nodeState, translate, trackingWrap);
+  _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);
 
   /**
    * Пересчитать состояние. Два режима:
@@ -160,10 +164,11 @@ export function createProxyStore<TConfig extends Record<string, any>>(
         nodeParents,
         nodePaths,
         groupDeps,
+        valuesCache,
         translate,
       });
     }
-    return _recomputeAll(rootConfig, groupLeafMap, nodeState, translate);
+    return _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate);
   }
 
   // Capture initial values for dirty tracking (after recompute to get computed values)
@@ -202,22 +207,23 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     notifyChanged,
     notify,
     initialValueMap,
+    valuesCache,
   });
 
   const { triggerResolve, getResolveState } = resolveManager;
 
   // ─── Handlers (submit, reset, onChange) ──────────────────────────────────
 
-  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged, initialValueMap };
+  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged, initialValueMap, valuesCache };
   const resetNode = (node: AnyConfigNode, values?: Record<string, unknown>) => {
     executeReset(node, resetDeps, values);
   };
 
   const setValuesNode = (node: AnyConfigNode, patch: Record<string, unknown>): void => {
     // Фаза 1: форматируем патч — каждое листовое значение проходит через formatter узла.
-    const formatted = formatPatch(node, nodeState, patch, rootConfig);
+    const formatted = formatPatch(node, patch, valuesCache.values);
     // Фаза 2: применяем уже отформатированный патч к nodeState.
-    const changed = applyPatch(node, nodeState, formatted, new Set());
+    const changed = applyPatch(node, nodeState, formatted, new Set(), valuesCache);
     recomputeAndNotify(changed, recomputeAll, notifyChanged);
   };
 
@@ -227,6 +233,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     notifyChanged,
     resetNode,
     clearPersist: () => persistManager.clear(),
+    valuesCache,
+    nodePaths,
+    rootConfig,
   };
 
   const submitNode = (node: AnyConfigNode) => executeSubmit(node, submitDeps);
@@ -238,6 +247,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     nodeParents,
     recomputeAll,
     notifyChanged,
+    valuesCache,
   };
   const onFieldChange = (
     node: AnyConfigNode,
@@ -261,11 +271,12 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     onFieldChange,
     triggerResolve,
     getResolveState,
+    valuesCache,
   });
 
   // ─── Persist ────────────────────────────────────────────────────────────────
 
-  const getValues = () => collectValues(rootConfig, nodeState) as ExtractValues<TConfig>;
+  const getValues = () => structuredClone(valuesCache.values) as ExtractValues<TConfig>;
 
   const persistManager = createPersistManager({
     rootConfig,

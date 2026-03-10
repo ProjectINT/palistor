@@ -1,6 +1,7 @@
 import { CONFIG_PROPS } from "./constants";
 import type { AnyConfigNode } from "./collectValues";
 import type { FieldState } from "./compute";
+import { updateValuesCacheEntry, type ValuesCache } from "./valuesCache";
 
 /**
  * Применить патч (результат setter) к nodeState.
@@ -19,6 +20,7 @@ export function applyPatch(
   nodeState: WeakMap<object, FieldState>,
   patch: Record<string, unknown>,
   changed: Set<object>,
+  valuesCache?: ValuesCache,
 ): Set<object> {
   for (const key of Object.keys(patch)) {
     // Пропускаем служебные ключи конфига (value, label, validate, …)
@@ -36,11 +38,12 @@ export function applyPatch(
 
       if (state && state.value !== patchValue) {
         nodeState.set(child, { ...state, value: patchValue });
+        if (valuesCache) updateValuesCacheEntry(valuesCache, child, patchValue);
         changed.add(child);
       }
     } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {
       // Групповой узел — рекурсия
-      applyPatch(child, nodeState, patchValue as Record<string, unknown>, changed);
+      applyPatch(child, nodeState, patchValue as Record<string, unknown>, changed, valuesCache);
     }
   }
 

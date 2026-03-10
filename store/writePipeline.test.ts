@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { formatValue, storeValue, runSetter, mergeChanged, writeValue } from "./writePipeline";
 import type { FieldState } from "./compute";
 import type { AnyConfigNode } from "./collectValues";
+import { buildValuesCache, type ValuesCache } from "./valuesCache";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ describe("formatValue", () => {
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState("")]]);
 
-    const result = formatValue("hello", node, root, nodeState);
+    const result = formatValue("hello", node, buildValuesCache(root, nodeState).values);
 
     expect(result).toBe("hello");
   });
@@ -44,7 +45,7 @@ describe("formatValue", () => {
     const root: AnyConfigNode = { amount: node };
     const nodeState = makeNodeState([[node, makeState(0)]]);
 
-    const result = formatValue("42", node, root, nodeState);
+    const result = formatValue("42", node, buildValuesCache(root, nodeState).values);
 
     expect(result).toBe(42);
   });
@@ -63,11 +64,13 @@ describe("formatValue", () => {
       [other, makeState("USD")],
     ]);
 
-    expect(formatValue("5", node, root, nodeState)).toBe(5);
+    const cache = buildValuesCache(root, nodeState);
+    expect(formatValue("5", node, cache.values)).toBe(5);
 
     // Меняем currency → formatter должен умножить на 100
     nodeState.set(other, makeState("BTC"));
-    expect(formatValue("5", node, root, nodeState)).toBe(500);
+    cache.values.currency = "BTC";
+    expect(formatValue("5", node, cache.values)).toBe(500);
   });
 
   it("не падает если formatter вернёт undefined", () => {
@@ -78,7 +81,7 @@ describe("formatValue", () => {
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState("")]]);
 
-    const result = formatValue("x", node, root, nodeState);
+    const result = formatValue("x", node, buildValuesCache(root, nodeState).values);
 
     expect(result).toBeUndefined();
   });
@@ -145,8 +148,9 @@ describe("runSetter", () => {
     };
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState("card")]]);
+    const cache = buildValuesCache(root, nodeState);
 
-    const changed = runSetter(node, "bank", root, nodeState);
+    const changed = runSetter(node, "bank", root, nodeState, cache);
 
     expect(changed.size).toBe(0);
     expect(errorSpy).toHaveBeenCalledOnce();
@@ -168,8 +172,9 @@ describe("runSetter", () => {
       [node, makeState("card")],
       [targetNode, makeState("4111")],
     ]);
+    const cache = buildValuesCache(root, nodeState);
 
-    const changed = runSetter(node, "bank", root, nodeState);
+    const changed = runSetter(node, "bank", root, nodeState, cache);
 
     // cardNumber должен быть сброшен
     expect(nodeState.get(targetNode)!.value).toBe("");
@@ -188,8 +193,9 @@ describe("runSetter", () => {
       [node, makeState("card")],
       [targetNode, makeState("")], // уже пустая строка
     ]);
+    const cache = buildValuesCache(root, nodeState);
 
-    const changed = runSetter(node, "bank", root, nodeState);
+    const changed = runSetter(node, "bank", root, nodeState, cache);
 
     expect(changed.size).toBe(0);
   });
@@ -213,8 +219,9 @@ describe("runSetter", () => {
       [cityNode, makeState("")],
       [zipNode, makeState("")],
     ]);
+    const cache = buildValuesCache(root, nodeState);
 
-    const changed = runSetter(node, "us", root, nodeState);
+    const changed = runSetter(node, "us", root, nodeState, cache);
 
     expect(nodeState.get(cityNode)!.value).toBe("New York");
     expect(nodeState.get(zipNode)!.value).toBe(""); // не тронут
@@ -234,8 +241,9 @@ describe("runSetter", () => {
       [node, makeState("x")],
       [otherNode, makeState("active")],
     ]);
+    const cache = buildValuesCache(root, nodeState);
 
-    runSetter(node, "y", root, nodeState);
+    runSetter(node, "y", root, nodeState, cache);
 
     // Второй аргумент setter — snapshot значений, третий — previousValue
     expect(setterSpy).toHaveBeenCalledWith("y", { source: "x", status: "active" }, undefined);
@@ -293,11 +301,13 @@ describe("writeValue", () => {
   it("возвращает null если узел не зарегистрирован", () => {
     const node: AnyConfigNode = { value: "" };
     const root: AnyConfigNode = { field: node };
+    const cache = buildValuesCache(root, new WeakMap());
 
     const result = writeValue(node, "test", {
       rootConfig: root,
       nodeState: new WeakMap(),
       recomputeAll: () => new Set(),
+      valuesCache: cache,
     });
 
     expect(result).toBeNull();
@@ -311,11 +321,13 @@ describe("writeValue", () => {
     const root: AnyConfigNode = { amount: node };
     const nodeState = makeNodeState([[node, makeState(0)]]);
     const recomputeAll = vi.fn(() => new Set<object>());
+    const cache = buildValuesCache(root, nodeState);
 
     const result = writeValue(node, "42", {
       rootConfig: root,
       nodeState,
       recomputeAll,
+      valuesCache: cache,
     });
 
     // Значение отформатировано и записано
@@ -326,7 +338,7 @@ describe("writeValue", () => {
     expect(result!.changed.has(node)).toBe(true);
   });
 
-  it("setter-ветка: патчит зависимые узлы, НЕ записывает в текущий", () => {
+  it("setter-ветка: патчит зависимые узлы И записывает текущий", () => {
     const targetNode: AnyConfigNode = { value: "old" };
     const node: AnyConfigNode = {
       value: "a",
@@ -337,18 +349,20 @@ describe("writeValue", () => {
       [node, makeState("a")],
       [targetNode, makeState("old")],
     ]);
+    const cache = buildValuesCache(root, nodeState);
 
     const result = writeValue(node, "b", {
       rootConfig: root,
       nodeState,
       recomputeAll: () => new Set(),
+      valuesCache: cache,
     });
 
     expect(result!.changed.has(node)).toBe(true);
     expect(result!.changed.has(targetNode)).toBe(true);
     expect(nodeState.get(targetNode)!.value).toBe("new");
-    // storeValue НЕ вызывался — значение текущего узла осталось прежним
-    expect(nodeState.get(node)!.value).toBe("a");
+    // storeValue вызван — значение текущего узла обновлено
+    expect(nodeState.get(node)!.value).toBe("b");
   });
 
   it("возвращает skipped: true если значение не изменилось", () => {
@@ -356,11 +370,13 @@ describe("writeValue", () => {
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState("hello")]]);
     const recomputeAll = vi.fn(() => new Set<object>());
+    const cache = buildValuesCache(root, nodeState);
 
     const result = writeValue(node, "hello", {
       rootConfig: root,
       nodeState,
       recomputeAll,
+      valuesCache: cache,
     });
 
     expect(result).not.toBeNull();
@@ -380,12 +396,14 @@ describe("writeValue", () => {
     const root: AnyConfigNode = { amount: node };
     const nodeState = makeNodeState([[node, makeState(42)]]);
     const recomputeAll = vi.fn(() => new Set<object>());
+    const cache = buildValuesCache(root, nodeState);
 
     // Передаём строку "42", formatter вернёт число 42 — совпадение
     const result = writeValue(node, "42", {
       rootConfig: root,
       nodeState,
       recomputeAll,
+      valuesCache: cache,
     });
 
     expect(result!.skipped).toBe(true);
@@ -397,11 +415,13 @@ describe("writeValue", () => {
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState("hello")]]);
     const recomputeAll = vi.fn(() => new Set<object>());
+    const cache = buildValuesCache(root, nodeState);
 
     const result = writeValue(node, "world", {
       rootConfig: root,
       nodeState,
       recomputeAll,
+      valuesCache: cache,
     });
 
     expect(result!.skipped).toBeUndefined();
@@ -414,11 +434,13 @@ describe("writeValue", () => {
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState(NaN)]]);
     const recomputeAll = vi.fn(() => new Set<object>());
+    const cache = buildValuesCache(root, nodeState);
 
     const result = writeValue(node, NaN, {
       rootConfig: root,
       nodeState,
       recomputeAll,
+      valuesCache: cache,
     });
 
     // NaN === NaN через Object.is → skipped

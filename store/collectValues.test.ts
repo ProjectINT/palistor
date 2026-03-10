@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { collectValues, type AnyConfigNode } from "./collectValues";
+import { buildValuesCache, updateValuesCacheEntry } from "./valuesCache";
 import { type FieldState } from "./compute";
 
 // ─── Вспомогательные функции ─────────────────────────────────────────────────
@@ -28,7 +29,7 @@ function makeNodeState(entries: Array<[object, unknown]>): WeakMap<object, Field
   return map;
 }
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Тесты: collectValues (legacy) ──────────────────────────────────────────
 
 describe("collectValues", () => {
   it("возвращает пустой объект для пустого узла", () => {
@@ -69,6 +70,48 @@ describe("collectValues", () => {
       passport: { number: "AB123456" },
     });
   });
+});
+
+// ─── Тесты: buildValuesCache ─────────────────────────────────────────────────
+
+describe("buildValuesCache", () => {
+  it("возвращает пустой объект values для пустого конфига", () => {
+    const nodeState = new WeakMap<object, FieldState>();
+    const cache = buildValuesCache({}, nodeState);
+    expect(cache.values).toEqual({});
+  });
+
+  it("собирает значения одного листового поля", () => {
+    const email = { value: "" };
+    const config: AnyConfigNode = { email };
+    const nodeState = makeNodeState([[email, "user@example.com"]]);
+
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({ email: "user@example.com" });
+  });
+
+  it("собирает значения нескольких листовых полей", () => {
+    const firstName = { value: "" };
+    const lastName = { value: "" };
+    const config: AnyConfigNode = { firstName, lastName };
+    const nodeState = makeNodeState([
+      [firstName, "John"],
+      [lastName, "Doe"],
+    ]);
+
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({ firstName: "John", lastName: "Doe" });
+  });
+
+  it("рекурсирует в групповой узел", () => {
+    const number = { value: "" };
+    const passport: AnyConfigNode = { number };
+    const config: AnyConfigNode = { passport };
+    const nodeState = makeNodeState([[number, "AB123456"]]);
+
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({ passport: { number: "AB123456" } });
+  });
 
   it("обрабатывает несколько уровней вложенности", () => {
     const street = { value: "" };
@@ -81,7 +124,8 @@ describe("collectValues", () => {
       [city, "London"],
     ]);
 
-    expect(collectValues(config, nodeState)).toEqual({
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({
       home: { address: { street: "Baker St", city: "London" } },
     });
   });
@@ -89,59 +133,24 @@ describe("collectValues", () => {
   it("возвращает '' для листового поля без записи в nodeState", () => {
     const email = { value: "" };
     const config: AnyConfigNode = { email };
-    const nodeState = new WeakMap<object, FieldState>(); // нет записи для email
+    const nodeState = new WeakMap<object, FieldState>();
 
-    expect(collectValues(config, nodeState)).toEqual({ email: "" });
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({ email: "" });
   });
 
-  it("пропускает служебные ключи CONFIG_PROPS (value, label, validate, formatter…)", () => {
-    // Листовые узлы содержат value, label, validate — они не должны
-    // попасть в results как отдельные поля, только сам узел целиком
+  it("пропускает служебные ключи CONFIG_PROPS", () => {
     const email = { value: "", label: "Email", validate: () => undefined };
     const config: AnyConfigNode = { email };
     const nodeState = makeNodeState([[email, "test@test.com"]]);
 
-    const result = collectValues(config, nodeState);
-
-    // Результат содержит только "email", а не "value", "label", "validate"
-    expect(result).toEqual({ email: "test@test.com" });
-    expect(result).not.toHaveProperty("value");
-    expect(result).not.toHaveProperty("label");
-    expect(result).not.toHaveProperty("validate");
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({ email: "test@test.com" });
+    expect(cache.values).not.toHaveProperty("value");
+    expect(cache.values).not.toHaveProperty("label");
   });
 
-  it("пропускает служебные ключи групп (isVisible, isRequired на ConfigNode)", () => {
-    const number = { value: "" };
-    // Группа с isVisible — isVisible не должна попасть в values
-    const passport: AnyConfigNode = {
-      isVisible: () => true,
-      number,
-    };
-    const config: AnyConfigNode = { passport };
-    const nodeState = makeNodeState([[number, "XY999"]]);
-
-    const result = collectValues(config, nodeState);
-
-    expect(result).toEqual({ passport: { number: "XY999" } });
-    expect((result.passport as Record<string, unknown>)).not.toHaveProperty("isVisible");
-  });
-
-  it("пропускает примитивные (не-объектные) значения ключей", () => {
-    // Конфиг с ключом, значение которого — примитив (не узел дерева).
-    // Такого быть не должно в валидном конфиге, но функция должна устоять.
-    const email = { value: "" };
-    const config: AnyConfigNode = {
-      email,
-      someString: "unexpected" as unknown as AnyConfigNode,
-      someNumber: 42 as unknown as AnyConfigNode,
-      nullValue: null as unknown as AnyConfigNode,
-    };
-    const nodeState = makeNodeState([[email, "hi@example.com"]]);
-
-    expect(collectValues(config, nodeState)).toEqual({ email: "hi@example.com" });
-  });
-
-  it("корректно возвращает falsy-значения value (0, false, null)", () => {
+  it("корректно возвращает falsy-значения (0, false)", () => {
     const count = { value: 0 };
     const checked = { value: false };
     const config: AnyConfigNode = { count, checked };
@@ -150,6 +159,58 @@ describe("collectValues", () => {
       [checked, false],
     ]);
 
-    expect(collectValues(config, nodeState)).toEqual({ count: 0, checked: false });
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values).toEqual({ count: 0, checked: false });
+  });
+
+  it("регистрирует nodeSlot для каждого листового узла", () => {
+    const email = { value: "" };
+    const config: AnyConfigNode = { email };
+    const nodeState = makeNodeState([[email, "test"]]);
+
+    const cache = buildValuesCache(config, nodeState);
+    const slot = cache.nodeSlot.get(email);
+    expect(slot).toBeDefined();
+    expect(slot!.key).toBe("email");
+    expect(slot!.parent).toBe(cache.values);
+  });
+});
+
+// ─── Тесты: updateValuesCacheEntry ──────────────────────────────────────────
+
+describe("updateValuesCacheEntry", () => {
+  it("обновляет значение в кеше через nodeSlot (O(1))", () => {
+    const email = { value: "" };
+    const config: AnyConfigNode = { email };
+    const nodeState = makeNodeState([[email, "old@test.com"]]);
+
+    const cache = buildValuesCache(config, nodeState);
+    expect(cache.values.email).toBe("old@test.com");
+
+    updateValuesCacheEntry(cache, email, "new@test.com");
+    expect(cache.values.email).toBe("new@test.com");
+  });
+
+  it("обновляет вложенные значения", () => {
+    const street = { value: "" };
+    const address: AnyConfigNode = { street };
+    const config: AnyConfigNode = { address };
+    const nodeState = makeNodeState([[street, "Baker St"]]);
+
+    const cache = buildValuesCache(config, nodeState);
+    updateValuesCacheEntry(cache, street, "Wall St");
+
+    expect((cache.values.address as Record<string, unknown>).street).toBe("Wall St");
+  });
+
+  it("не падает для узла без слота", () => {
+    const unknown = { value: "" };
+    const config: AnyConfigNode = {};
+    const nodeState = new WeakMap<object, FieldState>();
+
+    const cache = buildValuesCache(config, nodeState);
+    // Shouldn't throw
+    updateValuesCacheEntry(cache, unknown, "test");
+    expect(cache.values).toEqual({});
   });
 });

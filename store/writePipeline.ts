@@ -1,7 +1,8 @@
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
 import { CONFIG_PROPS } from "./constants";
 import { applyPatch } from "./applyPatch";
 import type { FieldState } from "./compute";
+import { updateValuesCacheEntry, type ValuesCache } from "./valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,8 @@ export interface WriteDeps {
    * - С changedNodes → таргетированный пересчёт затронутых групп
    */
   recomputeAll: (changedNodes?: Set<object>) => Set<object>;
+  /** Постоянно-актуальный кеш значений. */
+  valuesCache: ValuesCache;
 }
 
 /** Результат выполнения write pipeline. */
@@ -39,12 +42,10 @@ export interface WriteResult {
 export function formatValue(
   rawValue: unknown,
   node: AnyConfigNode,
-  rootConfig: AnyConfigNode,
-  nodeState: WeakMap<object, FieldState>,
+  allValues: Record<string, unknown>,
 ): unknown {
   if (typeof node.formatter !== "function") return rawValue;
 
-  const allValues = collectValues(rootConfig, nodeState);
   return (node.formatter as (v: string | boolean, vals: Record<string, unknown>) => string | number | boolean)(
     rawValue as string | boolean,
     allValues,
@@ -64,9 +65,8 @@ export function formatValue(
  */
 export function formatPatch(
   configNode: AnyConfigNode,
-  nodeState: WeakMap<object, FieldState>,
   patch: Record<string, unknown>,
-  rootConfig: AnyConfigNode,
+  allValues: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
@@ -80,10 +80,10 @@ export function formatPatch(
 
     if ("value" in child) {
       // Листовой узел — прогоняем через formatter
-      result[key] = formatValue(patchValue, child, rootConfig, nodeState);
+      result[key] = formatValue(patchValue, child, allValues);
     } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {
       // Групповой узел — рекурсия
-      result[key] = formatPatch(child, nodeState, patchValue as Record<string, unknown>, rootConfig);
+      result[key] = formatPatch(child, patchValue as Record<string, unknown>, allValues);
     }
   }
 
@@ -100,11 +100,13 @@ export function storeValue(
   node: AnyConfigNode,
   processedValue: unknown,
   nodeState: WeakMap<object, FieldState>,
+  valuesCache?: ValuesCache,
 ): boolean {
   const state = nodeState.get(node);
   if (!state) return false;
 
   nodeState.set(node, { ...state, value: processedValue });
+  if (valuesCache) updateValuesCacheEntry(valuesCache, node, processedValue);
   return true;
 }
 
@@ -125,13 +127,12 @@ export function runSetter(
   processedValue: unknown,
   rootConfig: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
+  valuesCache: ValuesCache,
   previousValue?: unknown,
 ): Set<object> {
-  const allValues = collectValues(rootConfig, nodeState);
-  
   const patch = (node.setter as Setter)(
     processedValue,
-    allValues,
+    valuesCache.values,
     previousValue,
   );
 
@@ -143,7 +144,7 @@ export function runSetter(
     return new Set();
   }
 
-  return applyPatch(rootConfig, nodeState, patch, new Set());
+  return applyPatch(rootConfig, nodeState, patch, new Set(), valuesCache);
 }
 
 /**
@@ -164,10 +165,10 @@ export function writeValue(
   deps: WriteDeps,
   previousValue?: unknown,
 ): WriteResult | null {
-  const { rootConfig, nodeState, recomputeAll } = deps;
+  const { rootConfig, nodeState, recomputeAll, valuesCache } = deps;
 
   // Фаза 1: Форматирование
-  const processedValue = formatValue(rawValue, node, rootConfig, nodeState);
+  const processedValue = formatValue(rawValue, node, valuesCache.values);
 
   // Фаза 1.5: Проверка — значение не изменилось?
   const currentState = nodeState.get(node);
@@ -178,13 +179,14 @@ export function writeValue(
   // Фаза 2: Ветвление — setter (альтернативная запись) или прямая запись
   let patchedNodes: Set<object>;
 
+  // Всегда записываем значение в текущий узел
+  const stored = storeValue(node, processedValue, nodeState, valuesCache);
+  if (!stored) return null;
+
   if (typeof node.setter === "function") {
-    // Setter-ветка: патч зависимых полей, текущий узел НЕ записывается
-    patchedNodes = runSetter(node, processedValue, rootConfig, nodeState, previousValue);
+    // Setter-ветка: дополнительно патчит зависимые поля
+    patchedNodes = runSetter(node, processedValue, rootConfig, nodeState, valuesCache, previousValue);
   } else {
-    // Прямая запись значения в текущий узел
-    const stored = storeValue(node, processedValue, nodeState);
-    if (!stored) return null;
     patchedNodes = new Set();
   }
 

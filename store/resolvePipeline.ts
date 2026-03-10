@@ -16,6 +16,7 @@ import { createValuesTrackingProxy, type PendingWrite } from "./createValuesTrac
 import type { FieldState } from "./compute";
 import { mergeInitialValues } from "./dirtyTracking";
 import { recomputeAndNotify } from "./recomputeAll";
+import type { ValuesCache } from "./valuesCache";
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
@@ -100,6 +101,7 @@ export interface ResolveDeps {
   getValues: () => Record<string, unknown>;
   /** Initial value snapshot for dirty tracking — updated after resolver success. */
   initialValueMap: WeakMap<object, unknown>;
+  valuesCache: ValuesCache;
 }
 
 // ─── Initialization ──────────────────────────────────────────────────────────
@@ -154,6 +156,7 @@ function applyPendingWrites(
   writes: PendingWrite[],
   rootConfig: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
+  valuesCache: ValuesCache,
 ): Set<object> {
   const changed = new Set<object>();
 
@@ -168,7 +171,7 @@ function applyPendingWrites(
     }
     current[parts[parts.length - 1]] = value;
 
-    applyPatch(rootConfig, nodeState, patch, changed);
+    applyPatch(rootConfig, nodeState, patch, changed, valuesCache);
   }
 
   return changed;
@@ -203,7 +206,7 @@ export function executeResolve(
   resolve: Resolve,
   deps: ResolveDeps,
 ): Promise<unknown> {
-  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, notify, getValues, initialValueMap } = deps;
+  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, notify, getValues, initialValueMap, valuesCache } = deps;
   const state = resolveStates.get(node);
   if (!state) return Promise.resolve();
 
@@ -241,7 +244,7 @@ export function executeResolve(
       const values = getValues();
       const optimisticResult = resolve.optimisticResolver(values);
       if (optimisticResult && typeof optimisticResult === "object") {
-        applyPatch(node, nodeState, optimisticResult as Record<string, unknown>, allChanged);
+        applyPatch(node, nodeState, optimisticResult as Record<string, unknown>, allChanged, valuesCache);
       }
     } catch {
       // Optimistic resolver failure is non-fatal — proceed with async resolver
@@ -285,7 +288,7 @@ export function executeResolve(
 
         // 1. Apply resolver result to node's subtree
         if (result && typeof result === "object") {
-          applyPatch(node, nodeState, result as Record<string, unknown>, changed);
+          applyPatch(node, nodeState, result as Record<string, unknown>, changed, valuesCache);
           // Update initial snapshot for affected leaves (resolver data = initial state)
           mergeInitialValues(node, nodeState, initialValueMap, result as Record<string, unknown>);
         }
@@ -293,7 +296,7 @@ export function executeResolve(
         // 2. Flush buffered side-effects
         const writes = tracking.getPendingWrites();
         if (writes.length > 0) {
-          const writeChanged = applyPendingWrites(writes, rootConfig, nodeState);
+          const writeChanged = applyPendingWrites(writes, rootConfig, nodeState, valuesCache);
           for (const n of writeChanged) changed.add(n);
         }
 

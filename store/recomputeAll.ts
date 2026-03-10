@@ -1,5 +1,5 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "./compute";
-import { collectValues, type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./collectValues";
 import { CONFIG_PROPS } from "./constants";
 import type { TranslateFn } from "./types";
 import type { LeafEntry, GroupLeafMap } from "./registerNodes";
@@ -8,6 +8,7 @@ import {
   getRecipientGroups,
   resolveGroupByPath,
 } from "./groupDeps";
+import { updateValuesCacheEntry, type ValuesCache } from "./valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ interface RecomputeTargetedDeps {
   nodeParents: WeakMap<object, object>;
   nodePaths: WeakMap<object, string>;
   groupDeps: Set<string>;
+  valuesCache: ValuesCache;
   translate?: TranslateFn;
 }
 
@@ -152,6 +154,7 @@ function recomputeLeaves(
   leafNodes: LeafEntry[],
   rootConfig: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
+  valuesCache: ValuesCache,
   translate?: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
@@ -163,20 +166,21 @@ function recomputeLeaves(
     const sorted = topologicalSortComputed(computedEntries);
 
     for (const { node } of sorted) {
-      // Собираем актуальные значения (с учётом уже пересчитанных computed)
-      const rawValues = collectValues(rootConfig, nodeState);
-      const currentValues = trackingWrap ? trackingWrap(node, rawValues) : rawValues;
+      // Используем кеш вместо collectValues
+      const currentValues = trackingWrap ? trackingWrap(node, valuesCache.values) : valuesCache.values;
       const computedValue = (node.value as (values: Record<string, unknown>) => unknown)(currentValues);
       const state = nodeState.get(node);
+
       if (state && state.value !== computedValue) {
         nodeState.set(node, { ...state, value: computedValue });
+        updateValuesCacheEntry(valuesCache, node, computedValue);
         changed.add(node);
       }
     }
   }
 
   // ── Фаза 2: Пересчёт FieldState (флаги, валидация, строки) ──────────────
-  const rawAllValues = collectValues(rootConfig, nodeState);
+  const rawAllValues = valuesCache.values;
 
   for (const { node } of leafNodes) {
     const prev = nodeState.get(node);
@@ -213,11 +217,12 @@ function recomputeGroup(
   rootConfig: AnyConfigNode,
   groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
+  valuesCache: ValuesCache,
   translate?: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
   const leafNodes = collectGroupLeafNodes(groupNode, groupLeafMap);
-  return recomputeLeaves(leafNodes, rootConfig, nodeState, translate, trackingWrap);
+  return recomputeLeaves(leafNodes, rootConfig, nodeState, valuesCache, translate, trackingWrap);
 }
 
 /**
@@ -230,10 +235,11 @@ export function recomputeAll(
   rootConfig: AnyConfigNode,
   groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
+  valuesCache: ValuesCache,
   translate?: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
-  return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, translate, trackingWrap);
+  return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);
 }
 
 // ─── Таргетированный пересчёт ────────────────────────────────────────────────
@@ -253,7 +259,7 @@ export function recomputeTargeted(
   changedNodes: Set<object>,
   deps: RecomputeTargetedDeps,
 ): Set<object> {
-  const { rootConfig, groupLeafMap, nodeState, nodeParents, nodePaths, groupDeps, translate } = deps;
+  const { rootConfig, groupLeafMap, nodeState, nodeParents, nodePaths, groupDeps, valuesCache, translate } = deps;
 
   // 1. Находим группы-источники изменений
   const sourceGroups = new Set<string>();
@@ -283,7 +289,7 @@ export function recomputeTargeted(
   for (const groupPath of orderedGroups) {
     const groupNode = resolveGroupByPath(rootConfig, groupPath);
     const ownLeaves = groupLeafMap.get(groupNode) ?? [];
-    const changed = recomputeLeaves(ownLeaves, rootConfig, nodeState, translate);
+    const changed = recomputeLeaves(ownLeaves, rootConfig, nodeState, valuesCache, translate);
     for (const n of changed) allChanged.add(n);
   }
 
