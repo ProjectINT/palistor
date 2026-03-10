@@ -109,17 +109,13 @@ export function storeValue(
 }
 
 /**
- * Фаза 3: Применение setter (сайд-эффект записи).
+ * Фаза 3 (альтернативная ветка): Применение setter.
  *
- * Если у узла есть setter — вызывает его с новым значением
- * и snapshot всех значений. Setter возвращает патч: вложенный объект
- * со значениями для обновления других полей.
+ * Setter — альтернативный путь записи: вместо сохранения значения
+ * в текущий узел, setter возвращает патч для обновления других полей.
  *
- * applyPatch рекурсивно обходит дерево конфига и применяет патч,
- * возвращая Set узлов, чьи значения были фактически изменены.
- *
- * Если setter отсутствует или вернул пустой/невалидный объект —
- * возвращает пустой Set.
+ * Вызывается ТОЛЬКО когда у узла есть setter (проверка на стороне вызывающего).
+ * Если setter вернул не-объект — логирует ошибку, но не ломает рантайм.
  */
 
 export type Setter = (v: unknown, vals: Record<string, unknown>, prev: unknown) => Record<string, unknown>;
@@ -131,8 +127,6 @@ export function runSetter(
   nodeState: WeakMap<object, FieldState>,
   previousValue?: unknown,
 ): Set<object> {
-  if (typeof node.setter !== "function") return new Set();
-
   const allValues = collectValues(rootConfig, nodeState);
   
   const patch = (node.setter as Setter)(
@@ -141,16 +135,23 @@ export function runSetter(
     previousValue,
   );
 
-  if (!patch || typeof patch !== "object") return new Set();
+  if (!patch || typeof patch !== "object") {
+    console.error(
+      `[Palistor] setter must return an object, got ${patch === null ? "null" : typeof patch}.`,
+      { node, value: processedValue },
+    );
+    return new Set();
+  }
 
-  return applyPatch(rootConfig, nodeState, patch);
+  return applyPatch(rootConfig, nodeState, patch, new Set());
 }
 
 /**
- * Полный write pipeline: format → store → setter → recompute → merge changed.
+ * Полный write pipeline: format → (setter | store) → recompute → merge changed.
  *
- * Объединяет все фазы записи в одну функцию.
- * Каждая фаза — отдельная чистая функция, которая тестируется независимо.
+ * После форматирования проверяется наличие setter:
+ * — Если setter есть → альтернативная запись: патч зависимых полей (storeValue НЕ вызывается).
+ * — Если setter нет → прямая запись значения в текущий узел через storeValue.
  *
  * @param node   — узел конфига, в который пишем
  * @param rawValue — сырое значение из пользовательского ввода
@@ -174,20 +175,25 @@ export function writeValue(
     return { changed: new Set<object>(), skipped: true };
   }
 
-  // Фаза 2: Запись значения
-  const stored = storeValue(node, processedValue, nodeState);
+  // Фаза 2: Ветвление — setter (альтернативная запись) или прямая запись
+  let patchedNodes: Set<object>;
 
-  if (!stored) return null;
+  if (typeof node.setter === "function") {
+    // Setter-ветка: патч зависимых полей, текущий узел НЕ записывается
+    patchedNodes = runSetter(node, processedValue, rootConfig, nodeState, previousValue);
+  } else {
+    // Прямая запись значения в текущий узел
+    const stored = storeValue(node, processedValue, nodeState);
+    if (!stored) return null;
+    patchedNodes = new Set();
+  }
 
-  // Фаза 3: Setter — патч зависимых полей
-  const patchedNodes = runSetter(node, processedValue, rootConfig, nodeState, previousValue);
-
-  // Фаза 4: Таргетированный пересчёт затронутых групп
+  // Фаза 3: Таргетированный пересчёт затронутых групп
   const changedSoFar = new Set<object>([node]);
   for (const n of patchedNodes) changedSoFar.add(n);
   const recomputedNodes = recomputeAll(changedSoFar);
 
-  // Фаза 5: Объединение всех изменённых узлов
+  // Фаза 4: Объединение всех изменённых узлов
   const changed = mergeChanged(node, patchedNodes, recomputedNodes);
 
   return { changed };

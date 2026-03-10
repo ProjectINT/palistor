@@ -18,13 +18,14 @@ export function applyPatch(
   configNode: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
   patch: Record<string, unknown>,
-  changed: Set<object> = new Set(),
+  changed: Set<object>,
 ): Set<object> {
   for (const key of Object.keys(patch)) {
     // Пропускаем служебные ключи конфига (value, label, validate, …)
     if (CONFIG_PROPS.has(key)) continue;
 
     const child = configNode[key] as AnyConfigNode | undefined;
+
     if (!child || typeof child !== "object") continue;
 
     const patchValue = patch[key];

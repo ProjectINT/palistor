@@ -1,4 +1,5 @@
 import { applyPatch } from "./applyPatch";
+import { recomputeAndNotify } from "./recomputeAll";
 import { type FieldState } from "./compute";
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { createBuildProxy } from "./buildProxy/buildProxy";
@@ -216,10 +217,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     // Фаза 1: форматируем патч — каждое листовое значение проходит через formatter узла.
     const formatted = formatPatch(node, nodeState, patch, rootConfig);
     // Фаза 2: применяем уже отформатированный патч к nodeState.
-    const changed = applyPatch(node, nodeState, formatted);
-    const recomputed = recomputeAll();
-    for (const n of changed) recomputed.add(n);
-    notifyChanged(recomputed);
+    const changed = applyPatch(node, nodeState, formatted, new Set());
+    recomputeAndNotify(changed, recomputeAll, notifyChanged);
   };
 
   const submitDeps: SubmitDeps = {

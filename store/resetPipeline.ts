@@ -3,6 +3,7 @@ import type { AnyConfigNode } from "./collectValues";
 import type { FieldState } from "./compute";
 import { applyPatch } from "./applyPatch";
 import { setGroupRevalidate, captureInitialValues, collectInitialSnapshot } from "./dirtyTracking";
+import { recomputeAndNotify } from "./recomputeAll";
 
 export interface ResetDeps {
   nodeState: WeakMap<object, FieldState>;
@@ -85,16 +86,14 @@ export function executeReset(
   }
 
   // Применяем патч к nodeState
-  const patchChanged = applyPatch(groupNode, nodeState, patch);
+  const patchChanged = applyPatch(groupNode, nodeState, patch, new Set());
 
   // Reset revalidate to false — clear validation mode
   const revalidateChanged = setGroupRevalidate(groupNode, false, nodeState);
   for (const n of revalidateChanged) patchChanged.add(n);
 
   // Полный пересчёт всех вычисляемых свойств
-  const recomputed = recomputeAll();
-  for (const n of patchChanged) recomputed.add(n);
-  notifyChanged(recomputed);
+  recomputeAndNotify(patchChanged, recomputeAll, notifyChanged);
 
   // When explicit values are provided, update initial snapshot (new baseline → dirty = false).
   // When no values (restoring to initial), snapshot already matches → no update needed.

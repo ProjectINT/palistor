@@ -1,6 +1,7 @@
 import { collectValues, type AnyConfigNode } from "./collectValues";
 import { applyPatch } from "./applyPatch";
 import type { FieldState } from "./compute";
+import { recomputeAndNotify } from "./recomputeAll";
 
 export interface OnChangeDeps {
   rootConfig: AnyConfigNode;
@@ -73,11 +74,10 @@ export function fireOnChange(
             ancestor,
             nodeState,
             patch as Record<string, unknown>,
+            new Set(),
           );
           if (patchChanged.size > 0) {
-            const recomputed = recomputeAll();
-            for (const n of patchChanged) recomputed.add(n);
-            notifyChanged(recomputed);
+            recomputeAndNotify(patchChanged, recomputeAll, notifyChanged);
           }
         }
       })

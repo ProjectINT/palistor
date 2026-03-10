@@ -14,6 +14,7 @@ import type { PersistDriver, PersistOptions } from "./types";
 import type { AnyConfigNode } from "../collectValues";
 import type { FieldState } from "../compute";
 import { applyPatch } from "../applyPatch";
+import { recomputeAndNotify } from "../recomputeAll";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -187,17 +188,10 @@ export function createPersistManager(deps: PersistManagerDeps): PersistManager {
       }
 
       // Применяем как патч — applyPatch рекурсивно обходит дерево конфига
-      const patchedNodes = applyPatch(rootConfig, nodeState, values);
+      const patchedNodes = applyPatch(rootConfig, nodeState, values, new Set());
 
-      // Пересчитываем все computed (isVisible, error, …)
-      const recomputed = recomputeAll();
-
-      // Объединяем изменённые узлы
-      const changed = new Set(recomputed);
-      for (const n of patchedNodes) changed.add(n);
-
-      // Уведомляем подписчиков
-      notifyChanged(changed);
+      // Пересчитываем, объединяем и уведомляем подписчиков
+      recomputeAndNotify(patchedNodes, recomputeAll, notifyChanged);
     } catch {
       // Ошибки десериализации — молчим
     } finally {

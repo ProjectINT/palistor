@@ -137,14 +137,21 @@ describe("storeValue", () => {
 // ─── runSetter ───────────────────────────────────────────────────────────────
 
 describe("runSetter", () => {
-  it("возвращает пустой Set если setter отсутствует", () => {
-    const node: AnyConfigNode = { value: "card" };
+  it("логирует ошибку и возвращает пустой Set если setter вернул не-объект", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const node: AnyConfigNode = {
+      value: "card",
+      setter: () => null as any,
+    };
     const root: AnyConfigNode = { field: node };
     const nodeState = makeNodeState([[node, makeState("card")]]);
 
     const changed = runSetter(node, "bank", root, nodeState);
 
     expect(changed.size).toBe(0);
+    expect(errorSpy).toHaveBeenCalledOnce();
+    expect(errorSpy.mock.calls[0][0]).toMatch(/setter must return an object/);
+    errorSpy.mockRestore();
   });
 
   it("применяет патч от setter к другим полям", () => {
@@ -319,7 +326,7 @@ describe("writeValue", () => {
     expect(result!.changed.has(node)).toBe(true);
   });
 
-  it("включает запатченные узлы в changed", () => {
+  it("setter-ветка: патчит зависимые узлы, НЕ записывает в текущий", () => {
     const targetNode: AnyConfigNode = { value: "old" };
     const node: AnyConfigNode = {
       value: "a",
@@ -340,6 +347,8 @@ describe("writeValue", () => {
     expect(result!.changed.has(node)).toBe(true);
     expect(result!.changed.has(targetNode)).toBe(true);
     expect(nodeState.get(targetNode)!.value).toBe("new");
+    // storeValue НЕ вызывался — значение текущего узла осталось прежним
+    expect(nodeState.get(node)!.value).toBe("a");
   });
 
   it("возвращает skipped: true если значение не изменилось", () => {

@@ -29,7 +29,7 @@ describe("applyPatch", () => {
     const root: AnyConfigNode = { field: leaf };
     const nodeState = makeNodeState([[leaf, makeState("old")]]);
 
-    const changed = applyPatch(root, nodeState, { field: "new" });
+    const changed = applyPatch(root, nodeState, { field: "new" }, new Set());
 
     expect(nodeState.get(leaf)!.value).toBe("new");
     expect(changed.has(leaf)).toBe(true);
@@ -40,7 +40,7 @@ describe("applyPatch", () => {
     const root: AnyConfigNode = { field: leaf };
     const nodeState = makeNodeState([[leaf, makeState("same")]]);
 
-    const changed = applyPatch(root, nodeState, { field: "same" });
+    const changed = applyPatch(root, nodeState, { field: "same" }, new Set());
 
     expect(changed.size).toBe(0);
   });
@@ -58,7 +58,7 @@ describe("applyPatch", () => {
 
     const changed = applyPatch(root, nodeState, {
       address: { city: "Moscow" },
-    });
+    }, new Set());
 
     expect(nodeState.get(cityNode)!.value).toBe("Moscow");
     expect(nodeState.get(zipNode)!.value).toBe(""); // не тронут
@@ -78,7 +78,7 @@ describe("applyPatch", () => {
     const changed = applyPatch(root, nodeState, {
       name: "Alice",
       email: "alice@test.com",
-    });
+    }, new Set());
 
     expect(nodeState.get(nameNode)!.value).toBe("Alice");
     expect(nodeState.get(emailNode)!.value).toBe("alice@test.com");
@@ -91,7 +91,7 @@ describe("applyPatch", () => {
     const nodeState = makeNodeState([[leaf, makeState("x")]]);
 
     // "value" — это CONFIG_PROP, должен быть пропущен как ключ патча
-    const changed = applyPatch(root, nodeState, { value: "hack" });
+    const changed = applyPatch(root, nodeState, { value: "hack" }, new Set());
 
     expect(changed.size).toBe(0);
   });
@@ -101,7 +101,7 @@ describe("applyPatch", () => {
     const nodeState = makeNodeState([[root.field as AnyConfigNode, makeState("x")]]);
 
     // nonexistent — нет в конфиге, должен быть пропущен
-    const changed = applyPatch(root, nodeState, { nonexistent: "y" });
+    const changed = applyPatch(root, nodeState, { nonexistent: "y" }, new Set());
 
     expect(changed.size).toBe(0);
   });
@@ -112,7 +112,7 @@ describe("applyPatch", () => {
     const nodeState = makeNodeState([[leaf, makeState([1, 2])]]);
 
     // Патч передаёт массив — он не должен восприниматься как группа
-    const changed = applyPatch(root, nodeState, { items: [3, 4] });
+    const changed = applyPatch(root, nodeState, { items: [3, 4] }, new Set());
 
     expect(nodeState.get(leaf)!.value).toEqual([3, 4]);
     expect(changed.has(leaf)).toBe(true);

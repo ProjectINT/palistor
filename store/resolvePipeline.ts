@@ -15,6 +15,7 @@ import { type AnyConfigNode } from "./collectValues";
 import { createValuesTrackingProxy, type PendingWrite } from "./createValuesTrackingProxy";
 import type { FieldState } from "./compute";
 import { mergeInitialValues } from "./dirtyTracking";
+import { recomputeAndNotify } from "./recomputeAll";
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
@@ -248,9 +249,7 @@ export function executeResolve(
   }
 
   // Notify about loading: true (and optimistic data)
-  const optimisticChanged = recomputeAll();
-  for (const n of optimisticChanged) allChanged.add(n);
-  notifyChanged(allChanged);
+  recomputeAndNotify(allChanged, recomputeAll, notifyChanged);
 
   // ── Async resolver execution ─────────────────────────────────────────────
   const retryOpts = resolve.options?.retry ?? { attempts: 0, delay: 1000 };
@@ -313,9 +312,7 @@ export function executeResolve(
         state.dependencies = mergedDeps;
 
         // 5. Recompute + notify (once)
-        const recomputeChanged = recomputeAll();
-        for (const n of recomputeChanged) changed.add(n);
-        notifyChanged(changed);
+        recomputeAndNotify(changed, recomputeAll, notifyChanged);
 
         return result;
       } catch (err) {
@@ -346,9 +343,7 @@ export function executeResolve(
     }
 
     // Recompute + notify
-    const recomputeChanged = recomputeAll();
-    for (const n of recomputeChanged) changed.add(n);
-    notifyChanged(changed);
+    recomputeAndNotify(changed, recomputeAll, notifyChanged);
 
     return undefined;
   })();
