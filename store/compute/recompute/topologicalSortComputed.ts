@@ -18,6 +18,7 @@ export function topologicalSortComputed(
   // Строим граф: path → зависимости (только те, которые сами computed)
   const deps = new Map<string, string[]>();
   const entryByPath = new Map<string, { node: AnyConfigNode; path: string }>();
+
   for (const entry of computedEntries) {
     entryByPath.set(entry.path, entry);
     const nodeDeps = (entry.node.dependencies as string[] | undefined) ?? [];
@@ -29,18 +30,23 @@ export function topologicalSortComputed(
   // Инвертируем: нам нужно «кто зависит от кого», а не «от кого зависит».
   // inDeg считает входящие рёбра: если A зависит от B, то A имеет inDeg += кол-во зависимостей.
   const inDeg = new Map<string, number>();
+  
   for (const path of computedPaths) inDeg.set(path, 0);
+  
+  
   for (const [path, d] of deps) {
     // path зависит от каждого d[i] → path имеет inDeg += кол-во зависимостей
     inDeg.set(path, d.length);
   }
 
   const queue: string[] = [];
+  
   for (const [path, deg] of inDeg) {
     if (deg === 0) queue.push(path);
   }
 
   const sorted: Array<{ node: AnyConfigNode; path: string }> = [];
+  
   while (queue.length > 0) {
     const current = queue.shift()!;
     sorted.push(entryByPath.get(current)!);

@@ -34,13 +34,25 @@ export function recomputeLeaves(
     const sorted = topologicalSortComputed(computedEntries);
 
     for (const { node } of sorted) {
-      // valuesCache.values — O(1) чтение глобального состояния
+      // Получаем снапшот значений — либо обёрнутый в tracking-прокси (для записи
+      // кросс-групповых зависимостей), либо сырой объект. В обоих случаях это O(1) —
+      // valuesCache.values хранит единый «живой» объект со всеми значениями формы.
       const currentValues = trackingWrap ? trackingWrap(node, valuesCache.values) : valuesCache.values;
+
+      // Вычисляем новое значение, передавая в функцию текущий снапшот.
+      // node.value здесь — selector вида (values) => values.a + values.b.
       const computedValue = (node.value as (values: Record<string, unknown>) => unknown)(currentValues);
+
       const state = nodeState.get(node);
 
+      // Сравнение по ссылке (===): computed-функция должна возвращать стабильную ссылку,
+      // если содержимое не изменилось; иначе Phase 2 излишне пересчитает downstream-узлы.
+      // Если state отсутствует (узел ещё не инициализирован) — пропускаем молча;
+      // Phase 2 всё равно возьмёт prev?.value ?? "".
       if (state && state.value !== computedValue) {
         nodeState.set(node, { ...state, value: computedValue });
+        // Мутируем valuesCache.values in-place через slot (O(1)), чтобы узлы,
+        // идущие дальше в топологическом порядке, уже видели обновлённое значение.
         updateValuesCacheEntry(valuesCache, node, computedValue);
         changed.add(node);
       }

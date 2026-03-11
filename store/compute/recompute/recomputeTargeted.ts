@@ -24,7 +24,12 @@ export function recomputeTargeted(
   changedNodes: Set<object>,
   deps: RecomputeTargetedDeps,
 ): Set<object> {
-  const { rootConfig, groupLeafMap, nodeState, nodeParents, nodePaths, groupDeps, valuesCache, translate } = deps;
+
+  const {
+    rootConfig, groupLeafMap,
+    nodeState, nodeParents, nodePaths,
+    groupDeps, valuesCache, translate,
+  } = deps;
 
   // 1. Находим группы-источники изменений
   const sourceGroups = new Set<string>();
@@ -40,6 +45,7 @@ export function recomputeTargeted(
   while (i < orderedGroups.length) {
     const current = orderedGroups[i++];
     const recipients = getRecipientGroups(groupDeps, current);
+    
     for (const r of recipients) {
       if (!visited.has(r)) {
         visited.add(r);
