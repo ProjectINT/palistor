@@ -1,8 +1,10 @@
-import { type AnyConfigNode } from "./types";
-import { applyPatch } from "./applyPatch/applyPatch";
-import type { FieldState } from "./compute/index";
-import { recomputeAndNotify } from "./compute/recompute";
-import type { ValuesCache } from "./valuesCache";
+import { type AnyConfigNode } from "../types";
+import { applyPatch } from "../applyPatch/applyPatch";
+import type { FieldState } from "../compute/index";
+import { recomputeAndNotify } from "../compute/recompute";
+import type { ValuesCache } from "../valuesCache";
+import { findOnChangeAncestors } from "./findOnChangeAncestors";
+import { computeFieldKey } from "./computeFieldKey";
 
 export interface OnChangeDeps {
   rootConfig: AnyConfigNode;
@@ -15,23 +17,29 @@ export interface OnChangeDeps {
 }
 
 /**
- * Поднимается от изменённого узла к корню, собирая все группы с `onChange`.
+ * Применяет патч, возвращённый onChange-обработчиком, к стору.
+ * Пустой или примитивный патч игнорируется.
  */
-function findOnChangeAncestors(
-  node: object,
-  nodeParents: WeakMap<object, object>,
-): AnyConfigNode[] {
-  const result: AnyConfigNode[] = [];
-  let current = nodeParents.get(node);
+export function applyOnChangeResult(
+  patch: unknown,
+  ancestor: AnyConfigNode,
+  nodeState: WeakMap<object, FieldState>,
+  recomputeAll: () => Set<object>,
+  notifyChanged: (changed: Set<object>) => void,
+  valuesCache: ValuesCache,
+): void {
+  if (!patch || typeof patch !== "object" || Object.keys(patch as object).length === 0) return;
 
-  while (current) {
-    if (typeof (current as AnyConfigNode).onChange === "function") {
-      result.push(current as AnyConfigNode);
-    }
-    current = nodeParents.get(current);
+  const patchChanged = applyPatch(
+    ancestor,
+    nodeState,
+    patch as Record<string, unknown>,
+    new Set(),
+    valuesCache,
+  );
+  if (patchChanged.size > 0) {
+    recomputeAndNotify(patchChanged, recomputeAll, notifyChanged);
   }
-
-  return result;
 }
 
 /**
@@ -51,7 +59,7 @@ export function fireOnChange(
   previousValue: unknown,
   deps: OnChangeDeps,
 ): void {
-  const { rootConfig, nodeState, nodePaths, nodeParents, recomputeAll, notifyChanged, valuesCache } = deps;
+  const { nodeState, nodePaths, nodeParents, recomputeAll, notifyChanged, valuesCache } = deps;
 
   const ancestors = findOnChangeAncestors(node, nodeParents);
   if (ancestors.length === 0) return;
@@ -60,30 +68,14 @@ export function fireOnChange(
 
   for (const ancestor of ancestors) {
     const ancestorPath = nodePaths.get(ancestor) ?? "";
-    const fieldKey = ancestorPath
-      ? nodePath.slice(ancestorPath.length + 1)
-      : nodePath;
-
+    const fieldKey = computeFieldKey(nodePath, ancestorPath);
     const allValues = valuesCache.values;
 
     // Fire-and-forget: не ждём результат, не блокируем pipeline
     Promise.resolve(
       (ancestor.onChange as Function)({ fieldKey, newValue, previousValue, allValues }),
     )
-      .then((patch) => {
-        if (patch && typeof patch === "object" && Object.keys(patch as object).length > 0) {
-          const patchChanged = applyPatch(
-            ancestor,
-            nodeState,
-            patch as Record<string, unknown>,
-            new Set(),
-            valuesCache,
-          );
-          if (patchChanged.size > 0) {
-            recomputeAndNotify(patchChanged, recomputeAll, notifyChanged);
-          }
-        }
-      })
+      .then((patch) => applyOnChangeResult(patch, ancestor, nodeState, recomputeAll, notifyChanged, valuesCache))
       .catch(() => {
         // onChange ошибки не блокируют работу — fire-and-forget
       });

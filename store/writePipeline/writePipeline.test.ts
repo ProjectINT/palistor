@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { formatValue, storeValue, runSetter, mergeChanged, writeValue } from "./writePipeline";
-import type { FieldState } from "./compute";
-import type { AnyConfigNode } from "./types";
-import { buildValuesCache, type ValuesCache } from "./valuesCache";
+import type { FieldState } from "../compute";
+import type { AnyConfigNode } from "../types";
+import { buildValuesCache, type ValuesCache } from "../valuesCache";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 

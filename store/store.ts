@@ -9,10 +9,10 @@ import type { TrackingWrap } from "./compute/recompute";
 import type { TranslateFn } from "./types";
 import { createPersistManager } from "./persist/persistManager";
 import { buildNodeMaps } from "./nodeMap";
-import { executeReset, type ResetDeps } from "./resetPipeline";
-import { executeSubmit, type SubmitDeps } from "./submitPipeline";
-import { fireOnChange, type OnChangeDeps } from "./onChangePipeline";
-import { formatPatch } from "./writePipeline";
+import { executeReset, type ResetDeps } from "./resetPipeline/resetPipeline";
+import { executeSubmit, type SubmitDeps } from "./submitPipeline/submitPipeline";
+import { fireOnChange, type OnChangeDeps } from "./onChangePipeline/onChangePipeline";
+import { formatPatch } from "./writePipeline/writePipeline";
 import { captureInitialValues } from "./dirtyTracking";
 import { initGroupSubmitting } from "./init/initGroupSubmitting";
 import { createNotificationHub } from "./init/createNotificationHub";
@@ -31,7 +31,7 @@ import type {
 
 export type { FieldState } from "./compute/index";
 export type { Resolve, NotifyFn } from "./resolvePipeline/";
-export type { SubmitResult } from "./submitPipeline";
+export type { SubmitResult } from "./submitPipeline/submitPipeline";
 
 // Re-export all public types from the dedicated types module
 export type {
