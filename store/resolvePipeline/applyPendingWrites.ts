@@ -1,6 +1,6 @@
 import { applyPatch } from "../applyPatch";
 import { type AnyConfigNode } from "../collectValues";
-import { type PendingWrite } from "../createValuesTrackingProxy";
+import { type PendingWrite } from "./createValuesTrackingProxy";
 import type { FieldState } from "../compute";
 import type { ValuesCache } from "../valuesCache";
 

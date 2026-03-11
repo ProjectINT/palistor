@@ -1,6 +1,6 @@
 import { applyPatch } from "../applyPatch";
 import { type AnyConfigNode } from "../collectValues";
-import { createValuesTrackingProxy } from "../createValuesTrackingProxy";
+import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
 import { mergeInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../recomputeAll";
 import type { Resolve, ResolveDeps } from "./types";
