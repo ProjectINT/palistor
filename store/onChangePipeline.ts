@@ -1,5 +1,5 @@
 import { type AnyConfigNode } from "./collectValues";
-import { applyPatch } from "./applyPatch";
+import { applyPatch } from "./applyPatch/applyPatch";
 import type { FieldState } from "./compute";
 import { recomputeAndNotify } from "./recomputeAll";
 import type { ValuesCache } from "./valuesCache";

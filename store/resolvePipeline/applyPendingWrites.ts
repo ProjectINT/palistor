@@ -1,4 +1,4 @@
-import { applyPatch } from "../applyPatch";
+import { applyPatch } from "../applyPatch/applyPatch";
 import { type AnyConfigNode } from "../collectValues";
 import { type PendingWrite } from "./createValuesTrackingProxy";
 import type { FieldState } from "../compute";

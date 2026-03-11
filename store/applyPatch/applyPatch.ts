@@ -1,7 +1,7 @@
-import { CONFIG_PROPS } from "./constants";
-import type { AnyConfigNode } from "./collectValues";
-import type { FieldState } from "./compute";
-import { updateValuesCacheEntry, type ValuesCache } from "./valuesCache";
+import { CONFIG_PROPS } from "../constants";
+import type { AnyConfigNode } from "../collectValues";
+import type { FieldState } from "../compute";
+import { updateValuesCacheEntry, type ValuesCache } from "../valuesCache";
 
 /**
  * Применить патч (результат setter) к nodeState.

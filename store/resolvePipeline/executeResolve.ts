@@ -1,4 +1,4 @@
-import { applyPatch } from "../applyPatch";
+import { applyPatch } from "../applyPatch/applyPatch";
 import { type AnyConfigNode } from "../collectValues";
 import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
 import { mergeInitialValues } from "../dirtyTracking";
