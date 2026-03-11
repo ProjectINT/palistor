@@ -15,7 +15,7 @@ export function computeFieldState(
   currentValue: any,
   allValues: Record<string, any>,
   revalidate = true,
-  translate?: TranslateFn,
+  translate: TranslateFn,
 ): FieldState {
   // Вычисляем флаги
   const isVisible  = resolveFlag(configNode.isVisible, allValues, true);
@@ -42,8 +42,7 @@ export function computeFieldState(
     }
     // Пользовательская валидация (выполняется даже если isRequired уже не прошёл — сообщение из validate имеет приоритет)
     if (typeof configNode.validate === "function") {
-      const t: TranslateFn = translate ?? ((v: string) => v);
-      const result = configNode.validate(currentValue, allValues, t);
+      const result = configNode.validate(currentValue, allValues, translate);
 
       if (result) {
         isInvalid = Boolean(result);
