@@ -11,7 +11,7 @@ export type TranslateFn = (...args: any[]) => string;
  * Тип конфигурации формы: объект, где каждый ключ — узел конфига с типами TValues.
  */
 export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
-import type { NotifyFn } from "./resolvePipeline";
+import type { NotifyFn } from "./resolvePipeline/";
 import type { SubmitResult } from "./submitPipeline";
 
 // ─── Утилитарные типы ────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import type { AnyConfigNode } from "../collectValues";
-import type { ResolveState } from "../resolvePipeline";
+import type { ResolveState } from "../resolvePipeline/";
 
 export interface HandleLazyResolveDeps {
   triggerResolve?: (node: AnyConfigNode) => void;

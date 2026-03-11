@@ -1,0 +1,45 @@
+import { CONFIG_PROPS } from "../constants";
+import { type AnyConfigNode } from "../collectValues";
+import type { Resolve, ResolveState } from "./types";
+
+// ─── Initialization ──────────────────────────────────────────────────────────
+
+/**
+ * Recursively finds all nodes with `resolve` in the config tree.
+ * Initializes ResolveState for each of them.
+ * Returns the list of { node, resolve } entries.
+ */
+export function initResolveStates(
+  rootConfig: AnyConfigNode,
+  resolveStates: Map<object, ResolveState>,
+): Array<{ node: AnyConfigNode; resolve: Resolve }> {
+  const entries: Array<{ node: AnyConfigNode; resolve: Resolve }> = [];
+
+  function walk(node: AnyConfigNode) {
+    // Check if this node has a resolve
+    if (node.resolve && typeof node.resolve === "object" && typeof (node.resolve as any).resolver === "function") {
+      const resolve = node.resolve as unknown as Resolve;
+      entries.push({ node, resolve });
+
+      resolveStates.set(node, {
+        status: "idle",
+        promise: null,
+        error: null,
+        dependencies: new Set(resolve.deps ?? []),
+        attempt: 0,
+      });
+    }
+
+    // Recurse into children
+    for (const key of Object.keys(node)) {
+      if (CONFIG_PROPS.has(key)) continue;
+      const child = node[key] as AnyConfigNode;
+      if (child && typeof child === "object" && !("value" in child)) {
+        walk(child);
+      }
+    }
+  }
+
+  walk(rootConfig);
+  return entries;
+}

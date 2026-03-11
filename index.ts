@@ -70,5 +70,5 @@ export type {
 // Resolve — типы и хуки
 // ============================================================================
 
-export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline";
+export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline/";
 export { useNotifier } from "./react/useNotifier";

@@ -10,7 +10,7 @@ import {
   executeResolve,
   findResolvesToRetrigger,
   resetResolveState,
-} from "../resolvePipeline";
+} from "../resolvePipeline/";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

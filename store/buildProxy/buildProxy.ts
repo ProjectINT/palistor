@@ -3,7 +3,7 @@ import { type AnyConfigNode } from "../collectValues";
 import { writeValue, type WriteDeps } from "../writePipeline";
 import type { FieldState } from "../compute";
 import type { TranslateFn } from "../types";
-import type { ResolveState } from "../resolvePipeline";
+import type { ResolveState } from "../resolvePipeline/index";
 import type { ValuesCache } from "../valuesCache";
 
 import { computeProxyKeys } from "./computeProxyKeys";

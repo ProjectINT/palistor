@@ -26,7 +26,7 @@
 
 import { useEffect } from "react";
 import type { ProxyStore } from "../store/store";
-import type { NotifyFn } from "../store/resolvePipeline";
+import type { NotifyFn } from "../store/resolvePipeline/";
 
 /**
  * Registers a notification function in ProxyStore for use in resolver onError.

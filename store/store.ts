@@ -17,7 +17,7 @@ import { captureInitialValues } from "./dirtyTracking";
 import { initGroupSubmitting } from "./init/initGroupSubmitting";
 import { createNotificationHub } from "./init/createNotificationHub";
 import { createResolveManager } from "./init/createResolveManager";
-import { type NotifyFn } from "./resolvePipeline";
+import { type NotifyFn } from "./resolvePipeline/";
 import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "./groupDeps";
 import { buildValuesCache } from "./valuesCache";
 
@@ -30,7 +30,7 @@ import type {
 } from "./types";
 
 export type { FieldState } from "./compute";
-export type { Resolve, NotifyFn } from "./resolvePipeline";
+export type { Resolve, NotifyFn } from "./resolvePipeline/";
 export type { SubmitResult } from "./submitPipeline";
 
 // Re-export all public types from the dedicated types module

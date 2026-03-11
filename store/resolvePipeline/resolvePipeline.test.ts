@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createProxyStore } from "./store";
-import type { ResolveState } from "./resolvePipeline";
+import { describe, it, expect, vi } from "vitest";
+import { createProxyStore } from "../store";
 
 // ─── Helper: flush microtasks ──────────────────────────────────────────────
 
