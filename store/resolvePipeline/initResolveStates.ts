@@ -1,6 +1,7 @@
 import { CONFIG_PROPS } from "../constants";
 import { type AnyConfigNode } from "../collectValues";
 import type { Resolve, ResolveState } from "./types";
+import { resetResolveState } from "./resetResolveState";
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
@@ -21,13 +22,7 @@ export function initResolveStates(
       const resolve = node.resolve as unknown as Resolve;
       entries.push({ node, resolve });
 
-      resolveStates.set(node, {
-        status: "idle",
-        promise: null,
-        error: null,
-        dependencies: new Set(resolve.deps ?? []),
-        attempt: 0,
-      });
+      resetResolveState(node, resolveStates, new Set(resolve.deps ?? []));
     }
 
     // Recurse into children
