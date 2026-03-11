@@ -1,5 +1,5 @@
 import { applyPatch } from "../applyPatch/applyPatch";
-import { type AnyConfigNode } from "../collectValues";
+import { type AnyConfigNode } from "../types";
 import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
 import { mergeInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../recomputeAll";

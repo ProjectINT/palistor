@@ -74,8 +74,7 @@ form.email.value = "X"   (SET trap в buildProxy)
 ```
 form.submit()                (executeSubmit)
   ├─ 1. submitting = true, setGroupRevalidate(true) → recomputeAll → notifyChanged
-  ├─ 2. collectValues()
-  ├─ 3. applyLeafBeforeSubmit()   leaf-level beforeSubmit на snapshot
+  ├─ 2. applyLeafBeforeSubmit()   leaf-level beforeSubmit на snapshot
   ├─ 4. group beforeSubmit()      group-level beforeSubmit
   ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
   ├─ 6. onSubmit(values) → result
@@ -139,7 +138,6 @@ store/
   recomputeAll.ts       topo-sort computed + computeFieldState для всех листьев
   onChangePipeline.ts   fire-and-forget onChange для предков
   applyPatch.ts         применение патчей к дереву
-  collectValues.ts      снапшот значений для computed/validate/resolve
   registerNodes.ts      инициализация leafNodes + nodeState
   dirtyTracking.ts      dirty от initial (captureInitialValues + recomputeDirty)
   nodeMap.ts            nodePaths + nodeParents
@@ -441,7 +439,7 @@ function writeValue(node, rawValue, deps):
 | Поле без `dependencies` (wildcard) | Всегда пересчитывается — вставлено в wildcardLeaves |
 | `dependencies: []` | Пересчитывается только при изменении своего value |
 | Computed зависит от computed | topologicalSort применяется к affected-подмножеству |
-| `collectValues` нужен полный | Да, collectValues(rootConfig) всегда читает всё дерево — это дёшево (чтение WeakMap) |
+| Snapshot значений для computed/validate | Читается из `valuesCache.values` — O(1), всегда актуален |
 | Новые поля после resolve | reverseDepIndex нужно обновить при resolve applyPatch |
 | onChange-патч меняет неожиданные поля | changedPaths из applyPatch содержит все фактически изменённые ноды |
 

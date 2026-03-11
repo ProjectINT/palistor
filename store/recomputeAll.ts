@@ -1,5 +1,5 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "./compute";
-import { type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./types";
 import { CONFIG_PROPS } from "./constants";
 import type { TranslateFn } from "./types";
 import type { LeafEntry, GroupLeafMap } from "./registerNodes";
@@ -142,11 +142,11 @@ function collectGroupLeafNodes(
  * Фаза 1: Пересчитать computed-значения (value — функция) в топологическом порядке.
  * Фаза 2: Пересчитать FieldState (isVisible, isRequired, error…) для всех полей.
  *
- * collectValues всегда использует rootConfig — computed и validate могут зависеть
+ * valuesCache всегда содержит globalRoot снапшот — computed и validate могут зависеть
  * от значений вне текущей группы (глобальный snapshot).
  *
  * @param trackingWrap — опциональная обёртка для отслеживания кросс-групповых зависимостей.
- *                       Если передана, каждый вызов collectValues оборачивается через неё.
+ *                       Если передана, значения из valuesCache оборачиваются через неё.
  *
  * Возвращает Set узлов, чьё состояние изменилось (для notify).
  */
@@ -166,7 +166,7 @@ function recomputeLeaves(
     const sorted = topologicalSortComputed(computedEntries);
 
     for (const { node } of sorted) {
-      // Используем кеш вместо collectValues
+      // valuesCache.values — O(1) чтение глобального состояния
       const currentValues = trackingWrap ? trackingWrap(node, valuesCache.values) : valuesCache.values;
       const computedValue = (node.value as (values: Record<string, unknown>) => unknown)(currentValues);
       const state = nodeState.get(node);

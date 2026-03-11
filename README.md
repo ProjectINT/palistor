@@ -675,7 +675,7 @@ palistor/
 │   ├── store.ts                       # createProxyStore — фабрика, подписки, версии
 │   ├── types.ts                       # ConfigNode, FieldProxyNode, GroupProxyNode, ProxyStore…
 │   ├── compute.ts                     # FieldState, computeFieldState, resolveFlag
-│   ├── collectValues.ts               # Сбор текущих значений в объект
+│   ├── valuesCache.ts                 # Постоянно-актуальный кеш значений (O(1) вместо обхода дерева)
 │   ├── registerNodes.ts               # Инициализация leafNodes + nodeState
 │   ├── recomputeAll.ts                # Пересчёт FieldState + топологическая сортировка computed
 │   ├── hasComputedProps.ts            # Проверка computed-свойств у группы

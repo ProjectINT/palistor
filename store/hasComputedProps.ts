@@ -1,5 +1,5 @@
 import { FIELD_STATE_PROPS } from "./constants";
-import type { AnyConfigNode } from "./collectValues";
+import type { AnyConfigNode } from "./types";
 
 /**
  * Проверяет, есть ли у узла вычисляемые свойства (функции isVisible, isRequired…).

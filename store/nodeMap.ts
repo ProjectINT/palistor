@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "./constants";
-import type { AnyConfigNode } from "./collectValues";
+import type { AnyConfigNode } from "./types";
 
 /**
  * Рекурсивно строит маппинги путей и родителей для всех узлов дерева конфига.

@@ -1,6 +1,14 @@
 import type { PersistManager } from "./persist/persistManager";
 
 /**
+ * Внутренний тип для рекурсивного обхода дерева конфига.
+ * Используется в registerNodes, buildProxy, applyPatch, recomputeAll и др.
+ */
+export interface AnyConfigNode {
+  [key: string]: AnyConfigNode | unknown;
+}
+
+/**
  * Функция перевода (next-intl, i18next, …).
  * label/placeholder/description в конфиге могут быть функцией от TranslateFn.
  * Принимает любое количество аргументов — совместима с next-intl `t`, i18next `t` и др.

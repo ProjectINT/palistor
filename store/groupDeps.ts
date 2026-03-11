@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./types";
 import { CONFIG_PROPS } from "./constants";
 
 /**
@@ -125,16 +125,16 @@ export function resolveGroupByPath(
   return node;
 }
 
-// ─── Tracking-proxy для collectValues ────────────────────────────────────────
+// ─── Tracking-proxy для values-кеша ───────────────────────────────────────────────
 
 /**
- * Обёртка для результата collectValues, которая перехватывает READ-доступы
+ * Обёртка для valuesCache.values, которая перехватывает READ-доступы
  * и записывает кросс-групповые зависимости в Set.
  *
  * При чтении leaf-значения определяется группа-донор (по текущему уровню вложенности).
  * Если донор ≠ реципиент → записываем пару donor→recipient.
  *
- * @param values             — плоский объект значений из collectValues
+ * @param values             — плоский объект значений из valuesCache.values
  * @param recipientGroupPath — путь группы, для которой сейчас идёт вычисление
  * @param deps               — Set для записи обнаруженных зависимостей
  * @param currentGroupPath   — текущий уровень вложенности в дереве значений (начинается с "")

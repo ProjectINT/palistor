@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "./constants";
-import type { AnyConfigNode } from "./collectValues";
+import type { AnyConfigNode } from "./types";
 import type { FieldState } from "./compute";
 import { applyPatch } from "./applyPatch/applyPatch";
 import { setGroupRevalidate, captureInitialValues, collectInitialSnapshot } from "./dirtyTracking";

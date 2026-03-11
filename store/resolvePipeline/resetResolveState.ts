@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../collectValues";
+import { type AnyConfigNode } from "../types";
 import type { ResolveState } from "./types";
 
 /**

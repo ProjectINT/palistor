@@ -8,7 +8,7 @@ import {
   pairKey,
 } from "./groupDeps";
 import { buildNodeMaps } from "./nodeMap";
-import type { AnyConfigNode } from "./collectValues";
+import type { AnyConfigNode } from "./types";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 

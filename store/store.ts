@@ -1,7 +1,7 @@
 import { applyPatch } from "./applyPatch/applyPatch";
 import { recomputeAndNotify } from "./recomputeAll";
 import { type FieldState } from "./compute";
-import { type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./types";
 import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
 import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "./recomputeAll";

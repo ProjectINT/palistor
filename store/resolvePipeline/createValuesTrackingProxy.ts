@@ -40,7 +40,7 @@
 export interface PendingWrite {
   /**
    * Путь в дереве значений, разделённый точками, например "user.vehicleExists" или "payment.amount".
-   * Отражает структуру объекта values, возвращаемого collectValues().
+   * Отражает структуру объекта values (аналогично valuesCache.values).
    * applyPendingWrites() разбивает этот путь по "." для построения вложенного патч-объекта.
    */
   path: string;
@@ -72,7 +72,7 @@ export interface ValuesTrackingResult {
  * - Чтение объекта возвращает вложенный прокси (рекурсивно), не трекается до обращения к листу
  * - Запись по ЛЮБОМУ пути буферизирует присваивание в pendingWrites[], не затрагивая реальные данные
  *
- * @param values — текущий снимок значений (из collectValues), здесь считается только для чтения
+ * @param values — текущий снапшот значений (из valuesCache.values), здесь считается только для чтения
  */
 export function createValuesTrackingProxy(
   values: Record<string, unknown>,

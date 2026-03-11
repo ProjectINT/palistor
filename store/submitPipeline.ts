@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./types";
 import { CONFIG_PROPS } from "./constants";
 import type { FieldState } from "./compute";
 import { setGroupRevalidate } from "./dirtyTracking";

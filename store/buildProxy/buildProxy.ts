@@ -1,5 +1,5 @@
 import { CONFIG_NODE } from "../constants";
-import { type AnyConfigNode } from "../collectValues";
+import { type AnyConfigNode } from "../types";
 import { writeValue, type WriteDeps } from "../writePipeline";
 import type { FieldState } from "../compute";
 import type { TranslateFn } from "../types";

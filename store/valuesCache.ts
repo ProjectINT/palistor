@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "./constants";
-import type { AnyConfigNode } from "./collectValues";
+import type { AnyConfigNode } from "./types";
 import type { FieldState } from "./compute";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export interface ValuesCache {
  * Построить начальный кеш значений из дерева конфига + nodeState.
  * Вызывается ОДИН раз после registerNodes.
  *
- * Обход дерева аналогичен collectValues, но дополнительно
+ * Обходит дерево конфига и дополнительно
  * запоминает «слот» каждого листового узла для O(1) обновлений.
  */
 export function buildValuesCache(

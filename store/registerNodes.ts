@@ -1,6 +1,6 @@
 import { type FieldState, resolveFlag } from "./compute";
 import { CONFIG_PROPS } from "./constants";
-import { type AnyConfigNode } from "./collectValues";
+import { type AnyConfigNode } from "./types";
 import { hasComputedProps } from "./hasComputedProps";
 
 /**

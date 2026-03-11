@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../collectValues";
+import { type AnyConfigNode } from "../types";
 import type { FieldState } from "../compute";
 import type { ValuesCache } from "../valuesCache";
 

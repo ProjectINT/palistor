@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../collectValues";
+import { type AnyConfigNode } from "../types";
 import type { Resolve, ResolveState } from "./types";
 
 // ─── Check if changed paths intersect with resolve dependencies ──────────────

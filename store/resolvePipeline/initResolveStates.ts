@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
-import { type AnyConfigNode } from "../collectValues";
+import { type AnyConfigNode } from "../types";
 import type { Resolve, ResolveState } from "./types";
 import { resetResolveState } from "./resetResolveState";
 

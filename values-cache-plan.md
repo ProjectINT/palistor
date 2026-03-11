@@ -1,20 +1,22 @@
-# План: Замена collectValues на постоянно-актуальный values-кеш
+# valuesCache — постоянно-актуальный кеш значений
 
-## Проблема
+> **Статус: реализовано.** `collectValues` удалена. Все вызовы заменены на `valuesCache.values`.
 
-`collectValues(rootConfig, nodeState)` рекурсивно обходит дерево конфига при **каждом** вызове
-и собирает `{ key: nodeState.get(child).value }`. Вызывается в 6 местах:
+## Предпосылки
 
-| # | Файл | Строка | Контекст |
-|---|------|--------|----------|
-| 1 | `recomputeAll.ts` | 167 | Каждый computed-узел — `collectValues` внутри цикла |
-| 2 | `recomputeAll.ts` | 180 | Фаза 2 — ещё один полный snapshot перед валидацией |
-| 3 | `writePipeline.ts` | 47 | `formatValue` — formatter нуждается в allValues |
-| 4 | `writePipeline.ts` | 130 | `runSetter` — setter получает allValues |
-| 5 | `onChangePipeline.ts` | 65 | `fireOnChange` — onChange получает allValues |
-| 6 | `buildProxy.ts` | 122 | `translatableHandler` — label/placeholder/description функции |
-| 7 | `store.ts` | 268 | `getValues()` — публичный API + persist auto-save |
-| 8 | `submitPipeline.ts` | 130 | `executeSubmit` — значения для onSubmit callback |
+`collectValues(rootConfig, nodeState)` рекурсивно обходила дерево конфига при **каждом** вызове
+и собирала `{ key: nodeState.get(child).value }`. Вызывалась в 6 местах:
+
+| # | Файл | Контекст |
+|---|------|----------|
+| 1 | `recomputeAll.ts` | Каждый computed-узел — внутри цикла |
+| 2 | `recomputeAll.ts` | Фаза 2 — snapshot перед валидацией |
+| 3 | `writePipeline.ts` | `formatValue` — formatter нуждается в allValues |
+| 4 | `writePipeline.ts` | `runSetter` — setter получает allValues |
+| 5 | `onChangePipeline.ts` | `fireOnChange` — onChange получает allValues |
+| 6 | `buildProxy.ts` | `translatableHandler` — label/placeholder/description функции |
+| 7 | `store.ts` | `getValues()` — публичный API + persist auto-save |
+| 8 | `submitPipeline.ts` | `executeSubmit` — значения для onSubmit callback |
 
 При форме из 50 полей — 50 итераций × N вызовов за один SET = сотни лишних обходов.
 
@@ -27,10 +29,9 @@
 Значения value меняются **только в 4 точках**:
 
 1. **`registerNodes`** — инициализация `nodeState.set(child, { value: initialValue })`
-2. **`applyPatch`** — `nodeState.set(child, { ...state, value: patchValue })` 
+2. **`applyPatch`** — `nodeState.set(child, { ...state, value: patchValue })`
 3. **`storeValue`** (writePipeline) — `nodeState.set(node, { ...state, value: processedValue })`
 4. **`recomputeAll`** (recomputeLeaves, фаза 1) — `nodeState.set(node, { ...state, value: computedValue })`
-
 **Все** эти точки можно перехватить, записывая параллельно в `valuesCache`. - да, я думаю можно одну функцию сеттер иметь которая будет параллелить всю запись.
 
 ---
