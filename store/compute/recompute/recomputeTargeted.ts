@@ -3,7 +3,7 @@ import {
   getNodeGroupPath,
   getRecipientGroups,
   resolveGroupByPath,
-} from "../../groupDeps";
+} from "../../groupDeps/groupDeps";
 import type { RecomputeTargetedDeps } from "./types";
 import { recomputeLeaves } from "./recomputeLeaves";
 

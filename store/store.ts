@@ -18,7 +18,7 @@ import { initGroupSubmitting } from "./init/initGroupSubmitting";
 import { createNotificationHub } from "./init/createNotificationHub";
 import { createResolveManager } from "./init/createResolveManager";
 import { type NotifyFn } from "./resolvePipeline/";
-import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "./groupDeps";
+import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "./groupDeps/groupDeps";
 import { buildValuesCache } from "./valuesCache";
 
 import type {
