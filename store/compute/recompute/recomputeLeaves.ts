@@ -1,5 +1,5 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "../index";
-import type { AnyConfigNode, TranslateFn } from "../../types";
+import type { TranslateFn } from "../../types";
 import type { LeafEntry } from "../../registerNodes";
 import { updateValuesCacheEntry, type ValuesCache } from "../../valuesCache";
 import { topologicalSortComputed } from "./topologicalSortComputed";
@@ -21,7 +21,6 @@ import type { TrackingWrap } from "./types";
  */
 export function recomputeLeaves(
   leafNodes: LeafEntry[],
-  rootConfig: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
   translate: TranslateFn,

@@ -1,6 +1,7 @@
 import type { FieldState } from "../index";
 import type { AnyConfigNode, TranslateFn } from "../../types";
 import type { GroupLeafMap } from "../../registerNodes";
+
 import type { ValuesCache } from "../../valuesCache";
 import type { TrackingWrap } from "./types";
 import { collectGroupLeafNodes } from "./collectGroupLeafNodes";
@@ -15,7 +16,6 @@ import { recomputeLeaves } from "./recomputeLeaves";
  */
 export function recomputeGroup(
   groupNode: AnyConfigNode,
-  rootConfig: AnyConfigNode,
   groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
@@ -26,7 +26,6 @@ export function recomputeGroup(
 
   return recomputeLeaves(
     leafNodes,
-    rootConfig,
     nodeState,
     valuesCache,
     translate,

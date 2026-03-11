@@ -21,7 +21,6 @@ export function recomputeAll(
 ): Set<object> {
   return recomputeGroup(
     rootConfig,
-    rootConfig,
     groupLeafMap,
     nodeState,
     valuesCache,

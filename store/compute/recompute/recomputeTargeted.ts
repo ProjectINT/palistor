@@ -54,7 +54,7 @@ export function recomputeTargeted(
   for (const groupPath of orderedGroups) {
     const groupNode = resolveGroupByPath(rootConfig, groupPath);
     const ownLeaves = groupLeafMap.get(groupNode) ?? [];
-    const changed = recomputeLeaves(ownLeaves, rootConfig, nodeState, valuesCache, translate);
+    const changed = recomputeLeaves(ownLeaves, nodeState, valuesCache, translate);
     for (const n of changed) allChanged.add(n);
   }
 

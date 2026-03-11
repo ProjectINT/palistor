@@ -15,7 +15,7 @@ describe("recomputeGroup", () => {
   it("возвращает пустой Set, если у группы нет листьев в карте", () => {
     const root = {} as AnyConfigNode;
     const groupLeafMap: GroupLeafMap = new WeakMap();
-    const result = recomputeGroup(root, root, groupLeafMap, new WeakMap(), makeCache(), translate);
+    const result = recomputeGroup(root, groupLeafMap, new WeakMap(), makeCache(), translate);
     expect(result.size).toBe(0);
   });
 
@@ -27,7 +27,7 @@ describe("recomputeGroup", () => {
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const result = recomputeGroup(root, root, groupLeafMap, nodeState, makeCache(), translate);
+    const result = recomputeGroup(root, groupLeafMap, nodeState, makeCache(), translate);
 
     // fieldNode не имел предыдущего состояния → должен быть в changed
     expect(result.has(fieldNode)).toBe(true);
@@ -44,7 +44,7 @@ describe("recomputeGroup", () => {
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const result = recomputeGroup(root, root, groupLeafMap, nodeState, makeCache(), translate);
+    const result = recomputeGroup(root, groupLeafMap, nodeState, makeCache(), translate);
 
     expect(result.has(childField)).toBe(true);
   });

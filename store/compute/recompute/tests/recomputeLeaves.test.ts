@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { recomputeLeaves } from "../recomputeLeaves";
 import type { AnyConfigNode } from "../../../types";
 import type { FieldState } from "../../index";
+
 import type { LeafEntry } from "../../../registerNodes";
 import type { ValuesCache } from "../../../valuesCache";
 
@@ -11,11 +12,9 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
   return { values, nodeSlot: new WeakMap() };
 }
 
-const ROOT = {} as AnyConfigNode;
-
 describe("recomputeLeaves", () => {
   it("возвращает пустой Set для пустого списка листьев", () => {
-    const result = recomputeLeaves([], ROOT, new WeakMap(), makeCache(), translate);
+    const result = recomputeLeaves([], new WeakMap(), makeCache(), translate);
     expect(result.size).toBe(0);
   });
 
@@ -24,7 +23,7 @@ describe("recomputeLeaves", () => {
     const leaf: LeafEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
 
-    const result = recomputeLeaves([leaf], ROOT, nodeState, makeCache(), translate);
+    const result = recomputeLeaves([leaf], nodeState, makeCache(), translate);
 
     expect(result.has(node)).toBe(true);
     expect(nodeState.get(node)).toBeDefined();
@@ -44,7 +43,7 @@ describe("recomputeLeaves", () => {
     };
     nodeState.set(node, prevState);
 
-    const result = recomputeLeaves([leaf], ROOT, nodeState, makeCache(), translate);
+    const result = recomputeLeaves([leaf], nodeState, makeCache(), translate);
 
     expect(result.has(node)).toBe(false);
   });
@@ -64,7 +63,7 @@ describe("recomputeLeaves", () => {
     };
     nodeState.set(computedNode, prevState);
 
-    const result = recomputeLeaves([leaf], ROOT, nodeState, makeCache(), translate);
+    const result = recomputeLeaves([leaf], nodeState, makeCache(), translate);
 
     expect(result.has(computedNode)).toBe(true);
     expect((nodeState.get(computedNode) as FieldState).value).toBe(99);
@@ -102,7 +101,7 @@ describe("recomputeLeaves", () => {
     };
     nodeState.set(visibleNode, visibleState);
 
-    recomputeLeaves([visibleLeaf], ROOT, nodeState, makeCache(), translate);
+    recomputeLeaves([visibleLeaf], nodeState, makeCache(), translate);
 
     const updated = nodeState.get(visibleNode) as FieldState;
     expect(updated.submitting).toBe(true);
