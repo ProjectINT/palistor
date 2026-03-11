@@ -2,7 +2,7 @@ import { applyPatch } from "../applyPatch/applyPatch";
 import { type AnyConfigNode } from "../types";
 import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
 import { mergeInitialValues } from "../dirtyTracking";
-import { recomputeAndNotify } from "../recomputeAll";
+import { recomputeAndNotify } from "../compute/recompute";
 import type { Resolve, ResolveDeps } from "./types";
 import { applyPendingWrites } from "./applyPendingWrites";
 

@@ -3,7 +3,7 @@ import type { AnyConfigNode } from "./types";
 import type { FieldState } from "./compute/index";
 import { applyPatch } from "./applyPatch/applyPatch";
 import { setGroupRevalidate, captureInitialValues, collectInitialSnapshot } from "./dirtyTracking";
-import { recomputeAndNotify } from "./recomputeAll";
+import { recomputeAndNotify } from "./compute/recompute";
 import type { ValuesCache } from "./valuesCache";
 
 export interface ResetDeps {

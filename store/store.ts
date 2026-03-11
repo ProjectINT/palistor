@@ -1,11 +1,11 @@
 import { applyPatch } from "./applyPatch/applyPatch";
-import { recomputeAndNotify } from "./recomputeAll";
+import { recomputeAndNotify } from "./compute/recompute";
 import { type FieldState } from "./compute/index";
 import { type AnyConfigNode } from "./types";
 import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
-import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "./recomputeAll";
-import type { TrackingWrap } from "./recomputeAll";
+import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "./compute/recompute";
+import type { TrackingWrap } from "./compute/recompute";
 import type { TranslateFn } from "./types";
 import { createPersistManager } from "./persist/persistManager";
 import { buildNodeMaps } from "./nodeMap";

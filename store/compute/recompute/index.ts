@@ -1,14 +1,14 @@
-import { type FieldState, computeFieldState, fieldStateChanged } from "./compute/index";
-import { type AnyConfigNode } from "./types";
-import { CONFIG_PROPS } from "./constants";
-import type { TranslateFn } from "./types";
-import type { LeafEntry, GroupLeafMap } from "./registerNodes";
+import { type FieldState, computeFieldState, fieldStateChanged } from "../index";
+import { type AnyConfigNode } from "../../types";
+import { CONFIG_PROPS } from "../../constants";
+import type { TranslateFn } from "../../types";
+import type { LeafEntry, GroupLeafMap } from "../../registerNodes";
 import {
   getNodeGroupPath,
   getRecipientGroups,
   resolveGroupByPath,
-} from "./groupDeps";
-import { updateValuesCacheEntry, type ValuesCache } from "./valuesCache";
+} from "../../groupDeps";
+import { updateValuesCacheEntry, type ValuesCache } from "../../valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ interface RecomputeTargetedDeps {
   nodePaths: WeakMap<object, string>;
   groupDeps: Set<string>;
   valuesCache: ValuesCache;
-  translate?: TranslateFn;
+  translate: TranslateFn;
 }
 
 /**
@@ -155,7 +155,7 @@ function recomputeLeaves(
   rootConfig: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
-  translate?: TranslateFn,
+  translate: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
   // ── Фаза 1: Пересчёт computed-значений ──────────────────────────────────
@@ -218,7 +218,7 @@ function recomputeGroup(
   groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
-  translate?: TranslateFn,
+  translate: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
   const leafNodes = collectGroupLeafNodes(groupNode, groupLeafMap);
@@ -236,7 +236,7 @@ export function recomputeAll(
   groupLeafMap: GroupLeafMap,
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
-  translate?: TranslateFn,
+  translate: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
   return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);

@@ -18,10 +18,10 @@ export function computeFieldState(
   translate: TranslateFn,
 ): FieldState {
   // Вычисляем флаги
-  const isVisible  = resolveFlag(configNode.isVisible, allValues, true);
-  const isRequired = resolveFlag(configNode.isRequired, allValues, false);
-  const isDisabled = resolveFlag(configNode.isDisabled, allValues, false);
-  const isReadOnly = resolveFlag(configNode.isReadOnly, allValues, false);
+  const isVisible  = resolveFlag(configNode.isVisible, allValues, true, translate);
+  const isRequired = resolveFlag(configNode.isRequired, allValues, false, translate);
+  const isDisabled = resolveFlag(configNode.isDisabled, allValues, false, translate);
+  const isReadOnly = resolveFlag(configNode.isReadOnly, allValues, false, translate);
 
   // Строки
   const label       = resolveString(configNode.label, allValues);
