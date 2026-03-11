@@ -140,20 +140,32 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // Создаём карту зависимостей групп (self-зависимости для каждой группы)
   const groupDeps = createGroupDeps(rootConfig, nodePaths);
 
-  // Tracking-обёртка: при первом recomputeAll перехватываем GET-доступы
+  // Tracking-обёртка: при ПЕРВОМ recomputeAll перехватываем GET-доступы
   // к значениям других групп и записываем кросс-групповые зависимости.
+  //
+  // Мемоизация по recipientPath: все листья одной группы используют один и тот же Proxy.
+  // valuesCache.values — стабильная ссылка (мутируется in-place через slots),
+  // поэтому кэшированный Proxy всегда видит актуальные данные.
+  const groupProxyCache = new Map<string, Record<string, unknown>>();
+  let depsBuilt = false;
+
   const trackingWrap: TrackingWrap = (node, values) => {
     const recipientPath = getNodeGroupPath(node, nodeParents, nodePaths);
-    return createTrackingValues(values, recipientPath, groupDeps);
+    const cached = groupProxyCache.get(recipientPath);
+    if (cached) return cached;
+    const proxy = createTrackingValues(values, recipientPath, groupDeps);
+    groupProxyCache.set(recipientPath, proxy);
+    return proxy;
   };
-
-  // Первый recomputeAll с tracking — строит карту зависимостей
-  _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);
 
   /**
    * Пересчитать состояние. Два режима:
    * - changedNodes передан → таргетированный пересчёт только затронутых групп
    * - changedNodes не передан → полный пересчёт всего дерева (init, reset, resolve)
+   *
+   * При первом вызове (init) пропускает значения через trackingWrap,
+   * чтобы зафиксировать кросс-групповые зависимости в groupDeps.
+   * После этого tracking больше не нужен, кэш прокси освобождается.
    */
   function recomputeAll(changedNodes?: Set<object>): Set<object> {
     if (changedNodes && changedNodes.size > 0) {
@@ -168,8 +180,17 @@ export function createProxyStore<TConfig extends Record<string, any>>(
         translate,
       });
     }
+    if (!depsBuilt) {
+      depsBuilt = true;
+      const result = _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);
+      groupProxyCache.clear(); // зависимости построены — освобождаем прокси
+      return result;
+    }
     return _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate);
   }
+
+  // Init: первый полный пересчёт — строит карту зависимостей и вычисляет состояние
+  recomputeAll();
 
   // Capture initial values for dirty tracking (after recompute to get computed values)
   captureInitialValues(rootConfig, nodeState, initialValueMap);

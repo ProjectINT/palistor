@@ -144,6 +144,10 @@ export function createTrackingValues(
   recipientGroupPath: string,
   deps: Set<string>,
   currentGroupPath = "",
+  // WeakMap для мемоизации суб-прокси в рамках одного вызова верхнего уровня.
+  // Передаётся рекурсивно, чтобы повторный доступ к одному и тому же sub-объекту
+  // (например, values.passport) не создавал новый Proxy каждый раз.
+  subProxyCache: WeakMap<object, Record<string, unknown>> = new WeakMap(),
 ): Record<string, unknown> {
   return new Proxy(values, {
     get(target, key: string | symbol): unknown {
@@ -151,15 +155,20 @@ export function createTrackingValues(
 
       const val = (target as Record<string, unknown>)[key];
 
-      // Вложенный объект (группа) — рекурсивный proxy
+      // Вложенный объект (группа) — рекурсивный proxy с мемоизацией
       if (val && typeof val === "object" && !Array.isArray(val)) {
+        const cached = subProxyCache.get(val as object);
+        if (cached) return cached;
         const childPath = currentGroupPath ? `${currentGroupPath}.${key}` : key;
-        return createTrackingValues(
+        const childProxy = createTrackingValues(
           val as Record<string, unknown>,
           recipientGroupPath,
           deps,
           childPath,
+          subProxyCache,
         );
+        subProxyCache.set(val as object, childProxy);
+        return childProxy;
       }
 
       // Чтение leaf-значения: донор = currentGroupPath

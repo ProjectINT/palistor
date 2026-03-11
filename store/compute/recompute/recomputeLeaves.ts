@@ -39,11 +39,12 @@ export function recomputeLeaves(
       // valuesCache.values хранит единый «живой» объект со всеми значениями формы.
       const currentValues = trackingWrap ? trackingWrap(node, valuesCache.values) : valuesCache.values;
 
+      const state = nodeState.get(node);
+      if (!state) continue; // Узел ещё не инициализирован — пропускаем молча; Phase 2 всё равно возьмёт prev?.value ?? "".
+
       // Вычисляем новое значение, передавая в функцию текущий снапшот.
       // node.value здесь — selector вида (values) => values.a + values.b.
       const computedValue = (node.value as (values: Record<string, unknown>) => unknown)(currentValues);
-
-      const state = nodeState.get(node);
 
       // Сравнение по ссылке (===): computed-функция должна возвращать стабильную ссылку,
       // если содержимое не изменилось; иначе Phase 2 излишне пересчитает downstream-узлы.
