@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { topologicalSortComputed } from "./topologicalSortComputed";
-import type { AnyConfigNode } from "../../types";
+import { topologicalSortComputed } from "../topologicalSortComputed";
+import type { AnyConfigNode } from "../../../types";
 
 function makeEntry(path: string, deps: string[] = []): { node: AnyConfigNode; path: string } {
   return { node: { value: () => 0, dependencies: deps } as unknown as AnyConfigNode, path };

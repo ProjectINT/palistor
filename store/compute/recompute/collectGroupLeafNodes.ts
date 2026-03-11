@@ -22,8 +22,11 @@ export function collectGroupLeafNodes(
   // Рекурсия в дочерние группы
   for (const key of Object.keys(groupNode)) {
     if (CONFIG_PROPS.has(key)) continue;
+
     const child = groupNode[key] as AnyConfigNode;
+
     if (!child || typeof child !== "object") continue;
+
     if ("value" in child) continue; // уже в ownLeaves родителя
     result.push(...collectGroupLeafNodes(child, groupLeafMap));
   }

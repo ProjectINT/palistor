@@ -23,5 +23,13 @@ export function recomputeGroup(
   trackingWrap?: TrackingWrap,
 ): Set<object> {
   const leafNodes = collectGroupLeafNodes(groupNode, groupLeafMap);
-  return recomputeLeaves(leafNodes, rootConfig, nodeState, valuesCache, translate, trackingWrap);
+
+  return recomputeLeaves(
+    leafNodes,
+    rootConfig,
+    nodeState,
+    valuesCache,
+    translate,
+    trackingWrap
+  );
 }

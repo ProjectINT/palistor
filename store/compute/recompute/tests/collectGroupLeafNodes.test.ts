@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { collectGroupLeafNodes } from "./collectGroupLeafNodes";
-import type { AnyConfigNode } from "../../types";
-import type { GroupLeafMap } from "../../registerNodes";
+import { collectGroupLeafNodes } from "../collectGroupLeafNodes";
+import type { AnyConfigNode } from "../../../types";
+import type { GroupLeafMap } from "../../../registerNodes";
 
 function makeLeaf(path: string): { node: AnyConfigNode; path: string } {
   return { node: { value: "" } as unknown as AnyConfigNode, path };

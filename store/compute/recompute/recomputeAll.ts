@@ -19,5 +19,13 @@ export function recomputeAll(
   translate: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
-  return recomputeGroup(rootConfig, rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);
+  return recomputeGroup(
+    rootConfig,
+    rootConfig,
+    groupLeafMap,
+    nodeState,
+    valuesCache,
+    translate,
+    trackingWrap,
+  );
 }

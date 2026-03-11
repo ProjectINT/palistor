@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { recomputeAndNotify } from "./recomputeAndNotify";
+import { recomputeAndNotify } from "../recomputeAndNotify";
 
 describe("recomputeAndNotify", () => {
   it("вызывает recomputeAll и передаёт результат в notifyChanged", () => {

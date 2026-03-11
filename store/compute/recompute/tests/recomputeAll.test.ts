@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { recomputeAll } from "./recomputeAll";
-import type { AnyConfigNode } from "../../types";
-import type { FieldState } from "../index";
-import type { GroupLeafMap } from "../../registerNodes";
-import type { ValuesCache } from "../../valuesCache";
+import { recomputeAll } from "../recomputeAll";
+import type { AnyConfigNode } from "../../../types";
+import type { FieldState } from "../../index";
+import type { GroupLeafMap } from "../../../registerNodes";
+import type { ValuesCache } from "../../../valuesCache";
 
 const translate = (...args: any[]) => String(args[0]);
 
