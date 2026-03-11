@@ -1,6 +1,6 @@
 import { applyPatch } from "./applyPatch/applyPatch";
 import { recomputeAndNotify } from "./recomputeAll";
-import { type FieldState } from "./compute";
+import { type FieldState } from "./compute/index";
 import { type AnyConfigNode } from "./types";
 import { createBuildProxy } from "./buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
@@ -29,7 +29,7 @@ import type {
   ProxyStoreOptions,
 } from "./types";
 
-export type { FieldState } from "./compute";
+export type { FieldState } from "./compute/index";
 export type { Resolve, NotifyFn } from "./resolvePipeline/";
 export type { SubmitResult } from "./submitPipeline";
 

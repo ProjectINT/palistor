@@ -1,4 +1,4 @@
-import type { FieldState } from "../compute";
+import type { FieldState } from "../compute/index";
 import type { AnyConfigNode } from "../types";
 import { CONFIG_PROPS } from "../constants";
 

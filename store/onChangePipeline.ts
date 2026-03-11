@@ -1,6 +1,6 @@
 import { type AnyConfigNode } from "./types";
 import { applyPatch } from "./applyPatch/applyPatch";
-import type { FieldState } from "./compute";
+import type { FieldState } from "./compute/index";
 import { recomputeAndNotify } from "./recomputeAll";
 import type { ValuesCache } from "./valuesCache";
 

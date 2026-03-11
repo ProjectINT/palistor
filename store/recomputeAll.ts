@@ -1,4 +1,4 @@
-import { type FieldState, computeFieldState, fieldStateChanged } from "./compute";
+import { type FieldState, computeFieldState, fieldStateChanged } from "./compute/index";
 import { type AnyConfigNode } from "./types";
 import { CONFIG_PROPS } from "./constants";
 import type { TranslateFn } from "./types";

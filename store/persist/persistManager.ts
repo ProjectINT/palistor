@@ -12,7 +12,7 @@
 
 import type { PersistDriver, PersistOptions } from "./types";
 import type { AnyConfigNode } from "../types";
-import type { FieldState } from "../compute";
+import type { FieldState } from "../compute/index";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify } from "../recomputeAll";
 

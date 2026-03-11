@@ -1,7 +1,7 @@
 import { applyPatch } from "../applyPatch/applyPatch";
 import { type AnyConfigNode } from "../types";
 import { type PendingWrite } from "./createValuesTrackingProxy";
-import type { FieldState } from "../compute";
+import type { FieldState } from "../compute/index";
 import type { ValuesCache } from "../valuesCache";
 
 // ─── Применение буферизированных записей ────────────────────────────────────

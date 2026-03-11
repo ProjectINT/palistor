@@ -1,6 +1,6 @@
 import { CONFIG_PROPS } from "../constants";
 import type { AnyConfigNode } from "../types";
-import type { FieldState } from "../compute";
+import type { FieldState } from "../compute/index";
 import { isDirtyValue } from "./isDirtyValue";
 
 export interface RecomputeDirtyResult {

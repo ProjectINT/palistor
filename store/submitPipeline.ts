@@ -1,6 +1,6 @@
 import { type AnyConfigNode } from "./types";
 import { CONFIG_PROPS } from "./constants";
-import type { FieldState } from "./compute";
+import type { FieldState } from "./compute/index";
 import { setGroupRevalidate } from "./dirtyTracking";
 import type { ValuesCache } from "./valuesCache";
 
