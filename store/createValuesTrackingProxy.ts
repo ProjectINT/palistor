@@ -1,70 +1,153 @@
 /**
- * createValuesTrackingProxy — wraps the values tree in a Proxy that:
- *   - READ: tracks accessed paths (auto-deps for resolver re-runs)
- *   - WRITE: buffers side-effects (batch mode, no intermediate re-renders)
+ * createValuesTrackingProxy — оборачивает дерево значений в Proxy, который:
+ *   - ЧТЕНИЕ: отслеживает обращённые пути (автоматические зависимости для повторного запуска резолвера)
+ *   - ЗАПИСЬ: буферизирует побочные эффекты (пакетный режим, без промежуточных ре-рендеров)
  *
- * Used inside resolver execution: resolver receives this proxy instead of raw values.
- * After resolver completes, accessed paths are saved for dependency tracking,
- * and buffered writes are flushed in one batch.
+ * Используется внутри выполнения резолвера: резолвер получает этот прокси вместо реального объекта.
+ * После завершения резолвера обращённые пути сохраняются для отслеживания зависимостей,
+ * а буферизированные записи сбрасываются одним пакетом.
+ *
+ * ─── КАК ЭТО РАБОТАЕТ ────────────────────────────────────────────────────────
+ *
+ * Дерево значений выглядит как обычный вложенный объект:
+ *   { user: { name: "Alice", vehicleExists: true }, payment: { amount: 100 } }
+ *
+ * Когда резолвер запускается, он получает этот прокси вместо реального объекта.
+ * Прокси перехватывает каждое обращение к свойству:
+ *
+ *   ЧТЕНИЕ:  values.user.name
+ *     → прокси возвращает вложенный прокси для "user"
+ *     → вложенный прокси перехватывает "name", записывает путь "user.name" в accessedPaths
+ *     → возвращает реальное значение
+ *
+ *   ЗАПИСЬ: values.user.vehicleExists = false
+ *     → прокси перехватывает присваивание, записывает { path: "user.vehicleExists", value: false }
+ *       в pendingWrites[]
+ *     → НЕ трогает реальный объект значений — запись отложена!
+ *
+ * После возврата резолвера:
+ *   1. getAccessedPaths() → используется для перестройки графа зависимостей этого резолвера
+ *      (при следующем изменении любого из этих путей резолвер запустится снова)
+ *   2. getPendingWrites() → передаётся в applyPendingWrites(), который превращает каждый
+ *      путь обратно во вложенный патч и вызывает applyPatch() на реальном хранилище
+ *
+ * ЗАЧЕМ БУФЕРИЗИРОВАТЬ ЗАПИСИ вместо немедленного применения?
+ *   - Предотвращает каскадные ре-рендеры в середине работы резолвера
+ *   - Все мутации применяются одним атомарным пакетом → согласованное состояние после каждого тика пайплайна
+ *   - Записи резолвера A случайно не запускают резолвер B в процессе его выполнения
  */
 
 export interface PendingWrite {
-  /** Dot-separated path in the values tree (e.g. "user.vehicleExists") */
+  /**
+   * Путь в дереве значений, разделённый точками, например "user.vehicleExists" или "payment.amount".
+   * Отражает структуру объекта values, возвращаемого collectValues().
+   * applyPendingWrites() разбивает этот путь по "." для построения вложенного патч-объекта.
+   */
   path: string;
+  /** Новое значение, которое резолвер хочет записать по этому пути. */
   value: unknown;
 }
 
 export interface ValuesTrackingResult {
-  /** Tracking write-proxy to pass to resolver */
+  /** Отслеживающий прокси с поддержкой записи для передачи резолверу. Чтения трекаются, записи буферизируются. */
   proxy: Record<string, unknown>;
-  /** Returns all paths that were READ during resolver execution */
+  /**
+   * Возвращает все пути (через точку), которые были ПРОЧИТАНЫ в ходе выполнения резолвера.
+   * Используется после возврата резолвера для обновления графа зависимостей:
+   * резолвер повторно запустится при изменении любого из этих путей.
+   */
   getAccessedPaths: () => Set<string>;
-  /** Returns all buffered WRITE operations */
+  /**
+   * Возвращает все операции записи, буферизированные во время выполнения резолвера.
+   * Ни одна из этих записей ещё не применена к реальному хранилищу —
+   * они сбрасываются одним пакетом через applyPendingWrites() после возврата резолвера.
+   */
   getPendingWrites: () => PendingWrite[];
 }
 
 /**
- * Creates a tracking write-proxy for the values tree.
+ * Создаёт отслеживающий прокси с поддержкой записи для дерева значений.
  *
- * - Reading a primitive records the full dot-path (e.g. "user.id")
- * - Reading an object returns a nested proxy (recursive)
- * - Writing buffers the assignment in pendingWrites[]
+ * - Чтение примитива записывает полный путь (например "user.id") в accessedPaths
+ * - Чтение объекта возвращает вложенный прокси (рекурсивно), не трекается до обращения к листу
+ * - Запись по ЛЮБОМУ пути буферизирует присваивание в pendingWrites[], не затрагивая реальные данные
  *
- * @param values — current values snapshot (from collectValues)
+ * @param values — текущий снимок значений (из collectValues), здесь считается только для чтения
  */
 export function createValuesTrackingProxy(
   values: Record<string, unknown>,
 ): ValuesTrackingResult {
+  // Собирает все пути к примитивам, которые резолвер читает.
+  // Пример после работы резолвера: Set { "user.name", "user.vehicleExists" }
   const accessedPaths = new Set<string>();
+
+  // Собирает все записи, которые резолвер выполняет, в порядке их появления.
+  // Ни одна не применяется до вызова applyPendingWrites() после возврата резолвера.
+  // Пример: [{ path: "user.vehicleExists", value: false }, { path: "payment.amount", value: 200 }]
   const pendingWrites: PendingWrite[] = [];
+
+  // Кэширует вложенные прокси по их префиксу пути, чтобы при повторном обращении
+  // к одному и тому же вложенному объекту возвращался тот же экземпляр прокси.
+  // Ключ: префикс пути через точку (например "user"), или "__root__" для корневого уровня.
   const proxyCache = new Map<string, unknown>();
 
-  function buildProxy(target: Record<string, unknown>, parentPath: string): Record<string, unknown> {
+  /**
+   * Рекурсивно оборачивает `target` в Proxy, который отслеживает чтения и буферизирует записи.
+   *
+   * @param target     — реальный объект значений (или вложенный подобъект) для обёртки
+   * @param parentPath — накопленный префикс пути через точку, например "" для корня или "user" для вложенного
+   */
+  function buildValuesProxy(target: Record<string, unknown>, parentPath: string): Record<string, unknown> {
+    // Возвращаем закэшированный прокси для данного пути, чтобы не создавать дублирующие прокси
+    // для одного узла (важно для проверок ссылочного равенства внутри резолверов).
     const cacheKey = parentPath || "__root__";
     if (proxyCache.has(cacheKey)) return proxyCache.get(cacheKey) as Record<string, unknown>;
 
     const p = new Proxy(target, {
+      // ─── GET-ловушка ──────────────────────────────────────────────────────
+      // Перехватывает каждое чтение свойства. Строит полный путь через точку, затем:
+      //   • если значение — вложенный простой объект → возвращает вложенный прокси
+      //     (промежуточные пути не трекаем, только чтения листьев)
+      //   • если значение — примитив → записывает путь в accessedPaths и возвращает его
       get(_t, key: string | symbol) {
+        // Игнорируем символьные ключи (например Symbol.toPrimitive, Symbol.iterator) —
+        // это внутренние ключи фреймворка/рантайма, не часть дерева значений.
         if (typeof key === "symbol") return undefined;
 
+        // Формируем полный путь через точку для данного обращения, например "user" + "." + "name" = "user.name"
         const fullPath = parentPath ? `${parentPath}.${key}` : key;
         const val = target[key];
 
-        // If the value is a plain object — return nested tracking proxy
+        // Если значение — простой объект, оборачиваем его в ещё один прокси, чтобы
+        // продолжать отслеживать более глубокие чтения, например values.user.address.city.
+        // Массивы и Date считаются листовыми значениями (не рекурсируем).
         if (val !== null && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
-          return buildProxy(val as Record<string, unknown>, fullPath);
+          return buildValuesProxy(val as Record<string, unknown>, fullPath);
         }
 
-        // Primitive read — track the path
+        // Чтение листа — записываем путь, чтобы резолвер мог быть перезапущен позже,
+        // когда это конкретное значение изменится в хранилище.
         accessedPaths.add(fullPath);
         return val;
       },
 
+      // ─── SET-ловушка ──────────────────────────────────────────────────────
+      // Перехватывает каждое присваивание. Вместо мутации реального объекта значений
+      // помещаем дескриптор PendingWrite в буфер.
+      //
+      // Запись намеренно откладывается:
+      //   1. Резолвер может выполнить несколько записей подряд; сначала собираем все.
+      //   2. applyPendingWrites() вызывается после возврата резолвера, поэтому все
+      //      мутации применяются атомарно за один вызов applyPatch().
+      //   3. Это не позволяет резолверу наблюдать собственные частично применённые записи.
       set(_t, key: string | symbol, newValue: unknown) {
         if (typeof key === "symbol") return false;
 
         const fullPath = parentPath ? `${parentPath}.${key}` : key;
+        // Буферизируем запись — реальное хранилище пока не трогаем.
         pendingWrites.push({ path: fullPath, value: newValue });
+        // Возврат true сообщает Proxy, что присваивание «принято»
+        // (предотвращает TypeError в strict-режиме, несмотря на отсутствие реальной мутации).
         return true;
       },
     });
@@ -73,7 +156,8 @@ export function createValuesTrackingProxy(
     return p as Record<string, unknown>;
   }
 
-  const proxy = buildProxy(values, "");
+  // Строим прокси корневого уровня (parentPath = "" означает отсутствие префикса).
+  const proxy = buildValuesProxy(values, "");
 
   return {
     proxy,
