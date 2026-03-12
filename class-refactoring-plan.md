@@ -977,8 +977,8 @@ class Palistor {
 
 **Цель:** ключевая сессия — собрать всё в `Palistor` класс.
 
-- [ ] **Фаза 6:** Превратить `createResolveManager` в класс `ResolveManager`.
-- [ ] **Фаза 7:** Создать класс `Palistor` — собрать все подсистемы, реализовать `ProxyStore` интерфейс на инстансе. `createProxyStore` → `return new Palistor(options)`. Убедиться что `useForm(store)` работает.
+- [Х] **Фаза 6:** Превратить `createResolveManager` в класс `ResolveManager`.
+- [Х] **Фаза 7:** Создать класс `Palistor` — собрать все подсистемы, реализовать `ProxyStore` интерфейс на инстансе. `createProxyStore` → `return new Palistor(options)`. Убедиться что `useForm(store)` работает.
 
 **Контрольная точка:** все тесты зелёные, `new Palistor(...)` работает, демо-приложение работает.
 

@@ -25,29 +25,10 @@ export interface ResolveManagerDeps {
   valuesCache: ValuesCache;
 }
 
-export interface ResolveManager {
-  /** Запустить resolve для конкретного узла (если у него есть resolve-конфиг). */
-  triggerResolve: (node: AnyConfigNode) => void;
-
-  /** Получить текущее состояние resolve для узла. */
-  getResolveState: (node: AnyConfigNode) => ResolveState | undefined;
-
-  /**
-   * Подключить retrigger resolve в notification hub.
-   * Возвращает функцию-хук `(changedPaths) => void`, которую нужно
-   * установить в `hub.setPostNotifyHook`.
-   * Возвращает `null`, если resolve-записей нет.
-   */
-  createPostNotifyHook: () => ((changedPaths: Set<string>) => void) | null;
-
-  /** Запустить eager resolvers (lazy: false). */
-  launchEager: () => void;
-}
-
-// ─── Factory ─────────────────────────────────────────────────────────────────
+// ─── Class ───────────────────────────────────────────────────────────────────
 
 /**
- * Создаёт менеджер resolve-подсистемы.
+ * Менеджер resolve-подсистемы.
  *
  * Консолидирует:
  * - Инициализацию resolve-состояний (initResolveStates)
@@ -55,77 +36,89 @@ export interface ResolveManager {
  * - Post-notify hook для retrigger по зависимостям
  * - Запуск eager resolvers (lazy: false)
  */
-export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
-  const { rootConfig, nodeState, recomputeAll, notifyChanged, notify, initialValueMap, valuesCache } = deps;
-
-  // ─── Init ──────────────────────────────────────────────────────────────────
-
+export class ResolveManager {
   /** Resolve states for all nodes with resolve config. */
-  const resolveStates = new Map<object, ResolveState>();
+  readonly states = new Map<object, ResolveState>();
 
-  /** All resolve entries (node + resolve config). */
-  const resolveEntries = initResolveStates(rootConfig, resolveStates);
+  private readonly resolveEntries: Array<{ node: AnyConfigNode; resolve: Resolve }>;
+  private readonly resolveEntryMap: Map<object, { node: AnyConfigNode; resolve: Resolve }>;
+  private readonly resolveDeps: ResolveDeps;
 
-  /** Map for O(1) lookup in triggerResolve. */
-  const resolveEntryMap = new Map<object, { node: AnyConfigNode; resolve: Resolve }>(
-    resolveEntries.map((e) => [e.node, e]),
-  );
+  constructor(deps: ResolveManagerDeps) {
+    const { rootConfig, nodeState, recomputeAll, notifyChanged, notify, initialValueMap, valuesCache } = deps;
 
-  // ─── Deps for executeResolve ───────────────────────────────────────────────
+    this.resolveEntries = initResolveStates(rootConfig, this.states);
+    this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node, e]));
 
-  const resolveDeps: ResolveDeps = {
-    rootConfig,
-    nodeState,
-    resolveStates,
-    recomputeAll,
-    notifyChanged,
-    notify,
-    getValues: () => structuredClone(valuesCache.values) as Record<string, unknown>,
-    initialValueMap,
-    valuesCache,
-  };
+    this.resolveDeps = {
+      rootConfig,
+      nodeState,
+      resolveStates: this.states,
+      recomputeAll,
+      notifyChanged,
+      notify,
+      getValues: () => structuredClone(valuesCache.values) as Record<string, unknown>,
+      initialValueMap,
+      valuesCache,
+    };
+  }
 
   // ─── Public API ────────────────────────────────────────────────────────────
 
-  function triggerResolve(node: AnyConfigNode) {
-    const entry = resolveEntryMap.get(node);
+  /**
+   * Запустить resolve для конкретного узла (если у него есть resolve-конфиг).
+   * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
+   */
+  triggerResolve = (node: AnyConfigNode): void => {
+    const entry = this.resolveEntryMap.get(node);
     if (!entry) return;
-    executeResolve(node, entry.resolve, resolveDeps);
-  }
+    executeResolve(node, entry.resolve, this.resolveDeps);
+  };
 
-  function getResolveState(node: AnyConfigNode): ResolveState | undefined {
-    return resolveStates.get(node);
-  }
+  /**
+   * Получить текущее состояние resolve для узла.
+   * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
+   */
+  getResolveState = (node: AnyConfigNode): ResolveState | undefined => {
+    return this.states.get(node);
+  };
 
-  function createPostNotifyHook(): ((changedPaths: Set<string>) => void) | null {
-    if (resolveEntries.length === 0) return null;
+  /**
+   * Подключить retrigger resolve в notification hub.
+   * Возвращает функцию-хук `(changedPaths) => void`, которую нужно
+   * установить в `hub.setPostNotifyHook`.
+   * Возвращает `null`, если resolve-записей нет.
+   */
+  createPostNotifyHook(): ((changedPaths: Set<string>) => void) | null {
+    if (this.resolveEntries.length === 0) return null;
 
     return (changedPaths: Set<string>) => {
       const toRetrigger = findResolvesToRetrigger(
         changedPaths,
-        resolveStates,
-        resolveEntries,
+        this.states,
+        this.resolveEntries,
       );
       for (const entry of toRetrigger) {
-        resetResolveState(entry.node, resolveStates);
-        executeResolve(entry.node, entry.resolve, resolveDeps);
+        resetResolveState(entry.node, this.states);
+        executeResolve(entry.node, entry.resolve, this.resolveDeps);
       }
     };
   }
 
-  function launchEager() {
-    for (const entry of resolveEntries) {
+  /** Запустить eager resolvers (lazy: false). */
+  launchEager(): void {
+    for (const entry of this.resolveEntries) {
       const lazy = entry.resolve.options?.lazy ?? true;
       if (!lazy) {
-        executeResolve(entry.node, entry.resolve, resolveDeps);
+        executeResolve(entry.node, entry.resolve, this.resolveDeps);
       }
     }
   }
+}
 
-  return {
-    triggerResolve,
-    getResolveState,
-    createPostNotifyHook,
-    launchEager,
-  };
+// ─── Deprecated factory alias ─────────────────────────────────────────────────
+
+/** @deprecated Use `new ResolveManager(deps)` instead. */
+export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
+  return new ResolveManager(deps);
 }
