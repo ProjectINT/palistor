@@ -20,6 +20,7 @@ import { createResolveManager } from "../init/createResolveManager";
 import { type NotifyFn } from "../resolvePipeline";
 import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "../groupDeps/groupDeps";
 import { buildValuesCache } from "../valuesCache/valuesCache";
+import { NodeRegistry } from "./nodeRegistry";
 
 import type {
   ConfigProxy,
@@ -77,28 +78,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   const { config, initialValues = {} } = options;
   const rootConfig = config as AnyConfigNode;
 
-  // ─── Хранилища ────────────────────────────────────────────────────────────
-
-  /**
-   * Вычисленное состояние каждого листового поля.
-   * Ключ — объект-узел конфига, значение — FieldState.
-   */
-  const nodeState = new WeakMap<object, FieldState>();
-
-  /**
-   * Список всех листовых узлов конфига (для bumpLeafVersions в notification hub).
-   * Заполняется при init.
-   */
-  const leafNodes: Array<{ node: AnyConfigNode; path: string }> = [];
-
-  /**
-   * Маппинг группового узла → массив его прямых листьев.
-   * Используется recomputeGroup для скопированного пересчёта поддерева.
-   */
-  const groupLeafMap: GroupLeafMap = new WeakMap();
-
-  /** Кэш Proxy-объектов — один прокси на узел конфига. */
-  const proxyCache = new WeakMap<object, unknown>();
+  // ─── Сервисы (нужны до NodeRegistry, т.к. передаются в конструктор) ───────
 
   /** Зарегистрированная функция перевода (label, placeholder, description). */
   let translator: TranslateFn = (v) => v;
@@ -112,29 +92,25 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   /** Стабильная функция уведомления, делегирует в текущий notifier. */
   const notify: NotifyFn = (...args) => notifier(...args);
 
+  // ─── Хранилища ────────────────────────────────────────────────────────────
+
+  // NodeRegistry объединяет nodeState, nodePaths, nodeParents,
+  // leafNodes, groupLeafMap, proxyCache и выполняет всю инициализацию узлов.
+  const registry = new NodeRegistry(rootConfig, initialValues as Record<string, unknown>, translate);
+
+  // Деструктурируем для обратной совместимости с существующим кодом пайплайнов.
+  const { nodeState, nodePaths, nodeParents, leafNodes, groupLeafMap, proxyCache } = registry;
+
   /**
    * Initial values for dirty tracking.
    * Captured after init and reset/hydrate.
    */
   const initialValueMap = new WeakMap<object, unknown>();
 
-  /** Маппинг узла → dot-путь и узла → родитель. */
-  const nodePaths = new WeakMap<object, string>();
-  const nodeParents = new WeakMap<object, object>();
-
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
-  // Выполняем инициализацию
-  registerNodes(rootConfig, initialValues, leafNodes, nodeState, "", groupLeafMap, translate);
-
-  // Инициализируем submitting/dirty/revalidate для корневого и вложенных групп
-  initGroupSubmitting(rootConfig, nodeState);
-
-  // Строим маппинг узлов (пути + родители) — ПЕРЕД recomputeAll,
-  // т.к. нужны для построения карты зависимостей при tracking
-  buildNodeMaps(rootConfig, nodePaths, nodeParents);
-
-  // Строим постоянно-актуальный кеш значений — ПОСЛЕ registerNodes
+  // NodeRegistry уже выполнил registerNodes, initGroupSubmitting, buildNodeMaps
+  // в своём конструкторе. Строим кэш значений — ПОСЛЕ registerNodes.
   const valuesCache = buildValuesCache(rootConfig, nodeState);
 
   // Создаём карту зависимостей групп (self-зависимости для каждой группы)

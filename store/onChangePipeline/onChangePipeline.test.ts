@@ -4,7 +4,7 @@ import { computeFieldKey } from "./computeFieldKey";
 import { fireOnChange, applyOnChangeResult } from "./onChangePipeline";
 import type { AnyConfigNode } from "../types";
 import type { FieldState } from "../compute/index";
-import { buildValuesCache } from "../valuesCache";
+import { buildValuesCache } from "../valuesCache/valuesCache";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getNodeGroupPath } from "../getNodeGroupPath";
-import { buildNodeMaps } from "../../nodeMap";
+import { buildNodeMaps } from "../../store/nodeMap";
 import type { AnyConfigNode } from "../../types";
 
 function buildMaps(root: AnyConfigNode) {
