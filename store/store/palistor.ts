@@ -1,13 +1,14 @@
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify as _recomputeAndNotify } from "../compute/recompute";
 import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "../compute/recompute";
-import { createBuildProxy } from "../buildProxy/buildProxy";
+import { ProxyBuilder } from "../buildProxy/buildProxy";
 import { createPersistManager } from "../persist/persistManager";
 import type { PersistManager } from "../persist/persistManager";
-import { executeReset, type ResetDeps } from "../resetPipeline/resetPipeline";
-import { executeSubmit, type SubmitDeps } from "../submitPipeline/submitPipeline";
+import { ResetPipeline } from "../resetPipeline/resetPipeline";
+import { SubmitPipeline } from "../submitPipeline/submitPipeline";
 import type { SubmitResult } from "../submitPipeline/submitPipeline";
-import { fireOnChange, type OnChangeDeps } from "../onChangePipeline/onChangePipeline";
+import { OnChangePipeline } from "../onChangePipeline/onChangePipeline";
+import { WritePipeline } from "../writePipeline/writePipeline";
 import { formatPatch } from "../writePipeline/writePipeline";
 import { NotificationHub } from "../init/createNotificationHub";
 import { ResolveManager } from "../init/createResolveManager";
@@ -65,24 +66,36 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   /** @internal Менеджер resolve-подсистемы. */
   readonly resolveManager: ResolveManager;
 
+  // ─── @internal pipeline-классы ───────────────────────────────────────────
+
+  /** @internal Write pipeline. */
+  readonly writePipeline: WritePipeline;
+
+  /** @internal Reset pipeline. */
+  readonly resetPipeline: ResetPipeline;
+
+  /** @internal Submit pipeline. */
+  readonly submitPipeline: SubmitPipeline;
+
+  /** @internal onChange pipeline. */
+  readonly onChangePipeline: OnChangePipeline;
+
+  /** @internal ProxyBuilder. */
+  readonly proxyBuilder: ProxyBuilder;
+
   // ─── Приватные данные ─────────────────────────────────────────────────────
 
-  private readonly _rootConfig: AnyConfigNode;
+  /** @internal Корневой конфиг, неизменяемый. */
+  readonly rootConfig: AnyConfigNode;
   private readonly _proxy: ConfigProxy<TConfig>;
   private readonly _persist: PersistManager;
-
-  /** @internal Выполнить submit pipeline для узла. */
-  private _submitNode!: (node: AnyConfigNode) => Promise<SubmitResult>;
-
-  /** @internal Выполнить reset pipeline для узла. */
-  private _resetNode!: (node: AnyConfigNode, values?: Record<string, unknown>) => void;
 
   // ─── Конструктор ──────────────────────────────────────────────────────────
 
   constructor(options: ProxyStoreOptions<TConfig>) {
     const { config, initialValues = {} } = options;
     const rootConfig = config as AnyConfigNode;
-    this._rootConfig = rootConfig;
+    this.rootConfig = rootConfig;
 
     // ─── Сервисы ────────────────────────────────────────────────────────────
 
@@ -92,7 +105,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     // ─── NodeRegistry ────────────────────────────────────────────────────────
 
     this.nodes = new NodeRegistry(rootConfig, initialValues as Record<string, unknown>, translate);
-    const { nodeState, nodePaths, nodeParents, leafNodes, groupLeafMap, proxyCache } = this.nodes;
+    const { nodeState, nodePaths, nodeParents, leafNodes, groupLeafMap } = this.nodes;
 
     // ─── DirtyTracker + ValuesCache ──────────────────────────────────────────
 
@@ -121,60 +134,15 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       valuesCache: this.values,
     });
 
-    // ─── Pipeline deps ────────────────────────────────────────────────────────
+    // ─── Pipeline классы ─────────────────────────────────────────────────────
 
-    const resetDeps: ResetDeps = {
-      nodeState,
-      recomputeAll: () => this.recomputeAll(),
-      notifyChanged: (c) => this.notifyChanged(c),
-      initialValueMap: this.dirty.initialValueMap,
-      valuesCache: this.values,
-    };
+    this.writePipeline = new WritePipeline(this);
+    this.resetPipeline = new ResetPipeline(this);
+    this.submitPipeline = new SubmitPipeline(this);
+    this.onChangePipeline = new OnChangePipeline(this);
+    this.proxyBuilder = new ProxyBuilder(this);
 
-    this._resetNode = (node, values) => executeReset(node, resetDeps, values);
-
-    const submitDeps: SubmitDeps = {
-      nodeState,
-      recomputeAll: () => this.recomputeAll(),
-      notifyChanged: (c) => this.notifyChanged(c),
-      resetNode: (node, values) => executeReset(node, resetDeps, values),
-      clearPersist: () => this._persist.clear(),
-      valuesCache: this.values,
-      nodePaths,
-      rootConfig,
-    };
-
-    this._submitNode = (node) => executeSubmit(node, submitDeps);
-
-    const onChangeDeps: OnChangeDeps = {
-      rootConfig,
-      nodeState,
-      nodePaths,
-      nodeParents,
-      recomputeAll: () => this.recomputeAll(),
-      notifyChanged: (c) => this.notifyChanged(c),
-      valuesCache: this.values,
-    };
-
-    // ─── Proxy ────────────────────────────────────────────────────────────────
-
-    const buildProxy = createBuildProxy({
-      proxyCache,
-      nodeState,
-      rootConfig,
-      recomputeAll: () => this.recomputeAll(),
-      notifyChanged: (c) => this.notifyChanged(c),
-      translate,
-      submitNode: (node) => this._submitNode(node),
-      resetNode: (node, values) => this._resetNode(node, values),
-      setValuesNode: (node, patch) => this._setValuesNode(node, patch),
-      onFieldChange: (node, newVal, prevVal) => fireOnChange(node, newVal, prevVal, onChangeDeps),
-      triggerResolve: this.resolveManager.triggerResolve,
-      getResolveState: this.resolveManager.getResolveState,
-      valuesCache: this.values,
-    });
-
-    this._proxy = buildProxy(rootConfig) as ConfigProxy<TConfig>;
+    this._proxy = this.proxyBuilder.build(rootConfig) as ConfigProxy<TConfig>;
 
     // ─── PersistManager ───────────────────────────────────────────────────────
 
@@ -215,7 +183,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     if (changedNodes && changedNodes.size > 0) {
       return _recomputeTargeted(changedNodes, {
-        rootConfig: this._rootConfig,
+        rootConfig: this.rootConfig,
         groupLeafMap,
         nodeState,
         nodeParents,
@@ -229,7 +197,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     if (!this.groupDepsMap.isBuilt) {
       const trackingWrap = this.groupDepsMap.getTrackingWrap();
       const result = _recomputeAll(
-        this._rootConfig,
+        this.rootConfig,
         groupLeafMap,
         nodeState,
         this.values,
@@ -240,7 +208,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       return result;
     }
 
-    return _recomputeAll(this._rootConfig, groupLeafMap, nodeState, this.values, translate);
+    return _recomputeAll(this.rootConfig, groupLeafMap, nodeState, this.values, translate);
   }
 
   /**
@@ -251,15 +219,16 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    */
   notifyChanged(changed: Set<object>): void {
     this.hub.notifyChanged(changed, {
-      rootConfig: this._rootConfig,
+      rootConfig: this.rootConfig,
       nodeState: this.nodes.nodeState,
       initialValueMap: this.dirty.initialValueMap,
     });
   }
 
-  // ─── Приватные pipeline-методы ────────────────────────────────────────────
+  // ─── @internal pipeline-методы ────────────────────────────────────────────
 
-  private _setValuesNode(node: AnyConfigNode, patch: Record<string, unknown>): void {
+  /** @internal Применить bulk-патч к узлу (один recompute + notify). */
+  setValuesNode(node: AnyConfigNode, patch: Record<string, unknown>): void {
     const formatted = formatPatch(node, patch, this.values.values);
     const changed = applyPatch(node, this.nodes.nodeState, formatted, new Set(), this.values);
     _recomputeAndNotify(changed, () => this.recomputeAll(), (c) => this.notifyChanged(c));
@@ -312,14 +281,14 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   submit(): Promise<SubmitResult> {
-    return this._submitNode(this._rootConfig);
+    return this.submitPipeline.execute(this.rootConfig);
   }
 
   reset(values?: DeepPartialValues<ExtractValues<TConfig>>): void {
-    this._resetNode(this._rootConfig, values as Record<string, unknown> | undefined);
+    this.resetPipeline.execute(this.rootConfig, values as Record<string, unknown> | undefined);
   }
 
   setValues(patch: DeepPartialValues<ExtractValues<TConfig>>): void {
-    this._setValuesNode(this._rootConfig, patch as Record<string, unknown>);
+    this.setValuesNode(this.rootConfig, patch as Record<string, unknown>);
   }
 }

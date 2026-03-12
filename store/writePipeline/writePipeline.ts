@@ -1,5 +1,6 @@
 import type { AnyConfigNode } from "../store/types";
 import type { WriteDeps, WriteResult } from "./types";
+import type { Palistor } from "../store/palistor";
 import { formatValue } from "./formatValue";
 import { storeValue } from "./storeValue";
 import { runSetter } from "./runSetter";
@@ -57,4 +58,30 @@ export function writeValue(
 
   // Фаза 4: Объединение всех изменённых узлов
   return { changed: mergeChanged(node, patchedNodes, recomputedNodes) };
+}
+
+/**
+ * WritePipeline — класс-фасад для write pipeline.
+ * Берёт все зависимости из kernel (Palistor), вместо россыпи deps.
+ */
+export class WritePipeline {
+  constructor(private readonly kernel: Palistor<any>) {}
+
+  execute(
+    node: AnyConfigNode,
+    rawValue: unknown,
+    previousValue?: unknown,
+  ): WriteResult | null {
+    return writeValue(
+      node,
+      rawValue,
+      {
+        rootConfig: this.kernel.rootConfig,
+        nodeState: this.kernel.nodes.nodeState,
+        recomputeAll: (changed) => this.kernel.recomputeAll(changed),
+        valuesCache: this.kernel.values,
+      },
+      previousValue,
+    );
+  }
 }

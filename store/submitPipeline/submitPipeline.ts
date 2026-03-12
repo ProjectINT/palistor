@@ -1,4 +1,5 @@
 import { type AnyConfigNode } from "../store/types";
+import type { Palistor } from "../store/palistor";
 import { setGroupRevalidate } from "../dirtyTracking";
 import { getSubValues } from "./getSubValues";
 import { collectLeafStates } from "./collectLeafStates";
@@ -105,5 +106,26 @@ export async function executeSubmit(
     const changed2 = recomputeAll();
     changed2.add(groupNode);
     notifyChanged(changed2);
+  }
+}
+
+/**
+ * SubmitPipeline — класс-фасад для submit pipeline.
+ * Берёт все зависимости из kernel (Palistor), вместо россыпи deps.
+ */
+export class SubmitPipeline {
+  constructor(private readonly kernel: Palistor<any>) {}
+
+  execute(node: AnyConfigNode): Promise<SubmitResult> {
+    return executeSubmit(node, {
+      nodeState: this.kernel.nodes.nodeState,
+      recomputeAll: () => this.kernel.recomputeAll(),
+      notifyChanged: (c) => this.kernel.notifyChanged(c),
+      resetNode: (n, v) => this.kernel.resetPipeline.execute(n, v),
+      clearPersist: () => this.kernel.persist.clear(),
+      valuesCache: this.kernel.values,
+      nodePaths: this.kernel.nodes.nodePaths,
+      rootConfig: this.kernel.rootConfig,
+    });
   }
 }

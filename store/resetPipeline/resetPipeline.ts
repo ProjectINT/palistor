@@ -1,5 +1,6 @@
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
+import type { Palistor } from "../store/palistor";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { setGroupRevalidate, captureInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../compute/recompute";
@@ -48,4 +49,26 @@ export function executeReset(
   for (const n of revalidateChanged) changed.add(n);
 
   recomputeAndNotify(changed, recomputeAll, notifyChanged);
+}
+
+/**
+ * ResetPipeline — класс-фасад для reset pipeline.
+ * Берёт все зависимости из kernel (Palistor), вместо россыпи deps.
+ */
+export class ResetPipeline {
+  constructor(private readonly kernel: Palistor<any>) {}
+
+  execute(node: AnyConfigNode, values?: Record<string, unknown>): void {
+    return executeReset(
+      node,
+      {
+        nodeState: this.kernel.nodes.nodeState,
+        recomputeAll: () => this.kernel.recomputeAll(),
+        notifyChanged: (c) => this.kernel.notifyChanged(c),
+        initialValueMap: this.kernel.dirty.initialValueMap,
+        valuesCache: this.kernel.values,
+      },
+      values,
+    );
+  }
 }

@@ -988,11 +988,11 @@ class Palistor {
 
 **Цель:** конвертировать все 5 пайплайнов в классы с `constructor(kernel)`.
 
-- [ ] `WritePipeline` ← `writePipeline.ts` (+ адаптировать тесты)
-- [ ] `SubmitPipeline` ← `submitPipeline.ts` (+ адаптировать тесты)
-- [ ] `ResetPipeline` ← `resetPipeline.ts` (+ адаптировать тесты)
-- [ ] `OnChangePipeline` ← `onChangePipeline.ts` (+ адаптировать тесты)
-- [ ] `ProxyBuilder` ← `buildProxy.ts` (+ адаптировать тесты)
+- [Х] `WritePipeline` ← `writePipeline.ts` (+ адаптировать тесты)
+- [Х] `SubmitPipeline` ← `submitPipeline.ts` (+ адаптировать тесты)
+- [Х] `ResetPipeline` ← `resetPipeline.ts` (+ адаптировать тесты)
+- [Х] `OnChangePipeline` ← `onChangePipeline.ts` (+ адаптировать тесты)
+- [Х] `ProxyBuilder` ← `buildProxy.ts` (+ адаптировать тесты)
 
 После каждого пайплайна — прогон всех тестов.
 

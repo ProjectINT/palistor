@@ -1,4 +1,5 @@
 import { type AnyConfigNode } from "../store/types";
+import type { Palistor } from "../store/palistor";
 import { applyPatch } from "../applyPatch/applyPatch";
 import type { FieldState } from "../compute/index";
 import { recomputeAndNotify } from "../compute/recompute";
@@ -79,5 +80,25 @@ export function fireOnChange(
       .catch(() => {
         // onChange ошибки не блокируют работу — fire-and-forget
       });
+  }
+}
+
+/**
+ * OnChangePipeline — класс-фасад для onChange pipeline.
+ * Берёт все зависимости из kernel (Palistor), вместо россыпи deps.
+ */
+export class OnChangePipeline {
+  constructor(private readonly kernel: Palistor<any>) {}
+
+  fire(node: AnyConfigNode, newValue: unknown, previousValue: unknown): void {
+    fireOnChange(node, newValue, previousValue, {
+      rootConfig: this.kernel.rootConfig,
+      nodeState: this.kernel.nodes.nodeState,
+      nodePaths: this.kernel.nodes.nodePaths,
+      nodeParents: this.kernel.nodes.nodeParents,
+      recomputeAll: () => this.kernel.recomputeAll(),
+      notifyChanged: (c) => this.kernel.notifyChanged(c),
+      valuesCache: this.kernel.values,
+    });
   }
 }

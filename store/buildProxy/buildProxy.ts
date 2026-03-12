@@ -1,6 +1,7 @@
 import { CONFIG_NODE } from "../constants";
 import { type AnyConfigNode } from "../store/types";
 import { writeValue, type WriteDeps } from "../writePipeline/writePipeline";
+import type { Palistor } from "../store/palistor";
 import type { FieldState } from "../compute/index";
 import type { TranslateFn } from "../store/types";
 import type { ResolveState } from "../resolvePipeline/index";
@@ -216,4 +217,34 @@ export function createBuildProxy({
   }
 
   return buildProxy;
+}
+
+/**
+ * ProxyBuilder — класс-фасад для построения реактивного прокси.
+ * Берёт все зависимости из kernel (Palistor), вместо россыпи deps.
+ */
+export class ProxyBuilder {
+  private readonly _build: (node: AnyConfigNode) => any;
+
+  constructor(private readonly kernel: Palistor<any>) {
+    this._build = createBuildProxy({
+      proxyCache: kernel.nodes.proxyCache,
+      nodeState: kernel.nodes.nodeState,
+      rootConfig: kernel.rootConfig,
+      recomputeAll: () => kernel.recomputeAll(),
+      notifyChanged: (c) => kernel.notifyChanged(c),
+      translate: kernel.services.translate,
+      submitNode: (node) => kernel.submitPipeline.execute(node),
+      resetNode: (node, values) => kernel.resetPipeline.execute(node, values),
+      setValuesNode: (node, patch) => kernel.setValuesNode(node, patch),
+      onFieldChange: (node, newVal, prevVal) => kernel.onChangePipeline.fire(node, newVal, prevVal),
+      triggerResolve: kernel.resolveManager.triggerResolve,
+      getResolveState: kernel.resolveManager.getResolveState,
+      valuesCache: kernel.values,
+    });
+  }
+
+  build(node: AnyConfigNode): any {
+    return this._build(node);
+  }
 }
