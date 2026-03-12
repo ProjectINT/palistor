@@ -944,8 +944,8 @@ class Palistor {
 
 **Цель:** страховочная сетка + первый класс.
 
-- [ ] **Фаза 0:** Прогнать все тесты, убедиться что зелёные. Написать integration-тест, покрывающий полный flow: init → write → recompute → notify → submit → reset → resolve.
-- [ ] **Фаза 1:** Создать `NodeRegistry` — объединить `nodeState`, `nodePaths`, `nodeParents`, `leafNodes`, `groupLeafMap`, `proxyCache` в один класс. Добавить методы навигации. Подключить в `createProxyStore`. Адаптировать тесты.
+- [Х] **Фаза 0:** Прогнать все тесты, убедиться что зелёные. Написать integration-тест, покрывающий полный flow: init → write → recompute → notify → submit → reset → resolve.
+- [Х] **Фаза 1:** Создать `NodeRegistry` — объединить `nodeState`, `nodePaths`, `nodeParents`, `leafNodes`, `groupLeafMap`, `proxyCache` в один класс. Добавить методы навигации. Подключить в `createProxyStore`. Адаптировать тесты.
 
 **Контрольная точка:** все тесты зелёные, integration-тест проходит.
 
@@ -955,7 +955,7 @@ class Palistor {
 
 **Цель:** вынести глобальные сервисы и dirty tracking в классы.
 
-- [ ] **Фаза 2:** Создать `ServiceRegistry` — перенести `translator`, `notifier`, стабильные делегаты. Подключить в `createProxyStore`.
+- [Х] **Фаза 2:** Создать `ServiceRegistry` — перенести `translator`, `notifier`, стабильные делегаты. Подключить в `createProxyStore`.
 - [ ] **Фаза 3:** Создать `DirtyTracker` — перенести `initialValueMap`, `captureInitialValues`, `mergeInitialValues`, `recomputeDirty`. Адаптировать тесты.
 
 **Контрольная точка:** все тесты зелёные.

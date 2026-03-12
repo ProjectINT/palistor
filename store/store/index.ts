@@ -21,6 +21,7 @@ import { type NotifyFn } from "../resolvePipeline";
 import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "../groupDeps/groupDeps";
 import { buildValuesCache } from "../valuesCache/valuesCache";
 import { NodeRegistry } from "./nodeRegistry";
+import { ServiceRegistry } from "./serviceRegistry";
 
 import type {
   ConfigProxy,
@@ -80,17 +81,8 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Сервисы (нужны до NodeRegistry, т.к. передаются в конструктор) ───────
 
-  /** Зарегистрированная функция перевода (label, placeholder, description). */
-  let translator: TranslateFn = (v) => v;
-
-  /** Зарегистрированная функция уведомления (toast, alert — для resolver onError). */
-  let notifier: NotifyFn = () => {};
-
-  /** Стабильная функция перевода, делегирует в текущий translator. */
-  const translate: TranslateFn = (...args: any[]) => translator(...args);
-
-  /** Стабильная функция уведомления, делегирует в текущий notifier. */
-  const notify: NotifyFn = (...args) => notifier(...args);
+  const services = new ServiceRegistry();
+  const { translate, notify } = services;
 
   // ─── Хранилища ────────────────────────────────────────────────────────────
 
@@ -183,16 +175,13 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // ─── Translator ─────────────────────────────────────────────────────────────
 
   function setTranslator(t: TranslateFn | null) {
-    const next = typeof t === "function" ? t : (v: string) => v;
-    if (translator === next) return;
-    translator = next;
-    hub.bumpLeafVersions();
+    if (services.setTranslator(t)) hub.bumpLeafVersions();
   }
 
   // ─── Notifier ─────────────────────────────────────────────────────────────────────
 
   function setNotifier(fn: NotifyFn | null) {
-    notifier = typeof fn === "function" ? fn : () => {};
+    services.setNotifier(fn);
   }
 
   // ─── Resolve system ────────────────────────────────────────────────────────
@@ -301,9 +290,9 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     getNodeVersion: hub.getNodeVersion,
     getValues,
     setTranslator,
-    getTranslator: () => translator,
+    getTranslator: () => services.getTranslator(),
     setNotifier,
-    getNotifier: () => notifier,
+    getNotifier: () => services.getNotifier(),
     persist: persistManager,
     submit: () => submitNode(rootConfig),
     reset: (values?: DeepPartialValues<ExtractValues<TConfig>>) =>
