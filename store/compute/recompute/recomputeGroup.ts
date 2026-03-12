@@ -2,7 +2,7 @@ import type { FieldState } from "../index";
 import type { AnyConfigNode, TranslateFn } from "../../store/types";
 import type { GroupLeafMap } from "../../store/registerNodes";
 
-import type { ValuesCache } from "../../valuesCache";
+import type { ValuesCache } from "../../valuesCache/valuesCache";
 import type { TrackingWrap } from "./types";
 import { collectGroupLeafNodes } from "./collectGroupLeafNodes";
 import { recomputeLeaves } from "./recomputeLeaves";

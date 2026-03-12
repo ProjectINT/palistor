@@ -1,5 +1,5 @@
 import type { AnyConfigNode } from "../store/types";
-import type { ValuesCache } from "../valuesCache";
+import type { ValuesCache } from "../valuesCache/valuesCache";
 
 /**
  * Извлечь поддерево значений для группового узла из кеша.

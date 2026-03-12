@@ -3,7 +3,7 @@ import type { FieldState } from "../compute/index";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { setGroupRevalidate, captureInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../compute/recompute";
-import type { ValuesCache } from "../valuesCache";
+import type { ValuesCache } from "../valuesCache/valuesCache";
 import { buildResetPatch } from "./buildResetPatch";
 
 export interface ResetDeps {

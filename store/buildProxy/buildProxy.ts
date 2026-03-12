@@ -4,7 +4,7 @@ import { writeValue, type WriteDeps } from "../writePipeline/writePipeline";
 import type { FieldState } from "../compute/index";
 import type { TranslateFn } from "../store/types";
 import type { ResolveState } from "../resolvePipeline/index";
-import type { ValuesCache } from "../valuesCache";
+import type { ValuesCache } from "../valuesCache/valuesCache";
 
 import { computeProxyKeys } from "./computeProxyKeys";
 import { handleLazyResolve } from "./handleLazyResolve";

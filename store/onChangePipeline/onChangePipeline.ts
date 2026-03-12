@@ -2,7 +2,7 @@ import { type AnyConfigNode } from "../store/types";
 import { applyPatch } from "../applyPatch/applyPatch";
 import type { FieldState } from "../compute/index";
 import { recomputeAndNotify } from "../compute/recompute";
-import type { ValuesCache } from "../valuesCache";
+import type { ValuesCache } from "../valuesCache/valuesCache";
 import { findOnChangeAncestors } from "./findOnChangeAncestors";
 import { computeFieldKey } from "./computeFieldKey";
 

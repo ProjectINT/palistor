@@ -8,7 +8,7 @@ import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted 
 import type { TrackingWrap } from "../compute/recompute";
 import type { TranslateFn } from "./types";
 import { createPersistManager } from "../persist/persistManager";
-import { buildNodeMaps } from "../nodeMap";
+import { buildNodeMaps } from "./nodeMap";
 import { executeReset, type ResetDeps } from "../resetPipeline/resetPipeline";
 import { executeSubmit, type SubmitDeps } from "../submitPipeline/submitPipeline";
 import { fireOnChange, type OnChangeDeps } from "../onChangePipeline/onChangePipeline";
@@ -19,7 +19,7 @@ import { createNotificationHub } from "../init/createNotificationHub";
 import { createResolveManager } from "../init/createResolveManager";
 import { type NotifyFn } from "../resolvePipeline";
 import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "../groupDeps/groupDeps";
-import { buildValuesCache } from "../valuesCache";
+import { buildValuesCache } from "../valuesCache/valuesCache";
 
 import type {
   ConfigProxy,

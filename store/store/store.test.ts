@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createProxyStore } from "./store";
+import { createProxyStore } from ".";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
 

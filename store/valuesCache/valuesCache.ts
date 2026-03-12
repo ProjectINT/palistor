@@ -1,6 +1,6 @@
-import { CONFIG_PROPS } from "./constants";
-import type { AnyConfigNode } from "./store/types";
-import type { FieldState } from "./compute/index";
+import { CONFIG_PROPS } from "../constants";
+import type { AnyConfigNode } from "../store/types";
+import type { FieldState } from "../compute/index";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

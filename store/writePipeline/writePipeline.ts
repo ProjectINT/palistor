@@ -2,7 +2,7 @@ import { type AnyConfigNode } from "../store/types";
 import { CONFIG_PROPS } from "../constants";
 import { applyPatch } from "../applyPatch/applyPatch";
 import type { FieldState } from "../compute/index";
-import { updateValuesCacheEntry, type ValuesCache } from "../valuesCache";
+import { updateValuesCacheEntry, type ValuesCache } from "../valuesCache/valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 
