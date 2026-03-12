@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../types";
+import { type AnyConfigNode } from "../store/types";
 
 /**
  * Поднимается от изменённого узла к корню, собирая все группы с `onChange`.

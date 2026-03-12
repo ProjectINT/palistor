@@ -1,4 +1,4 @@
-import type { TranslateFn } from "../types";
+import type { TranslateFn } from "../store/types";
 
 /**
  * Вычисляет строковое свойство (label, placeholder, description) из конфига.

@@ -64,7 +64,7 @@ export type {
   ProxyStoreOptions,
   ProxyStore,
   Unsubscribe,
-} from "./store/types";
+} from "./store/store/types";
 
 // ============================================================================
 // Resolve — типы и хуки

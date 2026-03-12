@@ -1,4 +1,4 @@
-import { TranslateFn } from "../types";
+import { TranslateFn } from "../store/types";
 
 /**
  * Вычисляет одно свойство-флаг из конфига: если это функция — вызывает с values,

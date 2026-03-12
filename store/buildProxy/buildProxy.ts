@@ -1,8 +1,8 @@
 import { CONFIG_NODE } from "../constants";
-import { type AnyConfigNode } from "../types";
+import { type AnyConfigNode } from "../store/types";
 import { writeValue, type WriteDeps } from "../writePipeline/writePipeline";
 import type { FieldState } from "../compute/index";
-import type { TranslateFn } from "../types";
+import type { TranslateFn } from "../store/types";
 import type { ResolveState } from "../resolvePipeline/index";
 import type { ValuesCache } from "../valuesCache";
 

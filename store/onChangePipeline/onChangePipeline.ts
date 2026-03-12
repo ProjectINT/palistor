@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../types";
+import { type AnyConfigNode } from "../store/types";
 import { applyPatch } from "../applyPatch/applyPatch";
 import type { FieldState } from "../compute/index";
 import { recomputeAndNotify } from "../compute/recompute";

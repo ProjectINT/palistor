@@ -1,6 +1,6 @@
-import type { AnyConfigNode } from "../../types";
+import type { AnyConfigNode } from "../../store/types";
 import { CONFIG_PROPS } from "../../constants";
-import type { LeafEntry, GroupLeafMap } from "../../registerNodes";
+import type { LeafEntry, GroupLeafMap } from "../../store/registerNodes";
 
 /**
  * Рекурсивно собирает все leaf-записи поддерева группового узла.

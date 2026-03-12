@@ -1,25 +1,25 @@
-import { applyPatch } from "./applyPatch/applyPatch";
-import { recomputeAndNotify } from "./compute/recompute";
-import { type FieldState } from "./compute/index";
+import { applyPatch } from "../applyPatch/applyPatch";
+import { recomputeAndNotify } from "../compute/recompute";
+import { type FieldState } from "../compute/index";
 import { type AnyConfigNode } from "./types";
-import { createBuildProxy } from "./buildProxy/buildProxy";
+import { createBuildProxy } from "../buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
-import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "./compute/recompute";
-import type { TrackingWrap } from "./compute/recompute";
+import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "../compute/recompute";
+import type { TrackingWrap } from "../compute/recompute";
 import type { TranslateFn } from "./types";
-import { createPersistManager } from "./persist/persistManager";
-import { buildNodeMaps } from "./nodeMap";
-import { executeReset, type ResetDeps } from "./resetPipeline/resetPipeline";
-import { executeSubmit, type SubmitDeps } from "./submitPipeline/submitPipeline";
-import { fireOnChange, type OnChangeDeps } from "./onChangePipeline/onChangePipeline";
-import { formatPatch } from "./writePipeline/writePipeline";
-import { captureInitialValues } from "./dirtyTracking";
-import { initGroupSubmitting } from "./init/initGroupSubmitting";
-import { createNotificationHub } from "./init/createNotificationHub";
-import { createResolveManager } from "./init/createResolveManager";
-import { type NotifyFn } from "./resolvePipeline/";
-import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "./groupDeps/groupDeps";
-import { buildValuesCache } from "./valuesCache";
+import { createPersistManager } from "../persist/persistManager";
+import { buildNodeMaps } from "../nodeMap";
+import { executeReset, type ResetDeps } from "../resetPipeline/resetPipeline";
+import { executeSubmit, type SubmitDeps } from "../submitPipeline/submitPipeline";
+import { fireOnChange, type OnChangeDeps } from "../onChangePipeline/onChangePipeline";
+import { formatPatch } from "../writePipeline/writePipeline";
+import { captureInitialValues } from "../dirtyTracking";
+import { initGroupSubmitting } from "../init/initGroupSubmitting";
+import { createNotificationHub } from "../init/createNotificationHub";
+import { createResolveManager } from "../init/createResolveManager";
+import { type NotifyFn } from "../resolvePipeline";
+import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "../groupDeps/groupDeps";
+import { buildValuesCache } from "../valuesCache";
 
 import type {
   ConfigProxy,
@@ -29,9 +29,9 @@ import type {
   ProxyStoreOptions,
 } from "./types";
 
-export type { FieldState } from "./compute/index";
-export type { Resolve, NotifyFn } from "./resolvePipeline/";
-export type { SubmitResult } from "./submitPipeline/submitPipeline";
+export type { FieldState } from "../compute/index";
+export type { Resolve, NotifyFn } from "../resolvePipeline";
+export type { SubmitResult } from "../submitPipeline/submitPipeline";
 
 // Re-export all public types from the dedicated types module
 export type {

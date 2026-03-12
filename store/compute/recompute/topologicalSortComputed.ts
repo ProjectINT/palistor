@@ -1,4 +1,4 @@
-import type { AnyConfigNode } from "../../types";
+import type { AnyConfigNode } from "../../store/types";
 
 /**
  * Топологическая сортировка computed-узлов по dependencies.

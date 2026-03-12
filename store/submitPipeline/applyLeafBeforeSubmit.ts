@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 
 /**
  * Применяет leaf-level `beforeSubmit` трансформации к snapshot'у значений.

@@ -1,5 +1,5 @@
 import { GROUP_SPREAD_KEYS, SPREADABLE_FIELD_STATE_PROPS } from "../constants";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 
 /**
  * Вычисляет, какие ключи должны быть видны в прокси для данного узла.

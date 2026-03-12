@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 
 /**
  * Collects current initial values from the initialValueMap for a subtree.

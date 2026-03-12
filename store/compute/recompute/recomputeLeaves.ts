@@ -1,6 +1,6 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "../index";
-import type { TranslateFn } from "../../types";
-import type { LeafEntry } from "../../registerNodes";
+import type { TranslateFn } from "../../store/types";
+import type { LeafEntry } from "../../store/registerNodes";
 import { updateValuesCacheEntry, type ValuesCache } from "../../valuesCache";
 import { topologicalSortComputed } from "./topologicalSortComputed";
 import type { TrackingWrap } from "./types";

@@ -1,4 +1,4 @@
-import type { TranslateFn } from "../types";
+import type { TranslateFn } from "../store/types";
 import type { FieldState } from "./types";
 import { resolveFlag } from "./resolveFlag";
 import { resolveString } from "./resolveString";

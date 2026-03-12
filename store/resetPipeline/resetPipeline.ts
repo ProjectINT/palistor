@@ -1,4 +1,4 @@
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { setGroupRevalidate, captureInitialValues } from "../dirtyTracking";

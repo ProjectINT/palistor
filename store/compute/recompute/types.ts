@@ -1,6 +1,6 @@
 import type { FieldState } from "../index";
-import type { AnyConfigNode, TranslateFn } from "../../types";
-import type { GroupLeafMap } from "../../registerNodes";
+import type { AnyConfigNode, TranslateFn } from "../../store/types";
+import type { GroupLeafMap } from "../../store/registerNodes";
 import type { ValuesCache } from "../../valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────

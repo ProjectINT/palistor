@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../types";
+import { type AnyConfigNode } from "../store/types";
 
 /**
  * Найти узел конфига группы по dot-пути.

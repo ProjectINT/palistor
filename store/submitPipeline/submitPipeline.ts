@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../types";
+import { type AnyConfigNode } from "../store/types";
 import { setGroupRevalidate } from "../dirtyTracking";
 import { getSubValues } from "./getSubValues";
 import { collectLeafStates } from "./collectLeafStates";

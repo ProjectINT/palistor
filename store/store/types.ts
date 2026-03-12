@@ -1,4 +1,4 @@
-import type { PersistManager } from "./persist/persistManager";
+import type { PersistManager } from "../persist/persistManager";
 
 /**
  * Внутренний тип для рекурсивного обхода дерева конфига.
@@ -19,8 +19,8 @@ export type TranslateFn = (...args: any[]) => string;
  * Тип конфигурации формы: объект, где каждый ключ — узел конфига с типами TValues.
  */
 export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
-import type { NotifyFn } from "./resolvePipeline/";
-import type { SubmitResult } from "./submitPipeline/submitPipeline";
+import type { NotifyFn } from "../resolvePipeline";
+import type { SubmitResult } from "../submitPipeline/submitPipeline";
 
 // ─── Утилитарные типы ────────────────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ export interface FieldTypeMeta {
   readonly type: string;
 }
 
-export type { Setter } from "./writePipeline/writePipeline";
+export type { Setter } from "../writePipeline/writePipeline";
 
 /**
  * Универсальный узел конфига — описывает и поле, и группу.

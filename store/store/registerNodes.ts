@@ -1,7 +1,7 @@
-import { type FieldState, resolveFlag } from "./compute/index";
-import { CONFIG_PROPS } from "./constants";
+import { type FieldState, resolveFlag } from "../compute/index";
+import { CONFIG_PROPS } from "../constants";
 import { TranslateFn, type AnyConfigNode } from "./types";
-import { hasComputedProps } from "./hasComputedProps";
+import { hasComputedProps } from "../hasComputedProps";
 
 /**
  * Служебные ключи узла конфига, которые пропускаются при обходе дерева.

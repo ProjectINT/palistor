@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../types";
+import { type AnyConfigNode } from "../store/types";
 import { CONFIG_PROPS } from "../constants";
 import { applyPatch } from "../applyPatch/applyPatch";
 import type { FieldState } from "../compute/index";

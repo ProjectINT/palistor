@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 import { updateValuesCacheEntry, type ValuesCache } from "../valuesCache";
 
