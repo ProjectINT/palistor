@@ -5,7 +5,7 @@
 Сейчас при **любом** `SET .value` вызывается `recomputeAll()`, который пересчитывает
 **все** листья дерева: все computed values, все `computeFieldState` (isVisible, isRequired,
 validate, label…). Для формы из 50 полей — это 50 вызовов `computeFieldState` + N вызовов 
-computed + 2× `collectValues(rootConfig)`, хотя реально затронуты 3–5 полей.
+computed + 2× обходов `valuesCache` (WeakMap), хотя реально затронуты 3–5 полей.
 
 ---
 
@@ -67,12 +67,12 @@ recomputeGroup(groupNode):
     computedEntries = leafNodes.filter(typeof value === "function")
     sorted = topologicalSortComputed(computedEntries)
     for each sorted:
-      allValues = collectValues(rootConfig)     // полный snapshot
+      allValues = valuesCache.values     // O(1) чтение кеша
       computedValue = node.value(allValues)
       if changed → update nodeState
   
   Фаза 2: computeFieldState
-    allValues = collectValues(rootConfig)        // ещё один полный snapshot
+    allValues = valuesCache.values        // O(1) чтение кеша
     for each leafNode:
       computeFieldState(node, value, allValues)  // isVisible, isRequired, validate, label...
       if changed → update nodeState

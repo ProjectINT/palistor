@@ -37,7 +37,7 @@ export const FIELD_STATE_PROPS = new Set<string>([
 
 /**
  * Полный набор «служебных» ключей узла конфига.
- * При обходе дерева (init, collectValues) — пропускаются.
+ * При обходе дерева (init, buildValuesCache) — пропускаются.
  */
 export const CONFIG_PROPS = new Set<string>([
   ...FIELD_STATE_PROPS,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeProxyKeys } from "./computeProxyKeys";
 import type { FieldState } from "../compute";
-import type { AnyConfigNode } from "../collectValues";
+import type { AnyConfigNode } from "../types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

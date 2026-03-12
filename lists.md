@@ -12,7 +12,7 @@
 - `nodePaths: WeakMap<object, string>` — dot-путь каждого узла
 - `nodeParents: WeakMap<object, object>` — родитель каждого узла
 
-**Обход дерева:** все функции (`registerNodes`, `collectValues`, `applyPatch`, `recomputeAll`, `buildNodeMaps`, `captureInitialValues`, `recomputeDirty`) итерируются по `Object.keys(node)`, пропуская `CONFIG_PROPS`, и рекурсируют в дочерние объекты. Массивы сейчас **не обрабатываются** — `applyPatch` явно пропускает `Array.isArray`.
+**Обход дерева:** все функции (`registerNodes`, `applyPatch`, `recomputeAll`, `buildNodeMaps`, `captureInitialValues`, `recomputeDirty`) итерируются по `Object.keys(node)`, пропуская `CONFIG_PROPS`, и рекурсируют в дочерние объекты. Массивы сейчас **не обрабатываются** — `applyPatch` явно пропускает `Array.isArray`.
 
 ---
 
@@ -106,8 +106,8 @@ user.reset()        // reset этого элемента
 4. При записи значения в элемент списка — вызывать `recomputeGroup(entity)` вместо `recomputeAll`.
 
 **Что нужно решить:**
-- Computed-свойства могут зависеть от значений **вне** группы (например, `isVisible: (values) => values.order.total > 0`). При скопированном recompute мы всё равно собираем `collectValues(rootConfig)` для всех computed/validate, так что зависимости от внешних полей работают. Но внешние поля не пересчитываются — если есть обратная зависимость, нужен полный recompute.
-- **Решение:** `recomputeGroup` пересчитывает только поддерево, но `collectValues` берёт глобальный snapshot. Для обратных зависимостей (computed вне группы, зависящий от поля в группе) — оставляем `recomputeAll` при необходимости (через `dependencies` граф).
+- Computed-свойства могут зависеть от значений **вне** группы (например, `isVisible: (values) => values.order.total > 0`). При скопированном recompute мы всё равно берём `valuesCache.values` для всех computed/validate, так что зависимости от внешних полей работают. Но внешние поля не пересчитываются — если есть обратная зависимость, нужен полный recompute.
+- **Решение:** `recomputeGroup` пересчитывает только поддерево, но берёт глобальный `valuesCache.values`. Для обратных зависимостей (computed вне группы, зависящий от поля в группе) — оставляем `recomputeAll` при необходимости (через `dependencies` граф).
 
 **Файлы:** `store/recomputeAll.ts`
 
@@ -133,7 +133,7 @@ user.reset()        // reset этого элемента
    ```
 4. `WeakMap<object, ListState>` — хранилище состояния списков (ключ — массив из конфига).
 
-**Что НЕ трогаем:** `collectValues`, `applyPatch` и другие pipeline-файлы — на этом шаге списки пустые, нет элементов.
+**Что НЕ трогаем:** `applyPatch` и другие pipeline-файлы — на этом шаге списки пустые, нет элементов.
 
 **Файлы:** `store/listState.ts` (новый), `store/constants.ts`, `store/registerNodes.ts`
 
@@ -213,17 +213,17 @@ user.reset()        // reset этого элемента
 
 ---
 
-### Шаг 5: collectValues / applyPatch для списков
+### Шаг 5: valuesCache / applyPatch для списков
 
-**Зачем:** `collectValues` собирает snapshot значений для computed/validate. Списки должны быть представлены как массив объектов. `applyPatch` должен уметь принимать массив для bulk-обновления списка.
+**Зачем:** `valuesCache.values` содержит snapshot значений для computed/validate. Списки должны быть представлены как массив объектов. `applyPatch` должен уметь принимать массив для bulk-обновления списка.
 
 **Что делать:**
-1. `collectValues` — при встрече массива (ListNode):
+1. `buildValuesCache` — при встрече массива (ListNode):
    ```ts
    // Вместо рекурсии в объект:
    result.set(key, listState.order.map(id => {
      const entity = listState.items.get(id);
-     return { _id: id, ...collectValues(entity, nodeState) };
+     return { _id: id, ...getSubValues(valuesCache.values, entity) };
    }));
    ```
 2. `applyPatch` — при встрече массива в патче:
@@ -237,7 +237,7 @@ isVisible: (values) => values.users.length > 0
 isVisible: (values) => values.users.some(u => u.name === 'Admin')
 ```
 
-**Файлы:** `store/collectValues.ts`, `store/applyPatch.ts`
+**Файлы:** `store/valuesCache.ts`, `store/applyPatch.ts`
 
 ---
 
@@ -359,7 +359,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 
 **Что делать:**
 1. При hydrate: если в persisted-данных есть массив для ListNode — создать элементы через `createListItem`.
-2. При auto-save: `collectValues` уже включает списки как массивы — persist работает через `getValues`.
+2. При auto-save: `valuesCache.values` уже включает списки как массивы — persist работает через `getValues`.
 
 **Файлы:** `store/persist/persistManager.ts`
 
@@ -374,7 +374,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 | 2 | `createListItem` + `removeListItem` | 0, 1 | Средняя |
 | 3 | Типизация (`ListProxyNode`, `ConfigNodeToProxy`) | 1 | Средняя |
 | 4 | `buildListProxy` + integration в `buildProxy` | 2, 3 | Сложная |
-| 5 | `collectValues` / `applyPatch` для списков | 1, 2 | Средняя |
+| 5 | `valuesCache` / `applyPatch` для списков | 1, 2 | Средняя |
 | 6 | Dirty / Reset / Submit для списков | 2, 5 | Средняя |
 | 7 | React подписки на списки | 4 | Средняя |
 | 8 | Resolve для списков | 4, 5 | Средняя |

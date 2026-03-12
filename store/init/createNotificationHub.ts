@@ -1,5 +1,5 @@
-import type { AnyConfigNode } from "../collectValues";
-import type { FieldState } from "../compute";
+import type { AnyConfigNode } from "../store/types";
+import type { FieldState } from "../compute/index";
 import { recomputeDirty } from "../dirtyTracking";
 
 // ─── Types ───────────────────────────────────────────────────────────────────

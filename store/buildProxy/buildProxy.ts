@@ -1,9 +1,10 @@
 import { CONFIG_NODE } from "../constants";
-import { collectValues, type AnyConfigNode } from "../collectValues";
-import { writeValue, type WriteDeps } from "../writePipeline";
-import type { FieldState } from "../compute";
-import type { TranslateFn } from "../types";
-import type { ResolveState } from "../resolvePipeline";
+import { type AnyConfigNode } from "../store/types";
+import { writeValue, type WriteDeps } from "../writePipeline/writePipeline";
+import type { FieldState } from "../compute/index";
+import type { TranslateFn } from "../store/types";
+import type { ResolveState } from "../resolvePipeline/index";
+import type { ValuesCache } from "../valuesCache/valuesCache";
 
 import { computeProxyKeys } from "./computeProxyKeys";
 import { handleLazyResolve } from "./handleLazyResolve";
@@ -29,6 +30,8 @@ export interface BuildProxyDeps {
   triggerResolve?: (node: AnyConfigNode) => void;
   /** Get resolve state for a node (undefined if no resolve). */
   getResolveState?: (node: AnyConfigNode) => ResolveState | undefined;
+  /** Постоянно-актуальный кеш значений. */
+  valuesCache: ValuesCache;
 }
 
 /** Возвращает закэшированное значение, создавая при первом обращении. */
@@ -72,11 +75,12 @@ export function createBuildProxy({
   onFieldChange,
   triggerResolve,
   getResolveState,
+  valuesCache,
 }: BuildProxyDeps): (node: AnyConfigNode) => any {
   const caches = initProxyCaches();
 
   /** Зависимости write pipeline — собранные один раз для всех узлов. */
-  const writeDeps: WriteDeps = { rootConfig, nodeState, recomputeAll };
+  const writeDeps: WriteDeps = { rootConfig, nodeState, recomputeAll, valuesCache };
 
   /** Зависимости для lazy resolve. */
   const resolveDeps = { triggerResolve, getResolveState };
@@ -119,8 +123,7 @@ export function createBuildProxy({
         const translatableHandler = () => {
           const configValue = node[key];
           if (typeof configValue === "function") {
-            const allValues = collectValues(rootConfig, nodeState);
-            return configValue(translate, allValues);
+            return configValue(translate, valuesCache.values);
           }
           return currentNode ? currentNode[key as keyof FieldState] : configValue;
         };

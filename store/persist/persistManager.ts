@@ -11,10 +11,10 @@
  */
 
 import type { PersistDriver, PersistOptions } from "./types";
-import type { AnyConfigNode } from "../collectValues";
-import type { FieldState } from "../compute";
-import { applyPatch } from "../applyPatch";
-import { recomputeAndNotify } from "../recomputeAll";
+import type { AnyConfigNode } from "../store/types";
+import type { FieldState } from "../compute/index";
+import { applyPatch } from "../applyPatch/applyPatch";
+import { recomputeAndNotify } from "../compute/recompute";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
 

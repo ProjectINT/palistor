@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleLazyResolve } from "./handleLazyResolve";
-import type { AnyConfigNode } from "../collectValues";
+import type { AnyConfigNode } from "../types";
 import type { ResolveState } from "../resolvePipeline";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

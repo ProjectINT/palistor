@@ -1,5 +1,6 @@
-import { collectValues, type AnyConfigNode } from "../collectValues";
-import type { FieldState } from "../compute";
+import { type AnyConfigNode } from "../store/types";
+import type { FieldState } from "../compute/index";
+import type { ValuesCache } from "../valuesCache/valuesCache";
 import {
   type Resolve,
   type NotifyFn,
@@ -9,7 +10,7 @@ import {
   executeResolve,
   findResolvesToRetrigger,
   resetResolveState,
-} from "../resolvePipeline";
+} from "../resolvePipeline/index";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ export interface ResolveManagerDeps {
   notify: NotifyFn;
   /** Initial value snapshot — passed to resolve pipeline for dirty tracking. */
   initialValueMap: WeakMap<object, unknown>;
+  valuesCache: ValuesCache;
 }
 
 export interface ResolveManager {
@@ -54,7 +56,7 @@ export interface ResolveManager {
  * - Запуск eager resolvers (lazy: false)
  */
 export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
-  const { rootConfig, nodeState, recomputeAll, notifyChanged, notify, initialValueMap } = deps;
+  const { rootConfig, nodeState, recomputeAll, notifyChanged, notify, initialValueMap, valuesCache } = deps;
 
   // ─── Init ──────────────────────────────────────────────────────────────────
 
@@ -78,8 +80,9 @@ export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
     recomputeAll,
     notifyChanged,
     notify,
-    getValues: () => collectValues(rootConfig, nodeState) as Record<string, unknown>,
+    getValues: () => structuredClone(valuesCache.values) as Record<string, unknown>,
     initialValueMap,
+    valuesCache,
   };
 
   // ─── Public API ────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@
 
 import { useEffect } from "react";
 import type { ProxyStore } from "../store/store";
-import type { TranslateFn } from "../store/types";
+import type { TranslateFn } from "../store/store/types";
 
 /**
  * Регистрирует функцию перевода в ProxyStore.

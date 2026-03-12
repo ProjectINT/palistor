@@ -64,11 +64,11 @@ export type {
   ProxyStoreOptions,
   ProxyStore,
   Unsubscribe,
-} from "./store/types";
+} from "./store/store/types";
 
 // ============================================================================
 // Resolve — типы и хуки
 // ============================================================================
 
-export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline";
+export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline/";
 export { useNotifier } from "./react/useNotifier";
