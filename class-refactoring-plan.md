@@ -966,8 +966,8 @@ class Palistor {
 
 **Цель:** вынести межгрупповые зависимости и notification hub.
 
-- [ ] **Фаза 4:** Создать `GroupDepsMap` — перенести `groupDeps`, `createTrackingValues`, кэш tracking proxy. Адаптировать тесты.
-- [ ] **Фаза 5:** Превратить `createNotificationHub` в класс `NotificationHub`. Адаптировать тесты.
+- [Х] **Фаза 4:** Создать `GroupDepsMap` — перенести `groupDeps`, `createTrackingValues`, кэш tracking proxy. Адаптировать тесты.
+- [Х] **Фаза 5:** Превратить `createNotificationHub` в класс `NotificationHub`. Адаптировать тесты.
 
 **Контрольная точка:** все тесты зелёные.
 

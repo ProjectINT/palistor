@@ -5,7 +5,6 @@ import { type AnyConfigNode } from "./types";
 import { createBuildProxy } from "../buildProxy/buildProxy";
 import { registerNodes, type GroupLeafMap } from "./registerNodes";
 import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "../compute/recompute";
-import type { TrackingWrap } from "../compute/recompute";
 import type { TranslateFn } from "./types";
 import { createPersistManager } from "../persist/persistManager";
 import { buildNodeMaps } from "./nodeMap";
@@ -14,14 +13,14 @@ import { executeSubmit, type SubmitDeps } from "../submitPipeline/submitPipeline
 import { fireOnChange, type OnChangeDeps } from "../onChangePipeline/onChangePipeline";
 import { formatPatch } from "../writePipeline/writePipeline";
 import { initGroupSubmitting } from "../init/initGroupSubmitting";
-import { createNotificationHub } from "../init/createNotificationHub";
+import { NotificationHub } from "../init/createNotificationHub";
 import { createResolveManager } from "../init/createResolveManager";
 import { type NotifyFn } from "../resolvePipeline";
-import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "../groupDeps/groupDeps";
 import { buildValuesCache } from "../valuesCache/valuesCache";
 import { NodeRegistry } from "./nodeRegistry";
 import { ServiceRegistry } from "./serviceRegistry";
 import { DirtyTracker } from "./dirtyTracker";
+import { GroupDepsMap } from "./groupDepsMap";
 
 import type {
   ConfigProxy,
@@ -101,26 +100,10 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // в своём конструкторе. Строим кэш значений — ПОСЛЕ registerNodes.
   const valuesCache = buildValuesCache(rootConfig, nodeState);
 
-  // Создаём карту зависимостей групп (self-зависимости для каждой группы)
-  const groupDeps = createGroupDeps(rootConfig, nodePaths);
-
-  // Tracking-обёртка: при ПЕРВОМ recomputeAll перехватываем GET-доступы
-  // к значениям других групп и записываем кросс-групповые зависимости.
-  //
-  // Мемоизация по recipientPath: все листья одной группы используют один и тот же Proxy.
-  // valuesCache.values — стабильная ссылка (мутируется in-place через slots),
-  // поэтому кэшированный Proxy всегда видит актуальные данные.
-  const groupProxyCache = new Map<string, Record<string, unknown>>();
-  let depsBuilt = false;
-
-  const trackingWrap: TrackingWrap = (node, values) => {
-    const recipientPath = getNodeGroupPath(node, nodeParents, nodePaths);
-    const cached = groupProxyCache.get(recipientPath);
-    if (cached) return cached;
-    const proxy = createTrackingValues(values, recipientPath, groupDeps);
-    groupProxyCache.set(recipientPath, proxy);
-    return proxy;
-  };
+  // Карта зависимостей групп: self-зависимости + кросс-групповые, построенные при первом
+  // recomputeAll через tracking proxy (см. getTrackingWrap).
+  const groupDepsMap = new GroupDepsMap(rootConfig, nodePaths, nodeParents);
+  const trackingWrap = groupDepsMap.getTrackingWrap();
 
   /**
    * Пересчитать состояние. Два режима:
@@ -139,15 +122,14 @@ export function createProxyStore<TConfig extends Record<string, any>>(
         nodeState,
         nodeParents,
         nodePaths,
-        groupDeps,
+        groupDeps: groupDepsMap.deps,
         valuesCache,
         translate,
       });
     }
-    if (!depsBuilt) {
-      depsBuilt = true;
+    if (!groupDepsMap.isBuilt) {
       const result = _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate, trackingWrap);
-      groupProxyCache.clear(); // зависимости построены — освобождаем прокси
+      groupDepsMap.markBuilt(); // зависимости построены — освобождаем прокси
       return result;
     }
     return _recomputeAll(rootConfig, groupLeafMap, nodeState, valuesCache, translate);
@@ -161,7 +143,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Notification hub ──────────────────────────────────────────────────────
 
-  const hub = createNotificationHub({ leafNodes, nodePaths });
+  const hub = new NotificationHub({ leafNodes, nodePaths });
 
   const { subscribe, subscribeGlobal } = hub;
 
