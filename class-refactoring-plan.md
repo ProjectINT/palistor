@@ -956,7 +956,7 @@ class Palistor {
 **Цель:** вынести глобальные сервисы и dirty tracking в классы.
 
 - [Х] **Фаза 2:** Создать `ServiceRegistry` — перенести `translator`, `notifier`, стабильные делегаты. Подключить в `createProxyStore`.
-- [ ] **Фаза 3:** Создать `DirtyTracker` — перенести `initialValueMap`, `captureInitialValues`, `mergeInitialValues`, `recomputeDirty`. Адаптировать тесты.
+- [Х] **Фаза 3:** Создать `DirtyTracker` — перенести `initialValueMap`, `captureInitialValues`, `mergeInitialValues`, `recomputeDirty`. Адаптировать тесты.
 
 **Контрольная точка:** все тесты зелёные.
 

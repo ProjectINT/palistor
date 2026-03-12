@@ -13,7 +13,6 @@ import { executeReset, type ResetDeps } from "../resetPipeline/resetPipeline";
 import { executeSubmit, type SubmitDeps } from "../submitPipeline/submitPipeline";
 import { fireOnChange, type OnChangeDeps } from "../onChangePipeline/onChangePipeline";
 import { formatPatch } from "../writePipeline/writePipeline";
-import { captureInitialValues } from "../dirtyTracking";
 import { initGroupSubmitting } from "../init/initGroupSubmitting";
 import { createNotificationHub } from "../init/createNotificationHub";
 import { createResolveManager } from "../init/createResolveManager";
@@ -22,6 +21,7 @@ import { createGroupDeps, createTrackingValues, getNodeGroupPath } from "../grou
 import { buildValuesCache } from "../valuesCache/valuesCache";
 import { NodeRegistry } from "./nodeRegistry";
 import { ServiceRegistry } from "./serviceRegistry";
+import { DirtyTracker } from "./dirtyTracker";
 
 import type {
   ConfigProxy,
@@ -93,11 +93,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // Деструктурируем для обратной совместимости с существующим кодом пайплайнов.
   const { nodeState, nodePaths, nodeParents, leafNodes, groupLeafMap, proxyCache } = registry;
 
-  /**
-   * Initial values for dirty tracking.
-   * Captured after init and reset/hydrate.
-   */
-  const initialValueMap = new WeakMap<object, unknown>();
+  const dirty = new DirtyTracker();
 
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
@@ -161,7 +157,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   recomputeAll();
 
   // Capture initial values for dirty tracking (after recompute to get computed values)
-  captureInitialValues(rootConfig, nodeState, initialValueMap);
+  dirty.capture(rootConfig, nodeState);
 
   // ─── Notification hub ──────────────────────────────────────────────────────
 
@@ -170,7 +166,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   const { subscribe, subscribeGlobal } = hub;
 
   const notifyChanged = (changed: Set<object>) =>
-    hub.notifyChanged(changed, { rootConfig, nodeState, initialValueMap });
+    hub.notifyChanged(changed, { rootConfig, nodeState, initialValueMap: dirty.initialValueMap });
 
   // ─── Translator ─────────────────────────────────────────────────────────────
 
@@ -192,7 +188,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
     recomputeAll,
     notifyChanged,
     notify,
-    initialValueMap,
+    initialValueMap: dirty.initialValueMap,
     valuesCache,
   });
 
@@ -200,7 +196,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
 
   // ─── Handlers (submit, reset, onChange) ──────────────────────────────────
 
-  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged, initialValueMap, valuesCache };
+  const resetDeps: ResetDeps = { nodeState, recomputeAll, notifyChanged, initialValueMap: dirty.initialValueMap, valuesCache };
   const resetNode = (node: AnyConfigNode, values?: Record<string, unknown>) => {
     executeReset(node, resetDeps, values);
   };
