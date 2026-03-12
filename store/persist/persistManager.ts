@@ -1,64 +1,19 @@
 /**
  * PersistManager — управляет гидратацией и автосохранением состояния формы.
  *
- * Инстанцируется внутри createProxyStore.
+ * Инстанцируется внутри Palistor.
  * Не зависит от React — может быть подключён из любого окружения.
  *
  * Жизненный цикл:
- *   1. Создаётся при createProxyStore (неактивен).
+ *   1. Создаётся при new Palistor(...) (неактивен).
  *   2. Активируется через enable(options) — гидратация + auto-save.
  *   3. Деактивируется через disable() — отписка от store, отмена таймеров.
  */
 
 import type { PersistDriver, PersistOptions } from "./types";
-import type { AnyConfigNode } from "../store/types";
-import type { FieldState } from "../compute/index";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify } from "../compute/recompute";
-
-// ─── Типы ────────────────────────────────────────────────────────────────────
-
-/** Зависимости, которые PersistManager получает от createProxyStore. */
-export interface PersistManagerDeps {
-  /** Корневой узел конфига. */
-  rootConfig: AnyConfigNode;
-  /** WeakMap с состоянием каждого листового узла. */
-  nodeState: WeakMap<object, FieldState>;
-  /** Пересчитать все computed-свойства. Возвращает Set изменённых узлов. */
-  recomputeAll: () => Set<object>;
-  /** Уведомить подписчиков об изменённых узлах. */
-  notifyChanged: (changed: Set<object>) => void;
-  /** Получить текущие значения формы как вложенный объект. */
-  getValues: () => Record<string, unknown>;
-  /** Подписаться на любое изменение (для auto-save). Возвращает отписку. */
-  subscribeGlobal: (listener: () => void) => () => void;
-}
-
-/** Публичный интерфейс PersistManager, возвращаемый createPersistManager. */
-export interface PersistManager {
-  /**
-   * Активировать персистенцию: гидратация из storage + auto-save при изменениях.
-   *
-   * Если persist уже активен — предыдущий отключается.
-   * Возвращает Promise, который резолвится после успешной гидратации.
-   */
-  enable: (options: PersistOptions) => Promise<void>;
-
-  /** Деактивировать: отписка от store, отмена таймеров, очистка состояния. */
-  disable: () => void;
-
-  /** Принудительно сохранить текущие значения в storage (без debounce). */
-  flush: () => Promise<void>;
-
-  /** Принудительно гидратировать из storage. */
-  hydrate: () => Promise<void>;
-
-  /** Удалить данные из storage по текущему ключу. */
-  clear: () => Promise<void>;
-
-  /** Активна ли персистенция в данный момент. */
-  isEnabled: () => boolean;
-}
+import type { Palistor } from "../store/palistor";
 
 // ─── Фильтрация полей ────────────────────────────────────────────────────────
 
@@ -91,57 +46,61 @@ function filterValues(
   return values;
 }
 
-// ─── Фабрика ─────────────────────────────────────────────────────────────────
+// ─── Класс ───────────────────────────────────────────────────────────────────
 
 /**
- * Создать PersistManager.
+ * Менеджер персистенции формы.
  *
- * @param deps — зависимости от ProxyStore (передаются при инициализации store)
+ * Получает доступ ко всем данным формы через `kernel` (Palistor instance).
  */
-export function createPersistManager(deps: PersistManagerDeps): PersistManager {
-  const { rootConfig, nodeState, recomputeAll, notifyChanged, getValues, subscribeGlobal } = deps;
+export class PersistManager {
+  private readonly kernel: Palistor<any>;
 
   // ─── Внутреннее состояние ─────────────────────────────────────────────────
 
-  let active = false;
-  let currentKey: string | null = null;
-  let currentDriver: PersistDriver | null = null;
-  let serialize: (v: Record<string, unknown>) => string = JSON.stringify;
-  let deserialize: (raw: string) => Record<string, unknown> = JSON.parse;
-  let debounceMs = 100;
-  let pickFields: string[] | undefined;
-  let omitFields: string[] | undefined;
+  private active = false;
+  private currentKey: string | null = null;
+  private currentDriver: PersistDriver | null = null;
+  private serialize: (v: Record<string, unknown>) => string = JSON.stringify;
+  private deserialize: (raw: string) => Record<string, unknown> = JSON.parse;
+  private debounceMs = 100;
+  private pickFields: string[] | undefined;
+  private omitFields: string[] | undefined;
 
   /** Отписка от subscribeGlobal. */
-  let unsubscribe: (() => void) | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   /** ID таймера debounce. */
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Флаг, предотвращающий сохранение во время гидратации. */
-  let isHydrating = false;
+  private isHydrating = false;
+
+  constructor(kernel: Palistor<any>) {
+    this.kernel = kernel;
+  }
 
   // ─── Вспомогательные ──────────────────────────────────────────────────────
 
-  function cancelDebounce() {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
+  private cancelDebounce(): void {
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
   }
 
   /**
    * Сохранить текущие значения в storage (без debounce).
    */
-  async function saveToStorage(): Promise<void> {
-    if (!active || !currentKey || !currentDriver) return;
+  private async saveToStorage(): Promise<void> {
+    if (!this.active || !this.currentKey || !this.currentDriver) return;
 
-    const allValues = getValues();
-    const filtered = filterValues(allValues, pickFields, omitFields);
+    const allValues = this.kernel.getValues() as Record<string, unknown>;
+    const filtered = filterValues(allValues, this.pickFields, this.omitFields);
 
     try {
-      const serialized = serialize(filtered);
-      await Promise.resolve(currentDriver.setItem(currentKey, serialized));
+      const serialized = this.serialize(filtered);
+      await Promise.resolve(this.currentDriver.setItem(this.currentKey, serialized));
     } catch {
       // Ошибки сериализации/записи — молчим (production-safe)
     }
@@ -150,120 +109,131 @@ export function createPersistManager(deps: PersistManagerDeps): PersistManager {
   /**
    * Запланировать сохранение с debounce.
    */
-  function scheduleSave() {
-    if (!active || isHydrating) return;
+  private scheduleSave = (): void => {
+    if (!this.active || this.isHydrating) return;
 
-    cancelDebounce();
+    this.cancelDebounce();
 
-    if (debounceMs <= 0) {
-      saveToStorage();
+    if (this.debounceMs <= 0) {
+      this.saveToStorage();
       return;
     }
 
-    debounceTimer = setTimeout(() => {
-      debounceTimer = null;
-      saveToStorage();
-    }, debounceMs);
-  }
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      this.saveToStorage();
+    }, this.debounceMs);
+  };
 
   /**
    * Прочитать из storage и применить значения к nodeState.
    */
-  async function hydrateFromStorage(): Promise<void> {
-    if (!currentKey || !currentDriver) return;
+  private async hydrateFromStorage(): Promise<void> {
+    if (!this.currentKey || !this.currentDriver) return;
 
-    isHydrating = true;
+    this.isHydrating = true;
 
     try {
-      const raw = await Promise.resolve(currentDriver.getItem(currentKey));
+      const raw = await Promise.resolve(this.currentDriver.getItem(this.currentKey));
       if (raw === null) {
-        isHydrating = false;
+        this.isHydrating = false;
         return;
       }
 
-      const values = deserialize(raw);
+      const values = this.deserialize(raw);
       if (!values || typeof values !== "object") {
-        isHydrating = false;
+        this.isHydrating = false;
         return;
       }
 
       // Применяем как патч — applyPatch рекурсивно обходит дерево конфига
-      const patchedNodes = applyPatch(rootConfig, nodeState, values, new Set());
+      const patchedNodes = applyPatch(
+        this.kernel.rootConfig,
+        this.kernel.nodes.nodeState,
+        values,
+        new Set(),
+      );
 
       // Пересчитываем, объединяем и уведомляем подписчиков
-      recomputeAndNotify(patchedNodes, recomputeAll, notifyChanged);
+      recomputeAndNotify(
+        patchedNodes,
+        () => this.kernel.recomputeAll(),
+        (c) => this.kernel.notifyChanged(c),
+      );
     } catch {
       // Ошибки десериализации — молчим
     } finally {
-      isHydrating = false;
+      this.isHydrating = false;
     }
   }
 
   // ─── Публичный API ─────────────────────────────────────────────────────────
 
-  function enable(options: PersistOptions): Promise<void> {
+  /**
+   * Активировать персистенцию: гидратация из storage + auto-save при изменениях.
+   *
+   * Если persist уже активен — предыдущий отключается.
+   * Возвращает Promise, который резолвится после успешной гидратации.
+   */
+  enable(options: PersistOptions): Promise<void> {
     // Если уже активен — отключаем предыдущий
-    if (active) disable();
+    if (this.active) this.disable();
 
     // Сохраняем настройки
-    currentKey = options.key;
-    currentDriver = options.driver;
-    serialize = options.serialize ?? JSON.stringify;
-    deserialize = options.deserialize ?? JSON.parse;
-    debounceMs = options.debounce ?? 100;
-    pickFields = options.pick as string[] | undefined;
-    omitFields = options.omit as string[] | undefined;
-    active = true;
+    this.currentKey = options.key;
+    this.currentDriver = options.driver;
+    this.serialize = options.serialize ?? JSON.stringify;
+    this.deserialize = options.deserialize ?? JSON.parse;
+    this.debounceMs = options.debounce ?? 100;
+    this.pickFields = options.pick as string[] | undefined;
+    this.omitFields = options.omit as string[] | undefined;
+    this.active = true;
 
     // Подписка на изменения для auto-save
-    unsubscribe = subscribeGlobal(scheduleSave);
+    this.unsubscribe = this.kernel.hub.subscribeGlobal(this.scheduleSave);
 
     // Гидратация
-    return hydrateFromStorage();
+    return this.hydrateFromStorage();
   }
 
-  function disable() {
-    active = false;
-    cancelDebounce();
+  /** Деактивировать: отписка от store, отмена таймеров, очистка состояния. */
+  disable(): void {
+    this.active = false;
+    this.cancelDebounce();
 
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
     }
 
-    currentKey = null;
-    currentDriver = null;
+    this.currentKey = null;
+    this.currentDriver = null;
   }
 
-  async function flush(): Promise<void> {
-    cancelDebounce();
-    await saveToStorage();
+  /** Принудительно сохранить текущие значения в storage (без debounce). */
+  async flush(): Promise<void> {
+    this.cancelDebounce();
+    await this.saveToStorage();
   }
 
-  async function hydrate(): Promise<void> {
-    await hydrateFromStorage();
+  /** Принудительно гидратировать из storage. */
+  async hydrate(): Promise<void> {
+    await this.hydrateFromStorage();
   }
 
-  async function clear(): Promise<void> {
-    if (!currentKey || !currentDriver) return;
+  /** Удалить данные из storage по текущему ключу. */
+  async clear(): Promise<void> {
+    if (!this.currentKey || !this.currentDriver) return;
 
     try {
-      await Promise.resolve(currentDriver.removeItem(currentKey));
+      await Promise.resolve(this.currentDriver.removeItem(this.currentKey));
     } catch {
       // noop
     }
   }
 
-  function isEnabled(): boolean {
-    return active;
+  /** Активна ли персистенция в данный момент. */
+  isEnabled(): boolean {
+    return this.active;
   }
-
-  return {
-    enable,
-    disable,
-    flush,
-    hydrate,
-    clear,
-    isEnabled,
-  };
 }

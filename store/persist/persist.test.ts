@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createProxyStore } from "../store";
-import { createPersistManager } from "./persistManager";
 import type { PersistDriver } from "./types";
 
 // ─── In-memory driver для тестов ─────────────────────────────────────────────

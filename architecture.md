@@ -49,6 +49,39 @@
 
 ---
 
+## Palistor — класс-ядро (kernel)
+
+`Palistor` — единственная точка входа. Одновременно реализует `ProxyStore` (публичный API)
+и служит DI-контейнером для всех внутренних подсистем.
+
+```
+Palistor<TConfig>  (implements ProxyStore)
+  │
+  ├─ @internal nodes         NodeRegistry   — nodeState, nodePaths, nodeParents,
+  │                                           leafNodes, groupLeafMap, proxyCache
+  ├─ @internal services      ServiceRegistry — translator, notifier, делегаты
+  ├─ @internal dirty         DirtyTracker   — initialValueMap, capture, merge, recompute
+  ├─ @internal values        ValuesCache    — мутабельный снапшот values
+  ├─ @internal groupDepsMap  GroupDepsMap   — deps, trackingWrap, isBuilt
+  ├─ @internal hub           NotificationHub — версии, подписки, postNotifyHook
+  ├─ @internal resolveManager ResolveManager — trigger, retrigger, eager launch
+  │
+  ├─ @internal writePipeline    WritePipeline(kernel)
+  ├─ @internal resetPipeline    ResetPipeline(kernel)
+  ├─ @internal submitPipeline   SubmitPipeline(kernel)
+  ├─ @internal onChangePipeline OnChangePipeline(kernel)
+  ├─ @internal proxyBuilder     ProxyBuilder(kernel)
+  │
+  └─ @internal persist       PersistManager(kernel)  — lazy, не активен до usePersist
+```
+
+Все пайплайны принимают `kernel` (Palistor) в конструкторе и читают из него нужные
+подсистемы напрямую — без россыпи deps-аргументов.
+
+`createProxyStore(options)` — устаревший алиас → `return new Palistor(options)`.
+
+---
+
 ## Write Pipeline
 
 ```
@@ -132,7 +165,7 @@ store/
   applyPatch/
     applyPatch.ts           применение патчей к дереву nodeState + valuesCache
   buildProxy/
-    buildProxy.ts           Proxy слой 1: config → FieldState + resolve trigger
+    buildProxy.ts           Proxy слой 1: createBuildProxy (fn) + ProxyBuilder (class)
     computeProxyKeys.ts     ownKeys для spread (field / group)
     handleLazyResolve.ts    lazy resolve trigger при GET группы
     initProxyCaches.ts      WeakMap-кэши (onValueChange, submit, reset)
@@ -167,21 +200,21 @@ store/
     pairKey.ts                сериализация пары donor→recipient
     resolveGroupByPath.ts     config-узел группы по строковому пути
   init/
-    createNotificationHub.ts  версионирование + подписки + dirty + postNotifyHook
-    createResolveManager.ts   resolve subsystem: trigger, retrigger, eager launch
+    createNotificationHub.ts  класс NotificationHub: версионирование + подписки + dirty
+    createResolveManager.ts   класс ResolveManager: trigger, retrigger, eager launch
     initGroupSubmitting.ts    submitting/dirty/revalidate для групповых узлов
   onChangePipeline/
     computeFieldKey.ts        вычисление fieldKey для onChange
     findOnChangeAncestors.ts  поиск предков с onChange-хэндлером
-    onChangePipeline.ts       fire-and-forget onChange (поднимается к предкам)
+    onChangePipeline.ts       класс OnChangePipeline + executeOnChange (fn)
   persist/
     drivers.ts                localStorage / sessionStorage drivers
-    persistManager.ts         менеджер персистенции (hydrate, flush, clear)
+    persistManager.ts         класс PersistManager: hydrate, flush, clear (принимает kernel)
     types.ts                  PersistDriver + PersistOptions
   resetPipeline/
     buildResetPatch.ts        построение патча сброса из defaults + overrides
     collectDefaults.ts        сбор дефолтных значений дерева
-    resetPipeline.ts          executeReset: applyPatch → recomputeAll → notify
+    resetPipeline.ts          класс ResetPipeline + executeReset (fn)
   resolvePipeline/
     applyPendingWrites.ts     сброс буфера write-операций после resolve
     createValuesTrackingProxy.ts  tracking write-proxy для resolver (auto-deps)
@@ -191,16 +224,21 @@ store/
     resetResolveState.ts      сброс статуса resolve-ноды в idle
     types.ts                  Resolve, ResolveDeps, ResolveState
   store/
+    dirtyTracker.ts           класс DirtyTracker: initialValueMap, capture, merge, recompute
+    groupDepsMap.ts           класс GroupDepsMap: deps, trackingWrap, isBuilt
     hasComputedProps.ts       проверка: есть ли computed-свойства у группы
-    index.ts                  главная фабрика createProxyStore
+    index.ts                  createProxyStore (deprecated alias → new Palistor) + реэкспорты
     nodeMap.ts                buildNodeMaps: nodePaths + nodeParents
+    nodeRegistry.ts           класс NodeRegistry: nodeState, proxyCache, paths, parents, leaves
+    palistor.ts               класс Palistor: kernel + ProxyStore (главный класс системы)
     registerNodes.ts          инициализация leafNodes + nodeState
+    serviceRegistry.ts        класс ServiceRegistry: translator, notifier, делегаты
     types.ts                  ConfigNode, ProxyStore, ExtractValues и др.
   submitPipeline/
     applyLeafBeforeSubmit.ts  leaf-level beforeSubmit на snapshot
     collectLeafStates.ts      сбор состояний листьев (для проверки ошибок)
     getSubValues.ts           извлечение values поддерева
-    submitPipeline.ts         executeSubmit: submitting → validate → onSubmit → after
+    submitPipeline.ts         класс SubmitPipeline + executeSubmit (fn)
     types.ts                  SubmitDeps, SubmitResult
   valuesCache/
     valuesCache.ts            buildValuesCache + updateValuesCacheEntry (O(1))
@@ -211,7 +249,7 @@ store/
     runSetter.ts              вызов node.setter → applyPatch зависимых полей
     storeValue.ts             запись value в nodeState + updateValuesCacheEntry
     types.ts                  WriteDeps, WriteResult, Setter
-    writePipeline.ts          writeValue: format → store → setter → recompute
+    writePipeline.ts          класс WritePipeline + writeValue (fn)
 react/
   useForm.ts                  useSyncExternalStore + tracking proxy
   createTrackingProxy.ts      Proxy слой 2: запись accessed нод
@@ -347,15 +385,15 @@ recomputeLeaves(leafNodes[]):
 ### Call sites `recomputeAll`
 
 ```
-1. store/index.ts (init)          → полный — строит groupDeps через trackingWrap
-2. writePipeline.ts               → таргетированный (changedNodes)
-3. onChangePipeline.ts            → таргетированный (changedNodes из applyPatch)
-4. resolvePipeline/executeResolve → полный (resolve меняет произвольные поля)
-5. submitPipeline.ts (start)      → полный (revalidate=true)
-6. submitPipeline.ts (end)        → полный
-7. resetPipeline.ts               → полный
-8. persistManager.ts (hydrate)    → полный
-9. store/index.ts (setValuesNode) → полный (патч может быть любым)
+1. Palistor constructor (init)    → полный — строит groupDeps через trackingWrap
+2. WritePipeline.execute()        → таргетированный (changedNodes)
+3. OnChangePipeline.fire()        → таргетированный (changedNodes из applyPatch)
+4. ResolvePipeline/executeResolve → полный (resolve меняет произвольные поля)
+5. SubmitPipeline.execute (start) → полный (revalidate=true)
+6. SubmitPipeline.execute (end)   → полный
+7. ResetPipeline.execute()        → полный
+8. PersistManager.hydrateFromStorage() → полный
+9. Palistor.setValuesNode()       → полный (патч может быть любым)
 ```
 
 ---
@@ -377,15 +415,17 @@ recomputeLeaves(leafNodes[]):
 
 ## createProxyStore + useForm
 
-`createProxyStore(options)` — фабрика, создаёт ProxyStore с конфигом и начальными значениями.  
+`new Palistor(options)` — создаёт экземпляр формы. `createProxyStore(options)` — устаревший алиас.  
 `useForm(store | subtree)` — React-хук, подключает компонент к store через tracking proxy.
 
 ```ts
 // Создание store (вне React)
-const store = createProxyStore<Config>({
+const store = new Palistor<Config>({
   config: orderConfig,
   initialValues: { email: "user@example.com" },
 });
+// или устаревший вариант:
+// const store = createProxyStore({ config: orderConfig });
 
 // Корневой компонент
 function App() {

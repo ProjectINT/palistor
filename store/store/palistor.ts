@@ -2,8 +2,7 @@ import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify as _recomputeAndNotify } from "../compute/recompute";
 import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "../compute/recompute";
 import { ProxyBuilder } from "../buildProxy/buildProxy";
-import { createPersistManager } from "../persist/persistManager";
-import type { PersistManager } from "../persist/persistManager";
+import { PersistManager } from "../persist/persistManager";
 import { ResetPipeline } from "../resetPipeline/resetPipeline";
 import { SubmitPipeline } from "../submitPipeline/submitPipeline";
 import type { SubmitResult } from "../submitPipeline/submitPipeline";
@@ -146,14 +145,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     // ─── PersistManager ───────────────────────────────────────────────────────
 
-    this._persist = createPersistManager({
-      rootConfig,
-      nodeState,
-      recomputeAll: () => this.recomputeAll(),
-      notifyChanged: (c) => this.notifyChanged(c),
-      getValues: () => this.getValues() as Record<string, unknown>,
-      subscribeGlobal: (fn) => this.hub.subscribeGlobal(fn),
-    });
+    this._persist = new PersistManager(this);
 
     // ─── Wire resolve retrigger ──────────────────────────────────────────────
 
