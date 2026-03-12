@@ -1,39 +1,11 @@
 import { CONFIG_NODE } from "../constants";
 import { type AnyConfigNode } from "../store/types";
-import { writeValue, type WriteDeps } from "../writePipeline/writePipeline";
 import type { Palistor } from "../store/palistor";
 import type { FieldState } from "../compute/index";
-import type { TranslateFn } from "../store/types";
-import type { ResolveState } from "../resolvePipeline/index";
-import type { ValuesCache } from "../valuesCache/valuesCache";
 
 import { computeProxyKeys } from "./computeProxyKeys";
 import { handleLazyResolve } from "./handleLazyResolve";
 import { initProxyCaches } from "./initProxyCaches";
-
-export interface BuildProxyDeps {
-  proxyCache: WeakMap<object, unknown>;
-  nodeState: WeakMap<object, FieldState>;
-  rootConfig: AnyConfigNode;
-  recomputeAll: () => Set<object>;
-  notifyChanged: (changed: Set<object>) => void;
-  /** Функция перевода (гарантированно существует, см. store.ts). */
-  translate: TranslateFn;
-  /** Запуск submit pipeline для группового узла. */
-  submitNode: (node: AnyConfigNode) => Promise<unknown>;
-  /** Запуск reset для группового узла. */
-  resetNode: (node: AnyConfigNode, values?: Record<string, unknown>) => void;
-  /** Bulk-обновление значений для группового узла (один recompute + notify). */
-  setValuesNode: (node: AnyConfigNode, patch: Record<string, unknown>) => void;
-  /** Fire-and-forget onChange для листового узла. */
-  onFieldChange?: (node: AnyConfigNode, newValue: unknown, previousValue: unknown) => void;
-  /** Trigger resolve for a group node with resolve config. */
-  triggerResolve?: (node: AnyConfigNode) => void;
-  /** Get resolve state for a node (undefined if no resolve). */
-  getResolveState?: (node: AnyConfigNode) => ResolveState | undefined;
-  /** Постоянно-актуальный кеш значений. */
-  valuesCache: ValuesCache;
-}
 
 /** Возвращает закэшированное значение, создавая при первом обращении. */
 function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V): V {
@@ -46,7 +18,7 @@ function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V):
 }
 
 /**
- * Создаёт функцию buildProxy, которая оборачивает узел конфига в Proxy.
+ * ProxyBuilder — строит реактивный Proxy для узлов конфига.
  *
  * Proxy перехватывает:
  *
@@ -55,7 +27,7 @@ function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V):
  *   - другой ключ → рекурсивный прокси дочернего узла
  *
  * SET:
- *   - "value" → formatter → update value → recomputeAll → notify
+ *   - "value" → write pipeline → recomputeAll → notify
  *   - остальное → запрещено
  *
  * OWNKEYS / GETOWNPROPERTYDESCRIPTOR:
@@ -63,47 +35,34 @@ function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V):
  *     Object.keys() и for...in. Скрывают внутренние ключи конфига
  *     (validate, formatter, setter, …), которые не должны утекать как пропсы.
  */
-export function createBuildProxy({
-  proxyCache,
-  nodeState,
-  rootConfig,
-  recomputeAll,
-  notifyChanged,
-  translate,
-  submitNode,
-  resetNode,
-  setValuesNode,
-  onFieldChange,
-  triggerResolve,
-  getResolveState,
-  valuesCache,
-}: BuildProxyDeps): (node: AnyConfigNode) => any {
-  const caches = initProxyCaches();
+export class ProxyBuilder {
+  private readonly caches = initProxyCaches();
 
-  /** Зависимости write pipeline — собранные один раз для всех узлов. */
-  const writeDeps: WriteDeps = { rootConfig, nodeState, recomputeAll, valuesCache };
+  constructor(private readonly kernel: Palistor<any>) {}
 
-  /** Зависимости для lazy resolve. */
-  const resolveDeps = { triggerResolve, getResolveState };
-
-  function buildProxy(node: AnyConfigNode): any {
+  build(node: AnyConfigNode): any {
+    const proxyCache = this.kernel.nodes.proxyCache;
     if (proxyCache.has(node)) return proxyCache.get(node);
+
+    const builder = this;
+    const kernel = this.kernel;
+    const caches = this.caches;
 
     const proxyNode: Record<string, any> = new Proxy(node as Record<string, any>, {
       get(_target, key: string | symbol) {
         if (key === CONFIG_NODE) return node;
-       
+
         // Любой символ кроме CONFIG_NODE не имеет смысла
         if (typeof key === "symbol") return undefined;
-       
+
         // onValueChange — стабильный functional setter для React
         if (key === "onValueChange") {
           return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
         }
-        
-        const currentNode = nodeState.get(node);
+
+        const currentNode = kernel.nodes.nodeState.get(node);
         const isGroupNode = !("value" in node);
-        
+
         // ── Групповой узел: методы и состояние ───────────────────────────
         if (isGroupNode) {
           const handlers = {
@@ -111,20 +70,23 @@ export function createBuildProxy({
             "dirty": () => currentNode?.[key as keyof FieldState] ?? false,
             "revalidate": () => currentNode?.[key as keyof FieldState] ?? false,
             "loading": () => currentNode?.[key as keyof FieldState] ?? false,
-            "submit": () => getCached(caches.submit, node, () => () => submitNode(node)),
-            "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => resetNode(node, vals)),
-            "setValues": () => getCached(caches.setValues, node, () => (patch: Record<string, unknown>) => setValuesNode(node, patch)),
+            "submit": () => getCached(caches.submit, node, () => () => kernel.submitPipeline.execute(node)),
+            "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => kernel.resetPipeline.execute(node, vals)),
+            "setValues": () => getCached(caches.setValues, node, () => (patch: Record<string, unknown>) => kernel.setValuesNode(node, patch)),
           }
-          
+
           if (key in handlers) return handlers[key as keyof typeof handlers]();
-          handleLazyResolve(node, resolveDeps);
+          handleLazyResolve(node,
+            kernel.resolveManager.triggerResolve,
+            kernel.resolveManager.getResolveState,
+          );
         }
 
         // ── Вычисленное состояние поля ───────────────────────────────────
         const translatableHandler = () => {
           const configValue = node[key];
           if (typeof configValue === "function") {
-            return configValue(translate, valuesCache.values);
+            return configValue(kernel.services.translate, kernel.values.values);
           }
           return currentNode ? currentNode[key as keyof FieldState] : configValue;
         };
@@ -153,7 +115,7 @@ export function createBuildProxy({
         // Дочерний узел → рекурсивный прокси
         const child = node[key];
 
-        if (child && typeof child === "object") return buildProxy(child as AnyConfigNode);
+        if (child && typeof child === "object") return builder.build(child as AnyConfigNode);
 
         return child;
       },
@@ -162,11 +124,11 @@ export function createBuildProxy({
         if (key !== "value") return false;
 
         // Захватываем предыдущее значение для onChange
-        const previousValue = nodeState.get(node)?.value;
+        const previousValue = kernel.nodes.nodeState.get(node)?.value;
 
         // Весь процесс записи делегирован write pipeline:
         // format → store → setter patch → recompute → merge changed
-        const result = writeValue(node, newValue, writeDeps, previousValue);
+        const result = kernel.writePipeline.execute(node, newValue, previousValue);
 
         if (!result) return false;
 
@@ -180,13 +142,11 @@ export function createBuildProxy({
           return true;
         }
 
-        notifyChanged(result.changed);
+        kernel.notifyChanged(result.changed);
 
         // Fire onChange на группах-предках (fire-and-forget, async)
-        if (onFieldChange) {
-          const actualNewValue = nodeState.get(node)?.value;
-          onFieldChange(node, actualNewValue, previousValue);
-        }
+        const actualNewValue = kernel.nodes.nodeState.get(node)?.value;
+        kernel.onChangePipeline.fire(node, actualNewValue, previousValue);
 
         return true;
       },
@@ -214,37 +174,5 @@ export function createBuildProxy({
 
     proxyCache.set(node, proxyNode);
     return proxyNode;
-  }
-
-  return buildProxy;
-}
-
-/**
- * ProxyBuilder — класс-фасад для построения реактивного прокси.
- * Берёт все зависимости из kernel (Palistor), вместо россыпи deps.
- */
-export class ProxyBuilder {
-  private readonly _build: (node: AnyConfigNode) => any;
-
-  constructor(private readonly kernel: Palistor<any>) {
-    this._build = createBuildProxy({
-      proxyCache: kernel.nodes.proxyCache,
-      nodeState: kernel.nodes.nodeState,
-      rootConfig: kernel.rootConfig,
-      recomputeAll: () => kernel.recomputeAll(),
-      notifyChanged: (c) => kernel.notifyChanged(c),
-      translate: kernel.services.translate,
-      submitNode: (node) => kernel.submitPipeline.execute(node),
-      resetNode: (node, values) => kernel.resetPipeline.execute(node, values),
-      setValuesNode: (node, patch) => kernel.setValuesNode(node, patch),
-      onFieldChange: (node, newVal, prevVal) => kernel.onChangePipeline.fire(node, newVal, prevVal),
-      triggerResolve: kernel.resolveManager.triggerResolve,
-      getResolveState: kernel.resolveManager.getResolveState,
-      valuesCache: kernel.values,
-    });
-  }
-
-  build(node: AnyConfigNode): any {
-    return this._build(node);
   }
 }

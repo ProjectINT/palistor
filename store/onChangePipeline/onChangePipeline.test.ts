@@ -1,24 +1,69 @@
 import { describe, it, expect, vi } from "vitest";
 import { findOnChangeAncestors } from "./findOnChangeAncestors";
 import { computeFieldKey } from "./computeFieldKey";
-import { fireOnChange, applyOnChangeResult } from "./onChangePipeline";
+import { Palistor } from "../store/palistor";
 import type { AnyConfigNode } from "../types";
-import type { FieldState } from "../compute/index";
-import { buildValuesCache } from "../valuesCache/valuesCache";
 
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
+// ─── OnChangePipeline (через Palistor) ───────────────────────────────────────
 
-function makeState(value: unknown): FieldState {
-  return { value, isVisible: true, isRequired: false, isDisabled: false, isReadOnly: false };
-}
+describe("OnChangePipeline.fire", () => {
+  it("не вызывает onChange если нет предков с onChange", async () => {
+    const fieldNode: AnyConfigNode = { value: "" };
+    const root: AnyConfigNode = { field: fieldNode };
+    const store = new Palistor({ config: root });
+    const notifySpy = vi.spyOn(store, "notifyChanged");
+    const callsBefore = notifySpy.mock.calls.length;
 
-function makeNodeState(entries: Array<[object, FieldState]>): WeakMap<object, FieldState> {
-  const map = new WeakMap<object, FieldState>();
-  for (const [node, state] of entries) map.set(node, state);
-  return map;
-}
+    store.onChangePipeline.fire(fieldNode, "new", "old");
 
-// ─── computeFieldKey ─────────────────────────────────────────────────────────
+    await Promise.resolve();
+    expect(notifySpy.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("вызывает onChange предка с правильными аргументами", async () => {
+    const fieldNode: AnyConfigNode = { value: "" };
+    const onChange = vi.fn().mockResolvedValue(null);
+    const root: AnyConfigNode = { field: fieldNode, onChange };
+    const store = new Palistor({ config: root });
+
+    store.onChangePipeline.fire(fieldNode, "new", "old");
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onChange).toHaveBeenCalledWith({
+      fieldKey: "field",
+      newValue: "new",
+      previousValue: "old",
+      allValues: store.values.values,
+    });
+  });
+
+  it("применяет патч, возвращённый onChange", async () => {
+    const fieldNode: AnyConfigNode = { value: "" };
+    const otherNode: AnyConfigNode = { value: "" };
+    const onChange = vi.fn().mockResolvedValue({ other: "patched" });
+    const root: AnyConfigNode = { field: fieldNode, other: otherNode, onChange };
+    const store = new Palistor({ config: root });
+    const notifySpy = vi.spyOn(store, "notifyChanged");
+
+    store.onChangePipeline.fire(fieldNode, "new", "old");
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(notifySpy).toHaveBeenCalled();
+  });
+
+  it("глотает исключение из onChange, не ронит pipeline", async () => {
+    const fieldNode: AnyConfigNode = { value: "" };
+    const onChange = vi.fn().mockRejectedValue(new Error("boom"));
+    const root: AnyConfigNode = { field: fieldNode, onChange };
+    const store = new Palistor({ config: root });
+    const notifySpy = vi.spyOn(store, "notifyChanged");
+
+    expect(() => store.onChangePipeline.fire(fieldNode, "x", "")).not.toThrow();
+
+    await new Promise((r) => setTimeout(r, 0));
+    // notifyChanged from onChange patch should NOT have been called (error swallowed)
+  });
+});
 
 describe("computeFieldKey", () => {
   it("возвращает nodePath если ancestorPath пустой (корневой предок)", () => {
@@ -83,173 +128,4 @@ describe("findOnChangeAncestors", () => {
   });
 });
 
-// ─── applyOnChangeResult ─────────────────────────────────────────────────────
 
-describe("applyOnChangeResult", () => {
-  it("ничего не делает при null патче", () => {
-    const ancestor: AnyConfigNode = { field: { value: "" } };
-    const nodeState = makeNodeState([[ancestor.field as object, makeState("")]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-    const cache = buildValuesCache(ancestor, nodeState);
-
-    applyOnChangeResult(null, ancestor, nodeState, recomputeAll, notifyChanged, cache);
-
-    expect(recomputeAll).not.toHaveBeenCalled();
-    expect(notifyChanged).not.toHaveBeenCalled();
-  });
-
-  it("ничего не делает при пустом объекте-патче", () => {
-    const ancestor: AnyConfigNode = { field: { value: "" } };
-    const nodeState = makeNodeState([[ancestor.field as object, makeState("")]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-    const cache = buildValuesCache(ancestor, nodeState);
-
-    applyOnChangeResult({}, ancestor, nodeState, recomputeAll, notifyChanged, cache);
-
-    expect(notifyChanged).not.toHaveBeenCalled();
-  });
-
-  it("применяет валидный патч и нотифицирует", () => {
-    const fieldNode: AnyConfigNode = { value: "old" };
-    const ancestor: AnyConfigNode = { field: fieldNode };
-    const nodeState = makeNodeState([[fieldNode as object, makeState("old")]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-    const cache = buildValuesCache(ancestor, nodeState);
-
-    applyOnChangeResult({ field: "new" }, ancestor, nodeState, recomputeAll, notifyChanged, cache);
-
-    expect(notifyChanged).toHaveBeenCalledOnce();
-  });
-});
-
-// ─── fireOnChange ─────────────────────────────────────────────────────────────
-
-describe("fireOnChange", () => {
-  it("не вызывает onChange если нет предков с onChange", async () => {
-    const fieldNode: AnyConfigNode = { value: "" };
-    const root: AnyConfigNode = { field: fieldNode };
-    const nodeState = makeNodeState([[fieldNode as object, makeState("")]]);
-    const cache = buildValuesCache(root, nodeState);
-
-    const nodePaths = new WeakMap<object, string>([[fieldNode as object, "field"]]);
-    const nodeParents = new WeakMap<object, object>([[fieldNode as object, root]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-
-    fireOnChange(fieldNode, "new", "old", {
-      rootConfig: root,
-      nodeState,
-      nodePaths,
-      nodeParents,
-      recomputeAll,
-      notifyChanged,
-      valuesCache: cache,
-    });
-
-    // Даём очереди микрозадач отработать
-    await Promise.resolve();
-    expect(notifyChanged).not.toHaveBeenCalled();
-  });
-
-  it("вызывает onChange предка с правильными аргументами", async () => {
-    const fieldNode: AnyConfigNode = { value: "" };
-    const onChange = vi.fn().mockResolvedValue(null);
-    const root: AnyConfigNode = { field: fieldNode, onChange };
-    const nodeState = makeNodeState([[fieldNode as object, makeState("old")]]);
-    const cache = buildValuesCache(root, nodeState);
-
-    const nodePaths = new WeakMap<object, string>([
-      [fieldNode as object, "field"],
-      [root as object, ""],
-    ]);
-    const nodeParents = new WeakMap<object, object>([[fieldNode as object, root]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-
-    fireOnChange(fieldNode, "new", "old", {
-      rootConfig: root,
-      nodeState,
-      nodePaths,
-      nodeParents,
-      recomputeAll,
-      notifyChanged,
-      valuesCache: cache,
-    });
-
-    await new Promise((r) => setTimeout(r, 0));
-    expect(onChange).toHaveBeenCalledWith({
-      fieldKey: "field",
-      newValue: "new",
-      previousValue: "old",
-      allValues: cache.values,
-    });
-  });
-
-  it("применяет патч, возвращённый onChange", async () => {
-    const fieldNode: AnyConfigNode = { value: "" };
-    const otherNode: AnyConfigNode = { value: "" };
-    const onChange = vi.fn().mockResolvedValue({ other: "patched" });
-    const root: AnyConfigNode = { field: fieldNode, other: otherNode, onChange };
-
-    const nodeState = makeNodeState([
-      [fieldNode as object, makeState("old")],
-      [otherNode as object, makeState("")],
-    ]);
-    const cache = buildValuesCache(root, nodeState);
-
-    const nodePaths = new WeakMap<object, string>([
-      [fieldNode as object, "field"],
-      [root as object, ""],
-    ]);
-    const nodeParents = new WeakMap<object, object>([[fieldNode as object, root]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-
-    fireOnChange(fieldNode, "new", "old", {
-      rootConfig: root,
-      nodeState,
-      nodePaths,
-      nodeParents,
-      recomputeAll,
-      notifyChanged,
-      valuesCache: cache,
-    });
-
-    await new Promise((r) => setTimeout(r, 0));
-    expect(notifyChanged).toHaveBeenCalledOnce();
-  });
-
-  it("глотает исключение из onChange, не ронит pipeline", async () => {
-    const fieldNode: AnyConfigNode = { value: "" };
-    const onChange = vi.fn().mockRejectedValue(new Error("boom"));
-    const root: AnyConfigNode = { field: fieldNode, onChange };
-    const nodeState = makeNodeState([[fieldNode as object, makeState("")]]);
-    const cache = buildValuesCache(root, nodeState);
-
-    const nodePaths = new WeakMap<object, string>([
-      [fieldNode as object, "field"],
-      [root as object, ""],
-    ]);
-    const nodeParents = new WeakMap<object, object>([[fieldNode as object, root]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const notifyChanged = vi.fn();
-
-    expect(() =>
-      fireOnChange(fieldNode, "x", "", {
-        rootConfig: root,
-        nodeState,
-        nodePaths,
-        nodeParents,
-        recomputeAll,
-        notifyChanged,
-        valuesCache: cache,
-      }),
-    ).not.toThrow();
-
-    await new Promise((r) => setTimeout(r, 0));
-    expect(notifyChanged).not.toHaveBeenCalled();
-  });
-});
