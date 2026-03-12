@@ -57,8 +57,9 @@ form.email.value = "X"   (SET trap в buildProxy)
   ├─ 1. formatValue()       node.formatter(raw, allValues)
   ├─ 1.5 skip?              Object.is(formatted, current) → skipped (warn)
   ├─ 2. storeValue()        nodeState.set(node, { ...state, value })
+  │                         + updateValuesCacheEntry O(1)
   ├─ 3. runSetter()         node.setter(value, allValues, prev) → patch → applyPatch()
-  ├─ 4. recomputeAll()      computed values (topo-sort) + computeFieldState для каждого листа
+  ├─ 4. recomputeAll(changedNodes)  таргетированный пересчёт групп
   ├─ 5. notifyChanged()
   │      ├─ recomputeDirty
   │      ├─ nodeVersions[node]++ для changed-нод
@@ -125,334 +126,237 @@ SET form.email.value → emailNode++ → getSnapshot → изменилось �
 
 ```
 store/
-  store.ts              главная фабрика createProxyStore
-  types.ts              ConfigNode, ProxyStore, ExtractValues и др.
-  compute.ts            FieldState, computeFieldState, resolveFlag
-  constants.ts          символы CONFIG_NODE / SOURCE_PROXY / STORE_REF,
-                        наборы FIELD_STATE_PROPS / CONFIG_PROPS /
-                        INTERNAL_CONFIG_KEYS / GROUP_SPREAD_KEYS
-  writePipeline.ts      format → skip? → store → setter → recompute
-  submitPipeline.ts     submitting → beforeSubmit → validate → onSubmit → afterSubmit
-  resetPipeline.ts      collectDefaults / collectInitialSnapshot → applyPatch → recompute
-  resolvePipeline.ts    async resolve: init, execute, retry, auto-deps
-  recomputeAll.ts       topo-sort computed + computeFieldState для всех листьев
-  onChangePipeline.ts   fire-and-forget onChange для предков
-  applyPatch.ts         применение патчей к дереву
-  registerNodes.ts      инициализация leafNodes + nodeState
-  dirtyTracking.ts      dirty от initial (captureInitialValues + recomputeDirty)
-  nodeMap.ts            nodePaths + nodeParents
-  hasComputedProps.ts   проверка: есть ли computed-свойства у группы
-  createValuesTrackingProxy.ts  tracking write-proxy для resolver
+  constants.ts              символы CONFIG_NODE / SOURCE_PROXY / STORE_REF,
+                            наборы FIELD_STATE_PROPS / CONFIG_PROPS /
+                            INTERNAL_CONFIG_KEYS / GROUP_SPREAD_KEYS
+  applyPatch/
+    applyPatch.ts           применение патчей к дереву nodeState + valuesCache
   buildProxy/
-    buildProxy.ts       Proxy слой 1: config → FieldState + resolve trigger
-    computeProxyKeys.ts ownKeys для spread (field / group)
-    handleLazyResolve.ts  lazy resolve trigger при GET группы
-    initProxyCaches.ts    WeakMap-кэши (onValueChange, submit, reset)
-    translatableProps.ts  набор {label, placeholder, description}
+    buildProxy.ts           Proxy слой 1: config → FieldState + resolve trigger
+    computeProxyKeys.ts     ownKeys для spread (field / group)
+    handleLazyResolve.ts    lazy resolve trigger при GET группы
+    initProxyCaches.ts      WeakMap-кэши (onValueChange, submit, reset)
+  compute/
+    computeFieldState.ts    вычисление FieldState одного узла
+    fieldStateChanged.ts    сравнение двух FieldState (для skip notify)
+    isEmpty.ts              утилита проверки пустоты значения
+    resolveFlag.ts          resolve флага (bool | fn → bool)
+    resolveString.ts        resolve строки (string | fn → string) + translate
+    types.ts                FieldState + вспомогательные типы
+    recompute/
+      collectGroupLeafNodes.ts  сбор OWN листьев группы (не рекурсивно)
+      recomputeAll.ts           полный пересчёт всего дерева (делегирует recomputeGroup)
+      recomputeAndNotify.ts     хелпер: recomputeAll → merge → notifyChanged
+      recomputeGroup.ts         рекурсивный пересчёт поддерева
+      recomputeLeaves.ts        пересчёт списка листьев (computed + fieldState)
+      recomputeTargeted.ts      таргетированный пересчёт по groupDeps (BFS)
+      topologicalSortComputed.ts  алгоритм Кана для computed-узлов
+      types.ts                  TrackingWrap + RecomputeTargetedDeps
+  dirtyTracking/
+    captureInitialValues.ts   снимок initial values для dirty baseline
+    collectInitialSnapshot.ts сбор плоского снапшота дерева
+    isDirtyValue.ts           сравнение value с initial (dirty check)
+    mergeInitialValues.ts     обновление baseline после resolve
+    recomputeDirty.ts         пересчёт флага dirty для каждого листа
+    setGroupRevalidate.ts     выставление revalidate=true для группы (submit)
+  groupDeps/
+    createGroupDeps.ts        начальная карта self-зависимостей групп
+    createTrackingValues.ts   proxy для перехвата кросс-групповых READ-доступов
+    getNodeGroupPath.ts       путь группы для произвольного узла
+    getRecipientGroups.ts     реципиенты группы из groupDeps
+    pairKey.ts                сериализация пары donor→recipient
+    resolveGroupByPath.ts     config-узел группы по строковому пути
   init/
     createNotificationHub.ts  версионирование + подписки + dirty + postNotifyHook
     createResolveManager.ts   resolve subsystem: trigger, retrigger, eager launch
     initGroupSubmitting.ts    submitting/dirty/revalidate для групповых узлов
-  persist/              персистенция (localStorage, sessionStorage)
+  onChangePipeline/
+    computeFieldKey.ts        вычисление fieldKey для onChange
+    findOnChangeAncestors.ts  поиск предков с onChange-хэндлером
+    onChangePipeline.ts       fire-and-forget onChange (поднимается к предкам)
+  persist/
+    drivers.ts                localStorage / sessionStorage drivers
+    persistManager.ts         менеджер персистенции (hydrate, flush, clear)
+    types.ts                  PersistDriver + PersistOptions
+  resetPipeline/
+    buildResetPatch.ts        построение патча сброса из defaults + overrides
+    collectDefaults.ts        сбор дефолтных значений дерева
+    resetPipeline.ts          executeReset: applyPatch → recomputeAll → notify
+  resolvePipeline/
+    applyPendingWrites.ts     сброс буфера write-операций после resolve
+    createValuesTrackingProxy.ts  tracking write-proxy для resolver (auto-deps)
+    executeResolve.ts         основная логика: init → optimistic → async → retry
+    findResolvesToRetrigger.ts  поиск resolve-нод, зависящих от changedPaths
+    initResolveStates.ts      инициализация resolveStates при старте
+    resetResolveState.ts      сброс статуса resolve-ноды в idle
+    types.ts                  Resolve, ResolveDeps, ResolveState
+  store/
+    hasComputedProps.ts       проверка: есть ли computed-свойства у группы
+    index.ts                  главная фабрика createProxyStore
+    nodeMap.ts                buildNodeMaps: nodePaths + nodeParents
+    registerNodes.ts          инициализация leafNodes + nodeState
+    types.ts                  ConfigNode, ProxyStore, ExtractValues и др.
+  submitPipeline/
+    applyLeafBeforeSubmit.ts  leaf-level beforeSubmit на snapshot
+    collectLeafStates.ts      сбор состояний листьев (для проверки ошибок)
+    getSubValues.ts           извлечение values поддерева
+    submitPipeline.ts         executeSubmit: submitting → validate → onSubmit → after
+    types.ts                  SubmitDeps, SubmitResult
+  valuesCache/
+    valuesCache.ts            buildValuesCache + updateValuesCacheEntry (O(1))
+  writePipeline/
+    formatPatch.ts            рекурсивное форматирование патча через formatters
+    formatValue.ts            форматирование одного значения через node.formatter
+    mergeChanged.ts           объединение наборов изменённых узлов
+    runSetter.ts              вызов node.setter → applyPatch зависимых полей
+    storeValue.ts             запись value в nodeState + updateValuesCacheEntry
+    types.ts                  WriteDeps, WriteResult, Setter
+    writePipeline.ts          writeValue: format → store → setter → recompute
 react/
-  useForm.ts            useSyncExternalStore + tracking proxy
-  createTrackingProxy.ts  Proxy слой 2: запись accessed нод
-  useTranslator.ts      регистрация функции перевода (i18n)
-  useNotifier.ts        регистрация функции уведомлений (toast)
-  usePersist.ts         React-хук для подключения persist
+  useForm.ts                  useSyncExternalStore + tracking proxy
+  createTrackingProxy.ts      Proxy слой 2: запись accessed нод
+  useTranslator.ts            регистрация функции перевода (i18n)
+  useNotifier.ts              регистрация функции уведомлений (toast)
+  usePersist.ts               React-хук для подключения persist
 ```
 
 ---
 
-## recomputeAll — анализ рантайма
+## valuesCache — снапшот значений формы
 
-### Текущее поведение: ВСЕГДА полный пересчёт
-
-`recomputeAll()` = `recomputeGroup(rootConfig)` = пересчёт **ВСЕХ** листьев дерева.
-При **каждом** `SET .value` пересчитываются все поля формы — даже те, которые никак не зависят от изменённого.
+Глобально-актуальный мутабельный объект, зеркалирующий `value` всех листовых узлов.
+Читается синхронно за O(1) — вместо обхода дерева при каждом computed/validate.
 
 ```
-form.email.value = "X"
-  └─ writePipeline → recomputeAll()
-       └─ recomputeGroup(rootConfig)
-            └─ collectGroupLeafNodes(rootConfig) → ВСЕ листья (50 шт.)
-                 ├─ Фаза 1: пересчитать computed (topo-sort) — для ВСЕХ computed
-                 └─ Фаза 2: computeFieldState() — для КАЖДОГО из 50 листьев
+buildValuesCache(rootConfig, nodeState)
+  └─ обходит дерево один раз → строит { values, nodeSlot }
+       ├─ values    — вложенный объект { email: "…", passport: { number: "…" } }
+       │              Мутируется в-месте (in-place) — стабильная ссылка навсегда
+       └─ nodeSlot  — WeakMap<node, { parent, key }> для O(1) обновлений
+
+updateValuesCacheEntry(cache, node, newValue)
+  └─ nodeSlot.get(node) → slot.parent[slot.key] = newValue   // O(1)
 ```
 
-### Где вызывается `recomputeAll()` — 8 мест
-
-```
-Вот ВСЕ call sites (store.ts оборачивает _recomputeAll в замыкание recomputeAll):
-
-1. store.ts:133           init → полный пересчёт (✓ нужен полный)
-2. writePipeline.ts:181   SET .value → ⚠️ МОЖНО ТАРГЕТИРОВАТЬ
-3. submitPipeline.ts:119  submit start (revalidate=true) → (✓ нужен полный — валидация)
-4. submitPipeline.ts:182  submit end (submitting=false) → (✓ нужен полный)
-5. resetPipeline.ts:95    reset → (✓ нужен полный)
-6. onChangePipeline.ts:78 onChange patch → ⚠️ МОЖНО ТАРГЕТИРОВАТЬ
-7. resolvePipeline.ts:251 optimistic resolve → ⚠️ МОЖНО ТАРГЕТИРОВАТЬ
-8. resolvePipeline.ts:316 resolve success → ⚠️ МОЖНО ТАРГЕТИРОВАТЬ
-9. resolvePipeline.ts:349 resolve error → ⚠️ МОЖНО ТАРГЕТИРОВАТЬ
-10. persistManager.ts:193  persist hydrate → (✓ нужен полный)
-11. store.ts:192 (setValuesNode) → (✓ нужен полный — патч может быть любой)
-```
-
-### Проблема
-
-```
-Конфиг с 5 группами × 10 полей = 50 полей:
-
-SET passport.number = "123456"
-  └─ recomputeAll() → пересчёт ВСЕХ 50 полей
-       ├─ personal:    name, email, phone              ← НЕ НУЖНО (нет deps на passport.number)
-       ├─ address:     country, city, shippingCost     ← НЕ НУЖНО
-       ├─ payment:     amount, paymentType             ← НЕ НУЖНО
-       ├─ passport:    number, issueDate, expiryDate   ← НУЖНО (та же группа)
-       └─ calculator:  price, quantity, total          ← НЕ НУЖНО
-
-Фактически нужно пересчитать 3 поля из 50 — остальные 47 пересчётов впустую.
-```
-
-### `dependencies` — ключ к оптимизации (НЕ ИСПОЛЬЗУЕТСЯ для таргетирования)
-
-Поле `dependencies` в конфиге **уже** объявляет, от каких путей зависит это поле:
-
-```ts
-// Семантика dependencies:
-{ dependencies: undefined }   // wildcard — зависит от ВСЕГО (пересчитывать при любом изменении)
-{ dependencies: [] }          // only-self — пересчитывать только при изменении своего value
-{ dependencies: ["country"] } // explicit — пересчитывать при изменении country
-```
-
-**Но сейчас `dependencies` используется ТОЛЬКО для топологической сортировки computed-узлов!**
-Ни одна точка в рантайме не использует `dependencies` для фильтрации пересчёта.
-
-```
-node.dependencies → используется ТОЛЬКО в topologicalSortComputed()
-                     для определения ПОРЯДКА вычисления computed-значений.
-
-                     НЕ используется для определения, НУЖНО ЛИ пересчитывать поле.
-```
+Обновление происходит в `storeValue` при каждой записи. Все computed/validate/setter
+получают `valuesCache.values` как `allValues` — всегда актуальный снапшот.
 
 ---
 
-## Архитектура таргетированного пересчёта (ПЛАН)
+## recomputeAll — таргетированный пересчёт
 
-### Принцип: от изменённых путей → к затронутым листьям напрямую
-
-Не «перебрать все группы, пропустить ненужные», а **сразу получить** нужные листья
-через reverse-индекс зависимостей.
-
-### Фаза 0: Построение reverse dependency index (при init)
-
-При `registerNodes` строим обратный индекс:
-
-```
-Структуры:
-
-  reverseDepIndex: Map<string, Set<LeafEntry>>
-  │  path → множество листьев, которые зависят от этого пути
-  │
-  │  "country" → { cityNode, shippingCostNode }
-  │  "city"    → { shippingCostNode }
-  │  "price"   → { totalNode }
-  │  "tax"     → { totalNode }
-
-  wildcardLeaves: Set<LeafEntry>
-  │  листья БЕЗ dependencies (зависят от всего)
-  │
-  │  { emailNode, phoneNode, nameNode, ... }
-
-  selfOnlyLeaves: Set<LeafEntry>
-  │  листья с dependencies: [] (зависят только от себя)
-  │
-  │  { commentNode, paymentTypeNode, ... }
-```
-
-Построение (один проход при init):
+### Два режима одной функции
 
 ```ts
-for (const { node, path } of leafNodes) {
-  const deps = node.dependencies as string[] | undefined;
-
-  if (deps === undefined) {
-    wildcardLeaves.add(entry);       // нет dependencies → wildcard
-  } else if (deps.length === 0) {
-    selfOnlyLeaves.add(entry);       // deps: [] → only-self
-  } else {
-    for (const dep of deps) {
-      reverseDepIndex.get(dep)?.add(entry) ?? reverseDepIndex.set(dep, new Set([entry]));
-    }
+// Замыкание в store/index.ts
+function recomputeAll(changedNodes?: Set<object>): Set<object> {
+  if (changedNodes && changedNodes.size > 0) {
+    return recomputeTargeted(changedNodes, deps); // горячий путь
   }
+  return _recomputeAll(rootConfig, groupLeafMap, nodeState, ...); // полный
 }
 ```
 
-### Фаза 1: `recomputeAffected(changedPaths)` — замена `recomputeAll()`
+- **С `changedNodes`** — таргетированный пересчёт (write, onChange, resolve)
+- **Без аргументов** — полный пересчёт (init, reset, submit, persist hydrate)
+
+### groupDeps — карта зависимостей между группами
+
+Строится автоматически при первом (init) `recomputeAll` через трекинг GET-доступов:
+
+```
+groupDeps: Set<string>   — пары "донор→реципиент" в формате pairKey(donor, recipient)
+
+  При init: каждый лист вычисляет свои computed/flags через trackingValues-proxy,
+  который перехватывает чтения значений из других групп и записывает пару.
+
+  Пример: поле passport.city читает values.address.country
+    → donor = "address", recipient = "passport"
+    → groupDeps.add("address→passport")
+
+  Self-зависимость добавляется явно при createGroupDeps:
+    → groupDeps.add("address→address"), "passport→passport", "→" (root)
+```
+
+### `recomputeTargeted` — алгоритм
 
 ```
 SET passport.number = "123456"
   │
-  ├─ changedPaths = {"passport.number"}
+  ├─ changedNodes = {passportNumberNode}
   │
-  └─ recomputeAffected(changedPaths):
+  └─ recomputeTargeted(changedNodes):
        │
-       ├─ affected = new Set<LeafEntry>()
+       ├─ 1. Source groups: {passportNumberNode} → {"passport"}
+       │     (через nodeParents + nodePaths)
        │
-       ├─ // 1. Reverse lookup: кто зависит от changedPaths?
-       │  for path in changedPaths:
-       │    affected ∪= reverseDepIndex.get(path)  → прямые зависимые
+       ├─ 2. BFS по groupDeps:
+       │     "passport" → все реципиенты → …
+       │     orderedGroups = ["passport", "calculator", ...]
+       │     (топологический порядок: доноры раньше реципиентов)
        │
-       ├─ // 2. Wildcard листья — всегда
-       │  affected ∪= wildcardLeaves
-       │
-       ├─ // 3. Self-only — только если сам изменился
-       │  for leaf in selfOnlyLeaves:
-       │    if leaf.path ∈ changedPaths → affected.add(leaf)
-       │
-       ├─ // 4. Topo-sort computed среди affected
-       │  computedEntries = affected.filter(node.value === function)
-       │  sorted = topologicalSortComputed(computedEntries)
-       │  for each sorted: пересчитать value
-       │
-       └─ // 5. computeFieldState только для affected
-          for each leaf in affected:
-            computeFieldState(leaf, currentValue, allValues)
+       └─ 3. Пересчёт OWN листьев каждой группы:
+             recomputeLeaves(groupLeafMap.get(groupNode))
+               ├─ Фаза 1: topo-sort computed → пересчёт value
+               └─ Фаза 2: computeFieldState для всех листьев группы
 ```
 
-### Визуально: было vs. станет
+### Визуально: было vs. стало
 
 ```
 БЫЛО (recomputeAll):
 
-  SET country = "ru"
+  SET passport.number = "123456"
     └─ пересчёт ВСЕХ 50 полей
-         ├─ personal:  name, email, phone        ← впустую
-         ├─ address:   country, city, shipping   ← нужно
-         ├─ payment:   amount, type              ← впустую
-         ├─ passport:  number, issue, expiry     ← впустую
-         └─ calc:      price, qty, total         ← впустую
+         ├─ personal:  name, email, phone    ← впустую
+         ├─ address:   country, city         ← впустую
+         ├─ payment:   amount, type          ← впустую
+         ├─ passport:  number, issue, expiry ← нужно
+         └─ calculator: total                ← впустую
 
-СТАНЕТ (recomputeAffected):
+СТАЛО (recomputeTargeted):
 
-  SET country = "ru"
-    ├─ changedPaths = {"country"}
-    ├─ reverseDepIndex["country"] = {city, shippingCost}
-    ├─ wildcardLeaves = {name, email, phone, ...}   ← всё ещё пересчитываются
-    └─ пересчёт: affected = wildcard ∪ {city, shippingCost}
-         (self-only листья вроде comment — пропущены ✓)
+  SET passport.number = "123456"
+    ├─ sourceGroup = "passport"
+    ├─ groupDeps → никто не зависит от passport
+    └─ пересчёт только: passport (3 поля)
+         Экономия: 94%
 ```
 
-### Максимальная эффективность: когда ВСЕ поля имеют `dependencies`
+### recomputeLeaves — внутреннее устройство
 
 ```
-Конфиг, где каждое поле объявляет dependencies:
-
-  personal:
-    name:  { deps: [] }             → self-only
-    email: { deps: [] }             → self-only
-    phone: { deps: [] }             → self-only
-
-  address:
-    country: { deps: [] }           → self-only
-    city:    { deps: ["country"] }  → explicit
-    shipping:{ deps: ["country","city"] } → explicit
-
-  passport:
-    number:    { deps: [] }         → self-only
-    issueDate: { deps: [] }         → self-only
-
-SET country = "ru":
-  wildcardLeaves = {} (пусто — все объявили deps!)
-  reverseDepIndex["country"] = {city, shipping}
-  affected = {city, shipping}  ← ТОЛЬКО 2 поля из 8!
-  Экономия: 75%
+recomputeLeaves(leafNodes[]):
+  │
+  ├─ Фаза 1: computed values
+  │   ├─ filter leafNodes: только node.value === Function
+  │   ├─ topologicalSortComputed(computedEntries)
+  │   │     Алгоритм Кана (BFS по dependencies)
+  │   │     Гарантирует порядок: subtotal → tax → total
+  │   └─ для каждого в порядке сортировки:
+  │       computedValue = node.value(valuesCache.values)
+  │       if changed → nodeState.set(...) + updateValuesCacheEntry O(1)
+  │
+  └─ Фаза 2: FieldState
+      для каждого листа:
+        computeFieldState(node, currentValue, allValues, revalidate, translate)
+        if fieldStateChanged(prev, next) → nodeState.set(node, next)
+      returns Set<object> изменённых узлов
 ```
 
-### Интеграция в call sites
+### Call sites `recomputeAll`
 
 ```
-writePipeline.ts — ГОРЯЧИЙ ПУТЬ (каждый keypress):
-  БЫЛО:   recomputeAll()
-  СТАНЕТ: recomputeAffected(changedPaths)
-  changedPaths = {nodePath} ∪ {paths из setter-патча}
-
-onChangePipeline.ts — после onChange-патча:
-  БЫЛО:   recomputeAll()
-  СТАНЕТ: recomputeAffected(changedPaths из applyPatch)
-
-resolvePipeline.ts — после resolve:
-  БЫЛО:   recomputeAll()
-  СТАНЕТ: recomputeAffected(changedPaths из applyPatch)
-
-submitPipeline, resetPipeline, persist hydrate, init:
-  Остаётся recomputeAll() — нужен полный пересчёт (изменения глобальные).
+1. store/index.ts (init)          → полный — строит groupDeps через trackingWrap
+2. writePipeline.ts               → таргетированный (changedNodes)
+3. onChangePipeline.ts            → таргетированный (changedNodes из applyPatch)
+4. resolvePipeline/executeResolve → полный (resolve меняет произвольные поля)
+5. submitPipeline.ts (start)      → полный (revalidate=true)
+6. submitPipeline.ts (end)        → полный
+7. resetPipeline.ts               → полный
+8. persistManager.ts (hydrate)    → полный
+9. store/index.ts (setValuesNode) → полный (патч может быть любым)
 ```
-
-### Сигнатуры (план)
-
-```ts
-// Новая функция — замена recomputeAll для горячих путей
-export function recomputeAffected(
-  changedPaths: Set<string>,
-  rootConfig: AnyConfigNode,
-  groupLeafMap: GroupLeafMap,
-  nodeState: WeakMap<object, FieldState>,
-  reverseDepIndex: Map<string, Set<LeafEntry>>,
-  wildcardLeaves: Set<LeafEntry>,
-  selfOnlyLeaves: Set<LeafEntry>,
-  translate?: TranslateFn,
-): Set<object>;
-
-// recomputeAll остаётся для init/reset/submit
-export function recomputeAll(...): Set<object>;
-
-// writePipeline получает changedPaths вместо recomputeAll
-export interface WriteDeps {
-  rootConfig: AnyConfigNode;
-  nodeState: WeakMap<object, FieldState>;
-  recomputeAffected: (changedPaths: Set<string>) => Set<object>;
-  // recomputeAll убирается отсюда
-}
-```
-
-### Построение `changedPaths` в writePipeline
-
-```ts
-// writeValue знает какой node изменился → берём его path из nodePaths WeakMap:
-
-function writeValue(node, rawValue, deps):
-  // ...format, store, setter...
-  const changedPaths = new Set<string>();
-  changedPaths.add(nodePaths.get(node)!);
-  // setter мог изменить другие поля:
-  for (const patchedNode of patchedNodes):
-    changedPaths.add(nodePaths.get(patchedNode)!);
-
-  const recomputedNodes = recomputeAffected(changedPaths);
-```
-
-### Ограничения и edge cases
-
-| Ситуация | Решение |
-|---|---|
-| Поле без `dependencies` (wildcard) | Всегда пересчитывается — вставлено в wildcardLeaves |
-| `dependencies: []` | Пересчитывается только при изменении своего value |
-| Computed зависит от computed | topologicalSort применяется к affected-подмножеству |
-| Snapshot значений для computed/validate | Читается из `valuesCache.values` — O(1), всегда актуален |
-| Новые поля после resolve | reverseDepIndex нужно обновить при resolve applyPatch |
-| onChange-патч меняет неожиданные поля | changedPaths из applyPatch содержит все фактически изменённые ноды |
-
-### topologicalSortComputed
-
-`topologicalSortComputed` сохраняется — но применяется к **подмножеству** computed-узлов
-среди affected, а не ко всем computed в дереве. Описание алгоритма:
-
-Алгоритм Кана (BFS): отфильтровать зависимости на другие computed → inDegree → очередь.
-Гарантирует порядок вычислений в цепочках `subtotal → tax → total`.
-
-Замечание: в текущей реализации есть **мёртвый код** (переменная `inDegree`, строки 41–47) —
-она вычисляется, но не используется. Работает только `inDeg`. Можно удалить.
 
 ---
 
