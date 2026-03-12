@@ -1,6 +1,6 @@
 import { type FieldState, resolveFlag } from "./compute/index";
 import { CONFIG_PROPS } from "./constants";
-import { type AnyConfigNode } from "./types";
+import { TranslateFn, type AnyConfigNode } from "./types";
 import { hasComputedProps } from "./hasComputedProps";
 
 /**
@@ -74,7 +74,8 @@ export function registerNodes<TNode extends AnyConfigNode>(
   leafNodes: LeafEntry[],
   nodeState: WeakMap<object, FieldState>,
   parentPath = "",
-  groupLeafMap?: GroupLeafMap,
+  groupLeafMap: GroupLeafMap,
+  translate: TranslateFn,
 ) {
   for (const key of Object.keys(node)) {
     if (CONFIG_PROPS.has(key)) continue;
@@ -98,10 +99,10 @@ export function registerNodes<TNode extends AnyConfigNode>(
       const initialValue = rawSlice?.[key] ?? configValue ?? "";
       nodeState.set(child, {
         value: initialValue,
-        isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true),
-        isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false),
-        isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false),
-        isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false),
+        isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true, translate),
+        isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false, translate),
+        isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false, translate),
+        isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false, translate),
         dirty: false,
         revalidate: false,
       });
@@ -118,16 +119,16 @@ export function registerNodes<TNode extends AnyConfigNode>(
       const sliceValues = (initialSlice as Record<string, unknown> | undefined ?? {}) as Record<string, unknown>;
       nodeState.set(child, {
         value: undefined,
-        isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true),
-        isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false),
-        isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false),
-        isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false),
+        isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true, translate),
+        isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false, translate),
+        isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false, translate),
+        isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false, translate),
         dirty: false,
         revalidate: false,
       });
     }
 
     // Рекурсия в дочерние
-    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap, translate);
   }
 }

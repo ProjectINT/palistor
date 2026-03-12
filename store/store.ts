@@ -125,7 +125,7 @@ export function createProxyStore<TConfig extends Record<string, any>>(
   // ─── Инициализация ─────────────────────────────────────────────────────────
 
   // Выполняем инициализацию
-  registerNodes(rootConfig, initialValues, leafNodes, nodeState, "", groupLeafMap);
+  registerNodes(rootConfig, initialValues, leafNodes, nodeState, "", groupLeafMap, translate);
 
   // Инициализируем submitting/dirty/revalidate для корневого и вложенных групп
   initGroupSubmitting(rootConfig, nodeState);
