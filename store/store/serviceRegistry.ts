@@ -32,8 +32,4 @@ export class ServiceRegistry {
   setNotifier(fn: NotifyFn | null): void {
     this._notifier = typeof fn === "function" ? fn : () => {};
   }
-
-  getNotifier(): NotifyFn {
-    return this._notifier;
-  }
 }

@@ -264,10 +264,6 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     this.services.setNotifier(fn);
   }
 
-  getNotifier(): NotifyFn {
-    return this.services.getNotifier();
-  }
-
   submit(): Promise<SubmitResult> {
     return this.submitPipeline.execute(this.rootConfig);
   }

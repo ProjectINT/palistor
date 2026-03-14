@@ -371,11 +371,6 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   setNotifier: (fn: NotifyFn | null) => void;
 
   /**
-   * Возвращает текущую зарегистрированную функцию уведомления (всегда гарантированно существует).
-   */
-  getNotifier: () => NotifyFn;
-
-  /**
    * Submit root form.
    * Lifecycle: submitting → beforeSubmit → validate → onSubmit → afterSubmit.
    */
