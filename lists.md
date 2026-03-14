@@ -12,7 +12,7 @@
 - `nodePaths: WeakMap<object, string>` — dot-путь каждого узла
 - `nodeParents: WeakMap<object, object>` — родитель каждого узла
 
-**Обход дерева:** все функции (`registerNodes`, `applyPatch`, `recomputeAll`, `buildNodeMaps`, `captureInitialValues`, `recomputeDirty`) итерируются по `Object.keys(node)`, пропуская `CONFIG_PROPS`, и рекурсируют в дочерние объекты. Массивы сейчас **не обрабатываются** — `applyPatch` явно пропускает `Array.isArray`.
+**Обход дерева:** все функции (`registerNodes`, `applyPatch`, `recompute`, `buildNodeMaps`, `captureInitialValues`, `recomputeDirty`) итерируются по `Object.keys(node)`, пропуская `CONFIG_PROPS`, и рекурсируют в дочерние объекты. Массивы сейчас **не обрабатываются** — `applyPatch` явно пропускает `Array.isArray`.
 
 ---
 
@@ -95,21 +95,9 @@ user.reset()        // reset этого элемента
 
 ## Пошаговый план
 
-### Шаг 0: `recomputeGroup(node)` — скопированный recompute
+### Шаг 0: Таргетированный пересчёт — уже реализован
 
-**Зачем:** Сейчас `recomputeAll` пересчитывает **все** листья в массиве `leafNodes`. При изменении одного элемента списка из 1000 пересчитываются все 1000. Нужна функция, которая пересчитывает только поддерево одного узла.
-
-**Что делать:**
-1. Создать `recomputeGroup(groupNode, nodeState, translate)` — пересчитывает только leafNodes, принадлежащие поддереву `groupNode`.
-2. Для определения принадлежности: либо фильтровать `leafNodes` по path-prefix (`nodePaths`), либо хранить per-group список leafNodes.
-3. Рефакторить `recomputeAll` → вызов `recomputeGroup(rootConfig)`.
-4. При записи значения в элемент списка — вызывать `recomputeGroup(entity)` вместо `recomputeAll`.
-
-**Что нужно решить:**
-- Computed-свойства могут зависеть от значений **вне** группы (например, `isVisible: (values) => values.order.total > 0`). При скопированном recompute мы всё равно берём `valuesCache.values` для всех computed/validate, так что зависимости от внешних полей работают. Но внешние поля не пересчитываются — если есть обратная зависимость, нужен полный recompute.
-- **Решение:** `recomputeGroup` пересчитывает только поддерево, но берёт глобальный `valuesCache.values`. Для обратных зависимостей (computed вне группы, зависящий от поля в группе) — оставляем `recomputeAll` при необходимости (через `dependencies` граф).
-
-**Файлы:** `store/recomputeAll.ts`
+**Статус:** Завершён. `Palistor.recompute(changedNodes)` через `recomputeTargeted` пересчитывает только затронутые группы через BFS по `groupDeps`. При изменении поля в любой группе пересчитываются только она и её реципиенты — не всё дерево.
 
 ---
 

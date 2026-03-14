@@ -92,7 +92,7 @@ form.email.value = "X"   (SET trap в buildProxy)
   ├─ 2. storeValue()        nodeState.set(node, { ...state, value })
   │                         + updateValuesCacheEntry O(1)
   ├─ 3. runSetter()         node.setter(value, allValues, prev) → patch → applyPatch()
-  ├─ 4. recomputeAll(changedNodes)  таргетированный пересчёт групп
+  ├─ 4. recompute(changedNodes)  таргетированный пересчёт групп
   ├─ 5. notifyChanged()
   │      ├─ recomputeDirty
   │      ├─ nodeVersions[node]++ для changed-нод
@@ -107,14 +107,14 @@ form.email.value = "X"   (SET trap в buildProxy)
 
 ```
 form.submit()                (executeSubmit)
-  ├─ 1. submitting = true, setGroupRevalidate(true) → recomputeAll → notifyChanged
+  ├─ 1. submitting = true, setGroupRevalidate(true) → recompute → notifyChanged
   ├─ 2. applyLeafBeforeSubmit()   leaf-level beforeSubmit на snapshot
   ├─ 4. group beforeSubmit()      group-level beforeSubmit
   ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
   ├─ 6. onSubmit(values) → result
   ├─ 7. afterSubmit(result, { reset })
   ├─ 8. clearPersist()
-  └─ finally: submitting = false → recomputeAll → notifyChanged
+  └─ finally: submitting = false → recompute → notifyChanged
 ```
 
 ---
@@ -127,10 +127,10 @@ GET form.car → узел idle → triggerResolve()
   └─ resolver(trackingProxy)         ← auto-deps: read → accessedPaths, write → buffer
        ├─ OK  → batch flush: applyPatch(result) + buffered writes, loading: false,
        │        status: resolved, save auto-deps, mergeInitialValues (dirty baseline),
-       │        recomputeAll, notifyChanged (1 раз)
+       │        recompute, notifyChanged (1 раз)
        ├─ ERR → retry до attempts раз (delay ms) → при исчерпании:
        │        onError(err, { notify }), loading: false, status: error
-       └─ always: recomputeAll + notifyChanged
+       └─ always: recompute + notifyChanged
 
 Deps: явные (config) ∪ auto-deps (из tracking proxy resolver'а)
 При изменении dep: notifyChanged → findResolvesToRetrigger → resetResolveState → triggerResolve
@@ -178,9 +178,7 @@ store/
     types.ts                FieldState + вспомогательные типы
     recompute/
       collectGroupLeafNodes.ts  сбор OWN листьев группы (не рекурсивно)
-      recomputeAll.ts           полный пересчёт всего дерева (делегирует recomputeGroup)
-      recomputeAndNotify.ts     хелпер: recomputeAll → merge → notifyChanged
-      recomputeGroup.ts         рекурсивный пересчёт поддерева
+      recomputeAndNotify.ts     хелпер: recompute → merge → notifyChanged
       recomputeLeaves.ts        пересчёт списка листьев (computed + fieldState)
       recomputeTargeted.ts      таргетированный пересчёт по groupDeps (BFS)
       topologicalSortComputed.ts  алгоритм Кана для computed-узлов
@@ -281,17 +279,19 @@ updateValuesCacheEntry(cache, node, newValue)
 
 ---
 
-## recomputeAll — таргетированный пересчёт
+## Palistor.recompute() — таргетированный пересчёт
 
 ### Два режима одной функции
 
 ```ts
-// Замыкание в store/index.ts
-function recomputeAll(changedNodes?: Set<object>): Set<object> {
+// Метод Palistor
+recompute(changedNodes?: Set<object>): Set<object> {
   if (changedNodes && changedNodes.size > 0) {
     return recomputeTargeted(changedNodes, deps); // горячий путь
   }
-  return _recomputeAll(rootConfig, groupLeafMap, nodeState, ...); // полный
+  // Полный путь: собрать все листья и пересчитать
+  const leafNodes = collectGroupLeafNodes(rootConfig, groupLeafMap);
+  return recomputeLeaves(leafNodes, nodeState, valuesCache, translate, trackingWrap?);
 }
 ```
 
@@ -300,7 +300,7 @@ function recomputeAll(changedNodes?: Set<object>): Set<object> {
 
 ### groupDeps — карта зависимостей между группами
 
-Строится автоматически при первом (init) `recomputeAll` через трекинг GET-доступов:
+Строится автоматически при первом (init) `recompute()` через трекинг GET-доступов:
 
 ```
 groupDeps: Set<string>   — пары "донор→реципиент" в формате pairKey(donor, recipient)
@@ -342,7 +342,7 @@ SET passport.number = "123456"
 ### Визуально: было vs. стало
 
 ```
-БЫЛО (recomputeAll):
+BYLO (full recompute):
 
   SET passport.number = "123456"
     └─ пересчёт ВСЕХ 50 полей
@@ -352,7 +352,7 @@ SET passport.number = "123456"
          ├─ passport:  number, issue, expiry ← нужно
          └─ calculator: total                ← впустую
 
-СТАЛО (recomputeTargeted):
+STALO (recomputeTargeted via recompute()):
 
   SET passport.number = "123456"
     ├─ sourceGroup = "passport"
@@ -382,7 +382,7 @@ recomputeLeaves(leafNodes[]):
       returns Set<object> изменённых узлов
 ```
 
-### Call sites `recomputeAll`
+### Call sites `recompute()`
 
 ```
 1. Palistor constructor (init)    → полный — строит groupDeps через trackingWrap
