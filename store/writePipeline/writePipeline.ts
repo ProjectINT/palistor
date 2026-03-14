@@ -52,7 +52,7 @@ export class WritePipeline {
     // Фаза 3: Таргетированный пересчёт затронутых групп
     const changedSoFar = new Set<object>([node]);
     for (const n of patchedNodes) changedSoFar.add(n);
-    const recomputedNodes = this.kernel.recomputeAll(changedSoFar);
+    const recomputedNodes = this.kernel.recompute(changedSoFar);
 
     // Фаза 4: Объединение всех изменённых узлов
     return { changed: mergeChanged(node, patchedNodes, recomputedNodes) };

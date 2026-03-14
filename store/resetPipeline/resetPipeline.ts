@@ -37,7 +37,7 @@ export class ResetPipeline {
 
     recomputeAndNotify(
       changed,
-      () => this.kernel.recomputeAll(),
+      () => this.kernel.recompute(),
       (c) => this.kernel.notifyChanged(c),
     );
   }

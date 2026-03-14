@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { recomputeGroup } from "../recomputeGroup";
+import { collectGroupLeafNodes } from "../collectGroupLeafNodes";
+import { recomputeLeaves } from "../recomputeLeaves";
 import type { AnyConfigNode } from "../../../types";
 import type { FieldState } from "../../index";
 import type { GroupLeafMap } from "../../../registerNodes";
@@ -11,11 +12,12 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
   return { values, nodeSlot: new WeakMap() };
 }
 
-describe("recomputeGroup", () => {
+describe("collectGroupLeafNodes + recomputeLeaves (group subtree)", () => {
   it("возвращает пустой Set, если у группы нет листьев в карте", () => {
     const root = {} as AnyConfigNode;
     const groupLeafMap: GroupLeafMap = new WeakMap();
-    const result = recomputeGroup(root, groupLeafMap, new WeakMap(), makeCache(), translate);
+    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const result = recomputeLeaves(leaves, new WeakMap(), makeCache(), translate);
     expect(result.size).toBe(0);
   });
 
@@ -27,7 +29,8 @@ describe("recomputeGroup", () => {
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const result = recomputeGroup(root, groupLeafMap, nodeState, makeCache(), translate);
+    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
     // fieldNode не имел предыдущего состояния → должен быть в changed
     expect(result.has(fieldNode)).toBe(true);
@@ -44,7 +47,8 @@ describe("recomputeGroup", () => {
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const result = recomputeGroup(root, groupLeafMap, nodeState, makeCache(), translate);
+    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
     expect(result.has(childField)).toBe(true);
   });

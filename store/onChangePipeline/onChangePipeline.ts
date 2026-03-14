@@ -55,7 +55,7 @@ export class OnChangePipeline {
     if (patchChanged.size > 0) {
       recomputeAndNotify(
         patchChanged,
-        () => this.kernel.recomputeAll(),
+        () => this.kernel.recompute(),
         (c) => this.kernel.notifyChanged(c),
       );
     }

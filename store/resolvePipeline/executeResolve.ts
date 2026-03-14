@@ -35,7 +35,7 @@ export function executeResolve(
   resolve: Resolve,
   deps: ResolveDeps,
 ): Promise<unknown> {
-  const { rootConfig, nodeState, resolveStates, recomputeAll, notifyChanged, notify, getValues, initialValueMap, valuesCache } = deps;
+  const { rootConfig, nodeState, resolveStates, recompute, notifyChanged, notify, getValues, initialValueMap, valuesCache } = deps;
   const state = resolveStates.get(node);
   if (!state) return Promise.resolve();
 
@@ -81,7 +81,7 @@ export function executeResolve(
   }
 
   // Notify about loading: true (and optimistic data)
-  recomputeAndNotify(allChanged, recomputeAll, notifyChanged);
+  recomputeAndNotify(allChanged, recompute, notifyChanged);
 
   // ── Async resolver execution ─────────────────────────────────────────────
   const retryOpts = resolve.options?.retry ?? { attempts: 0, delay: 1000 };
@@ -144,7 +144,7 @@ export function executeResolve(
         state.dependencies = mergedDeps;
 
         // 5. Recompute + notify (once)
-        recomputeAndNotify(changed, recomputeAll, notifyChanged);
+        recomputeAndNotify(changed, recompute, notifyChanged);
 
         return result;
       } catch (err) {
@@ -175,7 +175,7 @@ export function executeResolve(
     }
 
     // Recompute + notify
-    recomputeAndNotify(changed, recomputeAll, notifyChanged);
+    recomputeAndNotify(changed, recompute, notifyChanged);
 
     return undefined;
   })();

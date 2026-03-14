@@ -6,10 +6,10 @@
  */
 export function recomputeAndNotify(
   changed: Set<object>,
-  recomputeAll: () => Set<object>,
+  recompute: () => Set<object>,
   notifyChanged: (changed: Set<object>) => void,
 ): void {
-  const recomputed = recomputeAll();
+  const recomputed = recompute();
   for (const n of changed) recomputed.add(n);
   notifyChanged(recomputed);
 }

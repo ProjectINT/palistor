@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { findOnChangeAncestors } from "./findOnChangeAncestors";
 import { computeFieldKey } from "./computeFieldKey";
 import { Palistor } from "../store/palistor";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 
 // ─── OnChangePipeline (через Palistor) ───────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify as _recomputeAndNotify } from "../compute/recompute";
-import { recomputeAll as _recomputeAll, recomputeTargeted as _recomputeTargeted } from "../compute/recompute";
+import { recomputeTargeted, collectGroupLeafNodes, recomputeLeaves } from "../compute/recompute";
 import { ProxyBuilder } from "../buildProxy/buildProxy";
 import { PersistManager } from "../persist/persistManager";
 import { ResetPipeline } from "../resetPipeline/resetPipeline";
@@ -111,10 +111,10 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     this.dirty = new DirtyTracker();
     this.values = buildValuesCache(rootConfig, nodeState);
 
-    // ─── GroupDepsMap + первый recomputeAll ──────────────────────────────────
+    // ─── GroupDepsMap + первый recompute ──────────────────────────────────────
 
     this.groupDepsMap = new GroupDepsMap(rootConfig, nodePaths, nodeParents);
-    this.recomputeAll(); // первый полный пересчёт — строит карту зависимостей
+    this.recompute(); // первый полный пересчёт — строит карту зависимостей
     this.dirty.capture(rootConfig, nodeState);
 
     // ─── NotificationHub ────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     this.resolveManager = new ResolveManager({
       rootConfig,
       nodeState,
-      recomputeAll: () => this.recomputeAll(),
+      recompute: () => this.recompute(),
       notifyChanged: (c) => this.notifyChanged(c),
       notify,
       initialValueMap: this.dirty.initialValueMap,
@@ -169,12 +169,12 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    *
    * @internal
    */
-  recomputeAll(changedNodes?: Set<object>): Set<object> {
+  recompute(changedNodes?: Set<object>): Set<object> {
     const { nodeState, nodePaths, nodeParents, groupLeafMap } = this.nodes;
     const { translate } = this.services;
 
     if (changedNodes && changedNodes.size > 0) {
-      return _recomputeTargeted(changedNodes, {
+      return recomputeTargeted(changedNodes, {
         rootConfig: this.rootConfig,
         groupLeafMap,
         nodeState,
@@ -186,21 +186,16 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       });
     }
 
+    const leafNodes = collectGroupLeafNodes(this.rootConfig, groupLeafMap);
+
     if (!this.groupDepsMap.isBuilt) {
       const trackingWrap = this.groupDepsMap.getTrackingWrap();
-      const result = _recomputeAll(
-        this.rootConfig,
-        groupLeafMap,
-        nodeState,
-        this.values,
-        translate,
-        trackingWrap,
-      );
+      const result = recomputeLeaves(leafNodes, nodeState, this.values, translate, trackingWrap);
       this.groupDepsMap.markBuilt();
       return result;
     }
 
-    return _recomputeAll(this.rootConfig, groupLeafMap, nodeState, this.values, translate);
+    return recomputeLeaves(leafNodes, nodeState, this.values, translate);
   }
 
   /**
@@ -223,7 +218,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   setValuesNode(node: AnyConfigNode, patch: Record<string, unknown>): void {
     const formatted = formatPatch(node, patch, this.values.values);
     const changed = applyPatch(node, this.nodes.nodeState, formatted, new Set(), this.values);
-    _recomputeAndNotify(changed, () => this.recomputeAll(), (c) => this.notifyChanged(c));
+    _recomputeAndNotify(changed, () => this.recompute(), (c) => this.notifyChanged(c));
   }
 
   // ─── ProxyStore — публичный API ───────────────────────────────────────────

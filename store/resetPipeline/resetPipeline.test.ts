@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { collectDefaults } from "./collectDefaults";
 import { buildResetPatch } from "./buildResetPatch";
 import { Palistor } from "../store";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 

@@ -17,7 +17,7 @@ import {
 export interface ResolveManagerDeps {
   rootConfig: AnyConfigNode;
   nodeState: WeakMap<object, FieldState>;
-  recomputeAll: () => Set<object>;
+  recompute: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
   notify: NotifyFn;
   /** Initial value snapshot — passed to resolve pipeline for dirty tracking. */
@@ -45,7 +45,7 @@ export class ResolveManager {
   private readonly resolveDeps: ResolveDeps;
 
   constructor(deps: ResolveManagerDeps) {
-    const { rootConfig, nodeState, recomputeAll, notifyChanged, notify, initialValueMap, valuesCache } = deps;
+    const { rootConfig, nodeState, recompute, notifyChanged, notify, initialValueMap, valuesCache } = deps;
 
     this.resolveEntries = initResolveStates(rootConfig, this.states);
     this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node, e]));
@@ -54,7 +54,7 @@ export class ResolveManager {
       rootConfig,
       nodeState,
       resolveStates: this.states,
-      recomputeAll,
+      recompute,
       notifyChanged,
       notify,
       getValues: () => structuredClone(valuesCache.values) as Record<string, unknown>,

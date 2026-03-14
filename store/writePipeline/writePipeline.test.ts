@@ -50,7 +50,7 @@ describe("WritePipeline", () => {
     const node: AnyConfigNode = { value: "hello" };
     const root: AnyConfigNode = { field: node };
     const store = new Palistor({ config: root });
-    const recomputeSpy = vi.spyOn(store, "recomputeAll");
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
     const result = store.writePipeline.execute(node, "hello");
 
@@ -66,7 +66,7 @@ describe("WritePipeline", () => {
     };
     const root: AnyConfigNode = { amount: node };
     const store = new Palistor({ config: root });
-    const recomputeSpy = vi.spyOn(store, "recomputeAll");
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
     const result = store.writePipeline.execute(node, "42");
 
@@ -78,7 +78,7 @@ describe("WritePipeline", () => {
     const node: AnyConfigNode = { value: "hello" };
     const root: AnyConfigNode = { field: node };
     const store = new Palistor({ config: root });
-    const recomputeSpy = vi.spyOn(store, "recomputeAll");
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
     const result = store.writePipeline.execute(node, "world");
 
@@ -91,7 +91,7 @@ describe("WritePipeline", () => {
     const node: AnyConfigNode = { value: NaN };
     const root: AnyConfigNode = { field: node };
     const store = new Palistor({ config: root });
-    const recomputeSpy = vi.spyOn(store, "recomputeAll");
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
     const result = store.writePipeline.execute(node, NaN);
 

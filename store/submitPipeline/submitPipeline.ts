@@ -36,7 +36,7 @@ export class SubmitPipeline {
 
     const revalidateChanged = setGroupRevalidate(groupNode, true, nodeState);
 
-    const changed1 = this.kernel.recomputeAll();
+    const changed1 = this.kernel.recompute();
     changed1.add(groupNode);
     for (const n of revalidateChanged) changed1.add(n);
     this.kernel.notifyChanged(changed1);
@@ -95,7 +95,7 @@ export class SubmitPipeline {
       // 9. submitting = false → recompute → notify
       const finalState = nodeState.get(groupNode);
       nodeState.set(groupNode, { ...finalState!, submitting: false });
-      const changed2 = this.kernel.recomputeAll();
+      const changed2 = this.kernel.recompute();
       changed2.add(groupNode);
       this.kernel.notifyChanged(changed2);
     }
