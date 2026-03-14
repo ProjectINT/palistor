@@ -8,8 +8,8 @@ import type { AnyConfigNode, TranslateFn } from "./types";
 /**
  * Реестр узлов конфига.
  *
- * Объединяет данные, которые раньше были россыпью WeakMap-ов в замыкании
- * `createProxyStore`: nodeState, nodePaths, nodeParents, leafNodes,
+ * Объединяет данные,
+ * `Palistor`: nodeState, nodePaths, nodeParents, leafNodes,
  * groupLeafMap, proxyCache.
  *
  * Выполняет инициализацию (registerNodes + buildNodeMaps + initGroupSubmitting)

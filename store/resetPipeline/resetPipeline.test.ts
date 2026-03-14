@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { collectDefaults } from "./collectDefaults";
 import { buildResetPatch } from "./buildResetPatch";
-import { createProxyStore } from "../store";
+import { Palistor } from "../store";
 import type { AnyConfigNode } from "../types";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ describe("executeReset (through store)", () => {
   });
 
   it("сбрасывает значения к initial snapshot", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     store.proxy.name.value = "Alice";
     store.proxy.age.value = 30;
 
@@ -112,7 +112,7 @@ describe("executeReset (through store)", () => {
   });
 
   it("после reset поля не dirty", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     store.proxy.name.value = "Alice";
     expect(store.proxy.name.dirty).toBe(true);
 
@@ -122,7 +122,7 @@ describe("executeReset (through store)", () => {
   });
 
   it("reset с явными values применяет их как новую baseline", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     store.reset({ name: "Bob", age: 20 });
 
     expect(store.proxy.name.value).toBe("Bob");
@@ -132,7 +132,7 @@ describe("executeReset (through store)", () => {
   });
 
   it("сбрасывает только вложенную группу", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     store.proxy.name.value = "Alice";
     store.proxy.address.city.value = "Moscow";
 

@@ -41,7 +41,7 @@ import type { PersistOptions } from "../store/persist/types";
  *
  * При смене ключа — переподключается.
  *
- * @param store   — ProxyStore, созданный через createProxyStore
+ * @param store   — ProxyStore, созданный через new Palistor()
  * @param options — опции персистенции (key, driver, debounce, …)
  */
 export function usePersist<TConfig extends Record<string, any>>(

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { render, screen } from "@testing-library/react";
-import { createProxyStore } from "../store/store";
+import { Palistor } from "../store/store";
 import { useForm } from "./useForm";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ const makeConfig = () => ({
 
 describe("useForm", () => {
   it("возвращает прокси с текущими значениями", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -51,7 +51,7 @@ describe("useForm", () => {
   });
 
   it("читает вычисленные свойства (isVisible, isRequired)", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -61,7 +61,7 @@ describe("useForm", () => {
   });
 
   it("вложенные поля доступны через точку", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -71,7 +71,7 @@ describe("useForm", () => {
   });
 
   it("ре-рендерит компонент при записи value", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const renderCount = vi.fn();
 
     const { result } = renderHook(() => {
@@ -91,7 +91,7 @@ describe("useForm", () => {
   });
 
   it("пересчитывает зависимые поля после изменения", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -107,7 +107,7 @@ describe("useForm", () => {
   });
 
   it("запись через useForm proxy работает из компонента", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     function TestComponent() {
       const form = useForm(store);
@@ -137,7 +137,7 @@ describe("useForm", () => {
   });
 
   it("поддерево можно передать в дочерний компонент как проп", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     function PassportSection({ passport }: { passport: any }) {
       if (!passport.isVisible) return <span data-testid="hidden">hidden</span>;
@@ -188,7 +188,7 @@ describe("useForm", () => {
   });
 
   it("несколько компонентов с одним store синхронизированы", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     function EmailDisplay() {
       const form = useForm(store);
@@ -221,7 +221,7 @@ describe("useForm", () => {
   });
 
   it("getValues() отражает изменения сделанные через useForm proxy", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -236,7 +236,7 @@ describe("useForm", () => {
   });
 
   it("один и тот же прокси на каждом ре-рендере (referential equality)", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const proxies: any[] = [];
 
     const { rerender } = renderHook(() => {
@@ -255,7 +255,7 @@ describe("useForm", () => {
 
 describe("useForm tracking (selective re-render)", () => {
   it("НЕ перерендерит компонент, который не читает изменённое поле", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const emailRender = vi.fn();
     const paymentRender = vi.fn();
 
@@ -293,7 +293,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("перерендерит компонент только при изменении прочитанного поля", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const renderCount = vi.fn();
 
     function CardSection() {
@@ -326,7 +326,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("tracking работает для вложенных полей (passport.number)", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const passportRender = vi.fn();
     const emailRender = vi.fn();
 
@@ -365,7 +365,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("tracking через переданный проп (без useForm в дочернем)", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const parentRender = vi.fn();
 
     function Parent() {
@@ -390,7 +390,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("запись через tracking proxy работает корректно", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -403,7 +403,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("tracking proxy стабилен (referential equality между рендерами)", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const proxies: any[] = [];
 
     const { rerender } = renderHook(() => {
@@ -418,7 +418,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("три компонента: меняется одно поле, рендерится только один", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const renderA = vi.fn();
     const renderB = vi.fn();
     const renderC = vi.fn();
@@ -462,7 +462,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("один useForm на верхнем уровне + пропсы вниз — все перерендериваются", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const renderParent = vi.fn();
     const renderA = vi.fn();
     const renderB = vi.fn();
@@ -519,7 +519,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("useForm(subtree) — дочерние компоненты с независимой подпиской", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const renderParent = vi.fn();
     const renderA = vi.fn();
     const renderB = vi.fn();
@@ -577,7 +577,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("useForm(subtree) — запись через поддерево работает", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     function EmailEditor({ emailProxy }: { emailProxy: any }) {
       const email = useForm(emailProxy) as any;
@@ -608,7 +608,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("onValueChange работает через tracking proxy", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     function TestComponent() {
       const form = useForm(store);
@@ -634,7 +634,7 @@ describe("useForm tracking (selective re-render)", () => {
   });
 
   it("onValueChange возвращает стабильную ссылку через tracking proxy", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const fns: any[] = [];
 
     const { rerender } = renderHook(() => {
@@ -653,7 +653,7 @@ describe("useForm tracking (selective re-render)", () => {
 
 describe("setValues", () => {
   it("store.setValues обновляет несколько полей сразу", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -666,7 +666,7 @@ describe("setValues", () => {
   });
 
   it("store.setValues не затрагивает поля вне патча", () => {
-    const store = createProxyStore({
+    const store = new Palistor({
       config: makeConfig(),
       initialValues: { email: "original@test.com", paymentType: "card" },
     });
@@ -681,7 +681,7 @@ describe("setValues", () => {
   });
 
   it("form.setValues через useForm proxy работает", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     function TestComponent() {
       const form = useForm(store);
@@ -707,7 +707,7 @@ describe("setValues", () => {
   });
 
   it("form.passport.setValues обновляет вложенную группу", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -722,7 +722,7 @@ describe("setValues", () => {
   });
 
   it("setValues пересчитывает computed-свойства (isVisible)", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
 
@@ -738,7 +738,7 @@ describe("setValues", () => {
   });
 
   it("setValues триггерит ре-рендер только для компонентов, читающих изменённые поля", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const emailRender = vi.fn();
     const paymentRender = vi.fn();
     const passportRender = vi.fn();
@@ -786,7 +786,7 @@ describe("setValues", () => {
   });
 
   it("setValues возвращает стабильную ссылку между рендерами", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
     const fns: any[] = [];
 
     const { rerender } = renderHook(() => {
@@ -801,7 +801,7 @@ describe("setValues", () => {
   });
 
   it("store.setValues отражается в getValues()", () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     act(() => {
       store.setValues({

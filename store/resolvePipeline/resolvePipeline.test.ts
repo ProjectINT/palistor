@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createProxyStore } from "../store";
+import { Palistor } from "../store";
 
 // ─── Helper: flush microtasks ──────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ describe("resolvePipeline", () => {
   describe("basic resolve lifecycle", () => {
     it("should not run resolver immediately (lazy: true by default)", () => {
       const config = createBasicResolveConfig();
-      createProxyStore({ config });
+      new Palistor({ config });
 
       // Resolver should NOT have been called (lazy by default)
       expect(config.car.resolve.resolver).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ describe("resolvePipeline", () => {
 
     it("should trigger resolver on first proxy access (lazy trigger)", async () => {
       const config = createBasicResolveConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Access a child field through proxy → triggers resolve
       const _brand = (store.proxy as any).car.brand.value;
@@ -68,7 +68,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Access to trigger resolve
       const carProxy = (store.proxy as any).car;
@@ -87,7 +87,7 @@ describe("resolvePipeline", () => {
 
     it("should apply resolver result to subtree", async () => {
       const config = createBasicResolveConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Trigger resolve
       const carProxy = (store.proxy as any).car;
@@ -111,7 +111,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      createProxyStore({ config });
+      new Palistor({ config });
 
       // Resolver should have been called immediately
       expect(config.car.resolve.resolver).toHaveBeenCalledTimes(1);
@@ -131,7 +131,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
 
       // Multiple accesses while pending
@@ -160,7 +160,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
       void carProxy.brand.value;
 
@@ -184,7 +184,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
       void carProxy.brand.value;
 
@@ -205,7 +205,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       store.setNotifier(notifyFn);
 
       const carProxy = (store.proxy as any).car;
@@ -239,7 +239,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
       void carProxy.brand.value;
 
@@ -270,7 +270,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
       void carProxy.brand.value;
 
@@ -301,7 +301,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const proxy = store.proxy as any;
 
       // Trigger resolve
@@ -332,7 +332,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
 
       // Trigger resolve
@@ -371,7 +371,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const proxy = store.proxy as any;
 
       // Trigger resolve
@@ -409,7 +409,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const proxy = store.proxy as any;
 
       // Trigger resolve
@@ -441,7 +441,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const proxy = store.proxy as any;
 
       // Trigger initial resolve
@@ -482,7 +482,7 @@ describe("resolvePipeline", () => {
         },
       };
 
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       await flushPromises();
 
       const proxy = store.proxy as any;
@@ -495,7 +495,7 @@ describe("resolvePipeline", () => {
   describe("getValues with resolve", () => {
     it("should include resolved values in getValues()", async () => {
       const config = createBasicResolveConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Trigger resolve
       void (store.proxy as any).car.brand.value;

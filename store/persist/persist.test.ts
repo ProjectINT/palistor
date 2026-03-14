@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createProxyStore } from "../store";
+import { Palistor } from "../store";
 import type { PersistDriver } from "./types";
 
 // ─── In-memory driver для тестов ─────────────────────────────────────────────
@@ -67,18 +67,18 @@ describe("PersistManager", () => {
 
   describe("enable / disable", () => {
     it("isEnabled возвращает false до вызова enable", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.persist.isEnabled()).toBe(false);
     });
 
     it("isEnabled возвращает true после enable", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver });
       expect(store.persist.isEnabled()).toBe(true);
     });
 
     it("isEnabled возвращает false после disable", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver });
       store.persist.disable();
       expect(store.persist.isEnabled()).toBe(false);
@@ -89,7 +89,7 @@ describe("PersistManager", () => {
 
   describe("auto-save", () => {
     it("сохраняет значения при изменении (после debounce)", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver, debounce: 50 });
 
       store.proxy.email.value = "user@test.com";
@@ -106,7 +106,7 @@ describe("PersistManager", () => {
     });
 
     it("debounce: 0 — мгновенное сохранение", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver, debounce: 0 });
 
       store.proxy.name.value = "John";
@@ -119,7 +119,7 @@ describe("PersistManager", () => {
     });
 
     it("не сохраняет после disable", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver, debounce: 50 });
 
       store.persist.disable();
@@ -137,7 +137,7 @@ describe("PersistManager", () => {
       const saved = { email: "saved@test.com", name: "Saved Name" };
       driver.storage.set("hydrate-key", JSON.stringify(saved));
 
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "hydrate-key", driver });
 
       expect(store.proxy.email.value).toBe("saved@test.com");
@@ -148,7 +148,7 @@ describe("PersistManager", () => {
       const saved = { passport: { number: "1234567890", issueDate: "2020-01-01" } };
       driver.storage.set("nested", JSON.stringify(saved));
 
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "nested", driver });
 
       expect(store.proxy.passport.number.value).toBe("1234567890");
@@ -156,7 +156,7 @@ describe("PersistManager", () => {
     });
 
     it("не падает если в storage нет данных", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "nonexistent", driver });
 
       // Значения остаются по умолчанию
@@ -166,7 +166,7 @@ describe("PersistManager", () => {
     it("не падает при битом JSON в storage", async () => {
       driver.storage.set("broken", "not-valid-json{{{");
 
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // Не должно бросать исключение
       await store.persist.enable({ key: "broken", driver });
       expect(store.proxy.email.value).toBe("");
@@ -177,7 +177,7 @@ describe("PersistManager", () => {
       driver.storage.set("cycle-test", JSON.stringify(saved));
 
       const setItemSpy = vi.spyOn(driver, "setItem");
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "cycle-test", driver, debounce: 0 });
 
       // setItem не должен вызываться во время гидратации
@@ -190,7 +190,7 @@ describe("PersistManager", () => {
 
   describe("flush", () => {
     it("принудительно сохраняет без ожидания debounce", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "flush-test", driver, debounce: 5000 });
 
       store.proxy.email.value = "flushed@test.com";
@@ -207,7 +207,7 @@ describe("PersistManager", () => {
     it("удаляет данные из storage", async () => {
       driver.storage.set("clear-test", JSON.stringify({ email: "x" }));
 
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "clear-test", driver });
       await store.persist.clear();
 
@@ -219,7 +219,7 @@ describe("PersistManager", () => {
 
   describe("pick / omit", () => {
     it("pick — сохраняет только указанные поля", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({
         key: "pick-test",
         driver,
@@ -240,7 +240,7 @@ describe("PersistManager", () => {
     });
 
     it("omit — исключает указанные поля", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({
         key: "omit-test",
         driver,
@@ -266,7 +266,7 @@ describe("PersistManager", () => {
       const asyncDriver = createAsyncMemoryDriver();
       asyncDriver.storage.set("async-key", JSON.stringify({ email: "async@test.com" }));
 
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "async-key", driver: asyncDriver });
 
       expect(store.proxy.email.value).toBe("async@test.com");
@@ -274,7 +274,7 @@ describe("PersistManager", () => {
 
     it("сохраняет через асинхронный драйвер", async () => {
       const asyncDriver = createAsyncMemoryDriver();
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "async-save", driver: asyncDriver, debounce: 0 });
 
       store.proxy.name.value = "Async Name";
@@ -290,7 +290,7 @@ describe("PersistManager", () => {
   describe("custom serializer", () => {
     it("использует кастомный serialize / deserialize", async () => {
       const prefix = "CUSTOM:";
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       driver.storage.set(
         "custom-serde",
@@ -321,7 +321,7 @@ describe("PersistManager", () => {
 
   describe("re-enable", () => {
     it("при повторном enable — переключается на новый ключ", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       driver.storage.set("key-1", JSON.stringify({ email: "key1@test.com" }));
       driver.storage.set("key-2", JSON.stringify({ email: "key2@test.com" }));
@@ -343,7 +343,7 @@ describe("PersistManager", () => {
         name: { value: "", label: "Name" },
         onSubmit: async () => ({ ok: true }),
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       await store.persist.enable({ key: "submit-clear", driver });
 
@@ -373,7 +373,7 @@ describe("PersistManager", () => {
         },
         name: { value: "", label: "Name" },
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       await store.persist.enable({ key: "submit-fail", driver });
 
@@ -395,7 +395,7 @@ describe("PersistManager", () => {
         email: { value: "", label: "Email" },
         onSubmit: async () => ({ ok: true }),
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Persist НЕ включен — submit не должен падать
       const result = await store.submit();

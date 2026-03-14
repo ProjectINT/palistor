@@ -12,7 +12,7 @@ import type { TrackingWrap } from "../compute/recompute";
  * - кэш tracking-proxy и флаг «зависимости построены»
  * - логику `createTrackingValues` при первом полном recomputeAll
  *
- * @internal используется `createProxyStore` и compute-пайплайнами
+ * @internal используется `Palistor` и compute-пайплайнами
  */
 export class GroupDepsMap {
   private readonly _deps: Set<string>;
