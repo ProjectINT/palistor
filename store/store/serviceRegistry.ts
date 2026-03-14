@@ -33,10 +33,6 @@ export class ServiceRegistry {
     this._notifier = typeof fn === "function" ? fn : () => {};
   }
 
-  getTranslator(): TranslateFn {
-    return this._translator;
-  }
-
   getNotifier(): NotifyFn {
     return this._notifier;
   }

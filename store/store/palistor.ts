@@ -260,10 +260,6 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     if (this.services.setTranslator(t)) this.hub.bumpLeafVersions();
   }
 
-  getTranslator(): TranslateFn {
-    return this.services.getTranslator();
-  }
-
   setNotifier(fn: NotifyFn | null): void {
     this.services.setNotifier(fn);
   }

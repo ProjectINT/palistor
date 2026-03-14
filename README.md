@@ -249,7 +249,6 @@ const store = createProxyStore({
 | `store.getVersion()` | Глобальная версия (инкремент при каждом изменении) |
 | `store.getNodeVersion(node)` | Версия конкретного узла |
 | `store.setTranslator(fn \| null)` | Зарегистрировать i18n-функцию перевода |
-| `store.getTranslator()` | Текущая функция перевода |
 | `store.setNotifier(fn \| null)` | Зарегистрировать функцию уведомлений (для resolver `onError`) |
 | `store.getNotifier()` | Текущая функция уведомлений |
 | `store.persist` | Менеджер персистенции (`enable`, `disable`, `flush`) |
