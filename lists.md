@@ -2,7 +2,7 @@
 
 ## Текущая архитектура (резюме)
 
-Дерево конфига статично: все узлы создаются при `createProxyStore` и никогда не добавляются/удаляются.
+Дерево конфига статично: все узлы создаются при `new Palistor()` и никогда не добавляются/удаляются.
 
 **Ключевые структуры данных:**
 - `nodeState: WeakMap<object, FieldState>` — вычисленное состояние каждого узла
@@ -12,7 +12,9 @@
 - `nodePaths: WeakMap<object, string>` — dot-путь каждого узла
 - `nodeParents: WeakMap<object, object>` — родитель каждого узла
 
-**Обход дерева:** все функции (`registerNodes`, `applyPatch`, `recompute`, `buildNodeMaps`, `captureInitialValues`, `recomputeDirty`) итерируются по `Object.keys(node)`, пропуская `CONFIG_PROPS`, и рекурсируют в дочерние объекты. Массивы сейчас **не обрабатываются** — `applyPatch` явно пропускает `Array.isArray`.
+Все структуры данных выше являются полями класса `NodeRegistry` (кроме `initialValueMap`, который хранится в `DirtyTracker`).
+
+**Обход дерева:** все функции (`registerNodes`, `applyPatch`, `recomputeLeaves`, `buildNodeMaps`, `captureInitialValues`, `recomputeDirty`) итерируются по `Object.keys(node)`, пропуская `CONFIG_PROPS`, и рекурсируют в дочерние объекты. Массивы сейчас **не обрабатываются** — `applyPatch` явно пропускает `Array.isArray`.
 
 ---
 
@@ -99,6 +101,8 @@ user.reset()        // reset этого элемента
 
 **Статус:** Завершён. `Palistor.recompute(changedNodes)` через `recomputeTargeted` пересчитывает только затронутые группы через BFS по `groupDeps`. При изменении поля в любой группе пересчитываются только она и её реципиенты — не всё дерево.
 
+> Все пайплайны (`WritePipeline`, `ResetPipeline`, `SubmitPipeline`, `OnChangePipeline`, `ProxyBuilder`) — классы, принимающие `kernel: Palistor` в конструкторе. Все внутренние подсистемы (`NodeRegistry`, `ServiceRegistry`, `DirtyTracker`, `GroupDepsMap`, `NotificationHub`, `ResolveManager`) — тоже классы.
+
 ---
 
 ### Шаг 1: Детекция и хранение списков
@@ -107,7 +111,7 @@ user.reset()        // reset этого элемента
 
 **Что делать:**
 1. Добавить в `CONFIG_PROPS` / `constants.ts` новый символ `LIST_NODE` (или пропускать массивы явно).
-2. В `registerNodes` — при встрече массива длины 1 (шаблон):
+2. В `registerNodes` (`store/store/registerNodes.ts`) — при встрече массива длины 1 (шаблон):
    - Сохранить шаблон (`template = array[0]`)
    - Создать `ListState` — хранилище метаданных списка (template, items: Map<string, configNode>, order: string[])
    - Зарегистрировать ListNode в `nodeState` (с `value: undefined`, аналогично группе)
@@ -119,11 +123,11 @@ user.reset()        // reset этого элемента
      order: string[];                  // порядок ID
    }
    ```
-4. `WeakMap<object, ListState>` — хранилище состояния списков (ключ — массив из конфига).
+4. `WeakMap<object, ListState>` — добавить в `NodeRegistry` как новое поле (`listStates`).
 
 **Что НЕ трогаем:** `applyPatch` и другие pipeline-файлы — на этом шаге списки пустые, нет элементов.
 
-**Файлы:** `store/listState.ts` (новый), `store/constants.ts`, `store/registerNodes.ts`
+**Файлы:** `store/listState.ts` (новый), `store/constants.ts`, `store/store/registerNodes.ts`, `store/store/nodeRegistry.ts`
 
 ---
 
@@ -132,16 +136,17 @@ user.reset()        // reset этого элемента
 **Зачем:** API для добавления нового элемента в список. Элемент создаётся из шаблона, регистрируется во всех WeakMap, и получает уникальный ID.
 
 **Что делать:**
-1. Функция `createListItem(listState, listNode, initialValues?, id?)`:
+1. Функция `createListItem(kernel, listState, listNode, initialValues?, id?)` (принимает `Palistor` как kernel):
    - Глубоко клонировать `template` → создать новый config-объект `entity`
    - Присвоить ID: `id ?? crypto.randomUUID()` (или nanoid/counter)
-   - Вызвать `registerNodes(entity, initialValues, leafNodes, nodeState)` — регистрирует все листья
-   - Вызвать `buildNodeMaps(entity, nodePaths, nodeParents)` — пути и родители
-   - Вызвать `initGroupSubmitting(entity, nodeState)` — submitting/dirty/revalidate для группы
-   - Вызвать `captureInitialValues(entity, nodeState, initialValueMap)` — dirty baseline
+   - Вызвать `registerNodes(entity, initialValues, kernel.nodes.leafNodes, kernel.nodes.nodeState, parentPath, kernel.nodes.groupLeafMap, kernel.services.translate)` — регистрирует все листья
+   - Вызвать `buildNodeMaps(entity, kernel.nodes.nodePaths, kernel.nodes.nodeParents)` — пути и родители
+   - Вызвать `initGroupSubmitting(entity, kernel.nodes.nodeState)` — submitting/dirty/revalidate для группы
+   - Вызвать `captureInitialValues(entity, kernel.nodes.nodeState, kernel.dirty.initialValueMap)` — dirty baseline
+   - Обновить `valuesCache` — добавить слоты для новых листьев
    - Добавить в `listState.items.set(id, entity)` и `listState.order.push(id)`
-   - `recomputeGroup(entity)` — пересчитать новый элемент
-   - `notifyChanged` — уведомить подписчиков
+   - `kernel.recompute()` — пересчитать
+   - `kernel.notifyChanged(changed)` — уведомить подписчиков
    - Вернуть `{ id, node: entity }`
 
 2. При клонировании шаблона: все объекты создаются заново (deep clone), но функции (validate, formatter, setter, computed) **остаются ссылками на оригиналы** — это правильно, т.к. функции stateless.
@@ -157,11 +162,12 @@ user.reset()        // reset этого элемента
 **Зачем:** Очистка при удалении — WeakMap сами собирают мусор при потере ссылок, но нужно убрать из `leafNodes`, `listState`, `proxyCache`, и уведомить подписчиков.
 
 **Что делать:**
-1. `removeListItem(listState, id)`:
+1. `removeListItem(kernel, listState, id)` (принимает `Palistor` как kernel):
    - Получить `entity = listState.items.get(id)`
    - Удалить из `listState.items` и `listState.order`
-   - Удалить все leaf-узлы entity из `leafNodes` (фильтр по path-prefix)
-   - `notifyChanged` — уведомить подписчиков (версия списка инкрементируется)
+   - Удалить все leaf-узлы entity из `kernel.nodes.leafNodes` и `kernel.nodes.groupLeafMap` (фильтр по path-prefix)
+   - Обновить `kernel.values` — удалить слоты из `valuesCache.nodeSlot`
+   - `kernel.notifyChanged` — уведомить подписчиков (версия списка инкрементируется)
    - WeakMap-ы (`nodeState`, `proxyCache`, `nodePaths`, `nodeParents`, `initialValueMap`) очистятся автоматически при GC, но можно явно удалить для немедленного освобождения.
 
 2. Если элемент присутствует в нескольких списках — удаление из одного списка не уничтожает сущность. Сущность уничтожается только когда её нет ни в одном списке (или явно).
@@ -175,22 +181,22 @@ user.reset()        // reset этого элемента
 **Зачем:** При обращении к `form.users` прокси должен вернуть не обычный GroupProxyNode, а ListProxyNode с массивным API.
 
 **Что делать:**
-1. В `buildProxy.ts` — в GET trap при обращении к дочернему ключу:
+1. В `ProxyBuilder.build()` (`buildProxy.ts`) — в GET trap при обращении к дочернему ключу:
    - Проверяем, является ли `child` массивом (Array.isArray) → это ListNode
-   - Строим специальный `ListProxy` вместо обычного рекурсивного buildProxy
+   - Строим специальный `ListProxy` вместо обычного рекурсивного `builder.build()`
 2. `ListProxy` — Proxy над объектом с traps:
    ```ts
    {
      get(target, key) {
-       // "items" → массив buildProxy(entity) для каждого элемента по порядку
+       // "items" → массив builder.build(entity) для каждого элемента по порядку
        // "length" → listState.order.length
-       // "add" → (values?, id?) => createListItem(...)
-       // "remove" → (id) => removeListItem(...)
-       // "getById" → (id) => buildProxy(listState.items.get(id))
-       // "map" → (fn) => listState.order.map((id, i) => fn(buildProxy(items.get(id)), i, id))
+       // "add" → (values?, id?) => createListItem(kernel, ...)
+       // "remove" → (id) => removeListItem(kernel, ...)
+       // "getById" → (id) => builder.build(listState.items.get(id))
+       // "map" → (fn) => listState.order.map((id, i) => fn(builder.build(items.get(id)), i, id))
        // "dirty" → хотя бы один элемент dirty
        // "submitting" → ...
-       // числовой индекс → buildProxy(items.get(order[index]))
+       // числовой индекс → builder.build(items.get(order[index]))
        // Symbol.iterator → итерация по элементам
      }
    }
@@ -225,7 +231,7 @@ isVisible: (values) => values.users.length > 0
 isVisible: (values) => values.users.some(u => u.name === 'Admin')
 ```
 
-**Файлы:** `store/valuesCache.ts`, `store/applyPatch.ts`
+**Файлы:** `store/valuesCache/valuesCache.ts`, `store/applyPatch/applyPatch.ts`
 
 ---
 
@@ -265,7 +271,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
      : ...
    ```
 
-**Файлы:** `store/types.ts`
+**Файлы:** `store/store/types.ts`
 
 ---
 
@@ -286,7 +292,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 - Каждый элемент списка проверяется на валидацию.
 - `onSubmit` получает snapshot, где списки — это массивы объектов.
 
-**Файлы:** `store/dirtyTracking.ts`, `store/resetPipeline.ts`, `store/submitPipeline.ts`
+**Файлы:** `store/dirtyTracking/recomputeDirty.ts`, `store/resetPipeline/resetPipeline.ts`, `store/submitPipeline/submitPipeline.ts`
 
 ---
 
@@ -337,7 +343,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 2. При resolve списка: результат — массив объектов. Для каждого объекта — `createListItem` с данными.
 3. `handleLazyResolve` — расширить для ListNode.
 
-**Файлы:** `store/resolvePipeline.ts`, `store/buildProxy/handleLazyResolve.ts`
+**Файлы:** `store/resolvePipeline/executeResolve.ts`, `store/buildProxy/handleLazyResolve.ts`
 
 ---
 
@@ -349,7 +355,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 1. При hydrate: если в persisted-данных есть массив для ListNode — создать элементы через `createListItem`.
 2. При auto-save: `valuesCache.values` уже включает списки как массивы — persist работает через `getValues`.
 
-**Файлы:** `store/persist/persistManager.ts`
+**Файлы:** `store/persist/persistManager.ts` (класс `PersistManager`, принимает `kernel: Palistor`)
 
 ---
 
@@ -357,7 +363,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 
 | # | Задача | Зависимости | Оценка |
 |---|--------|-------------|--------|
-| 0 | `recomputeGroup` | — | Средняя |
+| 0 | Таргетированный пересчёт | — | ✅ Завершён |
 | 1 | `ListState` + детекция массивов | — | Легко |
 | 2 | `createListItem` + `removeListItem` | 0, 1 | Средняя |
 | 3 | Типизация (`ListProxyNode`, `ConfigNodeToProxy`) | 1 | Средняя |
@@ -374,7 +380,7 @@ isVisible: (values) => values.users.some(u => u.name === 'Admin')
 
 1. **Синтаксис resolve для списка** — `Object.assign([template], { resolve })` неидеален. Альтернатива: оборачивать в helper `list({ template, resolve })` или использовать специальный ключ в шаблоне.
 
-2. **initialValues для списков** — при `createProxyStore({ config, initialValues: { users: [{ name: 'Alice' }, { name: 'Bob' }] } })` нужно автоматически создать элементы. Как передавать ID?
+2. **initialValues для списков** — при `new Palistor({ config, initialValues: { users: [{ name: 'Alice' }, { name: 'Bob' }] } })` нужно автоматически создать элементы. Как передавать ID?
 
 3. **Глубокое клонирование шаблона** — функции не клонируются (stateless), но что делать с `componentProps` объектами? Клонировать или разделять?
 
