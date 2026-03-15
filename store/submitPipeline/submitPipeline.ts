@@ -50,14 +50,16 @@ export class SubmitPipeline {
 
       // 4. Group-level beforeSubmit
       if (typeof groupNode.beforeSubmit === "function") {
-        values = (
-          groupNode.beforeSubmit as (v: Record<string, unknown>) => Record<string, unknown>
+        values = await (
+          groupNode.beforeSubmit as (v: Record<string, unknown>) => Promise<Record<string, unknown>> | Record<string, unknown>
         )(values);
       }
 
       // 5. Валидация
       const errors: Array<{ path: string; message: string }> = [];
+
       const leaves = collectLeafStates(groupNode, nodeState);
+
       for (const { path, state } of leaves) {
         if (state.isInvalid && state.errorMessage) {
           errors.push({ path, message: state.errorMessage });

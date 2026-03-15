@@ -31,7 +31,7 @@ Palistor — легковесная библиотека управления с
 import { createProxyStore } from "palistor/store/store";
 
 export const paymentStore = createProxyStore({
-  config: {
+  config: { // Это допустим user
     paymentType: {
       value: "card",
       label: "Payment Type",
@@ -49,7 +49,7 @@ export const paymentStore = createProxyStore({
         }
       },
     },
-
+    passport_id: { value: "" },
     passport: {
       // Групповой узел — computed-свойства на группе
       isVisible: (values) => values.paymentType === "bank",
@@ -62,6 +62,12 @@ export const paymentStore = createProxyStore({
       issueDate: {
         value: "",
         label: "Issue Date",
+      },
+      resolve: {
+        resolver: async (user) => {
+          const data = await api.fetchPassportInfo(user.passport_id);
+          return { issueDate: data.issueDate };
+        },
       },
     },
 
