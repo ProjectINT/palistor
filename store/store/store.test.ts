@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createProxyStore } from ".";
+import { Palistor } from ".";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
 
@@ -44,16 +44,16 @@ const makeConfig = () => ({
 
 // ─── Тесты ───────────────────────────────────────────────────────────────────
 
-describe("createProxyStore", () => {
+describe("Palistor", () => {
   describe("чтение начального состояния", () => {
     it("читает value из конфига", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.value).toBe("");
       expect(store.proxy.paymentType.value).toBe("card");
     });
 
     it("применяет initialValues поверх конфига", () => {
-      const store = createProxyStore({
+      const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "user@test.com" } as any,
       });
@@ -61,24 +61,24 @@ describe("createProxyStore", () => {
     });
 
     it("читает label из конфига (строка)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.label).toBe("Email");
       expect(store.proxy.cardNumber.label).toBe("Card Number");
     });
 
     it("вычисляет isRequired (boolean)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.isRequired).toBe(true);
     });
 
     it("вычисляет isRequired (function)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // paymentType = "card" → cardNumber.isRequired = true
       expect(store.proxy.cardNumber.isRequired).toBe(true);
     });
 
     it("вычисляет isVisible (function)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // paymentType = "card" → cardNumber.isVisible = true
       expect(store.proxy.cardNumber.isVisible).toBe(true);
       // paymentType = "card" → passport.isVisible = false
@@ -86,14 +86,14 @@ describe("createProxyStore", () => {
     });
 
     it("isInvalid скрыт до первого submit (revalidate=false по умолчанию)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // revalidate=false → ошибки не вычисляются, пока не было submit
       expect(store.proxy.email.isInvalid).toBeUndefined();
       expect(store.proxy.email.errorMessage).toBeUndefined();
     });
 
     it("isInvalid показывается после submit (revalidate=true)", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // Первый submit с пустым email → fail → revalidate=true
       const result = await store.submit();
       expect(result.success).toBe(false);
@@ -103,7 +103,7 @@ describe("createProxyStore", () => {
     });
 
     it("isInvalid = undefined когда валидация проходит", () => {
-      const store = createProxyStore({
+      const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "user@test.com" } as any,
       });
@@ -112,7 +112,7 @@ describe("createProxyStore", () => {
     });
 
     it("isDisabled и isReadOnly по умолчанию false", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.isDisabled).toBe(false);
       expect(store.proxy.email.isReadOnly).toBe(false);
     });
@@ -120,19 +120,19 @@ describe("createProxyStore", () => {
 
   describe("вложенные поля", () => {
     it("доступ через точку к вложенным полям", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.passport.number.value).toBe("");
       expect(store.proxy.passport.number.label).toBe("Passport Number");
       expect(store.proxy.passport.number.isRequired).toBe(true);
     });
 
     it("isVisible на группе (промежуточном узле)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.passport.isVisible).toBe(false); // paymentType = "card"
     });
 
     it("initialValues для вложенных полей", () => {
-      const store = createProxyStore({
+      const store = new Palistor({
         config: makeConfig(),
         initialValues: { passport: { number: "AB123" } } as any,
       });
@@ -142,13 +142,13 @@ describe("createProxyStore", () => {
 
   describe("запись value", () => {
     it("обновляет значение поля", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "new@test.com";
       expect(store.proxy.email.value).toBe("new@test.com");
     });
 
     it("пересчитывает validate после записи (когда revalidate=true)", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // До submit — ошибок нет (revalidate=false)
       expect(store.proxy.email.isInvalid).toBeUndefined();
 
@@ -165,7 +165,7 @@ describe("createProxyStore", () => {
     });
 
     it("пересчитывает isVisible зависимых полей", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.cardNumber.isVisible).toBe(true); // paymentType = "card"
       expect(store.proxy.passport.isVisible).toBe(false);
 
@@ -175,7 +175,7 @@ describe("createProxyStore", () => {
     });
 
     it("пересчитывает isRequired зависимых полей", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.cardNumber.isRequired).toBe(true);
 
       store.proxy.paymentType.value = "bank";
@@ -183,13 +183,13 @@ describe("createProxyStore", () => {
     });
 
     it("применяет formatter при записи", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.amount.value = "42";
       expect(store.proxy.amount.value).toBe(42);
     });
 
     it("запись в вложенные поля", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.passport.number.value = "XY999";
       expect(store.proxy.passport.number.value).toBe("XY999");
     });
@@ -198,7 +198,7 @@ describe("createProxyStore", () => {
   describe("подписка и уведомления", () => {
     it("вызывает listener при записи value", () => {
       const config = makeConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const listener = vi.fn();
 
       // Подписываемся на узел email конфига
@@ -210,7 +210,7 @@ describe("createProxyStore", () => {
 
     it("уведомляет зависимые поля при изменении", () => {
       const config = makeConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const cardListener = vi.fn();
 
       store.subscribe((config as any).cardNumber, cardListener);
@@ -222,7 +222,7 @@ describe("createProxyStore", () => {
 
     it("отписка работает", () => {
       const config = makeConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const listener = vi.fn();
 
       const unsub = store.subscribe((config as any).email, listener);
@@ -234,7 +234,7 @@ describe("createProxyStore", () => {
 
     it("не уведомляет, если computed-состояние не изменилось", () => {
       const config = makeConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const issueDateListener = vi.fn();
 
       store.subscribe((config as any).passport.issueDate, issueDateListener);
@@ -247,7 +247,7 @@ describe("createProxyStore", () => {
 
   describe("getValues", () => {
     it("возвращает вложенный объект со значениями", () => {
-      const store = createProxyStore({
+      const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "test@test.com" } as any,
       });
@@ -260,7 +260,7 @@ describe("createProxyStore", () => {
     });
 
     it("отражает изменения после записи", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "updated";
       store.proxy.passport.number.value = "AB123";
 
@@ -272,7 +272,7 @@ describe("createProxyStore", () => {
 
   describe("кэширование прокси", () => {
     it("одинаковые пути возвращают один и тот же прокси", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const p1 = store.proxy.passport;
       const p2 = store.proxy.passport;
       expect(p1).toBe(p2);
@@ -281,7 +281,7 @@ describe("createProxyStore", () => {
     it("конфиг не мутируется", () => {
       const config = makeConfig();
       const originalValue = config.email.value;
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       store.proxy.email.value = "mutated";
       expect(config.email.value).toBe(originalValue);
@@ -290,7 +290,7 @@ describe("createProxyStore", () => {
 
   describe("onValueChange", () => {
     it("устанавливает value через onValueChange", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       store.proxy.email.onValueChange("hello@test.com");
 
@@ -299,7 +299,7 @@ describe("createProxyStore", () => {
     });
 
     it("onValueChange вызывает formatter", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       store.proxy.amount.onValueChange("42");
 
@@ -307,7 +307,7 @@ describe("createProxyStore", () => {
     });
 
     it("onValueChange вызывает пересчёт зависимых полей", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       expect(store.proxy.cardNumber.isVisible).toBe(true);
       expect(store.proxy.passport.isVisible).toBe(false);
@@ -319,7 +319,7 @@ describe("createProxyStore", () => {
     });
 
     it("onValueChange вызывает validate (когда revalidate=true)", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       // Trigger revalidate via failed submit
       await store.submit();
@@ -333,7 +333,7 @@ describe("createProxyStore", () => {
     });
 
     it("onValueChange уведомляет подписчиков", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const listener = vi.fn();
 
       store.subscribeGlobal(listener);
@@ -344,7 +344,7 @@ describe("createProxyStore", () => {
     });
 
     it("onValueChange возвращает стабильную ссылку", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       const fn1 = store.proxy.email.onValueChange;
       const fn2 = store.proxy.email.onValueChange;
@@ -353,7 +353,7 @@ describe("createProxyStore", () => {
     });
 
     it("onValueChange работает для вложенных полей", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
 
       store.proxy.passport.number.onValueChange("AB123");
 
@@ -370,7 +370,7 @@ describe("createProxyStore", () => {
           label: (t: (key: string) => string) => t("form.name"),
         },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
       // Пока translate = identity → вернёт ключ
       expect(store.proxy.name.label).toBe("form.name");
     });
@@ -378,7 +378,7 @@ describe("createProxyStore", () => {
 
   describe("spread proxy ({...proxy})", () => {
     it("не утекает validate при spread листового узла", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const spread = { ...store.proxy.cardNumber };
 
       // validate не должен быть в spread
@@ -390,7 +390,7 @@ describe("createProxyStore", () => {
     });
 
     it("spread содержит все SPREADABLE_FIELD_STATE_PROPS и onValueChange", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const spread = { ...store.proxy.email };
 
       expect(spread).toHaveProperty("value");
@@ -409,7 +409,7 @@ describe("createProxyStore", () => {
     });
 
     it("Object.keys не содержит внутренних ключей конфига", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const keys = Object.keys(store.proxy.cardNumber);
 
       expect(keys).not.toContain("validate");
@@ -421,7 +421,7 @@ describe("createProxyStore", () => {
     });
 
     it("spread группового узла содержит GROUP_SPREAD_KEYS", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const keys = Object.keys(store.proxy.passport);
 
       // Групповой узел спредит только служебные ключи
@@ -449,7 +449,7 @@ describe("createProxyStore", () => {
           },
         },
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // До submit — ошибки не вычисляются
       expect(store.proxy.cardNumber.isInvalid).toBeUndefined();
@@ -486,12 +486,12 @@ describe("createProxyStore", () => {
     });
 
     it("вычисляет начальное computed value", () => {
-      const store = createProxyStore({ config: makeComputedConfig() });
+      const store = new Palistor({ config: makeComputedConfig() });
       expect(store.proxy.total.value).toBe(100); // 100 * 1
     });
 
     it("пересчитывает computed value при изменении зависимости", () => {
-      const store = createProxyStore({ config: makeComputedConfig() });
+      const store = new Palistor({ config: makeComputedConfig() });
       expect(store.proxy.total.value).toBe(100);
 
       store.proxy.quantity.value = 5;
@@ -502,7 +502,7 @@ describe("createProxyStore", () => {
     });
 
     it("computed value отражается в getValues()", () => {
-      const store = createProxyStore({ config: makeComputedConfig() });
+      const store = new Palistor({ config: makeComputedConfig() });
       store.proxy.price.value = 50;
       store.proxy.quantity.value = 3;
 
@@ -511,13 +511,13 @@ describe("createProxyStore", () => {
     });
 
     it("computed value доступен через isReadOnly", () => {
-      const store = createProxyStore({ config: makeComputedConfig() });
+      const store = new Palistor({ config: makeComputedConfig() });
       expect(store.proxy.total.isReadOnly).toBe(true);
     });
 
     it("уведомляет подписчиков при изменении computed value", () => {
       const config = makeComputedConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       const listener = vi.fn();
 
       store.subscribe((config as any).total, listener);
@@ -538,7 +538,7 @@ describe("createProxyStore", () => {
           dependencies: ["doubled"],
         },
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       expect(store.proxy.doubled.value).toBe(20);
       expect(store.proxy.quadrupled.value).toBe(40);
 
@@ -548,7 +548,7 @@ describe("createProxyStore", () => {
     });
 
     it("initialValues перекрывает computed для обычных полей", () => {
-      const store = createProxyStore({
+      const store = new Palistor({
         config: makeComputedConfig(),
         initialValues: { price: 50, quantity: 4 } as any,
       });
@@ -580,7 +580,7 @@ describe("createProxyStore", () => {
     });
 
     it("setter сбрасывает значение другого поля при записи", () => {
-      const store = createProxyStore({ config: makeSetterConfig() });
+      const store = new Palistor({ config: makeSetterConfig() });
       expect(store.proxy.cardNumber.value).toBe("4111111111111111");
 
       store.proxy.paymentType.value = "bank";
@@ -589,7 +589,7 @@ describe("createProxyStore", () => {
     });
 
     it("setter не трогает не указанные поля", () => {
-      const store = createProxyStore({ config: makeSetterConfig() });
+      const store = new Palistor({ config: makeSetterConfig() });
       store.proxy.bankAccount.value = "40817810099910004312";
 
       store.proxy.paymentType.value = "bank";
@@ -615,7 +615,7 @@ describe("createProxyStore", () => {
           dependencies: ["price", "quantity"],
         },
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
       expect(store.proxy.total.value).toBe(100); // 100 * 1
 
       store.proxy.quantity.value = 15;
@@ -640,7 +640,7 @@ describe("createProxyStore", () => {
           zip: { value: "", label: "ZIP" },
         },
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       store.proxy.country.value = "us";
       expect(store.proxy.address.city.value).toBe("New York");
@@ -648,7 +648,7 @@ describe("createProxyStore", () => {
     });
 
     it("getValues отражает изменения от setter", () => {
-      const store = createProxyStore({ config: makeSetterConfig() });
+      const store = new Palistor({ config: makeSetterConfig() });
       store.proxy.paymentType.value = "bank";
 
       const values = store.getValues();
@@ -708,7 +708,7 @@ describe("createProxyStore", () => {
     });
 
     it("setter патчит несколько полей за одну запись — значения обновлены", () => {
-      const store = createProxyStore({ config: makePatchConfig() });
+      const store = new Palistor({ config: makePatchConfig() });
 
       // До патча — начальные значения USD
       expect(store.proxy.symbol.value).toBe("$");
@@ -726,7 +726,7 @@ describe("createProxyStore", () => {
 
     it("подписчики ВСЕХ запатченных полей уведомлены за один цикл", () => {
       const config = makePatchConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Подписываемся на каждое поле, затронутое патчем
       const symbolListener = vi.fn();
@@ -758,7 +758,7 @@ describe("createProxyStore", () => {
     });
 
     it("глобальный подписчик уведомлён ровно один раз при патче", () => {
-      const store = createProxyStore({ config: makePatchConfig() });
+      const store = new Palistor({ config: makePatchConfig() });
       const globalListener = vi.fn();
 
       store.subscribeGlobal(globalListener);
@@ -770,7 +770,7 @@ describe("createProxyStore", () => {
     });
 
     it("getValues отражает все изменения от setter-патча", () => {
-      const store = createProxyStore({ config: makePatchConfig() });
+      const store = new Palistor({ config: makePatchConfig() });
       store.proxy.currency.value = "EUR";
 
       const values = store.getValues();
@@ -796,7 +796,7 @@ describe("createProxyStore", () => {
        *   proxy.currency.value = "BTC";
        */
       const config = makePatchConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Подписчики, которые считают вызовы
       const symbolCalls = vi.fn();
@@ -824,7 +824,7 @@ describe("createProxyStore", () => {
 
     it("версия узла обновляется для каждого запатченного поля", () => {
       const config = makePatchConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Запоминаем начальные версии
       const symbolV0 = store.getNodeVersion((config as any).symbol);
@@ -839,7 +839,7 @@ describe("createProxyStore", () => {
 
     it("повторный патч с теми же значениями — подписчики НЕ вызываются", () => {
       const config = makePatchConfig();
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Первый раз: USD → EUR
       store.proxy.currency.value = "EUR";
@@ -863,7 +863,7 @@ describe("createProxyStore", () => {
 
   // ─── Translator (setTranslator / getTranslator) ───────────────────────────
 
-  describe("setTranslator / getTranslator", () => {
+  describe("setTranslator", () => {
     it("без translator — label-функция возвращает ключ (identity fallback)", () => {
       const config = {
         name: {
@@ -872,10 +872,9 @@ describe("createProxyStore", () => {
           placeholder: (t: (key: string) => string) => t("form.namePlaceholder"),
         },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
       expect(store.proxy.name.label).toBe("form.name");
       expect(store.proxy.name.placeholder).toBe("form.namePlaceholder");
-      expect(store.getTranslator()).toBeTypeOf("function");
     });
 
     it("после setTranslator — label резолвится через translator", () => {
@@ -894,14 +893,13 @@ describe("createProxyStore", () => {
           description: (t: (key: string) => string) => t("form.desc"),
         },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
 
       store.setTranslator(t);
 
       expect(store.proxy.name.label).toBe("Имя");
       expect(store.proxy.name.placeholder).toBe("Введите имя");
       expect(store.proxy.name.description).toBe("Описание поля");
-      expect(store.getTranslator()).toBe(t);
     });
 
     it("setTranslator(null) возвращает к fallback (ключам)", () => {
@@ -912,14 +910,13 @@ describe("createProxyStore", () => {
           label: (t: (key: string) => string) => t("form.name"),
         },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
 
       store.setTranslator(t);
       expect(store.proxy.name.label).toBe("[form.name]");
 
       store.setTranslator(null);
       expect(store.proxy.name.label).toBe("form.name"); // fallback to identity
-      expect(store.getTranslator()).toBeTypeOf("function");
     });
 
     it("setTranslator инкрементирует версию и уведомляет подписчиков", () => {
@@ -929,7 +926,7 @@ describe("createProxyStore", () => {
           label: (t: (key: string) => string) => t("form.name"),
         },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
       const versionBefore = store.getVersion();
 
       const listener = vi.fn();
@@ -946,7 +943,7 @@ describe("createProxyStore", () => {
       const config = {
         name: { value: "", label: (t: (key: string) => string) => t("form.name") },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
 
       store.setTranslator(t);
       const versionAfterFirst = store.getVersion();
@@ -963,7 +960,7 @@ describe("createProxyStore", () => {
       const config = {
         name: { value: "", label: "Static Label" },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
 
       store.setTranslator((key) => `translated:${key}`);
       // Статическая строка — не вызывается как функция
@@ -979,7 +976,7 @@ describe("createProxyStore", () => {
           placeholder: (t: (key: string) => string) => t("form.namePlaceholder"),
         },
       };
-      const store = createProxyStore({ config: config as any });
+      const store = new Palistor({ config: config as any });
       store.setTranslator(t);
 
       const spread = { ...store.proxy.name };

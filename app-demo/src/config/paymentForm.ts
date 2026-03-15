@@ -13,7 +13,7 @@
  * - Computed values (value as function)
  */
 
-import { createProxyStore } from "@palistor/store/store";
+import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import type { FormConfig, TranslateFn } from "@palistor";
 import { computed } from "./computed";
@@ -143,10 +143,10 @@ export const paymentFormDefaults: PaymentFormValues = {
 };
 
 // ============================================================================
-// Store — новый API createProxyStore
+// Store
 // ============================================================================
 
-export const paymentStore = createProxyStore({
+export const paymentStore = new Palistor({
   config: paymentFormConfig,
   initialValues: paymentFormDefaults,
 });

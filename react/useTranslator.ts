@@ -33,7 +33,7 @@ import type { TranslateFn } from "../store/store/types";
  * все подписанные через useForm компоненты перерендерятся
  * с актуальными переводами.
  *
- * @param store      — ProxyStore, созданный через createProxyStore
+ * @param store      — ProxyStore, созданный через new Palistor()
  * @param translator — функция перевода (next-intl `t`, i18next `t`, …)
  */
 export function useTranslator<TConfig extends Record<string, any>>(

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createProxyStore } from "../store";
+import { Palistor } from "../store";
 
 // ─── Тестовый конфиг ─────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ const makeConfig = () => ({
 describe("dirty tracking", () => {
   describe("per-field dirty", () => {
     it("initially all fields are not dirty", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.dirty).toBe(false);
       expect(store.proxy.name.dirty).toBe(false);
       expect(store.proxy.age.dirty).toBe(false);
@@ -48,14 +48,14 @@ describe("dirty tracking", () => {
     });
 
     it("field becomes dirty when value changes from initial", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "user@test.com";
       expect(store.proxy.email.dirty).toBe(true);
       expect(store.proxy.name.dirty).toBe(false); // unchanged
     });
 
     it("field becomes clean when value returns to initial", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "user@test.com";
       expect(store.proxy.email.dirty).toBe(true);
 
@@ -64,7 +64,7 @@ describe("dirty tracking", () => {
     });
 
     it("field dirty with initialValues", () => {
-      const store = createProxyStore({
+      const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "initial@test.com" } as any,
       });
@@ -78,14 +78,14 @@ describe("dirty tracking", () => {
     });
 
     it("nested field dirty", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.address.city.value = "Moscow";
       expect(store.proxy.address.city.dirty).toBe(true);
       expect(store.proxy.address.zip.dirty).toBe(false);
     });
 
     it("dirty NOT appears in spread of leaf nodes", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       const spread = { ...store.proxy.email };
       expect(spread).not.toHaveProperty("dirty");
       expect(spread.dirty).toBe(undefined);
@@ -94,18 +94,18 @@ describe("dirty tracking", () => {
 
   describe("group-level dirty", () => {
     it("group not dirty when no children changed", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.address.dirty).toBe(false);
     });
 
     it("group becomes dirty when any child changes", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.address.city.value = "Berlin";
       expect(store.proxy.address.dirty).toBe(true);
     });
 
     it("group becomes clean when all children return to initial", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.address.city.value = "Berlin";
       expect(store.proxy.address.dirty).toBe(true);
 
@@ -116,7 +116,7 @@ describe("dirty tracking", () => {
 
   describe("dirty after reset", () => {
     it("reset clears dirty flags", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "changed@test.com";
       store.proxy.address.city.value = "Berlin";
       expect(store.proxy.email.dirty).toBe(true);
@@ -135,12 +135,12 @@ describe("dirty tracking", () => {
 describe("revalidate", () => {
   describe("initial state", () => {
     it("revalidate is false by default on group nodes", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.address.revalidate).toBe(false);
     });
 
     it("errors are not shown before first submit (revalidate=false)", () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       // email is empty and required, but revalidate=false
       expect(store.proxy.email.isInvalid).toBeUndefined();
       expect(store.proxy.email.errorMessage).toBeUndefined();
@@ -149,7 +149,7 @@ describe("revalidate", () => {
 
   describe("after failed submit", () => {
     it("revalidate becomes true after failed submit", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.address.revalidate).toBe(false);
 
       const result = await store.submit();
@@ -160,7 +160,7 @@ describe("revalidate", () => {
     });
 
     it("errors are shown after failed submit", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.isInvalid).toBeUndefined();
 
       await store.submit();
@@ -170,7 +170,7 @@ describe("revalidate", () => {
     });
 
     it("live validation after failed submit — errors clear as user types", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.submit(); // fail → revalidate=true
 
       expect(store.proxy.email.isInvalid).toBe(true);
@@ -183,7 +183,7 @@ describe("revalidate", () => {
     });
 
     it("revalidate resets to false after reset()", async () => {
-      const store = createProxyStore({ config: makeConfig() });
+      const store = new Palistor({ config: makeConfig() });
       await store.submit(); // fail → revalidate=true
 
       expect(store.proxy.email.isInvalid).toBe(true);
@@ -214,7 +214,7 @@ describe("revalidate", () => {
           onSubmit: async (values: any) => values,
         },
       };
-      const store = createProxyStore({ config });
+      const store = new Palistor({ config });
 
       // Submit user group (should fail — name is empty)
       const result = await store.proxy.user.submit();
@@ -237,7 +237,7 @@ describe("isRequired auto-validation", () => {
         // NO validate function — relies on isRequired auto-check
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit();
 
@@ -252,7 +252,7 @@ describe("isRequired auto-validation", () => {
         isRequired: true,
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit(); // fail → revalidate=true
     expect(store.proxy.name.isInvalid).toBe(true);
@@ -269,7 +269,7 @@ describe("isRequired auto-validation", () => {
         validate: (v: string) => (!v ? "email is required" : undefined),
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit();
 
@@ -285,7 +285,7 @@ describe("isRequired auto-validation", () => {
         isRequired: true,
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit();
     expect(store.proxy.field.isInvalid).toBe(true);
@@ -298,7 +298,7 @@ describe("isRequired auto-validation", () => {
         isRequired: true,
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit();
     expect(store.proxy.field.isInvalid).toBe(true);
@@ -311,7 +311,7 @@ describe("isRequired auto-validation", () => {
         isRequired: true,
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     const result = await store.submit();
     expect(result.success).toBe(true);
@@ -323,7 +323,7 @@ describe("isRequired auto-validation", () => {
 
 describe("submit pipeline validation", () => {
   it("submit fails when required fields are empty", async () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     const result = await store.submit();
     expect(result.success).toBe(false);
@@ -346,7 +346,7 @@ describe("submit pipeline validation", () => {
       },
       onSubmit: vi.fn(async (values: any) => ({ ok: true })),
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     const result = await store.submit();
     expect(result.success).toBe(true);
@@ -363,7 +363,7 @@ describe("submit pipeline validation", () => {
         return { ok: true };
       },
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     const result = await store.submit();
     expect(result.success).toBe(true);
@@ -377,7 +377,7 @@ describe("submit pipeline validation", () => {
       },
       onSubmit: vi.fn(async (values: any) => values),
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit();
     expect(config.onSubmit).toHaveBeenCalledWith({ email: "user@test.com" });
@@ -392,7 +392,7 @@ describe("submit pipeline validation", () => {
       onSubmit: async () => ({ done: true }),
       afterSubmit,
     };
-    const store = createProxyStore({ config });
+    const store = new Palistor({ config });
 
     await store.submit();
 
@@ -408,7 +408,7 @@ describe("submit pipeline validation", () => {
 
 describe("dirty + revalidate interaction", () => {
   it("form is dirty and errors show after failed submit", async () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     store.proxy.email.value = "partial"; // dirty but valid
     expect(store.proxy.email.dirty).toBe(true);
@@ -427,7 +427,7 @@ describe("dirty + revalidate interaction", () => {
   });
 
   it("reset clears both dirty and revalidate", async () => {
-    const store = createProxyStore({ config: makeConfig() });
+    const store = new Palistor({ config: makeConfig() });
 
     store.proxy.email.value = "changed";
     await store.submit(); // fail → errors visible

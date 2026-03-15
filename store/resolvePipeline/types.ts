@@ -79,7 +79,7 @@ export interface ResolveDeps {
   rootConfig: AnyConfigNode;
   nodeState: WeakMap<object, FieldState>;
   resolveStates: Map<object, ResolveState>;
-  recomputeAll: () => Set<object>;
+  recompute: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
   notify: NotifyFn;
   getValues: () => Record<string, unknown>;

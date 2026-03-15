@@ -31,7 +31,7 @@ Palistor — легковесная библиотека управления с
 import { createProxyStore } from "palistor/store/store";
 
 export const paymentStore = createProxyStore({
-  config: {
+  config: { // Это допустим user
     paymentType: {
       value: "card",
       label: "Payment Type",
@@ -49,7 +49,7 @@ export const paymentStore = createProxyStore({
         }
       },
     },
-
+    passport_id: { value: "" },
     passport: {
       // Групповой узел — computed-свойства на группе
       isVisible: (values) => values.paymentType === "bank",
@@ -62,6 +62,12 @@ export const paymentStore = createProxyStore({
       issueDate: {
         value: "",
         label: "Issue Date",
+      },
+      resolve: {
+        resolver: async (user) => {
+          const data = await api.fetchPassportInfo(user.passport_id);
+          return { issueDate: data.issueDate };
+        },
       },
     },
 
@@ -179,7 +185,7 @@ form.passport.number.value = "XY999"
   ├─ 1. formatter(value, allValues)         → processedValue
   ├─ 2. storeValue → nodeState.set(node, { ...state, value: processedValue })
   ├─ 3. setter(value, allValues)?           → applyPatch(patch) на другие поля
-  ├─ 4. recomputeAll():
+  ├─ 4. recompute():
   │     ├─ Фаза 1: computed values (функции) в топологическом порядке
   │     └─ Фаза 2: FieldState (isVisible, isRequired, error, dirty…) для всех нод
   ├─ 5. dirtyTracking: сравнение с initialValueMap
@@ -215,7 +221,7 @@ createProxyStore({ config, initialValues? })
   │     └─ Групповые узлы с computed-свойствами → тоже в leafNodes[]
   │
   ├─ 2. initGroupSubmitting — submitting/dirty/revalidate для групп
-  ├─ 3. recomputeAll() — вычисляет isVisible, isRequired, error… для всех нод
+  ├─ 3. recompute() — вычисляет isVisible, isRequired, error… для всех нод
   ├─ 4. captureInitialValues — снимок начальных значений (для dirty tracking)
   ├─ 5. buildNodeMaps — маппинг узел → path, узел → parent
   └─ 6. buildProxy(rootConfig) → store.proxy (кэшированный, referential equality)
@@ -249,7 +255,6 @@ const store = createProxyStore({
 | `store.getVersion()` | Глобальная версия (инкремент при каждом изменении) |
 | `store.getNodeVersion(node)` | Версия конкретного узла |
 | `store.setTranslator(fn \| null)` | Зарегистрировать i18n-функцию перевода |
-| `store.getTranslator()` | Текущая функция перевода |
 | `store.setNotifier(fn \| null)` | Зарегистрировать функцию уведомлений (для resolver `onError`) |
 | `store.getNotifier()` | Текущая функция уведомлений |
 | `store.persist` | Менеджер персистенции (`enable`, `disable`, `flush`) |
@@ -298,7 +303,7 @@ form.email.isInvalid      // → boolean | undefined
 form.email.errorMessage   // → string | undefined
 form.email.dirty          // → boolean (отличается от начального значения)
 
-// Запись (триггерит formatter → setter → recomputeAll → onChange → notify)
+// Запись (триггерит formatter → setter → recompute → onChange → notify)
 form.email.value = "new@example.com";
 
 // Альтернатива через onValueChange
@@ -677,7 +682,6 @@ palistor/
 │   ├── compute.ts                     # FieldState, computeFieldState, resolveFlag
 │   ├── valuesCache.ts                 # Постоянно-актуальный кеш значений (O(1) вместо обхода дерева)
 │   ├── registerNodes.ts               # Инициализация leafNodes + nodeState
-│   ├── recomputeAll.ts                # Пересчёт FieldState + топологическая сортировка computed
 │   ├── hasComputedProps.ts            # Проверка computed-свойств у группы
 │   ├── constants.ts                   # Символы + FIELD_STATE_PROPS, CONFIG_PROPS
 │   ├── writePipeline.ts               # formatter → storeValue → setter

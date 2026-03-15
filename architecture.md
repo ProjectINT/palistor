@@ -49,6 +49,37 @@
 
 ---
 
+## Palistor — класс-ядро (kernel)
+
+`Palistor` — единственная точка входа. Одновременно реализует `ProxyStore` (публичный API)
+и служит DI-контейнером для всех внутренних подсистем.
+
+```
+Palistor<TConfig>  (implements ProxyStore)
+  │
+  ├─ @internal nodes         NodeRegistry   — nodeState, nodePaths, nodeParents,
+  │                                           leafNodes, groupLeafMap, proxyCache
+  ├─ @internal services      ServiceRegistry — translator, notifier, делегаты
+  ├─ @internal dirty         DirtyTracker   — initialValueMap, capture, merge, recompute
+  ├─ @internal values        ValuesCache    — мутабельный снапшот values
+  ├─ @internal groupDepsMap  GroupDepsMap   — deps, trackingWrap, isBuilt
+  ├─ @internal hub           NotificationHub — версии, подписки, postNotifyHook
+  ├─ @internal resolveManager ResolveManager — trigger, retrigger, eager launch
+  │
+  ├─ @internal writePipeline    WritePipeline(kernel)
+  ├─ @internal resetPipeline    ResetPipeline(kernel)
+  ├─ @internal submitPipeline   SubmitPipeline(kernel)
+  ├─ @internal onChangePipeline OnChangePipeline(kernel)
+  ├─ @internal proxyBuilder     ProxyBuilder(kernel)
+  │
+  └─ @internal persist       PersistManager(kernel)  — создаётся при init, активируется через enable() из usePersist
+```
+
+Все пайплайны принимают `kernel` (Palistor) в конструкторе и читают из него нужные
+подсистемы напрямую — без россыпи deps-аргументов.
+
+---
+
 ## Write Pipeline
 
 ```
@@ -59,7 +90,7 @@ form.email.value = "X"   (SET trap в buildProxy)
   ├─ 2. storeValue()        nodeState.set(node, { ...state, value })
   │                         + updateValuesCacheEntry O(1)
   ├─ 3. runSetter()         node.setter(value, allValues, prev) → patch → applyPatch()
-  ├─ 4. recomputeAll(changedNodes)  таргетированный пересчёт групп
+  ├─ 4. recompute(changedNodes)  таргетированный пересчёт групп
   ├─ 5. notifyChanged()
   │      ├─ recomputeDirty
   │      ├─ nodeVersions[node]++ для changed-нод
@@ -74,14 +105,14 @@ form.email.value = "X"   (SET trap в buildProxy)
 
 ```
 form.submit()                (executeSubmit)
-  ├─ 1. submitting = true, setGroupRevalidate(true) → recomputeAll → notifyChanged
+  ├─ 1. submitting = true, setGroupRevalidate(true) → recompute → notifyChanged
   ├─ 2. applyLeafBeforeSubmit()   leaf-level beforeSubmit на snapshot
   ├─ 4. group beforeSubmit()      group-level beforeSubmit
   ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
   ├─ 6. onSubmit(values) → result
   ├─ 7. afterSubmit(result, { reset })
   ├─ 8. clearPersist()
-  └─ finally: submitting = false → recomputeAll → notifyChanged
+  └─ finally: submitting = false → recompute → notifyChanged
 ```
 
 ---
@@ -94,10 +125,10 @@ GET form.car → узел idle → triggerResolve()
   └─ resolver(trackingProxy)         ← auto-deps: read → accessedPaths, write → buffer
        ├─ OK  → batch flush: applyPatch(result) + buffered writes, loading: false,
        │        status: resolved, save auto-deps, mergeInitialValues (dirty baseline),
-       │        recomputeAll, notifyChanged (1 раз)
+       │        recompute, notifyChanged (1 раз)
        ├─ ERR → retry до attempts раз (delay ms) → при исчерпании:
        │        onError(err, { notify }), loading: false, status: error
-       └─ always: recomputeAll + notifyChanged
+       └─ always: recompute + notifyChanged
 
 Deps: явные (config) ∪ auto-deps (из tracking proxy resolver'а)
 При изменении dep: notifyChanged → findResolvesToRetrigger → resetResolveState → triggerResolve
@@ -132,10 +163,10 @@ store/
   applyPatch/
     applyPatch.ts           применение патчей к дереву nodeState + valuesCache
   buildProxy/
-    buildProxy.ts           Proxy слой 1: config → FieldState + resolve trigger
+    buildProxy.ts           Proxy слой 1: ProxyBuilder (class)
     computeProxyKeys.ts     ownKeys для spread (field / group)
     handleLazyResolve.ts    lazy resolve trigger при GET группы
-    initProxyCaches.ts      WeakMap-кэши (onValueChange, submit, reset)
+    initProxyCaches.ts      WeakMap-кэши (onValueChange, submit, reset, setValues)
   compute/
     computeFieldState.ts    вычисление FieldState одного узла
     fieldStateChanged.ts    сравнение двух FieldState (для skip notify)
@@ -145,9 +176,7 @@ store/
     types.ts                FieldState + вспомогательные типы
     recompute/
       collectGroupLeafNodes.ts  сбор OWN листьев группы (не рекурсивно)
-      recomputeAll.ts           полный пересчёт всего дерева (делегирует recomputeGroup)
-      recomputeAndNotify.ts     хелпер: recomputeAll → merge → notifyChanged
-      recomputeGroup.ts         рекурсивный пересчёт поддерева
+      recomputeAndNotify.ts     хелпер: recompute → merge → notifyChanged
       recomputeLeaves.ts        пересчёт списка листьев (computed + fieldState)
       recomputeTargeted.ts      таргетированный пересчёт по groupDeps (BFS)
       topologicalSortComputed.ts  алгоритм Кана для computed-узлов
@@ -167,21 +196,21 @@ store/
     pairKey.ts                сериализация пары donor→recipient
     resolveGroupByPath.ts     config-узел группы по строковому пути
   init/
-    createNotificationHub.ts  версионирование + подписки + dirty + postNotifyHook
-    createResolveManager.ts   resolve subsystem: trigger, retrigger, eager launch
+    createNotificationHub.ts  класс NotificationHub: версионирование + подписки + dirty
+    createResolveManager.ts   класс ResolveManager: trigger, retrigger, eager launch
     initGroupSubmitting.ts    submitting/dirty/revalidate для групповых узлов
   onChangePipeline/
     computeFieldKey.ts        вычисление fieldKey для onChange
     findOnChangeAncestors.ts  поиск предков с onChange-хэндлером
-    onChangePipeline.ts       fire-and-forget onChange (поднимается к предкам)
+    onChangePipeline.ts       класс OnChangePipeline
   persist/
     drivers.ts                localStorage / sessionStorage drivers
-    persistManager.ts         менеджер персистенции (hydrate, flush, clear)
+    persistManager.ts         класс PersistManager: hydrate, flush, clear (принимает kernel)
     types.ts                  PersistDriver + PersistOptions
   resetPipeline/
     buildResetPatch.ts        построение патча сброса из defaults + overrides
     collectDefaults.ts        сбор дефолтных значений дерева
-    resetPipeline.ts          executeReset: applyPatch → recomputeAll → notify
+    resetPipeline.ts          класс ResetPipeline
   resolvePipeline/
     applyPendingWrites.ts     сброс буфера write-операций после resolve
     createValuesTrackingProxy.ts  tracking write-proxy для resolver (auto-deps)
@@ -191,16 +220,21 @@ store/
     resetResolveState.ts      сброс статуса resolve-ноды в idle
     types.ts                  Resolve, ResolveDeps, ResolveState
   store/
+    dirtyTracker.ts           класс DirtyTracker: initialValueMap, capture, merge, recompute
+    groupDepsMap.ts           класс GroupDepsMap: deps, trackingWrap, isBuilt
     hasComputedProps.ts       проверка: есть ли computed-свойства у группы
-    index.ts                  главная фабрика createProxyStore
+    index.ts                  Palistor + реэкспорты публичных типов
     nodeMap.ts                buildNodeMaps: nodePaths + nodeParents
+    nodeRegistry.ts           класс NodeRegistry: nodeState, proxyCache, paths, parents, leaves
+    palistor.ts               класс Palistor: kernel + ProxyStore (главный класс системы)
     registerNodes.ts          инициализация leafNodes + nodeState
+    serviceRegistry.ts        класс ServiceRegistry: translator, notifier, делегаты
     types.ts                  ConfigNode, ProxyStore, ExtractValues и др.
   submitPipeline/
     applyLeafBeforeSubmit.ts  leaf-level beforeSubmit на snapshot
     collectLeafStates.ts      сбор состояний листьев (для проверки ошибок)
     getSubValues.ts           извлечение values поддерева
-    submitPipeline.ts         executeSubmit: submitting → validate → onSubmit → after
+    submitPipeline.ts         класс SubmitPipeline
     types.ts                  SubmitDeps, SubmitResult
   valuesCache/
     valuesCache.ts            buildValuesCache + updateValuesCacheEntry (O(1))
@@ -211,7 +245,7 @@ store/
     runSetter.ts              вызов node.setter → applyPatch зависимых полей
     storeValue.ts             запись value в nodeState + updateValuesCacheEntry
     types.ts                  WriteDeps, WriteResult, Setter
-    writePipeline.ts          writeValue: format → store → setter → recompute
+    writePipeline.ts          класс WritePipeline
 react/
   useForm.ts                  useSyncExternalStore + tracking proxy
   createTrackingProxy.ts      Proxy слой 2: запись accessed нод
@@ -243,17 +277,19 @@ updateValuesCacheEntry(cache, node, newValue)
 
 ---
 
-## recomputeAll — таргетированный пересчёт
+## Palistor.recompute() — таргетированный пересчёт
 
 ### Два режима одной функции
 
 ```ts
-// Замыкание в store/index.ts
-function recomputeAll(changedNodes?: Set<object>): Set<object> {
+// Метод Palistor
+recompute(changedNodes?: Set<object>): Set<object> {
   if (changedNodes && changedNodes.size > 0) {
     return recomputeTargeted(changedNodes, deps); // горячий путь
   }
-  return _recomputeAll(rootConfig, groupLeafMap, nodeState, ...); // полный
+  // Полный путь: собрать все листья и пересчитать
+  const leafNodes = collectGroupLeafNodes(rootConfig, groupLeafMap);
+  return recomputeLeaves(leafNodes, nodeState, valuesCache, translate, trackingWrap?);
 }
 ```
 
@@ -262,7 +298,7 @@ function recomputeAll(changedNodes?: Set<object>): Set<object> {
 
 ### groupDeps — карта зависимостей между группами
 
-Строится автоматически при первом (init) `recomputeAll` через трекинг GET-доступов:
+Строится автоматически при первом (init) `recompute()` через трекинг GET-доступов:
 
 ```
 groupDeps: Set<string>   — пары "донор→реципиент" в формате pairKey(donor, recipient)
@@ -304,7 +340,7 @@ SET passport.number = "123456"
 ### Визуально: было vs. стало
 
 ```
-БЫЛО (recomputeAll):
+BYLO (full recompute):
 
   SET passport.number = "123456"
     └─ пересчёт ВСЕХ 50 полей
@@ -314,7 +350,7 @@ SET passport.number = "123456"
          ├─ passport:  number, issue, expiry ← нужно
          └─ calculator: total                ← впустую
 
-СТАЛО (recomputeTargeted):
+STALO (recomputeTargeted via recompute()):
 
   SET passport.number = "123456"
     ├─ sourceGroup = "passport"
@@ -344,18 +380,18 @@ recomputeLeaves(leafNodes[]):
       returns Set<object> изменённых узлов
 ```
 
-### Call sites `recomputeAll`
+### Call sites `recompute()`
 
 ```
-1. store/index.ts (init)          → полный — строит groupDeps через trackingWrap
-2. writePipeline.ts               → таргетированный (changedNodes)
-3. onChangePipeline.ts            → таргетированный (changedNodes из applyPatch)
-4. resolvePipeline/executeResolve → полный (resolve меняет произвольные поля)
-5. submitPipeline.ts (start)      → полный (revalidate=true)
-6. submitPipeline.ts (end)        → полный
-7. resetPipeline.ts               → полный
-8. persistManager.ts (hydrate)    → полный
-9. store/index.ts (setValuesNode) → полный (патч может быть любым)
+1. Palistor constructor (init)    → полный — строит groupDeps через trackingWrap
+2. WritePipeline.execute()        → таргетированный (changedNodes)
+3. OnChangePipeline.fire()        → полный (onChange-патч может затронуть любые поля)
+4. ResolvePipeline/executeResolve → полный (resolve меняет произвольные поля)
+5. SubmitPipeline.execute (start) → полный (revalidate=true)
+6. SubmitPipeline.execute (end)   → полный
+7. ResetPipeline.execute()        → полный
+8. PersistManager.hydrateFromStorage() → полный
+9. Palistor.setValuesNode()       → полный (патч может быть любым)
 ```
 
 ---
@@ -366,7 +402,7 @@ recomputeLeaves(leafNodes[]):
 |---|---|
 | Конфиг неизменяем | `rootConfig` никогда не мутируется |
 | Один прокси на узел | `proxyCache: WeakMap` |
-| Стабильные ссылки | `WeakMap`-кэши для onValueChange / submit / reset |
+| Стабильные ссылки | `WeakMap`-кэши для onValueChange / submit / reset / setValues |
 | Точечные ре-рендеры | tracking proxy + `nodeVersions` |
 | Иммутабельный FieldState | `nodeState.set(node, { ...old, value: new })` |
 | Resolve без лишних ре-рендеров | batch: буфер writes + один flush + один notifyChanged |
@@ -375,14 +411,14 @@ recomputeLeaves(leafNodes[]):
 
 ---
 
-## createProxyStore + useForm
+## Palistor + useForm
 
-`createProxyStore(options)` — фабрика, создаёт ProxyStore с конфигом и начальными значениями.  
+`new Palistor(options)` — создаёт экземпляр формы.  
 `useForm(store | subtree)` — React-хук, подключает компонент к store через tracking proxy.
 
 ```ts
 // Создание store (вне React)
-const store = createProxyStore<Config>({
+const store = new Palistor<Config>({
   config: orderConfig,
   initialValues: { email: "user@example.com" },
 });

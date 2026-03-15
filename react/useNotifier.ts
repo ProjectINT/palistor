@@ -31,7 +31,7 @@ import type { NotifyFn } from "../store/resolvePipeline/";
 /**
  * Registers a notification function in ProxyStore for use in resolver onError.
  *
- * @param store    — ProxyStore created via createProxyStore
+ * @param store    — ProxyStore created via new Palistor()
  * @param notifier — notification function (toast, alert, etc.)
  */
 export function useNotifier<TConfig extends Record<string, any>>(

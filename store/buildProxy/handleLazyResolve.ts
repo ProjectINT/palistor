@@ -1,11 +1,6 @@
 import type { AnyConfigNode } from "../store/types";
 import type { ResolveState } from "../resolvePipeline/index";
 
-export interface HandleLazyResolveDeps {
-  triggerResolve?: (node: AnyConfigNode) => void;
-  getResolveState?: (node: AnyConfigNode) => ResolveState | undefined;
-}
-
 /**
  * Lazy trigger + suspense для группового узла с resolve.
  *
@@ -14,9 +9,9 @@ export interface HandleLazyResolveDeps {
  */
 export function handleLazyResolve(
   node: AnyConfigNode,
-  deps: HandleLazyResolveDeps,
+  triggerResolve: ((node: AnyConfigNode) => void) | undefined,
+  getResolveState: ((node: AnyConfigNode) => ResolveState | undefined) | undefined,
 ): void {
-  const { triggerResolve, getResolveState } = deps;
   if (!triggerResolve || !getResolveState || !node.resolve) return;
 
   const resolveState = getResolveState(node);

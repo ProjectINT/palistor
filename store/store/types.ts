@@ -359,11 +359,6 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   setTranslator: (t: TranslateFn | null) => void;
 
   /**
-   * Возвращает текущую зарегистрированную функцию перевода (всегда гарантированно существует).
-   */
-  getTranslator: () => TranslateFn;
-
-  /**
    * Менеджер персистенции — гидратация и автосохранение состояния формы.
    */
   persist: PersistManager;
@@ -374,11 +369,6 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * @param fn — функция уведомления или null для сброса
    */
   setNotifier: (fn: NotifyFn | null) => void;
-
-  /**
-   * Возвращает текущую зарегистрированную функцию уведомления (всегда гарантированно существует).
-   */
-  getNotifier: () => NotifyFn;
 
   /**
    * Submit root form.

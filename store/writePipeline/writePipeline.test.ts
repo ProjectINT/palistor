@@ -1,35 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { writeValue } from "./writePipeline";
-import type { FieldState } from "../compute/index";
+import { Palistor } from "../store/palistor";
 import type { AnyConfigNode } from "../store/types";
-import { buildValuesCache } from "../valuesCache/valuesCache";
 
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
+// ─── WritePipeline (через Palistor) ─────────────────────────────────────────
 
-function makeState(value: unknown): FieldState {
-  return { value, isVisible: true, isRequired: false, isDisabled: false, isReadOnly: false };
-}
-
-function makeNodeState(entries: Array<[object, FieldState]>): WeakMap<object, FieldState> {
-  const map = new WeakMap<object, FieldState>();
-  for (const [node, state] of entries) map.set(node, state);
-  return map;
-}
-
-// ─── writeValue (интеграция pipeline) ────────────────────────────────────────
-
-describe("writeValue", () => {
+describe("WritePipeline", () => {
   it("возвращает null если узел не зарегистрирован", () => {
-    const node: AnyConfigNode = { value: "" };
-    const root: AnyConfigNode = { field: node };
-    const cache = buildValuesCache(root, new WeakMap());
+    const root: AnyConfigNode = { field: { value: "" } };
+    const store = new Palistor({ config: root });
+    const unregistered: AnyConfigNode = { value: "x" };
 
-    const result = writeValue(node, "test", {
-      rootConfig: root,
-      nodeState: new WeakMap(),
-      recomputeAll: () => new Set(),
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(unregistered, "test");
 
     expect(result).toBeNull();
   });
@@ -40,19 +21,11 @@ describe("writeValue", () => {
       formatter: (v: unknown) => Number(v) || 0,
     };
     const root: AnyConfigNode = { amount: node };
-    const nodeState = makeNodeState([[node, makeState(0)]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const cache = buildValuesCache(root, nodeState);
+    const store = new Palistor({ config: root });
 
-    const result = writeValue(node, "42", {
-      rootConfig: root,
-      nodeState,
-      recomputeAll,
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(node, "42");
 
-    expect(nodeState.get(node)!.value).toBe(42);
-    expect(recomputeAll).toHaveBeenCalledOnce();
+    expect(store.nodes.nodeState.get(node)!.value).toBe(42);
     expect(result!.changed.has(node)).toBe(true);
   });
 
@@ -63,42 +36,27 @@ describe("writeValue", () => {
       setter: () => ({ target: "new" }),
     };
     const root: AnyConfigNode = { source: node, target: targetNode };
-    const nodeState = makeNodeState([
-      [node, makeState("a")],
-      [targetNode, makeState("old")],
-    ]);
-    const cache = buildValuesCache(root, nodeState);
+    const store = new Palistor({ config: root });
 
-    const result = writeValue(node, "b", {
-      rootConfig: root,
-      nodeState,
-      recomputeAll: () => new Set(),
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(node, "b");
 
     expect(result!.changed.has(node)).toBe(true);
     expect(result!.changed.has(targetNode)).toBe(true);
-    expect(nodeState.get(node)!.value).toBe("b");
-    expect(nodeState.get(targetNode)!.value).toBe("new");
+    expect(store.nodes.nodeState.get(node)!.value).toBe("b");
+    expect(store.nodes.nodeState.get(targetNode)!.value).toBe("new");
   });
 
   it("возвращает skipped: true если значение не изменилось", () => {
     const node: AnyConfigNode = { value: "hello" };
     const root: AnyConfigNode = { field: node };
-    const nodeState = makeNodeState([[node, makeState("hello")]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const cache = buildValuesCache(root, nodeState);
+    const store = new Palistor({ config: root });
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
-    const result = writeValue(node, "hello", {
-      rootConfig: root,
-      nodeState,
-      recomputeAll,
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(node, "hello");
 
     expect(result!.skipped).toBe(true);
     expect(result!.changed.size).toBe(0);
-    expect(recomputeAll).not.toHaveBeenCalled();
+    expect(recomputeSpy).not.toHaveBeenCalled();
   });
 
   it("возвращает skipped если значение совпадает после форматирования", () => {
@@ -107,55 +65,37 @@ describe("writeValue", () => {
       formatter: (v: unknown) => Number(v) || 0,
     };
     const root: AnyConfigNode = { amount: node };
-    const nodeState = makeNodeState([[node, makeState(42)]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const cache = buildValuesCache(root, nodeState);
+    const store = new Palistor({ config: root });
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
-    const result = writeValue(node, "42", {
-      rootConfig: root,
-      nodeState,
-      recomputeAll,
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(node, "42");
 
     expect(result!.skipped).toBe(true);
-    expect(recomputeAll).not.toHaveBeenCalled();
+    expect(recomputeSpy).not.toHaveBeenCalled();
   });
 
   it("не пропускает запись если значение отличается", () => {
     const node: AnyConfigNode = { value: "hello" };
     const root: AnyConfigNode = { field: node };
-    const nodeState = makeNodeState([[node, makeState("hello")]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const cache = buildValuesCache(root, nodeState);
+    const store = new Palistor({ config: root });
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
-    const result = writeValue(node, "world", {
-      rootConfig: root,
-      nodeState,
-      recomputeAll,
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(node, "world");
 
     expect(result!.skipped).toBeUndefined();
     expect(result!.changed.has(node)).toBe(true);
-    expect(recomputeAll).toHaveBeenCalledOnce();
+    expect(recomputeSpy).toHaveBeenCalledOnce();
   });
 
   it("корректно сравнивает NaN через Object.is", () => {
     const node: AnyConfigNode = { value: NaN };
     const root: AnyConfigNode = { field: node };
-    const nodeState = makeNodeState([[node, makeState(NaN)]]);
-    const recomputeAll = vi.fn(() => new Set<object>());
-    const cache = buildValuesCache(root, nodeState);
+    const store = new Palistor({ config: root });
+    const recomputeSpy = vi.spyOn(store, "recompute");
 
-    const result = writeValue(node, NaN, {
-      rootConfig: root,
-      nodeState,
-      recomputeAll,
-      valuesCache: cache,
-    });
+    const result = store.writePipeline.execute(node, NaN);
 
     expect(result!.skipped).toBe(true);
-    expect(recomputeAll).not.toHaveBeenCalled();
+    expect(recomputeSpy).not.toHaveBeenCalled();
   });
 });

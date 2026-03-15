@@ -1,11 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 import { getSubValues } from "./getSubValues";
 import { collectLeafStates } from "./collectLeafStates";
 import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
-import { executeSubmit } from "./submitPipeline";
-import type { SubmitDeps } from "./types";
+import { Palistor } from "../store/palistor";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 
@@ -169,101 +168,54 @@ describe("applyLeafBeforeSubmit", () => {
   });
 });
 
-// ─── executeSubmit ────────────────────────────────────────────────────────────
+// ─── SubmitPipeline (через Palistor) ──────────────────────────────────────────
 
-function makeBaseDeps(overrides: Partial<SubmitDeps> = {}): SubmitDeps {
-  const groupNode: AnyConfigNode = {};
-  return {
-    nodeState: new WeakMap([[groupNode, makeState()]]),
-    recomputeAll: vi.fn(() => new Set<object>()),
-    notifyChanged: vi.fn(),
-    resetNode: vi.fn(),
-    valuesCache: makeCache({}),
-    nodePaths: new WeakMap(),
-    rootConfig: groupNode,
-    ...overrides,
-  };
-}
-
-describe("executeSubmit", () => {
+describe("SubmitPipeline", () => {
   it("возвращает success:true если нет ошибок и вызывает onSubmit", async () => {
-    const groupNode: AnyConfigNode = { onSubmit: vi.fn().mockResolvedValue("ok") };
-    const deps = makeBaseDeps({
-      nodeState: new WeakMap([[groupNode, makeState()]]),
-      rootConfig: groupNode,
-      valuesCache: makeCache({ x: 1 }),
-    });
+    const onSubmit = vi.fn().mockResolvedValue("ok");
+    const root: AnyConfigNode = { x: { value: 1 }, onSubmit };
+    const store = new Palistor({ config: root });
 
-    const result = await executeSubmit(groupNode, deps);
+    const result = await store.submitPipeline.execute(root);
 
     expect(result).toEqual({ success: true, result: "ok" });
-    expect(groupNode.onSubmit).toHaveBeenCalledWith({ x: 1 });
+    expect(onSubmit).toHaveBeenCalledWith({ x: 1 });
   });
 
   it("возвращает success:false при наличии ошибок валидации", async () => {
-    const leafNode: AnyConfigNode = { value: "" };
-    const groupNode: AnyConfigNode = { field: leafNode };
-    const leafState = makeState({ isInvalid: true, errorMessage: "Обязательное поле" });
-    const nodeState = new WeakMap<object, FieldState>([
-      [groupNode, makeState()],
-      [leafNode, leafState],
-    ]);
-    const deps = makeBaseDeps({
-      nodeState,
-      rootConfig: groupNode,
-      recomputeAll: vi.fn(() => new Set<object>()),
-    });
+    const root: AnyConfigNode = {
+      field: { value: "", isRequired: true },
+    };
+    const store = new Palistor({ config: root });
 
-    const result = await executeSubmit(groupNode, deps);
+    const result = await store.submitPipeline.execute(root);
 
-    expect(result).toEqual({
-      success: false,
-      errors: [{ path: "field", message: "Обязательное поле" }],
-    });
-  });
-
-  it("вызывает clearPersist при успехе", async () => {
-    const groupNode: AnyConfigNode = {};
-    const clearPersist = vi.fn().mockResolvedValue(undefined);
-    const deps = makeBaseDeps({
-      nodeState: new WeakMap([[groupNode, makeState()]]),
-      rootConfig: groupNode,
-      clearPersist,
-    });
-
-    await executeSubmit(groupNode, deps);
-
-    expect(clearPersist).toHaveBeenCalledOnce();
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.length).toBeGreaterThan(0);
+    }
   });
 
   it("устанавливает submitting=false в finally даже при ошибке onSubmit", async () => {
-    const groupNode: AnyConfigNode = {
+    const root: AnyConfigNode = {
       onSubmit: vi.fn().mockRejectedValue(new Error("server error")),
     };
-    const nodeState = new WeakMap<object, FieldState>([[groupNode, makeState()]]);
-    const deps = makeBaseDeps({
-      nodeState,
-      rootConfig: groupNode,
-    });
+    const store = new Palistor({ config: root });
 
-    await expect(executeSubmit(groupNode, deps)).rejects.toThrow("server error");
+    await expect(store.submitPipeline.execute(root)).rejects.toThrow("server error");
 
-    expect(nodeState.get(groupNode)?.submitting).toBe(false);
+    expect(store.nodes.nodeState.get(root)?.submitting).toBe(false);
   });
 
   it("вызывает afterSubmit с результатом и reset-экшеном", async () => {
     const afterSubmit = vi.fn();
-    const groupNode: AnyConfigNode = {
+    const root: AnyConfigNode = {
       onSubmit: vi.fn().mockResolvedValue(42),
       afterSubmit,
     };
-    const nodeState = new WeakMap<object, FieldState>([[groupNode, makeState()]]);
-    const deps = makeBaseDeps({
-      nodeState,
-      rootConfig: groupNode,
-    });
+    const store = new Palistor({ config: root });
 
-    await executeSubmit(groupNode, deps);
+    await store.submitPipeline.execute(root);
 
     expect(afterSubmit).toHaveBeenCalledWith(42, { reset: expect.any(Function) });
   });

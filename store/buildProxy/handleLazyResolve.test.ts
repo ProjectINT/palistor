@@ -22,46 +22,34 @@ describe("handleLazyResolve", () => {
   it("does nothing if triggerResolve is not provided", () => {
     const node: AnyConfigNode = { resolve: { resolver: async () => ({}) } };
     // Should not throw
-    handleLazyResolve(node, { triggerResolve: undefined, getResolveState: undefined });
+    handleLazyResolve(node, undefined, undefined);
   });
 
   it("does nothing if node has no resolve config", () => {
     const trigger = vi.fn();
     const node: AnyConfigNode = { email: { value: "" } };
-    handleLazyResolve(node, {
-      triggerResolve: trigger,
-      getResolveState: () => makeResolveState(),
-    });
+    handleLazyResolve(node, trigger, () => makeResolveState());
     expect(trigger).not.toHaveBeenCalled();
   });
 
   it("does nothing if getResolveState returns undefined", () => {
     const trigger = vi.fn();
     const node: AnyConfigNode = { resolve: { resolver: async () => ({}) } };
-    handleLazyResolve(node, {
-      triggerResolve: trigger,
-      getResolveState: () => undefined,
-    });
+    handleLazyResolve(node, trigger, () => undefined);
     expect(trigger).not.toHaveBeenCalled();
   });
 
   it("triggers resolve when status is idle", () => {
     const trigger = vi.fn();
     const node: AnyConfigNode = { resolve: { resolver: async () => ({}) } };
-    handleLazyResolve(node, {
-      triggerResolve: trigger,
-      getResolveState: () => makeResolveState({ status: "idle" }),
-    });
+    handleLazyResolve(node, trigger, () => makeResolveState({ status: "idle" }));
     expect(trigger).toHaveBeenCalledWith(node);
   });
 
   it("does not trigger resolve when status is pending", () => {
     const trigger = vi.fn();
     const node: AnyConfigNode = { resolve: { resolver: async () => ({}) } };
-    handleLazyResolve(node, {
-      triggerResolve: trigger,
-      getResolveState: () => makeResolveState({ status: "pending", promise: Promise.resolve() }),
-    });
+    handleLazyResolve(node, trigger, () => makeResolveState({ status: "pending", promise: Promise.resolve() }));
     expect(trigger).not.toHaveBeenCalled();
   });
 
@@ -72,10 +60,7 @@ describe("handleLazyResolve", () => {
     };
     let thrown: unknown;
     try {
-      handleLazyResolve(node, {
-        triggerResolve: vi.fn(),
-        getResolveState: () => makeResolveState({ status: "pending", promise: pendingPromise }),
-      });
+      handleLazyResolve(node, vi.fn(), () => makeResolveState({ status: "pending", promise: pendingPromise }));
     } catch (e) {
       thrown = e;
     }
@@ -87,11 +72,8 @@ describe("handleLazyResolve", () => {
       resolve: { resolver: async () => ({}), options: { suspense: false } },
     };
     expect(() => {
-      handleLazyResolve(node, {
-        triggerResolve: vi.fn(),
-        getResolveState: () =>
-          makeResolveState({ status: "pending", promise: Promise.resolve() }),
-      });
+      handleLazyResolve(node, vi.fn(), () =>
+          makeResolveState({ status: "pending", promise: Promise.resolve() }));
     }).not.toThrow();
   });
 
@@ -100,10 +82,7 @@ describe("handleLazyResolve", () => {
       resolve: { resolver: async () => ({}), options: { suspense: true } },
     };
     expect(() => {
-      handleLazyResolve(node, {
-        triggerResolve: vi.fn(),
-        getResolveState: () => makeResolveState({ status: "pending", promise: null }),
-      });
+      handleLazyResolve(node, vi.fn(), () => makeResolveState({ status: "pending", promise: null }));
     }).not.toThrow();
   });
 });

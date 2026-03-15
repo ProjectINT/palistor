@@ -17,7 +17,52 @@ export interface NotificationHubDeps {
   nodePaths: WeakMap<object, string>;
 }
 
-export interface NotificationHub {
+// ─── Class ───────────────────────────────────────────────────────────────────
+
+/**
+ * Система уведомлений хранилища.
+ *
+ * Консолидирует:
+ * - per-node и глобальные подписки
+ * - версионирование (global + per-node)
+ * - post-notify hook для внешних подсистем (resolve retrigger)
+ */
+export class NotificationHub {
+  private readonly leafNodes: Array<{ node: object; path: string }>;
+  private readonly nodePaths: WeakMap<object, string>;
+
+  /** Подписчики на изменение каждого поля. */
+  private readonly nodeListeners = new WeakMap<object, Set<() => void>>();
+
+  /** Глобальные подписчики — уведомляются при ЛЮБОМ изменении. */
+  private readonly globalListeners = new Set<() => void>();
+
+  /** Глобальная версия — инкрементируется при каждом изменении. */
+  private version = 0;
+
+  /** Версии отдельных узлов — для точечной подписки. */
+  private readonly nodeVersions = new WeakMap<object, number>();
+
+  /** Хук, вызываемый после каждого notifyChanged (resolve retrigger и т.д.) */
+  private postNotifyHook: ((changedPaths: Set<string>) => void) | null = null;
+
+  constructor(deps: NotificationHubDeps) {
+    this.leafNodes = deps.leafNodes;
+    this.nodePaths = deps.nodePaths;
+  }
+
+  // ─── Internal helpers ────────────────────────────────────────────────────
+
+  private notifyNode(node: object): void {
+    this.nodeListeners.get(node)?.forEach((fn) => fn());
+  }
+
+  private notifyGlobals(): void {
+    this.globalListeners.forEach((fn) => fn());
+  }
+
+  // ─── Public API ──────────────────────────────────────────────────────────
+
   /**
    * Обработать набор изменённых узлов:
    * 1. Пересчитать dirty-флаги (leaf + group + root)
@@ -26,75 +71,7 @@ export interface NotificationHub {
    * 4. Уведомить глобальных подписчиков
    * 5. Вызвать postNotifyHook (retrigger resolves и т.д.)
    */
-  notifyChanged: (changed: Set<object>, dirtyDeps: DirtyDeps) => void;
-
-  /** Подписаться на изменения конкретного узла. */
-  subscribe: (node: object, listener: () => void) => () => void;
-
-  /** Подписаться на любое изменение в хранилище. */
-  subscribeGlobal: (listener: () => void) => () => void;
-
-  /** Глобальная версия хранилища. */
-  getVersion: () => number;
-
-  /** Версия конкретного узла. */
-  getNodeVersion: (node: object) => number;
-
-  /**
-   * Инкрементировать версию для всех leaf-узлов + уведомить глобальных подписчиков.
-   * Используется при смене translator — все компоненты перерендерятся.
-   */
-  bumpLeafVersions: () => void;
-
-  /**
-   * Зарегистрировать хук, вызываемый после каждого notifyChanged.
-   * Получает множество dot-путей изменённых узлов.
-   * Используется resolve-системой для retrigger по зависимостям.
-   */
-  setPostNotifyHook: (hook: ((changedPaths: Set<string>) => void) | null) => void;
-}
-
-// ─── Factory ─────────────────────────────────────────────────────────────────
-
-/**
- * Создаёт систему уведомлений хранилища.
- *
- * Консолидирует:
- * - per-node и глобальные подписки
- * - версионирование (global + per-node)
- * - post-notify hook для внешних подсистем (resolve retrigger)
- */
-export function createNotificationHub(deps: NotificationHubDeps): NotificationHub {
-  const { leafNodes, nodePaths } = deps;
-
-  /** Подписчики на изменение каждого поля. */
-  const nodeListeners = new WeakMap<object, Set<() => void>>();
-
-  /** Глобальные подписчики — уведомляются при ЛЮБОМ изменении. */
-  const globalListeners = new Set<() => void>();
-
-  /** Глобальная версия — инкрементируется при каждом изменении. */
-  let version = 0;
-
-  /** Версии отдельных узлов — для точечной подписки. */
-  const nodeVersions = new WeakMap<object, number>();
-
-  /** Хук, вызываемый после каждого notifyChanged (resolve retrigger и т.д.) */
-  let postNotifyHook: ((changedPaths: Set<string>) => void) | null = null;
-
-  // ─── Internal helpers ────────────────────────────────────────────────────
-
-  function notifyNode(node: object) {
-    nodeListeners.get(node)?.forEach((fn) => fn());
-  }
-
-  function notifyGlobals() {
-    globalListeners.forEach((fn) => fn());
-  }
-
-  // ─── Public API ──────────────────────────────────────────────────────────
-
-  function notifyChanged(changed: Set<object>, dirtyDeps: DirtyDeps) {
+  notifyChanged(changed: Set<object>, dirtyDeps: DirtyDeps): void {
     if (changed.size === 0) return;
 
     // Recompute dirty flags for all nodes (leaf + group)
@@ -110,56 +87,79 @@ export function createNotificationHub(deps: NotificationHubDeps): NotificationHu
     }
 
     // Инкрементируем глобальную версию
-    version++;
+    this.version++;
 
     // Обновляем версии изменённых узлов + уведомляем per-node подписчиков
     for (const node of changed) {
-      nodeVersions.set(node, version);
-      notifyNode(node);
+      this.nodeVersions.set(node, this.version);
+      this.notifyNode(node);
     }
 
     // Уведомляем глобальных подписчиков
-    notifyGlobals();
+    this.notifyGlobals();
 
     // Post-notify hook (resolve retrigger и т.д.)
-    if (postNotifyHook) {
+    if (this.postNotifyHook) {
       const changedPaths = new Set<string>();
       for (const n of changed) {
-        const p = nodePaths.get(n);
+        const p = this.nodePaths.get(n);
         if (p) changedPaths.add(p);
       }
       if (changedPaths.size > 0) {
-        postNotifyHook(changedPaths);
+        this.postNotifyHook(changedPaths);
       }
     }
   }
 
-  const subscribe = (node: object, listener: () => void): (() => void) => {
-    if (!nodeListeners.has(node)) nodeListeners.set(node, new Set());
-    nodeListeners.get(node)!.add(listener);
-    return () => nodeListeners.get(node)!.delete(listener);
+  /** Подписаться на изменения конкретного узла. */
+  subscribe = (node: object, listener: () => void): (() => void) => {
+    if (!this.nodeListeners.has(node)) this.nodeListeners.set(node, new Set());
+    this.nodeListeners.get(node)!.add(listener);
+    return () => this.nodeListeners.get(node)!.delete(listener);
   };
 
-  const subscribeGlobal = (listener: () => void): (() => void) => {
-    globalListeners.add(listener);
-    return () => globalListeners.delete(listener);
+  /** Подписаться на любое изменение в хранилище. */
+  subscribeGlobal = (listener: () => void): (() => void) => {
+    this.globalListeners.add(listener);
+    return () => this.globalListeners.delete(listener);
   };
 
-  function bumpLeafVersions() {
-    version++;
-    for (const { node } of leafNodes) {
-      nodeVersions.set(node, version);
+  /** Глобальная версия хранилища. */
+  getVersion = (): number => {
+    return this.version;
+  };
+
+  /** Версия конкретного узла. */
+  getNodeVersion = (node: object): number => {
+    return this.nodeVersions.get(node) ?? 0;
+  };
+
+  /**
+   * Инкрементировать версию для всех leaf-узлов + уведомить глобальных подписчиков.
+   * Используется при смене translator — все компоненты перерендерятся.
+   */
+  bumpLeafVersions(): void {
+    this.version++;
+    for (const { node } of this.leafNodes) {
+      this.nodeVersions.set(node, this.version);
     }
-    notifyGlobals();
+    this.notifyGlobals();
   }
 
-  return {
-    notifyChanged,
-    subscribe,
-    subscribeGlobal,
-    getVersion: () => version,
-    getNodeVersion: (node: object) => nodeVersions.get(node) ?? 0,
-    bumpLeafVersions,
-    setPostNotifyHook: (hook) => { postNotifyHook = hook; },
-  };
+  /**
+   * Зарегистрировать хук, вызываемый после каждого notifyChanged.
+   * Получает множество dot-путей изменённых узлов.
+   * Используется resolve-системой для retrigger по зависимостям.
+   */
+  setPostNotifyHook(hook: ((changedPaths: Set<string>) => void) | null): void {
+    this.postNotifyHook = hook;
+  }
 }
+
+// ─── Deprecated factory alias ────────────────────────────────────────────────
+
+/** @deprecated Use `new NotificationHub(deps)` instead. */
+export function createNotificationHub(deps: NotificationHubDeps): NotificationHub {
+  return new NotificationHub(deps);
+}
+

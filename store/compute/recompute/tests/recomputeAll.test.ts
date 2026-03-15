@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { recomputeAll } from "../recomputeAll";
+import { collectGroupLeafNodes } from "../collectGroupLeafNodes";
+import { recomputeLeaves } from "../recomputeLeaves";
 import type { AnyConfigNode } from "../../../types";
 import type { FieldState } from "../../index";
 import type { GroupLeafMap } from "../../../registerNodes";
@@ -11,11 +12,12 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
   return { values, nodeSlot: new WeakMap() };
 }
 
-describe("recomputeAll", () => {
+describe("collectGroupLeafNodes + recomputeLeaves", () => {
   it("возвращает пустой Set, если нет листьев", () => {
     const root = {} as AnyConfigNode;
     const groupLeafMap: GroupLeafMap = new WeakMap();
-    const result = recomputeAll(root, groupLeafMap, new WeakMap(), makeCache(), translate);
+    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const result = recomputeLeaves(leaves, new WeakMap(), makeCache(), translate);
     expect(result.size).toBe(0);
   });
 
@@ -31,7 +33,8 @@ describe("recomputeAll", () => {
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const result = recomputeAll(root, groupLeafMap, nodeState, makeCache(), translate);
+    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
     expect(result.has(fieldA)).toBe(true);
     expect(result.has(fieldB)).toBe(true);
@@ -44,7 +47,6 @@ describe("recomputeAll", () => {
       [root, [{ node: fieldNode, path: "field" }]],
     ]);
     const nodeState = new WeakMap<object, FieldState>();
-    // Состояние уже соответствует результату computeFieldState
     nodeState.set(fieldNode, {
       value: "",
       isVisible: true,
@@ -53,7 +55,8 @@ describe("recomputeAll", () => {
       isReadOnly: false,
     });
 
-    const result = recomputeAll(root, groupLeafMap, nodeState, makeCache(), translate);
+    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
     expect(result.has(fieldNode)).toBe(false);
   });

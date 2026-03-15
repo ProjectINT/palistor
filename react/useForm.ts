@@ -6,7 +6,7 @@
  *
  * @example
  * ```tsx
- * const store = createProxyStore({ config });
+ * const store = new Palistor({ config });
  *
  * function App() {
  *   const form = useForm(store);
@@ -80,7 +80,7 @@ function resolveInput<TConfig extends Record<string, any>>(
  * На первом рендере tracked set пуст → используется глобальная версия
  * (fallback). После первого рендера tracking работает точечно.
  *
- * @param input — ProxyStore, созданный через createProxyStore, ИЛИ
+ * @param input — ProxyStore, созданный через new Palistor(), ИЛИ
  *                tracking proxy поддерево (из пропса другого useForm)
  * @returns tracking proxy — типизированный по конфигу (или поддереву)
  */
