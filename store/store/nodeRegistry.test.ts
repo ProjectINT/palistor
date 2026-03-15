@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { NodeRegistry } from "./nodeRegistry";
+import { NodeRegistry } from "./NodeRegistry/nodeRegistry";
 import type { AnyConfigNode } from "./types";
 
 // ─── Тестовые конфиги ─────────────────────────────────────────────────────────

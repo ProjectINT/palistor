@@ -1,9 +1,10 @@
-import { type FieldState } from "../compute/index";
-import { registerNodes, type GroupLeafMap, type LeafEntry, type InitialSlice } from "./registerNodes";
-import { buildNodeMaps } from "./nodeMap";
-import { initGroupSubmitting } from "../init/initGroupSubmitting";
-import { getNodeGroupPath } from "../groupDeps/getNodeGroupPath";
-import type { AnyConfigNode, TranslateFn } from "./types";
+import { type FieldState } from "../../compute/index";
+import { registerNodes, type GroupLeafMap, type LeafEntry, type InitialSlice } from "../registerNodes";
+import { buildNodeMaps } from "../nodeMap";
+import { initGroupSubmitting } from "../../init/initGroupSubmitting";
+import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
+import type { AnyConfigNode, TranslateFn } from "../types";
+import { isLeaf, isGroup } from "./nodeUtils";
 
 /**
  * Реестр узлов конфига.
@@ -18,6 +19,31 @@ import type { AnyConfigNode, TranslateFn } from "./types";
  * @internal используется пайплайнами и подсистемами через kernel
  */
 export class NodeRegistry {
+  // ─── Инициализация ───────────────────────────────────────────────────────
+
+  constructor(
+    rootConfig: AnyConfigNode,
+    initialValues: Record<string, unknown>,
+    translate: TranslateFn,
+  ) {
+    // Фаза 1: регистрируем все листовые узлы, устанавливаем начальные значения
+    registerNodes(
+      rootConfig,
+      initialValues as InitialSlice<AnyConfigNode>,
+      this.leafNodes,
+      this.nodeState,
+      "",
+      this.groupLeafMap,
+      translate,
+    );
+
+    // Фаза 2: инициализируем submitting/dirty/revalidate для групп
+    initGroupSubmitting(rootConfig, this.nodeState);
+
+    // Фаза 3: строим маппинги путей и родителей
+    buildNodeMaps(rootConfig, this.nodePaths, this.nodeParents);
+  }
+
   // ─── Данные ──────────────────────────────────────────────────────────────
 
   /**
@@ -56,31 +82,6 @@ export class NodeRegistry {
    * Гарантирует стабильность ссылок (===) на proxy.
    */
   readonly proxyCache: WeakMap<object, unknown> = new WeakMap();
-
-  // ─── Инициализация ───────────────────────────────────────────────────────
-
-  constructor(
-    rootConfig: AnyConfigNode,
-    initialValues: Record<string, unknown>,
-    translate: TranslateFn,
-  ) {
-    // Фаза 1: регистрируем все листовые узлы, устанавливаем начальные значения
-    registerNodes(
-      rootConfig,
-      initialValues as InitialSlice<AnyConfigNode>,
-      this.leafNodes,
-      this.nodeState,
-      "",
-      this.groupLeafMap,
-      translate,
-    );
-
-    // Фаза 2: инициализируем submitting/dirty/revalidate для групп
-    initGroupSubmitting(rootConfig, this.nodeState);
-
-    // Фаза 3: строим маппинги путей и родителей
-    buildNodeMaps(rootConfig, this.nodePaths, this.nodeParents);
-  }
 
   // ─── Навигация ───────────────────────────────────────────────────────────
 
@@ -129,13 +130,6 @@ export class NodeRegistry {
     }
   }
 
-  /** Является ли узел листовым (имеет "value"). */
-  isLeaf(node: object): boolean {
-    return "value" in (node as Record<string, unknown>);
-  }
-
-  /** Является ли узел групповым (нет "value"). */
-  isGroup(node: object): boolean {
-    return !this.isLeaf(node);
-  }
+  isLeaf = isLeaf;
+  isGroup = isGroup;
 }

@@ -14,7 +14,7 @@ import { ResolveManager } from "../init/createResolveManager";
 import type { NotifyFn } from "../resolvePipeline";
 import { buildValuesCache } from "../valuesCache/valuesCache";
 import type { ValuesCache } from "../valuesCache/valuesCache";
-import { NodeRegistry } from "./nodeRegistry";
+import { NodeRegistry } from "./NodeRegistry/nodeRegistry";
 import { ServiceRegistry } from "./serviceRegistry";
 import { DirtyTracker } from "./dirtyTracker";
 import { GroupDepsMap } from "./groupDepsMap";
