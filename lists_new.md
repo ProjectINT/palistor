@@ -768,7 +768,7 @@ isVisible: (values) => values.users.length > 0
 | ConfigNode type | Ветка `readonly [infer Item, ...any[]]` для массивов |
 | SubmitPipeline | Ветка для template-bound submit `(thisForm, store)` |
 | NotificationHub | Минимальные — `bumpLeafVersions` работает через shared `leafNodes` массив |
-| Proxy (buildProxy) | Крупное — ветки для ListProxy и EntityItemProxy |
+| Proxy (buildProxy) | Крупное — ветки для ListProxy и EntityProjectionProxy |
 | Tracking Proxy | Минимальные — поддержка ListNode tracking (version) |
 | registerNodes | Array guard + ListState init |
 | buildValuesCache | Array → `[]` + entity shared objects |
@@ -815,17 +815,17 @@ function useForm<TEntity, TTemplate>(
 
 ```ts
 interface ListProxyNode<TItem> {
-  readonly items: ReadonlyArray<EntityItemProxy<TItem>>;
+  readonly items: ReadonlyArray<EntityProjectionProxy<TItem>>;
   readonly length: number;
   readonly loading: boolean;
 
   add(id: string): void;
-  add(values: Record<string, unknown>): EntityItemProxy<TItem>;
+  add(values: Record<string, unknown>): EntityProjectionProxy<TItem>;
   remove(id: string): void;
-  getById(id: string): EntityItemProxy<TItem> | undefined;
+  getById(id: string): EntityProjectionProxy<TItem> | undefined;
   setItems(ids: string[]): void;
-  map<R>(fn: (item: EntityItemProxy<TItem>, index: number, id: string) => R): R[];
-  [Symbol.iterator](): Iterator<EntityItemProxy<TItem>>;
+  map<R>(fn: (item: EntityProjectionProxy<TItem>, index: number, id: string) => R): R[];
+  [Symbol.iterator](): Iterator<EntityProjectionProxy<TItem>>;
 }
 ```
 
@@ -943,7 +943,7 @@ nodeSlot.set(u1NameNode, { parent: entityObj, key: 'name' });
 1. `buildFieldProxy(leaf)` — текущая leaf логика
 2. `buildGroupProxy(group)` — текущая group логика
 3. `buildListProxy(listNode)` — **новая**, GET handlers для `items, length, add, remove, map, ...`
-4. `buildEntityItemProxy(entityNode, template)` — **новая**, читает value из EntityRegistry
+4. `buildEntityProjectionProxy(entityNode, template)` — **новая**, читает value из EntityRegistry, применяет правила template
 
 ---
 
@@ -979,6 +979,8 @@ rekey(oldId: string, newId: string): void {
 
 ## 15. План реализации
 
+> **Принцип разбиения**: каждая фаза рассчитана на одну сессию Claude Sonnet 4.6 (~300-400 строк нового/изменённого кода, 5-10 файлов). Фаза завершается тестами — можно проверить результат перед следующей сессией.
+
 ### Фаза 0: Подготовка инфраструктуры
 
 > Цель: подготовить существующий код к расширению без ломки.
@@ -986,55 +988,121 @@ rekey(oldId: string, newId: string): void {
 | # | Задача | Описание | Файлы |
 |---|--------|---------|-------|
 | 0.1 | `isListNode` helper | `Array.isArray(node) && node.length >= 1 && node.length <= 2` | `store/constants.ts` или `nodeUtils.ts` |
-| 0.2 | Array guard во всех tree-walkers | `if (Array.isArray(child)) continue;` — 10 функций | см. П2 |
+| 0.2 | Array guard во всех tree-walkers | `if (Array.isArray(child)) continue;` — 10 функций: `registerNodes`, `buildNodeMaps`, `buildValuesCache`, `applyPatch`, `initResolveStates`, `recomputeDirty`, `initGroupSubmitting`, `collectDefaults`, `captureInitialValues`, `collectInitialSnapshot` | см. П2 |
 | 0.3 | `NodeRegistry.registerDynamicLeaf()` | Runtime-регистрация leaf node во всех WeakMaps + `leafNodes.push` | `nodeRegistry.ts` |
 | 0.4 | `LIST_SPREAD_KEYS` constant | `["items", "length", "loading", "add", "remove", "getById", "setItems", "map"]` | `store/constants.ts` |
 | 0.5 | Тесты на array guard | Конфиг с `[{...}]` и `[{...}, {...}]` не ломает существующие пайплайны | |
 
-### Фаза 1: EntityRegistry (фундамент)
+### Фаза 1A: EntityRegistry — ядро
+
+> Цель: создать изолированный класс EntityRegistry с полным CRUD и unit-тестами. Не зависит от Palistor.
 
 | # | Задача | Описание | Зависит от |
 |---|--------|---------|------------|
-| 1.1 | `EntityRegistry` класс | `Map<id, EntityNode>`, `bindings`, `resolvedCache`. CRUD. | — |
-| 1.2 | `EntityNode` — динамическое создание leaf нод | Каждый лист = `{ value }`, поддержка вложенных групп. Рекурсивный merge при upsert. Регистрация через `registerDynamicLeaf`. | 0.3 |
-| 1.3 | ID auto-creation / auto-generation | `_tmp_` prefix для пустого id. `rekey(oldId, newId)`. | 1.1 |
-| 1.4 | `store.set(data \| data[])` | Upsert entity → рекурсивное слияние → changed → notify | 1.1, 1.2 |
-| 1.5 | `store.delete(id)` | Удалить entity, очистить из списков, unbind, cleanup | 1.1 |
-| 1.6 | Тесты EntityRegistry | CRUD, вложенные entities, merge, rekey, bind/unbind, resolvedCache | 1.1-1.5 |
-| 1.7 | Интеграция EntityRegistry в Palistor | `this.entityRegistry` field в Palistor | 1.1 |
+| 1A.1 | `EntityRegistry` класс | `Map<id, EntityNode>`, `bindings`, `resolvedCache`. Методы: `upsert`, `get`, `delete`, `bind`, `unbind`, `markResolved`, `isResolved`, `clearResolved`. | — |
+| 1A.2 | `EntityNode` — создание leaf нод | Каждый лист = `{ value }`, поддержка вложенных групп. Рекурсивный merge при upsert (существующие поля обновляются, новые добавляются, отсутствующие не удаляются). | 1A.1 |
+| 1A.3 | ID auto-generation | `_tmp_` prefix для пустого id. | 1A.1 |
+| 1A.4 | `rekey(oldId, newId)` | Обновляет Map, bindings, resolvedCache. Обновление itemIds в списках — отложено до фазы 2C. | 1A.1 |
+| 1A.5 | Unit-тесты EntityRegistry | CRUD, вложенные entities, merge, rekey, bind/unbind, resolvedCache. Тесты изолированные — без Palistor. | 1A.1-1A.4 |
 
-### Фаза 2: Списки
+### Фаза 1B: Интеграция EntityRegistry в Palistor
 
-| # | Задача | Описание | Зависит от |
-|---|--------|---------|------------|
-| 2.1 | `ListState` interface + detection | `{ template, listConfig?, itemIds, version, initialItemIds }`. Массив длины 1-2 → ListState. | 0.1, 0.2 |
-| 2.2 | `ListProxyNode` — proxy для списка | GET handlers: items, length, add, remove, map, etc. Ветка в ProxyBuilder. | 0.4, 2.1 |
-| 2.3 | `EntityItemProxy` — proxy для элемента | Полноценный proxy: entity leaf values + все правила template (formatter, setter, validate, onChange). | 1.2, 2.1 |
-| 2.4 | List в `valuesCache` | `values.users = [entityObj1, entityObj2, ...]`. Entity объекты = shared references. | 2.1 |
-| 2.5 | List resolver | Resolve на list node → upsert entities → setItems. Конфиг в `array[1].resolve`. | 2.1, 1.4 |
-| 2.6 | List tracking для React | `ListState.version++` при add/remove → notify. Entity leaf change → notify per-leaf. | 2.2 |
-| 2.7 | Типизация: `ConfigNodeToProxy` + `ExtractValues` | Ветка `T extends readonly [infer Item, ...any[]]` | |
-| 2.8 | Тесты списков | CRUD items, resolver, tracking, valuesCache sync, dirty по составу | 2.1-2.7 |
-
-### Фаза 3: useForm(entity, template)
+> Цель: подключить EntityRegistry к store, реализовать `store.set()` и `store.delete()` с полной интеграцией в NotificationHub и recompute.
 
 | # | Задача | Описание | Зависит от |
 |---|--------|---------|------------|
-| 3.1 | Новая сигнатура resolver/onSubmit | `(thisForm, store)` вместо `(values)`. Breaking change. | |
-| 3.2 | Overload `useForm(entity, templateSelector)` | Второй аргумент → `(store) => store.editUserForm`. Возвращает template-bound proxy. | 2.3, 3.1 |
-| 3.3 | Entity-template binding lifecycle | `bind` при mount, `unbind` при unmount. Entity расширяется полями template. Guard на двойное открытие. | 1.1, 1.2 |
-| 3.4 | Resolved cache | `markResolved / isResolved` → skip resolve при повторном открытии | 1.1 |
-| 3.5 | `EntityProjectionProxy` для template-bound entity | Proxy: entity values + template rules (isRequired, validate, etc.) | 2.3 |
-| 3.6 | Template resolve pipeline | `resolver(thisForm, store)`. thisForm = entity proxy через template. | 3.1, 3.5 |
-| 3.7 | Template submit pipeline | `onSubmit(thisForm, store)`. Submit собирает entity values через template. | 3.1, 3.5 |
-| 3.8 | Тесты entity+template | bind/unbind, resolve cache, shared leaf, submit, guard на двойное открытие | 3.1-3.7 |
+| 1B.1 | `this.entityRegistry` field в Palistor | Создание EntityRegistry при init стора. | 1A.1 |
+| 1B.2 | `store.set(data \| data[])` | Upsert entity → рекурсивное слияние → регистрация leaf нод через `registerDynamicLeaf` → changed → recompute → notifyChanged. Batch-режим для массивов. | 0.3, 1A.2 |
+| 1B.3 | `store.delete(id)` | Удалить entity из registry, убрать id из всех списков (когда появятся), unbind все templates, очистить resolvedCache, удалить leaf-ноды из nodeState, notifyChanged. | 1A.1 |
+| 1B.4 | Интеграционные тесты | `store.set()` обновляет entity → notification → recompute. `store.delete()` → cleanup. Batch set. Merge поведение (не удаляет отсутствующие поля). | 1B.1-1B.3 |
 
-### Фаза 4: Интеграция и polish
+### Фаза 2A: ListState + типизация + registerNodes
+
+> Цель: научить стор распознавать массивы как ListNode при init. Добавить ListState, типы, обработку в registerNodes.
 
 | # | Задача | Описание | Зависит от |
 |---|--------|---------|------------|
-| 4.1 | Shared leaf notifications | Entity leaf `version++` → все observers (список + форма). Тест: edit в форме → list re-render. | 2.6, 3.5 |
-| 4.2 | `store.invalidate(id, template?)` | API для сброса resolved cache. Триггерит re-resolve при следующем bind. | 3.4 |
-| 4.3 | `bumpLeafVersions` с entity leafs | Entity leafs в том же `leafNodes` массиве → translator change бампит всё. | |
-| 4.4 | Persist для entities (опционально) | Сериализация EntityRegistry + listStates. Гидрация entity leaf нод. | 1.1, 2.1 |
-| 4.5 | E2E тесты — полный сценарий | Список → открыть форму → edit → list обновился → закрыть → открыть снова (кеш) | все |
+| 2A.1 | `ListState` interface | `{ template, listConfig?, itemIds, version, initialItemIds }`. `ListConfig` = `{ resolve? }`. | — |
+| 2A.2 | ListNode detection в `registerNodes` | При обходе config tree: `if (isListNode(child))` → создать ListState, зарегистрировать template (array[0]) как обычную группу, извлечь listConfig из array[1]. WeakMap `listStates: Map<configNode, ListState>`. | 0.1, 0.2 |
+| 2A.3 | `applyPatch` — array guard | Массив в патче → пропускать (списки обновляются через `store.set()`, не через patch). | 0.2 |
+| 2A.4 | Типизация: `ConfigNodeToProxy` + `ExtractValues` | Ветка `T extends readonly [infer Item, ...any[]]` → `ListProxyNode<...>`. `ExtractValues`: `Array<ExtractValues<Item>>`. | — |
+| 2A.5 | `computeProxyKeys` — ветка `LIST_SPREAD_KEYS` | Третья ветка: если `isListNode(node)` → возвращать `LIST_SPREAD_KEYS`. | 0.4 |
+| 2A.6 | Тесты | Конфиг с массивами корректно инициализируется. ListState создаётся. Типы компилируются. `applyPatch` не ломается на массивах. | 2A.1-2A.5 |
+
+### Фаза 2B: Proxy для списков
+
+> Цель: реализовать `ListProxyNode` и `EntityProjectionProxy` — два новых типа proxy в ProxyBuilder.
+>
+> **Примечание**: `EntityProjectionProxy` — единый proxy для entity через template. Используется и в списках (как элемент), и в `useForm(entity, template)` (фаза 3A). Не создаётся отдельный класс для каждого случая.
+
+| # | Задача | Описание | Зависит от |
+|---|--------|---------|------------|
+| 2B.1 | `buildListProxy(listNode)` — ветка в ProxyBuilder | GET trap: `items` → массив EntityProjectionProxy, `length`, `loading`, `add(id\|values)`, `remove(id)`, `getById(id)`, `setItems(ids)`, `map(fn)`, `[Symbol.iterator]`. | 0.4, 2A.2 |
+| 2B.2 | `EntityProjectionProxy` — proxy для entity через template | Полноценный proxy: entity leaf values + все правила template (formatter, setter, validate, isRequired, onChange). Строится из `(entityNode, templateNode)`. Запись `proxy.name.value = 'X'` → обновляет entity leaf. | 1A.2, 2A.2 |
+| 2B.3 | List в `valuesCache` | `values.users = [entityObj1, entityObj2, ...]`. Entity объекты = shared references. `nodeSlot` entity leaf указывает на entity-объект (см. П5). | 2A.2, 2B.2 |
+| 2B.4 | Тесты proxy | `form.users.length`, `form.users.items[0].name.value`, `form.users.add(...)`, `form.users.remove(...)`, `form.users.map(...)`. EntityProjectionProxy: formatter/setter/validate работают. Запись через proxy обновляет entity. | 2B.1-2B.3 |
+
+### Фаза 2C: List resolver + React tracking
+
+> Цель: списки загружают данные через resolver и корректно трекаются для React re-render.
+
+| # | Задача | Описание | Зависит от |
+|---|--------|---------|------------|
+| 2C.1 | List resolver | Resolve на list node: конфиг из `array[1].resolve`. Результат → `entityRegistry.upsert()` для каждого элемента → `listState.itemIds = data.map(item => item.id)` → `version++` → notifyChanged. | 2A.2, 1B.2 |
+| 2C.2 | `rekey` — обновление itemIds | Расширить `EntityRegistry.rekey()` — обновлять `itemIds` во всех ListState. | 1A.4, 2A.2 |
+| 2C.3 | List tracking для React | Чтение `users.items` / `users.map()` → tracking записывает ListNode. `version++` при add/remove → notify → re-render. Entity leaf change → notify per-leaf (не весь список). | 2B.1 |
+| 2C.4 | Dirty для списков | `listState.initialItemIds` сохраняется при init/resolve. `dirty = !arraysEqual(itemIds, initialItemIds)`. Dirty по значениям внутри items — на уровне entity leaf (существующий механизм). | 2A.2 |
+| 2C.5 | Тесты | Resolver загружает список → entities созданы → proxy работает. Tracking: add → re-render. Entity change → только строка обновляется. Dirty: добавление/удаление → dirty. Rekey обновляет itemIds. | 2C.1-2C.4 |
+
+### Фаза 3A: Новые сигнатуры + useForm overload
+
+> Цель: breaking change сигнатур resolver/onSubmit, новый overload `useForm(entity, template)`, bind/unbind lifecycle, resolved cache.
+>
+> **Важно**: сначала обновить все существующие тесты resolve/submit пайплайнов под новую сигнатуру `(thisForm, store)`, затем менять код. Иначе большая часть сессии уйдёт на починку сломанных тестов.
+
+| # | Задача | Описание | Зависит от |
+|---|--------|---------|------------|
+| 3A.1 | Обновить существующие тесты | Все тесты `resolvePipeline`, `submitPipeline` — обновить mock-и resolver/onSubmit под сигнатуру `(thisForm, store)`. | — |
+| 3A.2 | Новая сигнатура resolver/onSubmit в коде | `resolver(thisForm, store)` вместо `resolver(values)`. `onSubmit(thisForm, store)` вместо `onSubmit(values)`. Breaking change. | 3A.1 |
+| 3A.3 | Entity-template binding lifecycle | `bind` при mount, `unbind` при unmount. Entity расширяется полями template при bind. Guard на двойное открытие одной entity+template в двух компонентах. | 1A.1, 1A.2 |
+| 3A.4 | Resolved cache интеграция | `isResolved(entityId, templateNode)` → skip resolve при повторном открытии. `markResolved` после успешного resolve. | 1A.1 |
+| 3A.5 | Overload `useForm(entity, templateSelector)` | Второй аргумент → `(store) => store.editUserForm`. Определяет: entity ID из proxy, template из selector. Вызывает bind, проверяет resolved cache, возвращает proxy. При unmount — unbind. | 2B.2, 3A.2 |
+| 3A.6 | Тесты | Старые тесты проходят с новой сигнатурой. useForm overload: bind/unbind lifecycle. Resolved cache: open → close → open = skip resolve. Guard на двойное открытие. | 3A.1-3A.5 |
+
+### Фаза 3B: Template resolve + submit pipelines
+
+> Цель: полноценная работа resolve и submit для entity-bound templates через `useForm(entity, template)`.
+
+| # | Задача | Описание | Зависит от |
+|---|--------|---------|------------|
+| 3B.1 | Template resolve pipeline | `resolver(thisForm, store)`. `thisForm` = EntityProjectionProxy (entity через template). Результат сливается в entity через `entityRegistry.upsert()`. После resolve — `markResolved`. `loading` state на useForm proxy. | 3A.2, 2B.2 |
+| 3B.2 | Template submit pipeline | `onSubmit(thisForm, store)`. `thisForm` = EntityProjectionProxy. Submit собирает entity values через template. `submitting` state. Валидация перед submit (isRequired, validate) — через template rules на entity листьях. | 3A.2, 2B.2 |
+| 3B.3 | `store.invalidate(id, template?)` | API для сброса resolved cache. Без template → сбросить все. С template → сбросить конкретную пару. Триггерит re-resolve при следующем bind. | 3A.4 |
+| 3B.4 | Тесты | Template resolve: загружает → merge в entity → markResolved → skip на повторе. Template submit: собирает значения → валидация → onSubmit. Invalidate → re-resolve. Loading/submitting states. | 3B.1-3B.3 |
+
+### Фаза 4: Интеграция и E2E
+
+> Цель: убедиться, что все части работают вместе. Shared leaf notifications, bumpLeafVersions, полный E2E сценарий.
+
+| # | Задача | Описание | Зависит от |
+|---|--------|---------|------------|
+| 4.1 | Shared leaf notifications | Entity leaf `version++` → все observers (список + форма). Тест: edit name в форме → UserRow в списке re-render (та же leaf нода). | 2C.3, 3A.5 |
+| 4.2 | `bumpLeafVersions` с entity leafs | Entity leafs зарегистрированы в том же `leafNodes` массиве через `registerDynamicLeaf` → translator change бампит всё автоматически. Верифицировать. | 0.3 |
+| 4.3 | E2E тесты — полный сценарий | Список → resolver загружает entities → клик → useForm(entity, template) → resolve доп. полей → edit name → список обновился → close → open снова (кеш) → submit. | все |
+| 4.4 | Persist для entities (опционально) | Сериализация EntityRegistry + listStates. Гидрация entity leaf нод. **Отдельная сессия если потребуется.** | 1A.1, 2A.1 |
+
+---
+
+### Сводная таблица фаз
+
+| # | Фаза | Ключевое содержание | ~Строк | ~Файлов |
+|---|------|---------------------|--------|---------|
+| 0 | Подготовка | `isListNode`, array guards в 10 функциях, `LIST_SPREAD_KEYS`, `registerDynamicLeaf`, тесты | ~100 | ~12 |
+| 1A | EntityRegistry (ядро) | Изолированный класс, EntityNode, upsert/merge, rekey, ID auto-gen, unit-тесты | ~350 | ~3 |
+| 1B | EntityRegistry → Palistor | `store.set()`, `store.delete()`, интеграция с NotificationHub + registerDynamicLeaf, интеграционные тесты | ~300 | ~5 |
+| 2A | ListState + типы | ListState, detection в registerNodes, типы `ConfigNodeToProxy`/`ExtractValues`, `computeProxyKeys`, applyPatch guard | ~300 | ~8 |
+| 2B | Proxy для списков | `ListProxyNode`, `EntityProjectionProxy` (единый для списков и useForm), valuesCache для списков, тесты proxy | ~400 | ~6 |
+| 2C | List resolver + React | Resolver для списков, rekey+itemIds, list tracking, dirty по составу, тесты | ~300 | ~6 |
+| 3A | useForm overload + сигнатуры | Breaking change сигнатур (тесты сначала!), useForm overload, bind/unbind, resolved cache | ~400 | ~8 |
+| 3B | Template pipelines | Template resolve/submit через EntityProjectionProxy, `store.invalidate()`, тесты | ~350 | ~5 |
+| 4 | Интеграция + E2E | Shared leaf notify, bumpLeafVersions, E2E тесты полного сценария | ~300 | ~4 |
