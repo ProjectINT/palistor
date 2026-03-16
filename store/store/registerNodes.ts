@@ -1,7 +1,8 @@
 import { type FieldState, resolveFlag } from "../compute/index";
 import { CONFIG_PROPS } from "../constants";
-import { TranslateFn, type AnyConfigNode } from "./types";
+import { TranslateFn, type AnyConfigNode, type ListState, type ListConfig } from "./types";
 import { hasComputedProps } from "./hasComputedProps";
+import { isListNode } from "./NodeRegistry/nodeUtils";
 
 /**
  * Служебные ключи узла конфига, которые пропускаются при обходе дерева.
@@ -76,15 +77,34 @@ export function registerNodes<TNode extends AnyConfigNode>(
   parentPath = "",
   groupLeafMap: GroupLeafMap,
   translate: TranslateFn,
+  listStates?: WeakMap<object, ListState>,
 ) {
   for (const key of Object.keys(node)) {
     if (CONFIG_PROPS.has(key)) continue;
 
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
-    if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
 
     const path = parentPath ? `${parentPath}.${key}` : key;
+
+    if (Array.isArray(child)) {
+      // ListNode: создать ListState + зарегистрировать template как обычную группу
+      if (isListNode(child) && listStates) {
+        const template = child[0] as AnyConfigNode;
+        const listConfig = child.length > 1 ? (child[1] as ListConfig) : undefined;
+        const listState: ListState = {
+          template,
+          listConfig,
+          itemIds: [],
+          version: 0,
+          initialItemIds: [],
+        };
+        listStates.set(child, listState);
+        // Регистрируем поля template как обычную группу (path = ключ списка)
+        registerNodes(template, undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates);
+      }
+      continue;
+    }
 
     if ("value" in child) {
       // Листовой узел: запоминаем, ставим начальный value (computed позже)
@@ -130,6 +150,6 @@ export function registerNodes<TNode extends AnyConfigNode>(
     }
 
     // Рекурсия в дочерние
-    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap, translate);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates);
   }
 }

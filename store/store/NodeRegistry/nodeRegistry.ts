@@ -3,7 +3,7 @@ import { registerNodes, type GroupLeafMap, type LeafEntry, type InitialSlice } f
 import { buildNodeMaps } from "../nodeMap";
 import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
-import type { AnyConfigNode, TranslateFn } from "../types";
+import type { AnyConfigNode, TranslateFn, ListState } from "../types";
 import { isLeaf, isGroup, isListNode } from "./nodeUtils";
 
 /**
@@ -35,6 +35,7 @@ export class NodeRegistry {
       "",
       this.groupLeafMap,
       translate,
+      this.listStates,
     );
 
     // Фаза 2: инициализируем submitting/dirty/revalidate для групп
@@ -82,6 +83,13 @@ export class NodeRegistry {
    * Гарантирует стабильность ссылок (===) на proxy.
    */
   readonly proxyCache: WeakMap<object, unknown> = new WeakMap();
+
+  /**
+   * ListState для каждого ListNode в конфиге.
+   * Ключ — объект-массив конфига (сам ListNode).
+   * Заполняется при registerNodes (Phase 2A).
+   */
+  readonly listStates: WeakMap<object, ListState> = new WeakMap();
 
   // ─── Навигация ───────────────────────────────────────────────────────────
 

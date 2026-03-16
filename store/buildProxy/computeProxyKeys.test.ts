@@ -111,4 +111,37 @@ describe("computeProxyKeys", () => {
       expect(withState).toEqual(withoutState);
     });
   });
+
+  describe("list node (array)", () => {
+    it("returns exactly LIST_SPREAD_KEYS for array of length 1", () => {
+      const template = { id: { value: "" }, name: { value: "" } };
+      const listNode = [template];
+      const keys = computeProxyKeys(listNode);
+      expect(keys).toEqual(["items", "length", "loading", "add", "remove", "getById", "setItems", "map"]);
+    });
+
+    it("returns exactly LIST_SPREAD_KEYS for array of length 2", () => {
+      const template = { id: { value: "" } };
+      const listConfig = { resolve: { resolver: async () => [] } };
+      const listNode = [template, listConfig];
+      const keys = computeProxyKeys(listNode);
+      expect(keys).toEqual(["items", "length", "loading", "add", "remove", "getById", "setItems", "map"]);
+    });
+
+    it("does not include FIELD_STATE_PROPS", () => {
+      const listNode = [{ id: { value: "" } }];
+      const keys = computeProxyKeys(listNode);
+      expect(keys).not.toContain("value");
+      expect(keys).not.toContain("isVisible");
+      expect(keys).not.toContain("label");
+    });
+
+    it("does not include GROUP_SPREAD_KEYS like submit or dirty", () => {
+      const listNode = [{ id: { value: "" } }];
+      const keys = computeProxyKeys(listNode);
+      expect(keys).not.toContain("submit");
+      expect(keys).not.toContain("dirty");
+      expect(keys).not.toContain("submitting");
+    });
+  });
 });

@@ -262,18 +262,66 @@ export interface GroupProxyNode {
   setValues(patch: Record<string, unknown>): void;
 }
 
+// ─── Типы списков ────────────────────────────────────────────────────────────
+
+/**
+ * Конфигурация уровня списка (второй элемент ListNode-массива).
+ * Resolver и прочие опции уровня списка добавляются здесь.
+ */
+export interface ListConfig {
+  resolve?: Record<string, unknown>;
+}
+
+/**
+ * Внутреннее состояние списка. Хранится в NodeRegistry.listStates,
+ * ключ — объект-массив конфига (сам ListNode).
+ */
+export interface ListState {
+  /** Шаблон элемента — describes поля для отображения. array[0]. */
+  template: object;
+  /** Конфигурация списка (resolve и т.д.). array[1] — опционально. */
+  listConfig?: ListConfig;
+  /** ID сущностей, входящих в список (в порядке отображения). */
+  itemIds: string[];
+  /** Инкрементируется при add/remove/setItems/resolve — для tracking. */
+  version: number;
+  /** Сохраняется при init/resolve — для dirty-tracking по составу. */
+  initialItemIds: string[];
+}
+
+/**
+ * Прокси-интерфейс для списка (ListNode в конфиге).
+ * TItem — тип одного элемента (EntityProjectionProxy в Phase 2B).
+ */
+export interface ListProxyNode<TItem> {
+  readonly items: ReadonlyArray<TItem>;
+  readonly length: number;
+  readonly loading: boolean;
+  add(id: string): void;
+  add(values: Record<string, unknown>): TItem;
+  remove(id: string): void;
+  getById(id: string): TItem | undefined;
+  setItems(ids: string[]): void;
+  map<R>(fn: (item: TItem, index: number, id: string) => R): R[];
+  [Symbol.iterator](): Iterator<TItem>;
+}
+
 /**
  * Рекурсивно конвертирует узел конфига в его прокси-тип:
- * - Листовой узел (есть `value`) → `FieldProxyNode<TValue>`
- * - Групповой узел              → `GroupProxyNode & { дочерние поля… }`
+ * - ListNode (массив `[template, listConfig?]`) → `ListProxyNode<...>`
+ * - Листовой узел (есть `value`)               → `FieldProxyNode<TValue>`
+ * - Групповой узел                             → `GroupProxyNode & { дочерние поля… }`
  */
-type ConfigNodeToProxy<T> = T extends { value: any }
-  ? FieldProxyNode<ExtractNodeValue<T>>
-  : T extends Record<string, any>
-    ? GroupProxyNode & {
-        [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
-      }
-    : never;
+type ConfigNodeToProxy<T> =
+  T extends readonly [infer Item, ...any[]]
+    ? ListProxyNode<ConfigNodeToProxy<Item>>
+    : T extends { value: any }
+      ? FieldProxyNode<ExtractNodeValue<T>>
+      : T extends Record<string, any>
+        ? GroupProxyNode & {
+            [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
+          }
+        : never;
 
 /**
  * Полный прокси для конфига формы: каждый ключ маппируется в прокси-узел.
@@ -290,11 +338,13 @@ export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & 
  * Служебные ключи (validate, formatter, …) — пропускаются.
  */
 export type ExtractValues<T> = {
-  [K in keyof T as K extends ConfigSkipKeys ? never : K]: T[K] extends { value: any }
-    ? ExtractNodeValue<T[K]>
-    : T[K] extends Record<string, any>
-      ? ExtractValues<T[K]>
-      : never;
+  [K in keyof T as K extends ConfigSkipKeys ? never : K]: T[K] extends readonly [infer Item, ...any[]]
+    ? Array<ExtractValues<Item>>
+    : T[K] extends { value: any }
+      ? ExtractNodeValue<T[K]>
+      : T[K] extends Record<string, any>
+        ? ExtractValues<T[K]>
+        : never;
 };
 
 // ─── Интерфейсы Store ────────────────────────────────────────────────────────
