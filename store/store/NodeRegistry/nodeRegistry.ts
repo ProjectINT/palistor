@@ -4,7 +4,7 @@ import { buildNodeMaps } from "../nodeMap";
 import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
 import type { AnyConfigNode, TranslateFn } from "../types";
-import { isLeaf, isGroup } from "./nodeUtils";
+import { isLeaf, isGroup, isListNode } from "./nodeUtils";
 
 /**
  * Реестр узлов конфига.
@@ -132,4 +132,36 @@ export class NodeRegistry {
 
   isLeaf = isLeaf;
   isGroup = isGroup;
+  isListNode = isListNode;
+
+  /**
+   * Зарегистрировать листовой узел, созданный в runtime (например, entity leaf при store.set()).
+   *
+   * Обновляет все WeakMap-ы реестра и добавляет запись в `leafNodes`,
+   * чтобы `bumpLeafVersions` (NotificationHub) автоматически захватил новый узел.
+   *
+   * @param node    Объект-узел (`{ value }`)
+   * @param path    Абсолютный dot-путь, e.g. "users.0.name"
+   * @param parent  Непосредственный родительский объект-узел
+   * @param state   Начальное FieldState
+   */
+  registerDynamicLeaf(
+    node: object,
+    path: string,
+    parent: object,
+    state: import("../../compute/index").FieldState,
+  ): void {
+    const entry: import("../registerNodes").LeafEntry = { node: node as import("../types").AnyConfigNode, path };
+    this.leafNodes.push(entry);
+    this.nodeState.set(node, state);
+    this.nodePaths.set(node, path);
+    this.nodeParents.set(node, parent);
+    // groupLeafMap: добавить в лист-список родителя
+    let list = this.groupLeafMap.get(parent);
+    if (!list) {
+      list = [];
+      this.groupLeafMap.set(parent, list);
+    }
+    list.push(entry);
+  }
 }

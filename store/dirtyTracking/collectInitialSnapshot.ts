@@ -19,6 +19,7 @@ export function collectInitialSnapshot(
 
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
+    if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
 
     if ("value" in child) {
       const initial = initialValueMap.get(child);

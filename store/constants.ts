@@ -79,3 +79,18 @@ export const GROUP_SPREAD_KEYS: string[] = [
   "submit",
   "reset",
 ];
+
+/**
+ * Статический набор ключей для proxy списка (ListNode).
+ * Возвращается из computeProxyKeys вместо GROUP_SPREAD_KEYS, когда узел — массив.
+ */
+export const LIST_SPREAD_KEYS: string[] = [
+  "items",
+  "length",
+  "loading",
+  "add",
+  "remove",
+  "getById",
+  "setItems",
+  "map",
+];

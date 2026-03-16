@@ -37,6 +37,7 @@ export function initGroupSubmitting(
     if (CONFIG_PROPS.has(key)) continue;
     const child = node[key];
     if (!child || typeof child !== "object" || "value" in (child as object)) continue;
+    if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
     initGroupSubmitting(child as AnyConfigNode, nodeState);
   }
 }

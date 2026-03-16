@@ -29,6 +29,7 @@ export function applyPatch(
     const child = configNode[key] as AnyConfigNode | undefined;
 
     if (!child || typeof child !== "object") continue;
+    if (Array.isArray(child)) continue; // ListNode — пропускаем, обновляется через store.set()
 
     const patchValue = patch[key];
 
