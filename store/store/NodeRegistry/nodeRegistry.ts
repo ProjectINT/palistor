@@ -164,4 +164,29 @@ export class NodeRegistry {
     }
     list.push(entry);
   }
+
+  /**
+   * Снять регистрацию листового узла (например, при удалении entity).
+   *
+   * Удаляет запись из `leafNodes` и из `groupLeafMap` родителя.
+   * WeakMap-записи (nodeState, nodePaths, nodeParents) утилизируются GC автоматически.
+   *
+   * @param node  Листовой объект-узел
+   */
+  unregisterLeaf(node: object): void {
+    // Удалить из leafNodes
+    const idx = this.leafNodes.findIndex((e) => e.node === node);
+    if (idx !== -1) {
+      this.leafNodes.splice(idx, 1);
+    }
+    // Удалить из groupLeafMap родителя
+    const parent = this.nodeParents.get(node);
+    if (parent) {
+      const list = this.groupLeafMap.get(parent);
+      if (list) {
+        const listIdx = list.findIndex((e) => e.node === node);
+        if (listIdx !== -1) list.splice(listIdx, 1);
+      }
+    }
+  }
 }

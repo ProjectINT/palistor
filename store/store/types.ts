@@ -386,4 +386,19 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * Используется для подлива серверных данных или bulk-изменений из React.
    */
   setValues(patch: DeepPartialValues<ExtractValues<TConfig>>): void;
+
+  /**
+   * Создать или обновить entity (или массив entities) в реестре.
+   * - Если entity с таким id не существует — создаётся, leaf-ноды регистрируются.
+   * - Если существует — рекурсивный merge; изменённые leaf-ноды уведомляются.
+   * - Batch-режим: массив обрабатывается одним recompute + notifyChanged.
+   */
+  set(data: import("../entityRegistry").EntityData | import("../entityRegistry").EntityData[]): void;
+
+  /**
+   * Удалить entity из реестра по ID.
+   * Очищает leaf-ноды, bindings и resolvedCache. Уведомляет подписчиков.
+   * No-op если entity не существует.
+   */
+  delete(id: string): void;
 }

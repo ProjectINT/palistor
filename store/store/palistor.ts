@@ -18,6 +18,8 @@ import { NodeRegistry } from "./NodeRegistry/nodeRegistry";
 import { ServiceRegistry } from "./serviceRegistry";
 import { DirtyTracker } from "./dirtyTracker";
 import { GroupDepsMap } from "./groupDepsMap";
+import { EntityRegistry } from "../entityRegistry";
+import type { EntityData } from "../entityRegistry";
 
 import type {
   AnyConfigNode,
@@ -58,6 +60,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   /** @internal Карта межгрупповых зависимостей. */
   readonly groupDepsMap: GroupDepsMap;
+
+  /** @internal Реестр entity-объектов (Phase 1B+). */
+  readonly entityRegistry: EntityRegistry;
 
   /** @internal Система уведомлений: версии, подписки, post-notify hook. */
   readonly hub: NotificationHub;
@@ -110,6 +115,10 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     this.dirty = new DirtyTracker();
     this.values = buildValuesCache(rootConfig, nodeState);
+
+    // ─── EntityRegistry ──────────────────────────────────────────────────────
+
+    this.entityRegistry = new EntityRegistry();
 
     // ─── GroupDepsMap + первый recompute ──────────────────────────────────────
 
@@ -269,5 +278,147 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   setValues(patch: DeepPartialValues<ExtractValues<TConfig>>): void {
     this.setValuesNode(this.rootConfig, patch as Record<string, unknown>);
+  }
+
+  /**
+   * Создать или обновить entity (или массив entities) в реестре.
+   *
+   * - Если entity с таким id не существует — создаётся и регистрируются leaf-ноды.
+   * - Если существует — рекурсивный merge; обновлённые leaf-ноды маркируются как изменённые.
+   * - Batch-режим: массив entities обрабатывается одним recompute + notifyChanged.
+   */
+  set(data: EntityData | EntityData[]): void {
+    const items = Array.isArray(data) ? data : [data];
+    const changed = new Set<object>();
+
+    for (const item of items) {
+      const entityNode = this.entityRegistry.upsert(item);
+      const entityId = entityNode.id.value as string;
+      const entityPrefix = `_entity_.${entityId}`;
+      this._walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed);
+    }
+
+    if (changed.size === 0) return;
+    const recomputed = this.recompute(changed);
+    // Merge original changed: entity leaves have no computed props,
+    // so recomputed may be empty — still need to notify about the entity values.
+    for (const n of changed) recomputed.add(n);
+    this.notifyChanged(recomputed);
+  }
+
+  /**
+   * Удалить entity из реестра по ID.
+   *
+   * - Удаляет leaf-ноды entity из NodeRegistry (leafNodes, groupLeafMap).
+   * - Очищает bindings и resolvedCache.
+   * - Уведомляет подписчиков.
+   *
+   * No-op если entity не существует.
+   */
+  delete(id: string): void {
+    const entityNode = this.entityRegistry.get(id);
+    if (!entityNode) return;
+
+    // Собрать все leaf-ноды entity
+    const deletedLeaves = new Set<object>();
+    this._collectEntityLeaves(entityNode, deletedLeaves);
+
+    // Удалить leaf-ноды из NodeRegistry (предотвращает утечку памяти)
+    for (const leaf of deletedLeaves) {
+      this.nodes.unregisterLeaf(leaf);
+    }
+
+    // Удалить entity из реестра (очищает bindings + resolvedCache)
+    this.entityRegistry.delete(id);
+
+    // Уведомить подписчиков
+    this.notifyChanged(deletedLeaves);
+  }
+
+  // ─── Приватные helpers для entity ────────────────────────────────────────
+
+  /**
+   * Рекурсивный обход entity node: регистрирует новые leaf-ноды через
+   * `registerDynamicLeaf` и собирает изменённые в `changed`.
+   *
+   * - Новые leaf-ноды (не в nodeState): регистрируются + добавляются в changed.
+   * - Существующие leaf-ноды с изменившимся value: обновляют state.value + в changed.
+   * - Существующие leaf-ноды с тем же value: игнорируются.
+   *
+   * @param node    Текущий узел entity для обхода
+   * @param prefix  Dot-путь текущего узла (e.g. "_entity_.u1")
+   * @param parent  Родительский объект (для регистрации leaf-нод)
+   * @param changed Множество изменённых узлов (накапливается)
+   */
+  private _walkAndSyncEntityNode(
+    node: Record<string, unknown>,
+    prefix: string,
+    parent: object,
+    changed: Set<object>,
+  ): void {
+    // Регистрируем path группового узла для корректной работы getNodeGroupPath
+    if (!this.nodes.nodePaths.has(parent)) {
+      this.nodes.nodePaths.set(parent, prefix);
+    }
+
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (!child || typeof child !== "object") continue;
+
+      const childObj = child as object;
+      const childPath = `${prefix}.${key}`;
+
+      if ("value" in childObj) {
+        // Листовой узел
+        const leaf = childObj as { value: unknown };
+        if (!this.nodes.nodeState.has(childObj)) {
+          // Новый leaf — регистрируем
+          this.nodes.registerDynamicLeaf(childObj, childPath, parent, {
+            value: leaf.value,
+            isVisible: true,
+            isRequired: false,
+            isDisabled: false,
+            isReadOnly: false,
+            dirty: false,
+            revalidate: false,
+          });
+          changed.add(childObj);
+        } else {
+          // Существующий leaf — обнаруживаем изменение
+          const state = this.nodes.nodeState.get(childObj)!;
+          if (state.value !== leaf.value) {
+            state.value = leaf.value;
+            changed.add(childObj);
+          }
+        }
+      } else {
+        // Групповой узел — рекурсия
+        this._walkAndSyncEntityNode(
+          child as Record<string, unknown>,
+          childPath,
+          childObj,
+          changed,
+        );
+      }
+    }
+  }
+
+  /**
+   * Рекурсивно собрать все leaf-ноды из entity node tree.
+   * Используется в `delete()` для очистки NodeRegistry.
+   */
+  private _collectEntityLeaves(
+    node: Record<string, unknown>,
+    result: Set<object>,
+  ): void {
+    for (const key of Object.keys(node)) {
+      const child = node[key];
+      if (!child || typeof child !== "object") continue;
+      if ("value" in (child as object)) {
+        result.add(child as object);
+      } else {
+        this._collectEntityLeaves(child as Record<string, unknown>, result);
+      }
+    }
   }
 }
