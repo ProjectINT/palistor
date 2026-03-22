@@ -129,7 +129,7 @@ describe("buildNodeMaps — array guard", () => {
 // ─── buildValuesCache не ломается на ListNode ─────────────────────────────────
 
 describe("buildValuesCache — array guard", () => {
-  it("строит кеш для обычных полей, пропускает ListNode", () => {
+  it("строит кеш для обычных полей, инициализирует ListNode как []", () => {
     const config = makeConfigWithList1();
     const nameNode = (config as any).name;
     const nodeState = new WeakMap<object, FieldState>();
@@ -139,7 +139,8 @@ describe("buildValuesCache — array guard", () => {
     expect(() => { cache = buildValuesCache(config, nodeState); }).not.toThrow();
 
     expect(cache!.values.name).toBe("Alice");
-    expect(cache!.values.users).toBeUndefined();
+    // Phase 2B: list nodes are initialised as empty arrays (not undefined)
+    expect(cache!.values.users).toEqual([]);
   });
 });
 

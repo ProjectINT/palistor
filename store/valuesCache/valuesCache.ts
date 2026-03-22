@@ -33,7 +33,13 @@ export function buildValuesCache(
 
       const child = node[key] as AnyConfigNode;
       if (!child || typeof child !== "object") continue;
-      if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
+      if (Array.isArray(child)) {
+        // ListNode: register empty array in values + nodeSlot for later updates
+        const emptyArray: unknown[] = [];
+        target[key] = emptyArray;
+        nodeSlot.set(child as unknown as object, { parent: target, key });
+        continue;
+      }
 
       if ("value" in child) {
         target[key] = nodeState.get(child)?.value ?? "";

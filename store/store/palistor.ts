@@ -12,7 +12,7 @@ import { formatPatch } from "../writePipeline/writePipeline";
 import { NotificationHub } from "../init/createNotificationHub";
 import { ResolveManager } from "../init/createResolveManager";
 import type { NotifyFn } from "../resolvePipeline";
-import { buildValuesCache } from "../valuesCache/valuesCache";
+import { buildValuesCache, updateValuesCacheEntry } from "../valuesCache/valuesCache";
 import type { ValuesCache } from "../valuesCache/valuesCache";
 import { NodeRegistry } from "./NodeRegistry/nodeRegistry";
 import { ServiceRegistry } from "./serviceRegistry";
@@ -63,6 +63,13 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   /** @internal Реестр entity-объектов (Phase 1B+). */
   readonly entityRegistry: EntityRegistry;
+
+  /**
+   * @internal Plain POJO mirrors for each entity — used in valuesCache.values
+   * (list arrays) and nodeSlot for O(1) updates.
+   * Key: entityId, Value: plain object `{ id, field1, field2, ... }`.
+   */
+  readonly entityProjectionObjs: Map<string, Record<string, unknown>> = new Map();
 
   /** @internal Система уведомлений: версии, подписки, post-notify hook. */
   readonly hub: NotificationHub;
@@ -295,7 +302,15 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       const entityNode = this.entityRegistry.upsert(item);
       const entityId = entityNode.id.value as string;
       const entityPrefix = `_entity_.${entityId}`;
-      this._walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed);
+
+      // Get or create entity projection POJO (used in valuesCache list arrays)
+      let projectionObj = this.entityProjectionObjs.get(entityId);
+      if (!projectionObj) {
+        projectionObj = {};
+        this.entityProjectionObjs.set(entityId, projectionObj);
+      }
+
+      this._walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
     }
 
     if (changed.size === 0) return;
@@ -341,20 +356,22 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * Рекурсивный обход entity node: регистрирует новые leaf-ноды через
    * `registerDynamicLeaf` и собирает изменённые в `changed`.
    *
-   * - Новые leaf-ноды (не в nodeState): регистрируются + добавляются в changed.
-   * - Существующие leaf-ноды с изменившимся value: обновляют state.value + в changed.
-   * - Существующие leaf-ноды с тем же value: игнорируются.
+   * Также поддерживает entity projection POJO (projectionObj):
+   * - Новые leaf-ноды: регистрируют nodeSlot → projectionObj
+   * - Существующие leaf-ноды: обновляют через updateValuesCacheEntry
    *
-   * @param node    Текущий узел entity для обхода
-   * @param prefix  Dot-путь текущего узла (e.g. "_entity_.u1")
-   * @param parent  Родительский объект (для регистрации leaf-нод)
-   * @param changed Множество изменённых узлов (накапливается)
+   * @param node          Текущий узел entity для обхода
+   * @param prefix        Dot-путь текущего узла (e.g. "_entity_.u1")
+   * @param parent        Родительский объект (для регистрации leaf-нод)
+   * @param changed       Множество изменённых узлов (накапливается)
+   * @param projectionObj Plain POJO at the current nesting level for valuesCache
    */
   private _walkAndSyncEntityNode(
     node: Record<string, unknown>,
     prefix: string,
     parent: object,
     changed: Set<object>,
+    projectionObj?: Record<string, unknown>,
   ): void {
     // Регистрируем path группового узла для корректной работы getNodeGroupPath
     if (!this.nodes.nodePaths.has(parent)) {
@@ -382,22 +399,37 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
             dirty: false,
             revalidate: false,
           });
+          // Register nodeSlot so updateValuesCacheEntry keeps projectionObj in sync
+          if (projectionObj !== undefined) {
+            this.values.nodeSlot.set(childObj, { parent: projectionObj, key });
+            projectionObj[key] = leaf.value;
+          }
           changed.add(childObj);
         } else {
           // Существующий leaf — обнаруживаем изменение
           const state = this.nodes.nodeState.get(childObj)!;
           if (state.value !== leaf.value) {
             state.value = leaf.value;
+            // Update projectionObj via nodeSlot (O(1) through registered slot)
+            updateValuesCacheEntry(this.values, childObj, leaf.value);
             changed.add(childObj);
           }
         }
       } else {
         // Групповой узел — рекурсия
+        let nestedProjectionObj: Record<string, unknown> | undefined;
+        if (projectionObj !== undefined) {
+          if (!projectionObj[key] || typeof projectionObj[key] !== "object") {
+            projectionObj[key] = {};
+          }
+          nestedProjectionObj = projectionObj[key] as Record<string, unknown>;
+        }
         this._walkAndSyncEntityNode(
           child as Record<string, unknown>,
           childPath,
           childObj,
           changed,
+          nestedProjectionObj,
         );
       }
     }

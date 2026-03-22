@@ -6,6 +6,8 @@ import type { FieldState } from "../compute/index";
 import { computeProxyKeys } from "./computeProxyKeys";
 import { handleLazyResolve } from "./handleLazyResolve";
 import { initProxyCaches } from "./initProxyCaches";
+import { buildListProxy } from "./buildListProxy";
+import { isListNode } from "../store/NodeRegistry/nodeUtils";
 
 /** Возвращает закэшированное значение, создавая при первом обращении. */
 function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V): V {
@@ -43,6 +45,13 @@ export class ProxyBuilder {
   build(node: AnyConfigNode): any {
     const proxyCache = this.kernel.nodes.proxyCache;
     if (proxyCache.has(node)) return proxyCache.get(node);
+
+    // ── ListNode branch ─────────────────────────────────────────────────────
+    if (isListNode(node)) {
+      const listProxy = buildListProxy(node as unknown as unknown[], this.kernel);
+      proxyCache.set(node, listProxy);
+      return listProxy;
+    }
 
     const builder = this;
     const kernel = this.kernel;
