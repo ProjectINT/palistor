@@ -514,6 +514,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     templateNode: AnyConfigNode,
     entityProxy: object,
   ): Promise<SubmitResult> {
+    // Шаг 1: Найти entity в реестре. Если не найдена — ранний выход с ошибкой.
     const entityNode = this.entityRegistry.get(entityId);
     if (!entityNode) {
       return {
@@ -522,15 +523,21 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       };
     }
 
+    // Шаг 2: Получить (или создать) объект состояния привязки { loading, submitting }
+    // для пары (entityId, templateNode). Используется EntityProjectionProxy
+    // для отображения спиннера в UI.
     const bindingState = this._getEntityBindingState(entityId, templateNode as object);
     const entityNodeObj = entityNode as unknown as object;
 
-    // submitting: true → notify
+    // Шаг 3: Поднять флаг submitting и уведомить подписчиков (React перерендерит
+    // компоненты, привязанные к этой entity — например, кнопка покажет спиннер).
     bindingState.submitting = true;
     this.notifyChanged(new Set<object>([entityNodeObj]));
 
     try {
-      // Validate via template field rules
+      // Шаг 4: Валидация — рекурсивно обойти template-поля и вызвать validate()
+      // для каждого leaf-поля, у которого есть валидатор. Текущие значения
+      // берутся из nodeState entity.
       const errors: Array<{ path: string; message: string }> = [];
       this.collectEntityTemplateErrors(
         templateNode,
@@ -539,11 +546,14 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
         "",
       );
 
+      // Если есть ошибки валидации — вернуть их, не вызывая onSubmit.
       if (errors.length > 0) {
         return { success: false, errors };
       }
 
-      // Call onSubmit(thisForm, store)
+      // Шаг 5: Вызвать пользовательский onSubmit(entityProxy, store).
+      // entityProxy — это Proxy entity с template-правилами, store — сам Palistor.
+      // Обычно здесь выполняется API-запрос на сервер.
       let result: unknown;
       if (typeof templateNode.onSubmit === "function") {
         result = await (
@@ -554,7 +564,8 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
         )(entityProxy, this);
       }
 
-      // Call afterSubmit(result, { reset })
+      // Шаг 6: Вызвать afterSubmit(result, { reset }) — хук после успешного submit.
+      // reset для entity template — no-op (у entity нет встроенного сброса, в отличие от form).
       if (typeof templateNode.afterSubmit === "function") {
         const reset = () => void 0; // entity template has no built-in reset
         await (
@@ -567,7 +578,8 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
       return { success: true, result };
     } finally {
-      // submitting: false → notify
+      // Шаг 7 (always): Снять флаг submitting и уведомить подписчиков.
+      // finally гарантирует сброс даже при ошибке в onSubmit/afterSubmit.
       bindingState.submitting = false;
       this.notifyChanged(new Set<object>([entityNodeObj]));
     }
@@ -588,17 +600,24 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     const changed = new Set<object>();
 
     for (const item of items) {
+      // Создать новый EntityNode или обновить существующий (рекурсивный merge).
+      // Если item.id отсутствует — EntityRegistry сгенерирует временный _tmp_* id.
       const entityNode = this.entityRegistry.upsert(item);
       const entityId = entityNode.id.value as string;
+      // Все entity-ноды живут в namespace "_entity_." для изоляции от config-нод формы.
       const entityPrefix = `_entity_.${entityId}`;
 
-      // Get or create entity projection POJO (used in valuesCache list arrays)
+      // projectionObj — «зеркало» entity в виде plain POJO { id, field1, field2 }.
+      // Используется в valuesCache.values как элемент массива списка.
+      // Ссылочная идентичность POJO сохраняется между upsert-ами, меняются только значения.
       let projectionObj = this.entityProjectionObjs.get(entityId);
       if (!projectionObj) {
         projectionObj = {};
         this.entityProjectionObjs.set(entityId, projectionObj);
       }
 
+      // DFS-обход entity-дерева: зарегистрировать новые leaf-ноды
+      // или обнаружить изменения в существующих.
       this.walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
     }
 
@@ -612,10 +631,18 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * @internal
    */
   _syncListValuesCache(listNode: object): void {
+    // Найти «слот» в valuesCache для этого списка (пара { parent, key }).
+    // parent — родительский POJO-объект в valuesCache.values, key — имя поля.
     const slot = this.values.nodeSlot.get(listNode);
     if (!slot) return;
+
+    // listState хранит itemIds — упорядоченный массив entity ID текущего списка.
     const listState = this.nodes.listStates.get(listNode);
     if (!listState) return;
+
+    // Перестроить массив: заменить itemIds на соответствующие POJO-зеркала.
+    // Результат: valuesCache.values.users = [{ id: "u1", ... }, { id: "u2", ... }]
+    // Это тот же массив, на который ссылается proxy.users.value — React увидит обновление.
     slot.parent[slot.key] = listState.itemIds
       .map((id) => this.entityProjectionObjs.get(id))
       .filter((obj): obj is Record<string, unknown> => obj !== undefined);
@@ -642,23 +669,30 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     changed: Set<object>,
     projectionObj?: Record<string, unknown>,
   ): void {
-    // Регистрируем path группового узла для корректной работы getNodeGroupPath
+    // Зарегистрировать dot-path группового узла (e.g. "_entity_.u1", "_entity_.u1.address").
+    // nodePaths используется в compute-подсистеме для определения «группы» листа
+    // (getNodeGroupPath) и при таргетированном recompute.
     if (!this.nodes.nodePaths.has(parent)) {
       this.nodes.nodePaths.set(parent, prefix);
     }
 
     for (const key of Object.keys(node)) {
       const child = node[key];
+      // Пропускаем примитивы (не часть entity-дерева)
       if (!child || typeof child !== "object") continue;
 
       const childObj = child as object;
       const childPath = `${prefix}.${key}`;
 
       if ("value" in childObj) {
-        // Листовой узел
+        // ── Листовой узел (EntityLeafNode): { value: <текущее значение> } ──
         const leaf = childObj as { value: unknown };
         if (!this.nodes.nodeState.has(childObj)) {
-          // Новый leaf — регистрируем
+          // Первая встреча с этим leaf — зарегистрировать в NodeRegistry:
+          // - nodeState: хранит FieldState (value, isVisible, dirty, etc.)
+          // - nodePaths: маппинг node → dot-path
+          // - nodeParents: маппинг node → parent group
+          // Все entity leaf-ы всегда visible, не обязательны, не disabled.
           this.nodes.registerDynamicLeaf(childObj, childPath, parent, {
             value: leaf.value,
             isVisible: true,
@@ -668,24 +702,32 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
             dirty: false,
             revalidate: false,
           });
-          // Register nodeSlot so updateValuesCacheEntry keeps projectionObj in sync
+          // Привязать leaf к POJO-зеркалу через nodeSlot.
+          // При следующих updateValuesCacheEntry(node, newValue)
+          // значение в projectionObj обновится автоматически за O(1).
           if (projectionObj !== undefined) {
             this.values.nodeSlot.set(childObj, { parent: projectionObj, key });
             projectionObj[key] = leaf.value;
           }
           changed.add(childObj);
         } else {
-          // Существующий leaf — обнаруживаем изменение
+          // Leaf уже зарегистрирован — проверяем, изменилось ли значение.
+          // Это происходит при повторном upsert (обновление entity с сервера).
           const state = this.nodes.nodeState.get(childObj)!;
           if (state.value !== leaf.value) {
+            // Обновляем nodeState напрямую (без writePipeline — это raw-запись)
             state.value = leaf.value;
-            // Update projectionObj via nodeSlot (O(1) through registered slot)
+            // Обновить projectionObj через nodeSlot: O(1), не нужно искать POJO.
             updateValuesCacheEntry(this.values, childObj, leaf.value);
             changed.add(childObj);
           }
+          // Если значение не изменилось — leaf не попадёт в changed,
+          // подписчики не будут уведомлены (оптимизация).
         }
       } else {
-        // Групповой узел — рекурсия
+        // ── Групповой узел (EntityGroupNode): вложенный объект без "value" ──
+        // Например: address: { city: { value: "Moscow" } }
+        // Создаём вложенный POJO в projectionObj (если нужно) и рекурсируем.
         let nestedProjectionObj: Record<string, unknown> | undefined;
         if (projectionObj !== undefined) {
           if (!projectionObj[key] || typeof projectionObj[key] !== "object") {
@@ -716,8 +758,10 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       const child = node[key];
       if (!child || typeof child !== "object") continue;
       if ("value" in (child as object)) {
+        // Leaf-нода: объект с полем "value" → добавить в результат
         result.add(child as object);
       } else {
+        // Группа — рекурсивно обойти вложенные узлы
         this.collectEntityLeaves(child as Record<string, unknown>, result);
       }
     }
@@ -737,18 +781,26 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     parentPath: string,
   ): void {
     const translate = this.services.translate;
+    // Построить plain-объект значений entity — передаётся вторым аргументом
+    // в каждый validate(), чтобы валидатор мог проверять зависимости между полями.
+    // Пример: validate: (v, vals) => vals.password !== vals.confirmPassword ? "Mismatch" : undefined
     const entityValues = this.buildEntityValuesForTemplate(entityNode);
 
     for (const key of Object.keys(templateNode)) {
+      // Пропустить служебные ключи конфига (resolve, deps, onChange, formatter, etc.)
       if (CONFIG_PROPS.has(key)) continue;
       const templateField = (templateNode as Record<string, unknown>)[key];
       if (!templateField || typeof templateField !== "object") continue;
 
+      // Формируем dot-path для сообщения об ошибке (e.g. "address.city")
       const path = parentPath ? `${parentPath}.${key}` : key;
 
       if ("value" in (templateField as object)) {
-        // Leaf field — run validate if present
+        // Leaf-поле template — проверяем, есть ли validate() функция
         if (typeof (templateField as Record<string, unknown>).validate === "function") {
+          // Извлечь текущее значение из entity. Приоритет:
+          // 1. nodeState (актуальное значение после write pipeline)
+          // 2. fallback на entityField.value (если node ещё не зарегистрирован)
           const entityField = entityNode[key];
           const currentValue =
             entityField && typeof entityField === "object"
@@ -759,6 +811,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
                 )?.value ?? (entityField as { value: unknown }).value
               : undefined;
 
+          // Вызвать validate(currentValue, allEntityValues, translateFn).
+          // Если возвращает строку — это сообщение об ошибке.
+          // undefined / false = поле валидно.
           const result = (
             (templateField as Record<string, unknown>).validate as (
               v: unknown,
@@ -770,7 +825,8 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
           if (result) errors.push({ path, message: result });
         }
       } else {
-        // Group — recurse
+        // Группа template — рекурсия в соответствующий вложенный узел entity.
+        // Template и entity должны иметь одинаковую структуру вложенности.
         const entityField = entityNode[key];
         if (entityField && typeof entityField === "object") {
           this.collectEntityTemplateErrors(
@@ -793,15 +849,18 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   private buildEntityValuesForTemplate(
     entityNode: Record<string, unknown>,
   ): Record<string, unknown> {
+    // Результат: plain-объект вида { id: "u1", name: "Alice", address: { city: "Moscow" } }
     const values: Record<string, unknown> = {};
     for (const key of Object.keys(entityNode)) {
       const field = entityNode[key];
       if (field && typeof field === "object") {
         if ("value" in field) {
+          // Leaf: читаем value из nodeState (актуальное), fallback на field.value
           values[key] =
             (this.nodes.nodeState.get(field as object) as { value: unknown } | undefined)?.value ??
             (field as { value: unknown }).value;
         } else {
+          // Группа: рекурсивно собрать вложенный объект
           values[key] = this.buildEntityValuesForTemplate(field as Record<string, unknown>);
         }
       }
