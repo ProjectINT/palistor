@@ -152,6 +152,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       notify,
       initialValueMap: this.dirty.initialValueMap,
       valuesCache: this.values,
+      store: this,
       listStates: this.nodes.listStates,
       setEntitiesRaw: (items) => this._setEntitiesRaw(items),
       syncListValuesCache: (listNode) => this._syncListValuesCache(listNode),

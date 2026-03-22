@@ -1,4 +1,4 @@
-import { CONFIG_NODE, CONFIG_PROPS } from "../constants";
+import { CONFIG_NODE, CONFIG_PROPS, ENTITY_ID, STORE_REF } from "../constants";
 import type { AnyConfigNode } from "../store/types";
 import type { EntityNode, EntityLeafNode, EntityGroupNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
@@ -318,6 +318,20 @@ export function buildEntityProjectionProxy(
     get(_target, key: string | symbol) {
       // Transparent for tracking proxy
       if (key === CONFIG_NODE) return entityNode;
+
+      // Expose entity ID and store for useForm(entity, templateSelector) overload
+      if (key === ENTITY_ID) {
+        if ("id" in entityNode) {
+          const idLeaf = (entityNode as EntityNode).id;
+          return (
+            (kernel.nodes.nodeState.get(idLeaf as object) as { value: unknown } | undefined)
+              ?.value ?? idLeaf.value
+          );
+        }
+        return undefined;
+      }
+      if (key === STORE_REF) return kernel;
+
       if (typeof key === "symbol") return undefined;
 
       // id is always exposed directly as value (not as a leaf proxy)

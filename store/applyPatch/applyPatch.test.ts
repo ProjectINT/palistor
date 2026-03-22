@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { applyPatch } from "./applyPatch";
 import type { FieldState } from "../compute";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 

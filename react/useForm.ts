@@ -44,15 +44,22 @@
  *   - useForm(store)        — основной вариант, передаём ProxyStore
  *   - useForm(proxySubtree) — принимает tracking proxy поддерево (из пропса),
  *     создаёт **независимый** tracking для этого компонента
+ *   - useForm(entityProxy, templateSelector) — привязка entity к template.
+ *     entityProxy из list.items/list.getById. templateSelector = (s) => s.editForm.
+ *     Вызывает entityRegistry.bind на mount, unbind на unmount.
  */
 
-import { useSyncExternalStore, useCallback, useRef, useMemo } from "react";
+import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
 import type { ProxyStore, ConfigProxy } from "../store/store";
 import {
   createTrackingProxy,
   unwrapTrackingProxy,
   type TrackingRefs,
 } from "./createTrackingProxy";
+import { ENTITY_ID, STORE_REF, CONFIG_NODE } from "../store/constants";
+import { buildEntityProjectionProxy } from "../store/buildProxy/buildEntityProjectionProxy";
+import type { Palistor } from "../store/store/palistor";
+import type { AnyConfigNode } from "../store/store/types";
 
 /**
  * Извлечь store и sourceProxy из аргумента useForm.
@@ -86,17 +93,104 @@ function resolveInput<TConfig extends Record<string, any>>(
  */
 export function useForm<TConfig extends Record<string, any>>(
   input: ProxyStore<TConfig> | ConfigProxy<TConfig>,
-): ConfigProxy<TConfig> {
-  // ─── Resolve input (store vs tracking proxy subtree) ─────────────────────
+): ConfigProxy<TConfig>;
 
-  const { store, sourceProxy } = useMemo(
-    () => resolveInput<TConfig>(input),
-    [input],
+/**
+ * Перегрузка: привязка entity к template для отображения/редактирования.
+ *
+ * @param entity           — EntityProjectionProxy из list.items или list.getById
+ * @param templateSelector — функция выбора template: (store) => store.editUserForm
+ * @returns tracking proxy entity через template (поля template + значения entity)
+ *
+ * Lifecycle:
+ *   - mount: entityRegistry.bind(entityId, templateNode)
+ *   - unmount: entityRegistry.unbind(entityId, templateNode)
+ *
+ * Resolved cache (3A.4): при повторном открытии той же entity+template
+ * `isResolved` возвращает true → resolve будет пропущен (Phase 3B).
+ */
+export function useForm(
+  entity: object,
+  templateSelector: (store: any) => any,
+): any;
+
+export function useForm(
+  input: any,
+  templateSelector?: (store: any) => any,
+): any {
+  // ─── Detect entity mode ──────────────────────────────────────────────────
+
+  const isEntityMode = typeof templateSelector === "function";
+
+  // ─── Entity mode: build metadata once and store in a ref ─────────────────
+  // Must happen before any hooks to ensure all hooks called unconditionally.
+
+  interface EntityMeta {
+    entityId: string;
+    entityStore: Palistor<any>;
+    templateNode: AnyConfigNode;
+    entityProxy: object;
+  }
+
+  const entityMetaRef = useRef<EntityMeta | null>(null);
+
+  if (isEntityMode && !entityMetaRef.current) {
+    const entityId = (input as any)[ENTITY_ID] as string | undefined;
+    const entityStore = (input as any)[STORE_REF] as Palistor<any> | undefined;
+
+    if (!entityId || !entityStore) {
+      throw new Error(
+        "useForm: first argument must be an entity proxy (from list.items or list.getById) " +
+        "when templateSelector is provided.",
+      );
+    }
+
+    const templateProxy = templateSelector(entityStore.proxy);
+    const templateNode = (templateProxy as any)[CONFIG_NODE] as AnyConfigNode;
+
+    if (!templateNode) {
+      throw new Error("useForm: templateSelector must return a group proxy node.");
+    }
+
+    const entityNode = entityStore.entityRegistry.get(entityId);
+    if (!entityNode) {
+      throw new Error(`useForm: entity "${entityId}" not found in registry.`);
+    }
+
+    const entityProxy = buildEntityProjectionProxy(
+      entityNode,
+      templateNode,
+      entityStore,
+      new WeakMap(),
+      new WeakMap(),
+    );
+
+    entityMetaRef.current = { entityId, entityStore, templateNode, entityProxy };
+  }
+
+  // ─── Standard mode: resolve store + sourceProxy ──────────────────────────
+
+  const { store: stdStore, sourceProxy: stdSourceProxy } = useMemo(
+    () =>
+      isEntityMode
+        ? { store: null as any, sourceProxy: null as any }
+        : resolveInput<any>(input),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [input, isEntityMode],
   );
+
+  // ─── Unified store + sourceProxy ────────────────────────────────────────
+
+  const store: ProxyStore<any> = isEntityMode
+    ? entityMetaRef.current!.entityStore
+    : stdStore;
+
+  const sourceProxy: any = isEntityMode
+    ? entityMetaRef.current!.entityProxy
+    : stdSourceProxy;
 
   // ─── Tracking state (per-component, стабильные ref-ы) ────────────────────
 
-  /** Tracked nodes + их версии на момент первого чтения */
   const refsRef = useRef<TrackingRefs | null>(null);
   if (!refsRef.current) {
     refsRef.current = {
@@ -107,28 +201,40 @@ export function useForm<TConfig extends Record<string, any>>(
   }
   const refs = refsRef.current;
 
-  /** Кэш tracking proxy объектов (по source proxy → tracking proxy) */
   const cacheRef = useRef<WeakMap<object, object> | null>(null);
   if (!cacheRef.current) cacheRef.current = new WeakMap();
 
-  /**
-   * Последний принятый snapshot. Меняется только когда хотя бы одна
-   * из tracked нод изменила версию.
-   */
   const snapshotRef = useRef(0);
 
-  // ─── Tracking proxy (мемоизирован по store + sourceProxy) ────────────────
+  // ─── Tracking proxy ───────────────────────────────────────────────────────
 
   const trackingProxy = useMemo(
-    () =>
-      createTrackingProxy(
-        sourceProxy,
-        refs,
-        store,
-        cacheRef.current!,
-      ) as ConfigProxy<TConfig>,
+    () => createTrackingProxy(sourceProxy, refs, store, cacheRef.current!),
     [store, sourceProxy, refs],
   );
+
+  // ─── Bind/unbind lifecycle (entity mode only) ────────────────────────────
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isEntityMode) return;
+    const meta = entityMetaRef.current;
+    if (!meta) return;
+
+    // 3A.3: bind entity to template on mount
+    meta.entityStore.entityRegistry.bind(meta.entityId, meta.templateNode);
+
+    // 3A.4: resolved cache — in Phase 3B, if !isResolved → trigger resolve.
+    // Here we just note that the check exists:
+    // const alreadyResolved = meta.entityStore.entityRegistry.isResolved(
+    //   meta.entityId, meta.templateNode
+    // );
+
+    return () => {
+      // 3A.3: unbind entity from template on unmount
+      meta.entityStore.entityRegistry.unbind(meta.entityId, meta.templateNode);
+    };
+  }, []); // bind once on mount, unbind on unmount
 
   // ─── useSyncExternalStore ────────────────────────────────────────────────
 
@@ -140,19 +246,10 @@ export function useForm<TConfig extends Record<string, any>>(
   const getSnapshot = useCallback(() => {
     const { accessed, lastVersions } = refs;
 
-    // Компонент не читал ни одного FIELD_STATE_PROP.
-    // Два сценария:
-    //   1. hasNavigated = true  → компонент только навигировал (form.email,
-    //      form.passport), но сам не читал value/isVisible/… → стабильный
-    //      snapshot → НЕ перерендериваемся (Parent-паттерн с пропсами).
-    //   2. hasNavigated = false → компонент вообще ничего не трогал
-    //      (renderHook без JSX) → fallback на глобальную версию →
-    //      перерендериваемся при любом изменении.
     if (accessed.size === 0) {
       return refs.hasNavigated ? snapshotRef.current : store.getVersion();
     }
 
-    // Проверяем, изменилась ли хотя бы одна tracked нода
     let changed = false;
     for (const node of accessed) {
       const currentVersion = store.getNodeVersion(node);
@@ -163,7 +260,6 @@ export function useForm<TConfig extends Record<string, any>>(
     }
 
     if (changed) {
-      // Принимаем новый snapshot и обновляем сохранённые версии
       snapshotRef.current = store.getVersion();
       for (const node of accessed) {
         lastVersions.set(node, store.getNodeVersion(node));

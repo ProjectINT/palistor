@@ -74,8 +74,8 @@ export class SubmitPipeline {
       let result: unknown;
       if (typeof groupNode.onSubmit === "function") {
         result = await (
-          groupNode.onSubmit as (v: Record<string, unknown>) => Promise<unknown> | unknown
-        )(values);
+          groupNode.onSubmit as (v: Record<string, unknown>, store: unknown) => Promise<unknown> | unknown
+        )(values, this.kernel);
       }
 
       // 7. afterSubmit

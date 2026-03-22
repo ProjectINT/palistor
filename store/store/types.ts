@@ -142,7 +142,7 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
    */
   beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
   /** Callback отправки формы. Вызывается после валидации в submit pipeline. */
-  onSubmit?: (values: TValues) => Promise<unknown> | unknown;
+  onSubmit?: (thisForm: TValues, store: any) => Promise<unknown> | unknown;
   /** Пост-обработка после успешного onSubmit. */
   afterSubmit?: (
     result: unknown,

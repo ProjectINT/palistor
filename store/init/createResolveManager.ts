@@ -28,6 +28,8 @@ export interface ResolveManagerDeps {
   /** Initial value snapshot — passed to resolve pipeline for dirty tracking. */
   initialValueMap: WeakMap<object, unknown>;
   valuesCache: ValuesCache;
+  /** The ProxyStore instance — passed as second argument to resolver. */
+  store: any;
   // ─── Phase 2C: list-specific ────────────────────────────────────────────
   /** All ListState objects from NodeRegistry (for list resolve dispatch). */
   listStates: WeakMap<object, ListState>;
@@ -67,7 +69,7 @@ export class ResolveManager {
   constructor(deps: ResolveManagerDeps) {
     const {
       rootConfig, nodeState, recompute, notifyChanged, notify,
-      initialValueMap, valuesCache,
+      initialValueMap, valuesCache, store,
       listStates, setEntitiesRaw, syncListValuesCache,
     } = deps;
 
@@ -85,6 +87,7 @@ export class ResolveManager {
       getValues: () => structuredClone(valuesCache.values) as Record<string, unknown>,
       initialValueMap,
       valuesCache,
+      store,
     };
 
     this.listResolveDeps = {
