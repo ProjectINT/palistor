@@ -20,6 +20,7 @@ import { DirtyTracker } from "./dirtyTracker";
 import { GroupDepsMap } from "./groupDepsMap";
 import { EntityRegistry } from "../entityRegistry";
 import type { EntityData } from "../entityRegistry";
+import { CONFIG_PROPS } from "../constants";
 
 import type {
   AnyConfigNode,
@@ -298,6 +299,35 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   /**
+   * @internal Per-(entityId, templateNode) state tracking loading/submitting.
+   * Used by EntityProjectionProxy to expose loading/submitting flags.
+   */
+  private readonly _entityBindingStates = new Map<
+    string,
+    Map<object, { loading: boolean; submitting: boolean }>
+  >();
+
+  /**
+   * @internal Get or create entity binding state for (entityId, templateNode).
+   */
+  _getEntityBindingState(
+    entityId: string,
+    templateNode: object,
+  ): { loading: boolean; submitting: boolean } {
+    let byTemplate = this._entityBindingStates.get(entityId);
+    if (!byTemplate) {
+      byTemplate = new Map();
+      this._entityBindingStates.set(entityId, byTemplate);
+    }
+    let state = byTemplate.get(templateNode);
+    if (!state) {
+      state = { loading: false, submitting: false };
+      byTemplate.set(templateNode, state);
+    }
+    return state;
+  }
+
+  /**
    * Создать или обновить entity (или массив entities) в реестре.
    *
    * - Если entity с таким id не существует — создаётся и регистрируются leaf-ноды.
@@ -381,6 +411,166 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     // Уведомить подписчиков
     this.notifyChanged(deletedLeaves);
+  }
+
+  /**
+   * Сбросить resolved-кэш для entity (все template или конкретный).
+   *
+   * - `invalidate(id)` — очистить весь кэш для entity
+   * - `invalidate(id, templateNode)` — очистить только для конкретной пары
+   *
+   * При следующем mount useForm(entity, template) resolve будет перезапущен.
+   */
+  invalidate(id: string, templateNode?: object): void {
+    this.entityRegistry.clearResolved(id, templateNode);
+  }
+
+  /**
+   * Запустить resolve для entity-template binding.
+   * Вызывается из useForm(entity, templateSelector) при mount, если !isResolved.
+   *
+   * - Проверяет наличие templateNode.resolve.resolver
+   * - Deduplication: пропускает если уже loading
+   * - loading: true → resolver(entityProxy, store) → upsert result → markResolved → loading: false
+   * - При ошибке: onError → loading: false
+   *
+   * @internal
+   */
+  triggerEntityTemplateResolve(
+    entityId: string,
+    templateNode: AnyConfigNode,
+    entityProxy: object,
+  ): void {
+    const resolve = templateNode.resolve as
+      | {
+          resolver?: (...args: unknown[]) => unknown;
+          onError?: (...args: unknown[]) => void;
+        }
+      | undefined;
+    if (!resolve || typeof resolve.resolver !== "function") return;
+
+    const entityNode = this.entityRegistry.get(entityId);
+    if (!entityNode) return;
+
+    const bindingState = this._getEntityBindingState(entityId, templateNode as object);
+    // Deduplication: already in-flight
+    if (bindingState.loading) return;
+
+    const entityNodeObj = entityNode as unknown as object;
+
+    // Set loading: true → notify
+    bindingState.loading = true;
+    this.notifyChanged(new Set<object>([entityNodeObj]));
+
+    void (async () => {
+      try {
+        const result = await resolve.resolver!(entityProxy, this);
+
+        bindingState.loading = false;
+
+        if (result && typeof result === "object") {
+          // Merge result into entity
+          const changed = this._setEntitiesRaw([result as EntityData]);
+          this.entityRegistry.markResolved(entityId, templateNode as object);
+          // Also mark entityNode as changed so loading state re-renders
+          changed.add(entityNodeObj);
+          const recomputed = this.recompute(changed);
+          for (const n of changed) recomputed.add(n);
+          this.notifyChanged(recomputed);
+        } else {
+          // Resolver returned nothing — mark resolved, still notify
+          this.entityRegistry.markResolved(entityId, templateNode as object);
+          this.notifyChanged(new Set<object>([entityNodeObj]));
+        }
+      } catch (err) {
+        bindingState.loading = false;
+        try {
+          (resolve.onError as ((e: unknown, ctx: { notify: NotifyFn }) => void) | undefined)?.(
+            err,
+            { notify: this.services.notify },
+          );
+        } catch {
+          // swallow errors in onError
+        }
+        this.notifyChanged(new Set<object>([entityNodeObj]));
+      }
+    })();
+  }
+
+  /**
+   * Submit entity через template.
+   * Вызывается из EntityProjectionProxy.submit().
+   *
+   * 1. submitting: true → notify
+   * 2. Валидация через template field rules (validate)
+   * 3. templateNode.onSubmit(entityProxy, store)
+   * 4. templateNode.afterSubmit(result, { reset })
+   * 5. submitting: false → notify
+   *
+   * @internal
+   */
+  async executeEntityTemplateSubmit(
+    entityId: string,
+    templateNode: AnyConfigNode,
+    entityProxy: object,
+  ): Promise<SubmitResult> {
+    const entityNode = this.entityRegistry.get(entityId);
+    if (!entityNode) {
+      return {
+        success: false,
+        errors: [{ path: "", message: `Entity "${entityId}" not found` }],
+      };
+    }
+
+    const bindingState = this._getEntityBindingState(entityId, templateNode as object);
+    const entityNodeObj = entityNode as unknown as object;
+
+    // submitting: true → notify
+    bindingState.submitting = true;
+    this.notifyChanged(new Set<object>([entityNodeObj]));
+
+    try {
+      // Validate via template field rules
+      const errors: Array<{ path: string; message: string }> = [];
+      this._collectEntityTemplateErrors(
+        templateNode,
+        entityNode as unknown as Record<string, unknown>,
+        errors,
+        "",
+      );
+
+      if (errors.length > 0) {
+        return { success: false, errors };
+      }
+
+      // Call onSubmit(thisForm, store)
+      let result: unknown;
+      if (typeof templateNode.onSubmit === "function") {
+        result = await (
+          templateNode.onSubmit as (
+            proxy: object,
+            store: unknown,
+          ) => Promise<unknown> | unknown
+        )(entityProxy, this);
+      }
+
+      // Call afterSubmit(result, { reset })
+      if (typeof templateNode.afterSubmit === "function") {
+        const reset = () => void 0; // entity template has no built-in reset
+        await (
+          templateNode.afterSubmit as (
+            r: unknown,
+            actions: { reset: () => void },
+          ) => void | Promise<void>
+        )(result, { reset });
+      }
+
+      return { success: true, result };
+    } finally {
+      // submitting: false → notify
+      bindingState.submitting = false;
+      this.notifyChanged(new Set<object>([entityNodeObj]));
+    }
   }
 
   // ─── Приватные helpers для entity ────────────────────────────────────────
@@ -531,5 +721,91 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
         this._collectEntityLeaves(child as Record<string, unknown>, result);
       }
     }
+  }
+
+  /**
+   * Collect validation errors for entity-template fields.
+   * Iterates template fields recursively, calls templateField.validate() with
+   * current entity values.
+   *
+   * @internal
+   */
+  private _collectEntityTemplateErrors(
+    templateNode: AnyConfigNode,
+    entityNode: Record<string, unknown>,
+    errors: Array<{ path: string; message: string }>,
+    parentPath: string,
+  ): void {
+    const translate = this.services.translate;
+    const entityValues = this._buildEntityValuesForTemplate(entityNode);
+
+    for (const key of Object.keys(templateNode)) {
+      if (CONFIG_PROPS.has(key)) continue;
+      const templateField = (templateNode as Record<string, unknown>)[key];
+      if (!templateField || typeof templateField !== "object") continue;
+
+      const path = parentPath ? `${parentPath}.${key}` : key;
+
+      if ("value" in (templateField as object)) {
+        // Leaf field — run validate if present
+        if (typeof (templateField as Record<string, unknown>).validate === "function") {
+          const entityField = entityNode[key];
+          const currentValue =
+            entityField && typeof entityField === "object"
+              ? (
+                  this.nodes.nodeState.get(entityField as object) as
+                    | { value: unknown }
+                    | undefined
+                )?.value ?? (entityField as { value: unknown }).value
+              : undefined;
+
+          const result = (
+            (templateField as Record<string, unknown>).validate as (
+              v: unknown,
+              vals: Record<string, unknown>,
+              t: (...args: unknown[]) => string,
+            ) => string | undefined | false
+          )(currentValue, entityValues, translate);
+
+          if (result) errors.push({ path, message: result });
+        }
+      } else {
+        // Group — recurse
+        const entityField = entityNode[key];
+        if (entityField && typeof entityField === "object") {
+          this._collectEntityTemplateErrors(
+            templateField as AnyConfigNode,
+            entityField as Record<string, unknown>,
+            errors,
+            path,
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Build flat values object from entity node, reading from nodeState.
+   * Used in template validators (_collectEntityTemplateErrors).
+   *
+   * @internal
+   */
+  private _buildEntityValuesForTemplate(
+    entityNode: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const values: Record<string, unknown> = {};
+    for (const key of Object.keys(entityNode)) {
+      const field = entityNode[key];
+      if (field && typeof field === "object") {
+        if ("value" in field) {
+          values[key] =
+            (this.nodes.nodeState.get(field as object) as { value: unknown } | undefined)?.value ??
+            (field as { value: unknown }).value;
+        } else {
+          values[key] = this._buildEntityValuesForTemplate(field as Record<string, unknown>);
+        }
+      }
+    }
+    return values;
   }
 }

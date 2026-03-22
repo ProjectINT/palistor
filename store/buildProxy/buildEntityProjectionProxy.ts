@@ -314,6 +314,21 @@ export function buildEntityProjectionProxy(
   // For nested groups, we still need the root entity node context
   const rootEntityNode = entityNode as EntityNode;
 
+  // Stable submit function reference (created lazily)
+  let submitFnRef: (() => Promise<unknown>) | null = null;
+
+  // Helper: get current entity id from nodeState or entity leaf
+  const getEntityId = (): string => {
+    if ("id" in entityNode) {
+      const idLeaf = (entityNode as EntityNode).id;
+      return (
+        (kernel.nodes.nodeState.get(idLeaf as object) as { value: unknown } | undefined)?.value ??
+        idLeaf.value
+      ) as string;
+    }
+    return "";
+  };
+
   const proxy = new Proxy(entityNode as Record<string, unknown>, {
     get(_target, key: string | symbol) {
       // Transparent for tracking proxy
@@ -342,6 +357,29 @@ export function buildEntityProjectionProxy(
             ?.value ?? idLeaf.value
         );
       }
+
+      // ─── Phase 3B: loading / submitting / submit ──────────────────────────
+      // Only exposed on root entity proxy (the one that has an "id" field).
+      if ("id" in entityNode) {
+        if (key === "loading") {
+          const eid = getEntityId();
+          return kernel._getEntityBindingState(eid, templateNode as object)?.loading ?? false;
+        }
+        if (key === "submitting") {
+          const eid = getEntityId();
+          return kernel._getEntityBindingState(eid, templateNode as object)?.submitting ?? false;
+        }
+        if (key === "submit") {
+          if (!submitFnRef) {
+            submitFnRef = () => {
+              const eid = getEntityId();
+              return kernel.executeEntityTemplateSubmit(eid, templateNode, proxy);
+            };
+          }
+          return submitFnRef;
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       const templateField = templateNode[key as string];
       if (
@@ -395,13 +433,17 @@ export function buildEntityProjectionProxy(
 
     ownKeys() {
       const hasId = "id" in entityNode;
-      return hasId ? ["id", ...templateKeys] : templateKeys;
+      if (hasId) {
+        return ["id", ...templateKeys, "loading", "submitting", "submit"];
+      }
+      return templateKeys;
     },
 
     getOwnPropertyDescriptor(_target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
       const hasId = "id" in entityNode;
-      const keys = hasId ? ["id", ...templateKeys] : templateKeys;
+      const extraKeys = hasId ? ["loading", "submitting", "submit"] : [];
+      const keys = hasId ? ["id", ...templateKeys, ...extraKeys] : templateKeys;
       if (!keys.includes(key as string)) return undefined;
       return { configurable: true, enumerable: true, writable: false };
     },

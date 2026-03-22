@@ -224,11 +224,14 @@ export function useForm(
     // 3A.3: bind entity to template on mount
     meta.entityStore.entityRegistry.bind(meta.entityId, meta.templateNode);
 
-    // 3A.4: resolved cache — in Phase 3B, if !isResolved → trigger resolve.
-    // Here we just note that the check exists:
-    // const alreadyResolved = meta.entityStore.entityRegistry.isResolved(
-    //   meta.entityId, meta.templateNode
-    // );
+    // 3B.1: trigger resolve if not already resolved
+    if (!meta.entityStore.entityRegistry.isResolved(meta.entityId, meta.templateNode)) {
+      meta.entityStore.triggerEntityTemplateResolve(
+        meta.entityId,
+        meta.templateNode,
+        meta.entityProxy,
+      );
+    }
 
     return () => {
       // 3A.3: unbind entity from template on unmount
