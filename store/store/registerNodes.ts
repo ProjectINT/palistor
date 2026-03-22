@@ -1,6 +1,6 @@
 import { type FieldState, resolveFlag } from "../compute/index";
-import { CONFIG_PROPS } from "../constants";
 import { TranslateFn, type AnyConfigNode, type ListState, type ListConfig } from "./types";
+import { configKeys } from "../traversal";
 import { hasComputedProps } from "./hasComputedProps";
 import { isListNode } from "./NodeRegistry/nodeUtils";
 
@@ -80,8 +80,7 @@ export function registerNodes<TNode extends AnyConfigNode>(
   listStates?: WeakMap<object, ListState>,
   allListStates?: ListState[],
 ) {
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
+  for (const key of configKeys(node as Record<string, unknown>)) {
 
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;

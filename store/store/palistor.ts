@@ -27,11 +27,13 @@ import type {
   ConfigProxy,
   DeepPartialValues,
   ExtractValues,
+  ListState,
   ProxyStore,
   ProxyStoreOptions,
   TranslateFn,
   Unsubscribe,
 } from "./types";
+import type { FieldState } from "../compute/index";
 
 // ─── Palistor ─────────────────────────────────────────────────────────────────
 
@@ -231,11 +233,13 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * @internal
    */
   notifyChanged(changed: Set<object>): void {
-    this.hub.notifyChanged(changed, {
+    this.hub.notifyChanged(changed as Set<AnyConfigNode>, {
       rootConfig: this.rootConfig,
-      nodeState: this.nodes.nodeState,
-      initialValueMap: this.dirty.initialValueMap,
-      listStates: this.nodes.listStates,
+      nodeState: this.nodes.nodeState as WeakMap<AnyConfigNode, FieldState>,
+      initialValueMap: this.dirty.initialValueMap as WeakMap<AnyConfigNode, unknown>,
+      listStates: this.nodes.listStates as WeakMap<AnyConfigNode, ListState>,
+      nodeParents: this.nodes.nodeParents as WeakMap<AnyConfigNode, AnyConfigNode>,
+      nodePaths: this.nodes.nodePaths as WeakMap<AnyConfigNode, string>,
     });
   }
 
@@ -259,7 +263,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   subscribe(node: object, listener: () => void): Unsubscribe {
-    return this.hub.subscribe(node, listener);
+    return this.hub.subscribe(node as AnyConfigNode, listener);
   }
 
   subscribeGlobal(listener: () => void): Unsubscribe {
@@ -271,7 +275,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   getNodeVersion(node: object): number {
-    return this.hub.getNodeVersion(node);
+    return this.hub.getNodeVersion(node as AnyConfigNode);
   }
 
   getValues(): ExtractValues<TConfig> {

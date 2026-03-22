@@ -10,7 +10,7 @@ import { buildNodeMaps } from "./nodeMap";
 import { buildValuesCache } from "../valuesCache/valuesCache";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { initResolveStates } from "../resolvePipeline/initResolveStates";
-import { recomputeDirty } from "../dirtyTracking/recomputeDirty";
+import { recomputeDirtyTargeted } from "../dirtyTracking/recomputeDirtyTargeted";
 import { initGroupSubmitting } from "../init/initGroupSubmitting";
 import { collectDefaults } from "../resetPipeline/collectDefaults";
 import { captureInitialValues } from "../dirtyTracking/captureInitialValues";
@@ -181,17 +181,32 @@ describe("initResolveStates — array guard", () => {
 
 // ─── recomputeDirty не ломается на ListNode ───────────────────────────────────
 
-describe("recomputeDirty — array guard", () => {
+describe("recomputeDirtyTargeted — array guard", () => {
   it("пересчитывает dirty для обычных полей, пропускает ListNode", () => {
-    const config = makeConfigWithList1();
-    const nameNode = (config as any).name;
+    const config = makeConfigWithList1() as any;
+    const nameNode = config.name;
     const nodeState = new WeakMap<object, FieldState>();
     nodeState.set(nameNode, makeState("changed"));
+    nodeState.set(config, makeState(undefined));
     const initialValueMap = new WeakMap<object, unknown>();
     initialValueMap.set(nameNode, "original");
+    const nodeParents = new WeakMap<object, object>();
+    nodeParents.set(nameNode, config);
+    const nodePaths = new WeakMap<object, string>();
+    nodePaths.set(config, "");
+    nodePaths.set(nameNode, "name");
 
-    let result: ReturnType<typeof recomputeDirty> | undefined;
-    expect(() => { result = recomputeDirty(config, nodeState, initialValueMap); }).not.toThrow();
+    let result: ReturnType<typeof recomputeDirtyTargeted> | undefined;
+    expect(() => {
+      result = recomputeDirtyTargeted(
+        new Set<object>([nameNode]),
+        config,
+        nodeState,
+        initialValueMap,
+        nodeParents,
+        nodePaths,
+      );
+    }).not.toThrow();
 
     expect(result!.anyDirty).toBe(true);
     expect(result!.changed.has(nameNode)).toBe(true);

@@ -1,22 +1,25 @@
-import type { AnyConfigNode } from "../store/types";
+import type { AnyConfigNode, ListState } from "../store/types";
 import type { FieldState } from "../compute/index";
-import { recomputeDirty } from "../dirtyTracking";
+import type { LeafEntry } from "../store/registerNodes";
+import { recomputeDirtyTargeted } from "../dirtyTracking/recomputeDirtyTargeted";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────
 
 /** Зависимости, необходимые для пересчёта dirty-флагов при уведомлении. */
 export interface DirtyDeps {
   rootConfig: AnyConfigNode;
-  nodeState: WeakMap<object, FieldState>;
-  initialValueMap: WeakMap<object, unknown>;
+  nodeState: WeakMap<AnyConfigNode, FieldState>;
+  initialValueMap: WeakMap<AnyConfigNode, unknown>;
   /** ListStates для dirty-tracking по составу списков (Phase 2C). */
-  listStates?: WeakMap<object, { itemIds: string[]; initialItemIds: string[] }>;
+  listStates?: WeakMap<AnyConfigNode, ListState>;
+  nodeParents: WeakMap<AnyConfigNode, AnyConfigNode>;
+  nodePaths: WeakMap<AnyConfigNode, string>;
 }
 
 export interface NotificationHubDeps {
-  leafNodes: Array<{ node: object; path: string }>;
+  leafNodes: LeafEntry[];
   /** Маппинг узлов на их dot-пути (заполняется buildNodeMaps). */
-  nodePaths: WeakMap<object, string>;
+  nodePaths: WeakMap<AnyConfigNode, string>;
 }
 
 // ─── Class ───────────────────────────────────────────────────────────────────
@@ -30,11 +33,11 @@ export interface NotificationHubDeps {
  * - post-notify hook для внешних подсистем (resolve retrigger)
  */
 export class NotificationHub {
-  private readonly leafNodes: Array<{ node: object; path: string }>;
-  private readonly nodePaths: WeakMap<object, string>;
+  private readonly leafNodes: LeafEntry[];
+  private readonly nodePaths: WeakMap<AnyConfigNode, string>;
 
   /** Подписчики на изменение каждого поля. */
-  private readonly nodeListeners = new WeakMap<object, Set<() => void>>();
+  private readonly nodeListeners = new WeakMap<AnyConfigNode, Set<() => void>>();
 
   /** Глобальные подписчики — уведомляются при ЛЮБОМ изменении. */
   private readonly globalListeners = new Set<() => void>();
@@ -43,7 +46,7 @@ export class NotificationHub {
   private version = 0;
 
   /** Версии отдельных узлов — для точечной подписки. */
-  private readonly nodeVersions = new WeakMap<object, number>();
+  private readonly nodeVersions = new WeakMap<AnyConfigNode, number>();
 
   /** Хук, вызываемый после каждого notifyChanged (resolve retrigger и т.д.) */
   private postNotifyHook: ((changedPaths: Set<string>) => void) | null = null;
@@ -55,7 +58,7 @@ export class NotificationHub {
 
   // ─── Internal helpers ────────────────────────────────────────────────────
 
-  private notifyNode(node: object): void {
+  private notifyNode(node: AnyConfigNode): void {
     this.nodeListeners.get(node)?.forEach((fn) => fn());
   }
 
@@ -73,20 +76,13 @@ export class NotificationHub {
    * 4. Уведомить глобальных подписчиков
    * 5. Вызвать postNotifyHook (retrigger resolves и т.д.)
    */
-  notifyChanged(changed: Set<object>, dirtyDeps: DirtyDeps): void {
+  notifyChanged(changed: Set<AnyConfigNode>, dirtyDeps: DirtyDeps): void {
     if (changed.size === 0) return;
 
-    // Recompute dirty flags for all nodes (leaf + group)
-    const { rootConfig, nodeState, initialValueMap, listStates } = dirtyDeps;
-    const dirtyResult = recomputeDirty(rootConfig, nodeState, initialValueMap, listStates);
-    for (const n of dirtyResult.changed) changed.add(n);
-
-    // Update root node dirty flag
-    const rootState = nodeState.get(rootConfig);
-    if (rootState && rootState.dirty !== dirtyResult.anyDirty) {
-      nodeState.set(rootConfig, { ...rootState, dirty: dirtyResult.anyDirty });
-      changed.add(rootConfig);
-    }
+    // Recompute dirty flags targeted to changed nodes only
+    const { rootConfig, nodeState, initialValueMap, listStates, nodeParents, nodePaths } = dirtyDeps;
+    const dirtyResult = recomputeDirtyTargeted(changed, rootConfig, nodeState, initialValueMap, nodeParents, nodePaths, listStates);
+    for (const n of dirtyResult.changed) changed.add(n as AnyConfigNode);
 
     // Инкрементируем глобальную версию
     this.version++;
@@ -114,7 +110,7 @@ export class NotificationHub {
   }
 
   /** Подписаться на изменения конкретного узла. */
-  subscribe = (node: object, listener: () => void): (() => void) => {
+  subscribe = (node: AnyConfigNode, listener: () => void): (() => void) => {
     if (!this.nodeListeners.has(node)) this.nodeListeners.set(node, new Set());
     this.nodeListeners.get(node)!.add(listener);
     return () => this.nodeListeners.get(node)!.delete(listener);
@@ -132,7 +128,7 @@ export class NotificationHub {
   };
 
   /** Версия конкретного узла. */
-  getNodeVersion = (node: object): number => {
+  getNodeVersion = (node: AnyConfigNode): number => {
     return this.nodeVersions.get(node) ?? 0;
   };
 

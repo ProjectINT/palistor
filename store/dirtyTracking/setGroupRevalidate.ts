@@ -1,4 +1,4 @@
-import { configKeys, isLeaf } from "../traversal";
+import { walkFull } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 
@@ -18,28 +18,30 @@ export function setGroupRevalidate(
 ): Set<object> {
   const changed = new Set<object>();
 
-  // Обновляем сам текущий узел.
+  // Обновляем сам корневой узел (walkFull его не посещает).
+  updateRevalidate(node, revalidate, nodeState, changed);
+
+  walkFull(node, {
+    onLeaf(leafNode) {
+      updateRevalidate(leafNode, revalidate, nodeState, changed);
+    },
+    onGroupEnter(groupNode) {
+      updateRevalidate(groupNode, revalidate, nodeState, changed);
+    },
+  });
+
+  return changed;
+}
+
+function updateRevalidate(
+  node: object,
+  revalidate: boolean,
+  nodeState: WeakMap<object, FieldState>,
+  changed: Set<object>,
+) {
   const state = nodeState.get(node);
   if (state && state.revalidate !== revalidate) {
     nodeState.set(node, { ...state, revalidate });
     changed.add(node);
   }
-
-  for (const key of configKeys(node as Record<string, unknown>)) {
-    const child = node[key] as AnyConfigNode;
-    if (!child || typeof child !== "object") continue;
-
-    if (isLeaf(child)) {
-      const childState = nodeState.get(child);
-      if (childState && childState.revalidate !== revalidate) {
-        nodeState.set(child, { ...childState, revalidate });
-        changed.add(child);
-      }
-    } else {
-      const childChanged = setGroupRevalidate(child, revalidate, nodeState);
-      for (const n of childChanged) changed.add(n);
-    }
-  }
-
-  return changed;
 }
