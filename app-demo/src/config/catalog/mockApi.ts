@@ -1,0 +1,57 @@
+export const mockUsers = [
+  { id: "u1", name: "Alice Johnson", email: "alice@example.com", role: "admin" },
+  { id: "u2", name: "Bob Smith", email: "bob@example.com", role: "user" },
+  { id: "u3", name: "Charlie Brown", email: "charlie@example.com", role: "editor" },
+];
+
+export const mockProducts = [
+  { id: "p1", title: "Laptop Pro", price: 1299, category: "electronics", inStock: true },
+  { id: "p2", title: "Wireless Mouse", price: 29, category: "electronics", inStock: true },
+  { id: "p3", title: "Standing Desk", price: 499, category: "furniture", inStock: false },
+  { id: "p4", title: "Monitor 4K", price: 599, category: "electronics", inStock: true },
+];
+
+export const mockUserDetails: Record<string, object> = {
+  u1: { bio: "Senior developer", department: "Engineering", phone: "+1-555-0101" },
+  u2: { bio: "Product manager", department: "Product", phone: "+1-555-0102" },
+  u3: { bio: "Content writer", department: "Marketing", phone: "+1-555-0103" },
+};
+
+export function fetchUsers(): Promise<typeof mockUsers> {
+  return new Promise((resolve) => setTimeout(() => resolve([...mockUsers]), 800));
+}
+
+export function fetchProducts(category?: string): Promise<typeof mockProducts> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      const filtered = category
+        ? mockProducts.filter((p) => p.category === category)
+        : [...mockProducts];
+      resolve(filtered);
+    }, 600),
+  );
+}
+
+export function fetchUserDetails(userId: string): Promise<object> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      const details = mockUserDetails[userId];
+      if (details) resolve({ ...details });
+      else reject(new Error(`User ${userId} not found`));
+    }, 500),
+  );
+}
+
+let failCount = 0;
+export function fetchUnreliableData(): Promise<{ status: string; timestamp: number }> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      failCount++;
+      if (failCount % 3 !== 0) {
+        reject(new Error("Service temporarily unavailable"));
+      } else {
+        resolve({ status: "ok", timestamp: Date.now() });
+      }
+    }, 300),
+  );
+}

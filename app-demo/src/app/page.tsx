@@ -6,12 +6,15 @@ import { useTranslator } from "@palistor/react/useTranslator";
 import { usePersist } from "@palistor/react/usePersist";
 import { localStorageDriver } from "@palistor/store/persist";
 import { paymentStore } from "@/config/paymentForm";
+import { catalogStore } from "@/config/catalog/catalogConfig";
 
 import { DemoHeader, type TabType } from "@/modules/header";
 import { PaymentForm } from "@/modules/payment-form";
 import { HooksDemo } from "@/modules/hooks-demo";
 import { DebugPanel } from "@/modules/debug-panel";
 import { StatePreview } from "@/modules/state-preview/StatePreview";
+import { ListsDemo } from "@/modules/lists-demo";
+import { AsyncDemo } from "@/modules/async-demo";
 
 // ============================================================================
 // Demo Page
@@ -20,6 +23,7 @@ import { StatePreview } from "@/modules/state-preview/StatePreview";
 export default function DemoPage() {
   const t = useTranslations();
   useTranslator(paymentStore, t);
+  useTranslator(catalogStore, t);
   usePersist(paymentStore, {
     key: "payment-form-demo",
     driver: localStorageDriver,
@@ -39,13 +43,15 @@ export default function DemoPage() {
           {/* Main Content */}
           <div className="lg:col-span-2">
             {activeTab === "form" && <PaymentForm />}
+            {activeTab === "lists" && <ListsDemo />}
+            {activeTab === "async" && <AsyncDemo />}
             {activeTab === "hooks" && <HooksDemo />}
             {activeTab === "debug" && <DebugPanel />}
           </div>
 
           {/* Side Panel */}
           <div className="lg:col-span-1">
-            <StatePreview />
+            <StatePreview activeTab={activeTab} />
           </div>
         </div>
       </div>

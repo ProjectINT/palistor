@@ -2,17 +2,19 @@
 
 import { useTranslations } from "next-intl";
 
-export type TabType = "form" | "hooks" | "debug";
+export type TabType = "form" | "hooks" | "debug" | "lists" | "async";
 
 interface TabNavigationProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
 }
 
-const TABS: TabType[] = ["form", "hooks", "debug"];
+const TABS: TabType[] = ["form", "lists", "async", "hooks", "debug"];
 
 const TAB_LABELS: Record<TabType, string> = {
   form: "demo.tabs.payment",
+  lists: "demo.tabs.lists",
+  async: "demo.tabs.async",
   hooks: "demo.tabs.user",
   debug: "demo.tabs.debug",
 };
