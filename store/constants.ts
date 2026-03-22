@@ -88,6 +88,7 @@ export const LIST_SPREAD_KEYS: string[] = [
   "items",
   "length",
   "loading",
+  "dirty",
   "add",
   "remove",
   "getById",

@@ -112,6 +112,13 @@ export class EntityRegistry {
    */
   private readonly resolvedCache = new Map<string, Set<object>>();
 
+  /**
+   * Зарегистрированные ListState-объекты.
+   * Используются в rekey() для обновления itemIds при смене id entity.
+   * Структурный тип { itemIds: string[] } — не зависит от импорта ListState.
+   */
+  private readonly registeredLists: Array<{ itemIds: string[] }> = [];
+
   // ─── CRUD ──────────────────────────────────────────────────────────────
 
   /**
@@ -243,8 +250,8 @@ export class EntityRegistry {
   /**
    * Переименовать entity: перенести запись с oldId на newId.
    *
-   * Обновляет: entities Map, bindings, resolvedCache, id leaf value.
-   * Обновление itemIds в ListState — откладывается до фазы 2C.
+   * Обновляет: entities Map, bindings, resolvedCache, id leaf value,
+   * и itemIds в всех зарегистрированных ListState-объектах.
    *
    * No-op если entity с oldId не существует.
    */
@@ -272,5 +279,19 @@ export class EntityRegistry {
       this.resolvedCache.delete(oldId);
       this.resolvedCache.set(newId, resolved);
     }
+
+    // Обновить itemIds во всех зарегистрированных ListState-объектах
+    for (const list of this.registeredLists) {
+      const idx = list.itemIds.indexOf(oldId);
+      if (idx >= 0) list.itemIds[idx] = newId;
+    }
+  }
+
+  /**
+   * Зарегистрировать ListState для автоматического обновления itemIds при rekey().
+   * Вызывается из Palistor после инициализации NodeRegistry.
+   */
+  registerList(list: { itemIds: string[] }): void {
+    this.registeredLists.push(list);
   }
 }

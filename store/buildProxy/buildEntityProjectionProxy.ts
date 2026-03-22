@@ -143,6 +143,9 @@ function buildEntityLeafProxy(
 
   const leafProxy = new Proxy(entityLeaf as unknown as Record<string, unknown>, {
     get(_target, key: string | symbol) {
+      // Transparent for tracking proxy — exposes the entity leaf as config node
+      if (key === CONFIG_NODE) return entityLeaf;
+
       if (typeof key === "symbol") return undefined;
 
       const entityValues = buildEntityValues(

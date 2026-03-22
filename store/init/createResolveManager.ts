@@ -1,13 +1,18 @@
 import { type AnyConfigNode } from "../store/types";
+import type { ListState } from "../store/types";
 import type { FieldState } from "../compute/index";
 import type { ValuesCache } from "../valuesCache/valuesCache";
+import type { EntityData } from "../entityRegistry";
 import {
   type Resolve,
   type NotifyFn,
   type ResolveState,
   type ResolveDeps,
+  type ListResolveDeps,
+  type AnyResolveEntry,
   initResolveStates,
   executeResolve,
+  executeListResolve,
   findResolvesToRetrigger,
   resetResolveState,
 } from "../resolvePipeline/index";
@@ -23,6 +28,19 @@ export interface ResolveManagerDeps {
   /** Initial value snapshot — passed to resolve pipeline for dirty tracking. */
   initialValueMap: WeakMap<object, unknown>;
   valuesCache: ValuesCache;
+  // ─── Phase 2C: list-specific ────────────────────────────────────────────
+  /** All ListState objects from NodeRegistry (for list resolve dispatch). */
+  listStates: WeakMap<object, ListState>;
+  /**
+   * Upsert entities and register their leaves without triggering notify.
+   * Called by executeListResolve after a list resolver succeeds.
+   */
+  setEntitiesRaw: (items: EntityData[]) => Set<object>;
+  /**
+   * Sync valuesCache.values[listKey] from listState.itemIds.
+   * Called by executeListResolve after updating itemIds.
+   */
+  syncListValuesCache: (listNode: object) => void;
 }
 
 // ─── Class ───────────────────────────────────────────────────────────────────
@@ -40,15 +58,22 @@ export class ResolveManager {
   /** Resolve states for all nodes with resolve config. */
   readonly states = new Map<object, ResolveState>();
 
-  private readonly resolveEntries: Array<{ node: AnyConfigNode; resolve: Resolve }>;
-  private readonly resolveEntryMap: Map<object, { node: AnyConfigNode; resolve: Resolve }>;
+  private readonly resolveEntries: AnyResolveEntry[];
+  private readonly resolveEntryMap: Map<object, AnyResolveEntry>;
   private readonly resolveDeps: ResolveDeps;
+  private readonly listResolveDeps: ListResolveDeps;
+  private readonly listStates: WeakMap<object, ListState>;
 
   constructor(deps: ResolveManagerDeps) {
-    const { rootConfig, nodeState, recompute, notifyChanged, notify, initialValueMap, valuesCache } = deps;
+    const {
+      rootConfig, nodeState, recompute, notifyChanged, notify,
+      initialValueMap, valuesCache,
+      listStates, setEntitiesRaw, syncListValuesCache,
+    } = deps;
 
+    this.listStates = listStates;
     this.resolveEntries = initResolveStates(rootConfig, this.states);
-    this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node, e]));
+    this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node as object, e]));
 
     this.resolveDeps = {
       rootConfig,
@@ -61,6 +86,12 @@ export class ResolveManager {
       initialValueMap,
       valuesCache,
     };
+
+    this.listResolveDeps = {
+      ...this.resolveDeps,
+      setEntitiesRaw,
+      syncListValuesCache,
+    };
   }
 
   // ─── Public API ────────────────────────────────────────────────────────────
@@ -70,9 +101,9 @@ export class ResolveManager {
    * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
    */
   triggerResolve = (node: AnyConfigNode): void => {
-    const entry = this.resolveEntryMap.get(node);
+    const entry = this.resolveEntryMap.get(node as object);
     if (!entry) return;
-    executeResolve(node, entry.resolve, this.resolveDeps);
+    this._executeEntry(entry);
   };
 
   /**
@@ -80,7 +111,7 @@ export class ResolveManager {
    * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
    */
   getResolveState = (node: AnyConfigNode): ResolveState | undefined => {
-    return this.states.get(node);
+    return this.states.get(node as object);
   };
 
   /**
@@ -99,8 +130,8 @@ export class ResolveManager {
         this.resolveEntries,
       );
       for (const entry of toRetrigger) {
-        resetResolveState(entry.node, this.states);
-        executeResolve(entry.node, entry.resolve, this.resolveDeps);
+        resetResolveState(entry.node as AnyConfigNode, this.states);
+        this._executeEntry(entry);
       }
     };
   }
@@ -108,10 +139,33 @@ export class ResolveManager {
   /** Запустить eager resolvers (lazy: false). */
   launchEager(): void {
     for (const entry of this.resolveEntries) {
-      const lazy = entry.resolve.options?.lazy ?? true;
+      const lazy = entry.resolve?.options?.lazy ?? true;
       if (!lazy) {
-        executeResolve(entry.node, entry.resolve, this.resolveDeps);
+        this._executeEntry(entry);
       }
+    }
+  }
+
+  // ─── Internal dispatch ─────────────────────────────────────────────────────
+
+  /** Dispatch entry to the correct execute function (group vs list). */
+  private _executeEntry(entry: AnyResolveEntry): void {
+    if (entry.isListNode) {
+      const listState = this.listStates.get(entry.node as object);
+      if (listState && entry.resolve) {
+        executeListResolve(
+          entry.node as object,
+          entry.resolve as import("../store/types").ListResolveConfig,
+          listState,
+          this.listResolveDeps,
+        );
+      }
+    } else {
+      executeResolve(
+        (entry as { node: AnyConfigNode; resolve: Resolve }).node,
+        (entry as { node: AnyConfigNode; resolve: Resolve }).resolve,
+        this.resolveDeps,
+      );
     }
   }
 }

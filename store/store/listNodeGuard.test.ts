@@ -166,15 +166,16 @@ describe("applyPatch — array guard", () => {
 // ─── initResolveStates не ломается на ListNode ───────────────────────────────
 
 describe("initResolveStates — array guard", () => {
-  it("собирает resolve-ноды, игнорирует ListNode", () => {
+  it("собирает resolve-ноды, включая ListResolveEntry для ListNode с resolver", () => {
     const config = makeConfigWithList2();
     const resolveStates = new Map();
 
     let entries: ReturnType<typeof initResolveStates> | undefined;
     expect(() => { entries = initResolveStates(config, resolveStates); }).not.toThrow();
 
-    // resolve внутри listConfig (array[1]) не должен подниматься
-    expect(entries!).toHaveLength(0);
+    // Phase 2C: resolver внутри listConfig[1] собирается как ListResolveEntry
+    expect(entries!).toHaveLength(1);
+    expect((entries![0] as any).isListNode).toBe(true);
   });
 });
 

@@ -9,6 +9,8 @@ export interface DirtyDeps {
   rootConfig: AnyConfigNode;
   nodeState: WeakMap<object, FieldState>;
   initialValueMap: WeakMap<object, unknown>;
+  /** ListStates для dirty-tracking по составу списков (Phase 2C). */
+  listStates?: WeakMap<object, { itemIds: string[]; initialItemIds: string[] }>;
 }
 
 export interface NotificationHubDeps {
@@ -75,8 +77,8 @@ export class NotificationHub {
     if (changed.size === 0) return;
 
     // Recompute dirty flags for all nodes (leaf + group)
-    const { rootConfig, nodeState, initialValueMap } = dirtyDeps;
-    const dirtyResult = recomputeDirty(rootConfig, nodeState, initialValueMap);
+    const { rootConfig, nodeState, initialValueMap, listStates } = dirtyDeps;
+    const dirtyResult = recomputeDirty(rootConfig, nodeState, initialValueMap, listStates);
     for (const n of dirtyResult.changed) changed.add(n);
 
     // Update root node dirty flag

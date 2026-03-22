@@ -36,6 +36,7 @@ export class NodeRegistry {
       this.groupLeafMap,
       translate,
       this.listStates,
+      this.allListStates,
     );
 
     // Фаза 2: инициализируем submitting/dirty/revalidate для групп
@@ -90,6 +91,12 @@ export class NodeRegistry {
    * Заполняется при registerNodes (Phase 2A).
    */
   readonly listStates: WeakMap<object, ListState> = new WeakMap();
+
+  /**
+   * Все ListState-объекты в порядке регистрации.
+   * Используется Palistor для регистрации списков в EntityRegistry.rekey() (Phase 2C).
+   */
+  readonly allListStates: ListState[] = [];
 
   // ─── Навигация ───────────────────────────────────────────────────────────
 

@@ -4,6 +4,16 @@ import type { EntityData } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
 import { buildEntityProjectionProxy } from "./buildEntityProjectionProxy";
 
+// ─── arraysEqual helper ──────────────────────────────────────────────────────
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -76,6 +86,17 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
     const recomputed = kernel.recompute();
     recomputed.add(listNodeObj);
     kernel.notifyChanged(recomputed);
+  }
+
+  /** Trigger lazy list resolve on first access (if resolve config exists and status is idle). */
+  function triggerLazyResolveIfNeeded(): void {
+    const listConfig = listState.listConfig;
+    if (!listConfig?.resolve) return;
+    const listNodeObj = listNode as unknown as object;
+    const resolveState = kernel.resolveManager.states.get(listNodeObj);
+    if (resolveState?.status === "idle") {
+      kernel.resolveManager.triggerResolve(listNodeObj as AnyConfigNode);
+    }
   }
 
   // Stable method references (avoid recreation on every GET)
@@ -161,11 +182,13 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
 
       switch (key) {
         case "items":
+          triggerLazyResolveIfNeeded();
           return listState.itemIds
             .map(buildItemProxy)
             .filter((item): item is object => item !== undefined);
 
         case "length":
+          triggerLazyResolveIfNeeded();
           return listState.itemIds.length;
 
         case "loading":
@@ -176,6 +199,10 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
               | { loading?: boolean }
               | undefined)?.loading ?? false
           );
+
+        case "dirty":
+          // dirty by composition: current itemIds differ from initial snapshot
+          return !arraysEqual(listState.itemIds, listState.initialItemIds);
 
         case "add":
           return addFn;
@@ -190,6 +217,7 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
           return setItemsFn;
 
         case "map":
+          triggerLazyResolveIfNeeded();
           return mapFn;
 
         default:

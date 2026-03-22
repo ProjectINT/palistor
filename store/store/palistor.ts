@@ -127,6 +127,11 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     this.entityRegistry = new EntityRegistry();
 
+    // Register all list states so EntityRegistry.rekey() can update itemIds
+    for (const ls of this.nodes.allListStates) {
+      this.entityRegistry.registerList(ls);
+    }
+
     // ─── GroupDepsMap + первый recompute ──────────────────────────────────────
 
     this.groupDepsMap = new GroupDepsMap(rootConfig, nodePaths, nodeParents);
@@ -147,6 +152,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       notify,
       initialValueMap: this.dirty.initialValueMap,
       valuesCache: this.values,
+      listStates: this.nodes.listStates,
+      setEntitiesRaw: (items) => this._setEntitiesRaw(items),
+      syncListValuesCache: (listNode) => this._syncListValuesCache(listNode),
     });
 
     // ─── Pipeline классы ─────────────────────────────────────────────────────
@@ -225,6 +233,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       rootConfig: this.rootConfig,
       nodeState: this.nodes.nodeState,
       initialValueMap: this.dirty.initialValueMap,
+      listStates: this.nodes.listStates,
     });
   }
 
@@ -296,27 +305,50 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    */
   set(data: EntityData | EntityData[]): void {
     const items = Array.isArray(data) ? data : [data];
-    const changed = new Set<object>();
-
-    for (const item of items) {
-      const entityNode = this.entityRegistry.upsert(item);
-      const entityId = entityNode.id.value as string;
-      const entityPrefix = `_entity_.${entityId}`;
-
-      // Get or create entity projection POJO (used in valuesCache list arrays)
-      let projectionObj = this.entityProjectionObjs.get(entityId);
-      if (!projectionObj) {
-        projectionObj = {};
-        this.entityProjectionObjs.set(entityId, projectionObj);
-      }
-
-      this._walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
-    }
+    const changed = this._setEntitiesRaw(items);
 
     if (changed.size === 0) return;
     const recomputed = this.recompute(changed);
     // Merge original changed: entity leaves have no computed props,
     // so recomputed may be empty — still need to notify about the entity values.
+    for (const n of changed) recomputed.add(n);
+    this.notifyChanged(recomputed);
+  }
+
+  /**
+   * Переименовать entity: перенести с oldId на newId.
+   *
+   * - Обновляет EntityRegistry (entities Map, bindings, resolvedCache, id leaf value).
+   * - Обновляет itemIds во всех ListState-объектах.
+   * - Обновляет entityProjectionObjs (переносит POJO-зеркало).
+   * - Уведомляет подписчиков об изменении id leaf.
+   *
+   * No-op если entity с oldId не существует.
+   */
+  rekey(oldId: string, newId: string): void {
+    const entity = this.entityRegistry.get(oldId);
+    if (!entity) return;
+
+    // EntityRegistry.rekey() updates: entities Map, id.value, bindings, resolvedCache, allRegisteredLists.itemIds
+    this.entityRegistry.rekey(oldId, newId);
+
+    // Move entityProjectionObjs entry
+    const projObj = this.entityProjectionObjs.get(oldId);
+    if (projObj) {
+      this.entityProjectionObjs.delete(oldId);
+      this.entityProjectionObjs.set(newId, projObj);
+    }
+
+    // Notify: id leaf changed
+    const idLeaf = entity.id as object;
+    const changed = new Set<object>([idLeaf]);
+    // Update nodeState value for id leaf
+    const leafState = this.nodes.nodeState.get(idLeaf);
+    if (leafState) {
+      this.nodes.nodeState.set(idLeaf, { ...leafState, value: newId });
+      if (projObj) projObj["id"] = newId;
+    }
+    const recomputed = this.recompute(changed);
     for (const n of changed) recomputed.add(n);
     this.notifyChanged(recomputed);
   }
@@ -351,6 +383,52 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   // ─── Приватные helpers для entity ────────────────────────────────────────
+
+  /**
+   * Upsert entities in EntityRegistry and register/update their leaf nodes.
+   * Returns Set of changed leaf nodes. Does NOT call recompute or notifyChanged.
+   *
+   * Used internally by `set()` and by `executeListResolve` via the
+   * `setEntitiesRaw` callback in ResolveManagerDeps.
+   *
+   * @internal
+   */
+  _setEntitiesRaw(items: EntityData[]): Set<object> {
+    const changed = new Set<object>();
+
+    for (const item of items) {
+      const entityNode = this.entityRegistry.upsert(item);
+      const entityId = entityNode.id.value as string;
+      const entityPrefix = `_entity_.${entityId}`;
+
+      // Get or create entity projection POJO (used in valuesCache list arrays)
+      let projectionObj = this.entityProjectionObjs.get(entityId);
+      if (!projectionObj) {
+        projectionObj = {};
+        this.entityProjectionObjs.set(entityId, projectionObj);
+      }
+
+      this._walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
+    }
+
+    return changed;
+  }
+
+  /**
+   * Sync valuesCache.values[listKey] from listState.itemIds.
+   * Used by executeListResolve after updating itemIds.
+   *
+   * @internal
+   */
+  _syncListValuesCache(listNode: object): void {
+    const slot = this.values.nodeSlot.get(listNode);
+    if (!slot) return;
+    const listState = this.nodes.listStates.get(listNode);
+    if (!listState) return;
+    slot.parent[slot.key] = listState.itemIds
+      .map((id) => this.entityProjectionObjs.get(id))
+      .filter((obj): obj is Record<string, unknown> => obj !== undefined);
+  }
 
   /**
    * Рекурсивный обход entity node: регистрирует новые leaf-ноды через

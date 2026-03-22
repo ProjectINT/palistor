@@ -78,6 +78,7 @@ export function registerNodes<TNode extends AnyConfigNode>(
   groupLeafMap: GroupLeafMap,
   translate: TranslateFn,
   listStates?: WeakMap<object, ListState>,
+  allListStates?: ListState[],
 ) {
   for (const key of Object.keys(node)) {
     if (CONFIG_PROPS.has(key)) continue;
@@ -100,8 +101,9 @@ export function registerNodes<TNode extends AnyConfigNode>(
           initialItemIds: [],
         };
         listStates.set(child, listState);
+        if (allListStates) allListStates.push(listState);
         // Регистрируем поля template как обычную группу (path = ключ списка)
-        registerNodes(template, undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates);
+        registerNodes(template, undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates, allListStates);
       }
       continue;
     }
@@ -150,6 +152,6 @@ export function registerNodes<TNode extends AnyConfigNode>(
     }
 
     // Рекурсия в дочерние
-    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates, allListStates);
   }
 }

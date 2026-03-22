@@ -265,11 +265,34 @@ export interface GroupProxyNode {
 // ─── Типы списков ────────────────────────────────────────────────────────────
 
 /**
+ * Конфигурация resolver-а для ListNode (аналог Resolve для группы, но возвращает
+ * массив entity-данных). Минимальный интерфейс без импорта Resolve из resolvePipeline
+ * (избегает циклических зависимостей).
+ */
+export interface ListResolveConfig {
+  /** Async data loader — returns array of entity records. */
+  resolver: (values: any) => Promise<Array<Record<string, unknown>>>;
+  /**
+   * Error handler called when resolver throws.
+   * ctx.notify — notification function from useNotifier.
+   */
+  onError?: (error: unknown, ctx: { notify: (...args: any[]) => void }) => void;
+  /** Explicit dependency paths — re-trigger resolver when these paths change. */
+  deps?: string[];
+  options?: {
+    /** Wait for first access to the list. Default: true */
+    lazy?: boolean;
+    /** Throw Promise for React Suspense. Default: false */
+    suspense?: boolean;
+  };
+}
+
+/**
  * Конфигурация уровня списка (второй элемент ListNode-массива).
  * Resolver и прочие опции уровня списка добавляются здесь.
  */
 export interface ListConfig {
-  resolve?: Record<string, unknown>;
+  resolve?: ListResolveConfig;
 }
 
 /**
@@ -297,6 +320,8 @@ export interface ListProxyNode<TItem> {
   readonly items: ReadonlyArray<TItem>;
   readonly length: number;
   readonly loading: boolean;
+  /** true если состав списка изменился с момента init/последнего resolve. */
+  readonly dirty: boolean;
   add(id: string): void;
   add(values: Record<string, unknown>): TItem;
   remove(id: string): void;
