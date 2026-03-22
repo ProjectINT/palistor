@@ -399,7 +399,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     // Собрать все leaf-ноды entity
     const deletedLeaves = new Set<object>();
-    this._collectEntityLeaves(entityNode, deletedLeaves);
+    this.collectEntityLeaves(entityNode, deletedLeaves);
 
     // Удалить leaf-ноды из NodeRegistry (предотвращает утечку памяти)
     for (const leaf of deletedLeaves) {
@@ -532,7 +532,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     try {
       // Validate via template field rules
       const errors: Array<{ path: string; message: string }> = [];
-      this._collectEntityTemplateErrors(
+      this.collectEntityTemplateErrors(
         templateNode,
         entityNode as unknown as Record<string, unknown>,
         errors,
@@ -599,7 +599,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
         this.entityProjectionObjs.set(entityId, projectionObj);
       }
 
-      this._walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
+      this.walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
     }
 
     return changed;
@@ -635,7 +635,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * @param changed       Множество изменённых узлов (накапливается)
    * @param projectionObj Plain POJO at the current nesting level for valuesCache
    */
-  private _walkAndSyncEntityNode(
+  private walkAndSyncEntityNode(
     node: Record<string, unknown>,
     prefix: string,
     parent: object,
@@ -693,7 +693,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
           }
           nestedProjectionObj = projectionObj[key] as Record<string, unknown>;
         }
-        this._walkAndSyncEntityNode(
+        this.walkAndSyncEntityNode(
           child as Record<string, unknown>,
           childPath,
           childObj,
@@ -708,7 +708,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * Рекурсивно собрать все leaf-ноды из entity node tree.
    * Используется в `delete()` для очистки NodeRegistry.
    */
-  private _collectEntityLeaves(
+  private collectEntityLeaves(
     node: Record<string, unknown>,
     result: Set<object>,
   ): void {
@@ -718,7 +718,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       if ("value" in (child as object)) {
         result.add(child as object);
       } else {
-        this._collectEntityLeaves(child as Record<string, unknown>, result);
+        this.collectEntityLeaves(child as Record<string, unknown>, result);
       }
     }
   }
@@ -730,14 +730,14 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    *
    * @internal
    */
-  private _collectEntityTemplateErrors(
+  private collectEntityTemplateErrors(
     templateNode: AnyConfigNode,
     entityNode: Record<string, unknown>,
     errors: Array<{ path: string; message: string }>,
     parentPath: string,
   ): void {
     const translate = this.services.translate;
-    const entityValues = this._buildEntityValuesForTemplate(entityNode);
+    const entityValues = this.buildEntityValuesForTemplate(entityNode);
 
     for (const key of Object.keys(templateNode)) {
       if (CONFIG_PROPS.has(key)) continue;
@@ -773,7 +773,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
         // Group — recurse
         const entityField = entityNode[key];
         if (entityField && typeof entityField === "object") {
-          this._collectEntityTemplateErrors(
+          this.collectEntityTemplateErrors(
             templateField as AnyConfigNode,
             entityField as Record<string, unknown>,
             errors,
@@ -786,11 +786,11 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   /**
    * Build flat values object from entity node, reading from nodeState.
-   * Used in template validators (_collectEntityTemplateErrors).
+   * Used in template validators (collectEntityTemplateErrors).
    *
    * @internal
    */
-  private _buildEntityValuesForTemplate(
+  private buildEntityValuesForTemplate(
     entityNode: Record<string, unknown>,
   ): Record<string, unknown> {
     const values: Record<string, unknown> = {};
@@ -802,7 +802,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
             (this.nodes.nodeState.get(field as object) as { value: unknown } | undefined)?.value ??
             (field as { value: unknown }).value;
         } else {
-          values[key] = this._buildEntityValuesForTemplate(field as Record<string, unknown>);
+          values[key] = this.buildEntityValuesForTemplate(field as Record<string, unknown>);
         }
       }
     }
