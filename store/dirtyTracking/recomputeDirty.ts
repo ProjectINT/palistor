@@ -1,4 +1,4 @@
-import { CONFIG_PROPS } from "../constants";
+import { configKeys, isLeaf, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 import { isDirtyValue } from "./isDirtyValue";
@@ -36,13 +36,12 @@ export function recomputeDirty(
   let anyDirty = false;
   const changed = new Set<object>();
 
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
+  for (const key of configKeys(node as Record<string, unknown>)) {
 
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
 
-    if (Array.isArray(child)) {
+    if (isListNode(child)) {
       // ListNode — dirty по составу itemIds
       if (listStates) {
         const ls = listStates.get(child);
@@ -53,7 +52,7 @@ export function recomputeDirty(
       continue;
     }
 
-    if ("value" in child) {
+    if (isLeaf(child as object)) {
       const state = nodeState.get(child);
       if (state) {
         const initial = initialValueMap.get(child);

@@ -1,4 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
+import { isLeaf, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 import { updateValuesCacheEntry, type ValuesCache } from "../valuesCache/valuesCache";
@@ -29,11 +30,11 @@ export function applyPatch(
     const child = configNode[key] as AnyConfigNode | undefined;
 
     if (!child || typeof child !== "object") continue;
-    if (Array.isArray(child)) continue; // ListNode — пропускаем, обновляется через store.set()
+    if (isListNode(child)) continue; // ListNode — пропускаем, обновляется через store.set()
 
     const patchValue = patch[key];
 
-    if ("value" in child) {
+    if (isLeaf(child)) {
       // Листовой узел — обновляем value только если оно реально изменилось
       const state = nodeState.get(child);
 

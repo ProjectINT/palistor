@@ -373,27 +373,6 @@ const vals = this.buildEntityValuesForTemplate(entityNode);
 
 ---
 
-## Вопрос 2: Тотальный ли обход при установке данных (set)?
-
-**Короткий ответ:** Нет, `set()` в основном сфокусирован — но тот же `recomputeDirty`.
-
-**Что происходит при `store.set(data)`:**
-
-| Шаг | Что обходится | Scope |
-|:----|:-------------|:------|
-| `entityRegistry.upsert(item)` | Поля entity data (один объект) | **Scoped** |
-| `walkAndSyncEntityNode` | Дерево EntityNode (одна entity) | **Scoped** — только эта entity |
-| `recompute(changed)` | BFS по dependency graph → affected groups | **Targeted** — O(affected groups) |
-| `notifyChanged(recomputed)` | `recomputeDirty(rootConfig, ...)` внутри | **FULL TREE** |
-
-Основная работа (`_setEntitiesRaw` + `walkAndSyncEntityNode`) — O(entity fields).
-`recompute(changed)` — targeted через BFS по graphDeps, НЕ полный обход.
-
-Единственный полный обход — опять `recomputeDirty(rootConfig)` внутри `notifyChanged`.
-
-**Вывод:** Оба пути (submit и set) хорошо оптимизированы **кроме** `recomputeDirty`.
-
----
 
 ## Вопрос 3: Нужен ли отдельный абстрактный сервис обхода?
 

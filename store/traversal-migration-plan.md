@@ -402,6 +402,7 @@ C) Не мигрировать на walkFull — использовать тол
 достаточен.
 
 Если выбрал B, новый код будет примерно таким:
+
 ```typescript
 import { configKeys, isLeaf, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";

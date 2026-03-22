@@ -1,6 +1,6 @@
 import type { FieldState } from "../compute/index";
 import type { AnyConfigNode } from "../store/types";
-import { CONFIG_PROPS } from "../constants";
+import { configKeys, isLeaf } from "../traversal";
 
 /**
  * Инициализирует submitting: false, dirty: false, revalidate: false
@@ -33,10 +33,9 @@ export function initGroupSubmitting(
   }
 
   // Рекурсия в дочерние группы
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
+  for (const key of configKeys(node as Record<string, unknown>)) {
     const child = node[key];
-    if (!child || typeof child !== "object" || "value" in (child as object)) continue;
+    if (!child || typeof child !== "object" || isLeaf(child as object)) continue;
     if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
     initGroupSubmitting(child as AnyConfigNode, nodeState);
   }

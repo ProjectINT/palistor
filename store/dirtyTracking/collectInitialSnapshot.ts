@@ -1,4 +1,4 @@
-import { CONFIG_PROPS } from "../constants";
+import { configKeys, isLeaf, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 
 /**
@@ -14,14 +14,12 @@ export function collectInitialSnapshot(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
-
+  for (const key of configKeys(node as Record<string, unknown>)) {
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
-    if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
+    if (isListNode(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
 
-    if ("value" in child) {
+    if (isLeaf(child)) {
       const initial = initialValueMap.get(child);
       if (initial !== undefined) {
         result[key] = initial;

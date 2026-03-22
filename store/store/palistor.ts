@@ -20,7 +20,7 @@ import { DirtyTracker } from "./dirtyTracker";
 import { GroupDepsMap } from "./groupDepsMap";
 import { EntityRegistry } from "../entityRegistry";
 import type { EntityData } from "../entityRegistry";
-import { CONFIG_PROPS } from "../constants";
+import { isLeaf, configKeys } from "../traversal";
 
 import type {
   AnyConfigNode,
@@ -684,7 +684,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       const childObj = child as object;
       const childPath = `${prefix}.${key}`;
 
-      if ("value" in childObj) {
+      if (isLeaf(childObj)) {
         // ── Листовой узел (EntityLeafNode): { value: <текущее значение> } ──
         const leaf = childObj as { value: unknown };
         if (!this.nodes.nodeState.has(childObj)) {
@@ -757,7 +757,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     for (const key of Object.keys(node)) {
       const child = node[key];
       if (!child || typeof child !== "object") continue;
-      if ("value" in (child as object)) {
+      if (isLeaf(child as object)) {
         // Leaf-нода: объект с полем "value" → добавить в результат
         result.add(child as object);
       } else {
@@ -786,16 +786,14 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     // Пример: validate: (v, vals) => vals.password !== vals.confirmPassword ? "Mismatch" : undefined
     const entityValues = this.buildEntityValuesForTemplate(entityNode);
 
-    for (const key of Object.keys(templateNode)) {
-      // Пропустить служебные ключи конфига (resolve, deps, onChange, formatter, etc.)
-      if (CONFIG_PROPS.has(key)) continue;
+    for (const key of configKeys(templateNode as Record<string, unknown>)) {
       const templateField = (templateNode as Record<string, unknown>)[key];
       if (!templateField || typeof templateField !== "object") continue;
 
       // Формируем dot-path для сообщения об ошибке (e.g. "address.city")
       const path = parentPath ? `${parentPath}.${key}` : key;
 
-      if ("value" in (templateField as object)) {
+      if (isLeaf(templateField as object)) {
         // Leaf-поле template — проверяем, есть ли validate() функция
         if (typeof (templateField as Record<string, unknown>).validate === "function") {
           // Извлечь текущее значение из entity. Приоритет:
@@ -854,7 +852,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     for (const key of Object.keys(entityNode)) {
       const field = entityNode[key];
       if (field && typeof field === "object") {
-        if ("value" in field) {
+        if (isLeaf(field as object)) {
           // Leaf: читаем value из nodeState (актуальное), fallback на field.value
           values[key] =
             (this.nodes.nodeState.get(field as object) as { value: unknown } | undefined)?.value ??
