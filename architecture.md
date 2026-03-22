@@ -162,6 +162,10 @@ store/
   constants.ts              символы CONFIG_NODE / SOURCE_PROXY / STORE_REF / ENTITY_ID,
                             наборы FIELD_STATE_PROPS / CONFIG_PROPS /
                             GROUP_SPREAD_KEYS / LIST_SPREAD_KEYS
+  traversal/
+    nodeClassifier.ts       Layer 1: isLeaf, isGroup, isListNode, configKeys
+    walkFull.ts             Layer 2: walkFull + TreeVisitor interface
+    index.ts                реэкспорт traversal utilities
   applyPatch/
     applyPatch.ts           применение патчей к дереву nodeState + valuesCache
   buildProxy/
@@ -232,7 +236,8 @@ store/
   store/
     NodeRegistry/
       nodeRegistry.ts   класс NodeRegistry (listStates: WeakMap, allListStates: ListState[])
-      nodeUtils.ts      isListNode — детектор ListNode (Array.isArray + length 1-2)
+      nodeUtils.ts      isLeaf (реэкспорт из traversal), isGroup, isListNode (length 1-2),
+                        NodeUtils class — используется в buildProxy / computeProxyKeys
     dirtyTracker.ts           класс DirtyTracker: initialValueMap, capture, merge, recompute
     groupDepsMap.ts           класс GroupDepsMap: deps, trackingWrap, isBuilt
     hasComputedProps.ts       проверка: есть ли computed-свойства у группы
@@ -265,6 +270,60 @@ react/
   useNotifier.ts              регистрация функции уведомлений (toast)
   usePersist.ts               React-хук для подключения persist
 ```
+
+---
+
+## Traversal Layer — слоёная архитектура обхода дерева
+
+Конфиг-дерево обходится во многих местах системы (init, reset, dirty, submit, valuesCache и др.).
+Чтобы устранить дублирование классификационного паттерна, введён выделенный модуль `store/traversal/`.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Layer 3: Actions (конкретные операции)              │
+│  recomputeDirty, collectDefaults, buildValuesCache,  │
+│  captureInitialValues, collectLeafStates, …          │
+├─────────────────────────────────────────────────────┤
+│  Layer 2: walkFull(node, visitor, path?)             │
+│  Универсальный обход дерева с visitor-паттерном      │
+├─────────────────────────────────────────────────────┤
+│  Layer 1: Node Classifier                            │
+│  isLeaf(), isGroup(), isListNode(), configKeys()     │
+└─────────────────────────────────────────────────────┘
+```
+
+### Layer 1: Node Classifier (`traversal/nodeClassifier.ts`)
+
+| Функция | Описание |
+|---|---|
+| `isLeaf(node)` | `true` если объект имеет поле `"value"` |
+| `isGroup(node)` | `true` если объект не массив и не имеет `"value"` |
+| `isListNode(node)` | `true` если `Array.isArray(node)` (любой массив) |
+| `configKeys(node)` | `Object.keys(node)` с фильтром `CONFIG_PROPS` — заменяет повторяющийся boilerplate |
+
+> **Различие `isListNode`:** `traversal.isListNode` = любой массив. `nodeUtils.isListNode` = массив длиной 1–2 (строгая проверка для proxy/ownKeys). Используются в разных слоях намеренно.
+
+### Layer 2: walkFull (`traversal/walkFull.ts`)
+
+Универсальный обход полного дерева конфига с visitor-паттерном.
+Подходит для операций, которые не строят вложенный результат.
+
+```ts
+walkFull(node, visitor, parentPath?)
+
+interface TreeVisitor {
+  onLeaf(node, key, path, parent): void;          // обязателен
+  onGroupEnter?(node, key, path, parent): boolean | void;  // false → skip subtree
+  onGroupExit?(node, key, path, parent): void;    // для агрегации снизу вверх
+  onList?(node, key, path, parent): void;         // если не задан — list пропускается
+}
+```
+
+**Кто использует `walkFull`:** `captureInitialValues`, `collectLeafStates`.
+
+**Кто использует только Layer 1 (`configKeys` / `isLeaf` / `isListNode`):** функции, которые строят вложенный результат (рекурсия + объект-аккумулятор) — `collectDefaults`, `collectInitialSnapshot`, `buildValuesCache`, `recomputeDirty`, `setGroupRevalidate`, `initGroupSubmitting`, `createGroupDeps`.
+
+**Параллельный обход (config + patch):** `formatPatch`, `applyPatch`, `mergeInitialValues` — итерируют по ключам patch, поэтому `configKeys()` не используется, только `isLeaf`/`isListNode` из traversal.
 
 ---
 
