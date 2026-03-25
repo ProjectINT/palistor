@@ -18,7 +18,11 @@ export function handleLazyResolve(
   if (!resolveState) return;
 
   if (resolveState.status === "idle") {
-    triggerResolve(node);
+    // Defer via queueMicrotask: this is called from the proxy GET trap (i.e. during a
+    // React render). Calling triggerResolve synchronously would cause executeResolve to
+    // fire notifyChanged → notifyGlobals → useSyncExternalStore listeners still inside
+    // the render of another component → "Cannot update a component while rendering".
+    queueMicrotask(() => triggerResolve(node));
   }
 
   if (

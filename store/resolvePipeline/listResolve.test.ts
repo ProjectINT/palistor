@@ -113,6 +113,9 @@ describe("2C.1: List resolver", () => {
 
     void (store.proxy as any).users.items;
 
+    // Flush microtask — triggerResolve is deferred to avoid setState-in-render
+    await Promise.resolve();
+
     expect((store.proxy as any).users.loading).toBe(true);
 
     resolvePromise([{ id: "u1", name: "Alice", role: "admin" }]);

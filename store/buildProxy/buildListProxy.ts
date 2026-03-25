@@ -95,7 +95,10 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
     const listNodeObj = listNode as unknown as object;
     const resolveState = kernel.resolveManager.states.get(listNodeObj);
     if (resolveState?.status === "idle") {
-      kernel.resolveManager.triggerResolve(listNodeObj as AnyConfigNode);
+      // Defer: this runs inside a proxy GET trap (during React render).
+      // Synchronous triggerResolve → recomputeAndNotify → notifyGlobals
+      // would cause "Cannot update a component while rendering another".
+      queueMicrotask(() => kernel.resolveManager.triggerResolve(listNodeObj as AnyConfigNode));
     }
   }
 

@@ -49,8 +49,11 @@ describe("resolvePipeline", () => {
       const config = createBasicResolveConfig();
       const store = new Palistor({ config });
 
-      // Access a child field through proxy → triggers resolve
+      // Access a child field through proxy → triggers resolve (deferred via microtask)
       const _brand = (store.proxy as any).car.brand.value;
+
+      // Flush microtask — triggerResolve is deferred to avoid setState-in-render
+      await Promise.resolve();
 
       // Resolver should have been called
       expect(config.car.resolve.resolver).toHaveBeenCalledTimes(1);
@@ -70,9 +73,12 @@ describe("resolvePipeline", () => {
 
       const store = new Palistor({ config });
 
-      // Access to trigger resolve
+      // Access to trigger resolve (deferred via microtask)
       const carProxy = (store.proxy as any).car;
       const _brand = carProxy.brand.value;
+
+      // Flush microtask — triggerResolve is deferred
+      await Promise.resolve();
 
       // loading should be true
       expect(carProxy.loading).toBe(true);
@@ -138,6 +144,9 @@ describe("resolvePipeline", () => {
       void carProxy.brand.value;
       void carProxy.brand.value;
       void carProxy.brand.value;
+
+      // Flush microtask — triggerResolve is deferred
+      await Promise.resolve();
 
       // Resolver should only be called once
       expect(config.car.resolve.resolver).toHaveBeenCalledTimes(1);
@@ -335,10 +344,13 @@ describe("resolvePipeline", () => {
       const store = new Palistor({ config });
       const carProxy = (store.proxy as any).car;
 
-      // Trigger resolve
+      // Trigger resolve (deferred via microtask)
       void carProxy.brand.value;
 
-      // Optimistic value should be set immediately (synchronously after trigger)
+      // Flush microtask — triggerResolve is deferred
+      await Promise.resolve();
+
+      // Optimistic value should be set after microtask trigger
       expect(carProxy.brand.value).toBe("Loading...");
       expect(carProxy.loading).toBe(true);
 

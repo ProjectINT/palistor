@@ -369,16 +369,14 @@ describe("4.3: E2E — полный сценарий", () => {
 
     // ─── Store ───────────────────────────────────────────────────────────────
 
+    let resolveList!: (v: any[]) => void;
     const store = new Palistor({
       config: {
         users: [
           { id: { value: "" }, name: { value: "" } },
           {
             resolve: {
-              resolver: async () => [
-                { id: "u1", name: "Alice" },
-                { id: "u2", name: "Bob" },
-              ],
+              resolver: () => new Promise<any[]>((r) => { resolveList = r; }),
             },
           },
         ] as any,
@@ -473,12 +471,20 @@ describe("4.3: E2E — полный сценарий", () => {
 
     render(<App />);
 
-    // List resolver fires eagerly (launchEager in constructor)
-    // → loading: true on first render
+    // Flush microtask — lazy list resolve is deferred via queueMicrotask
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // List resolver fires after microtask → loading: true (resolver still pending)
     expect(screen.queryByTestId("list-loading")).toBeTruthy();
 
-    // Flush promises → list resolver resolves
+    // Resolve the list and flush promises
     await act(async () => {
+      resolveList([
+        { id: "u1", name: "Alice" },
+        { id: "u2", name: "Bob" },
+      ]);
       await flushPromises();
     });
 

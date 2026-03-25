@@ -275,9 +275,12 @@ describe("Integration: полный flow", () => {
       };
       const store = new Palistor({ config });
 
-      // Доступ через proxy запускает lazy-resolve
+      // Доступ через proxy запускает lazy-resolve (deferred via microtask)
       const carProxy = (store.proxy as any).car;
       const _brand = carProxy.brand.value;
+
+      // Flush microtask — triggerResolve is deferred
+      await Promise.resolve();
 
       expect(carProxy.loading).toBe(true);
 

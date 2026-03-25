@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleLazyResolve } from "./handleLazyResolve";
-import type { AnyConfigNode } from "../types";
+import type { AnyConfigNode } from "../store/types";
 import type { ResolveState } from "../resolvePipeline";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,10 +39,13 @@ describe("handleLazyResolve", () => {
     expect(trigger).not.toHaveBeenCalled();
   });
 
-  it("triggers resolve when status is idle", () => {
+  it("triggers resolve when status is idle (deferred via queueMicrotask)", async () => {
     const trigger = vi.fn();
     const node: AnyConfigNode = { resolve: { resolver: async () => ({}) } };
     handleLazyResolve(node, trigger, () => makeResolveState({ status: "idle" }));
+    // Trigger is deferred to avoid setState-in-render: must not fire synchronously
+    expect(trigger).not.toHaveBeenCalled();
+    await Promise.resolve(); // flush microtask queue
     expect(trigger).toHaveBeenCalledWith(node);
   });
 
