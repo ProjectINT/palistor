@@ -1,25 +1,41 @@
 # Palistor
 
-**Реактивный state manager для форм с гранулярным рендерингом**
+> Реактивный state manager для форм с гранулярным рендерингом
 
-Palistor — легковесная библиотека управления состоянием форм для React. Построена на двухслойной proxy-архитектуре: framework-agnostic хранилище (`createProxyStore`) и React-интеграция с точечным трекингом подписок (`useForm`).
+Palistor — библиотека управления состоянием форм для React. Построена на двухслойной proxy-архитектуре: framework-agnostic ядро и React-интеграция с точечным трекингом подписок. Компонент перерендеривается **только** при изменении тех полей, которые он реально читал.
 
-## Ключевые особенности
+---
 
-- **Точечные обновления** — re-render только при изменении полей, которые компонент реально читал
-- **Computed Field State** — `isVisible`, `isRequired`, `error`, `dirty` и другие свойства пересчитываются автоматически при каждом изменении
-- **Вложенные структуры** — групповые узлы с computed-свойствами на любом уровне вложенности
-- **Proxy API** — нативный синтаксис чтения и записи (`field.value = x`) вместо строковых ключей
-- **Submit pipeline** — `beforeSubmit → validate → onSubmit → afterSubmit`, revalidate-семантика
-- **Dirty tracking** — per-field и per-group флаг изменений относительно начальных значений
-- **Async resolvers** — загрузка начальных данных с auto-deps, retry, optimistic updates и Suspense
-- **Persist** — автосохранение в localStorage/sessionStorage или любом кастомном драйвере
-- **i18n** — интеграция с любой i18n-библиотекой через `useTranslator`
-- **Тестируемость** — framework-agnostic store, тестируется без React
+## Содержание
 
-## Установка
+- [Возможности](#возможности)
+- [Быстрый старт](#быстрый-старт)
+- [Концепции](#концепции)
+- [API Reference](#api-reference)
+- [Рецепты](#рецепты)
+- [Async Resolver](#async-resolver)
+- [Списки и сущности](#списки-и-сущности)
+- [Persist](#persist)
+- [i18n](#i18n)
+- [Уведомления](#уведомления)
+- [Структура модуля](#структура-модуля)
 
-**В разработке**
+---
+
+## Возможности
+
+| | |
+|---|---|
+| **Гранулярные ре-рендеры** | Компонент подписывается только на те поля, которые он читал — больше ничего не триггерит ре-рендер |
+| **Computed Field State** | `isVisible`, `isRequired`, `error`, `dirty` пересчитываются автоматически по конфигу |
+| **Proxy API** | Нативный синтаксис: `field.value = x` вместо `dispatch({ type: "SET", field: "...", value: x })` |
+| **Submit pipeline** | `beforeSubmit → validate → onSubmit → afterSubmit` с revalidate-семантикой |
+| **Dirty tracking** | Per-field и per-group флаг изменений; baseline обновляется после resolve и reset |
+| **Async resolvers** | Загрузка данных с auto-deps, retry, optimistic updates и React Suspense |
+| **Списки / Entities** | Нормализованный реестр сущностей, list proxy с `add / remove / setItems` |
+| **Persist** | Автосохранение в `localStorage`, `sessionStorage` или любом кастомном драйвере |
+| **i18n** | Одна строка в layout — `label`, `placeholder`, `description` переводятся везде |
+| **Тестируемость** | Framework-agnostic ядро — тестируется без React |
 
 ---
 
@@ -31,59 +47,34 @@ Palistor — легковесная библиотека управления с
 import { createProxyStore } from "palistor/store/store";
 
 export const paymentStore = createProxyStore({
-  config: { // Это допустим user
+  config: {
     paymentType: {
       value: "card",
-      label: "Payment Type",
+      label: "Способ оплаты",
     },
-
     cardNumber: {
       value: "",
-      label: "Card Number",
+      label: "Номер карты",
       placeholder: "0000 0000 0000 0000",
-      isVisible: (values) => values.paymentType === "card",
-      isRequired: (values) => values.paymentType === "card",
-      validate: (value, values) => {
-        if (values.paymentType === "card" && value.length < 16) {
-          return "Card number must be 16 digits";
-        }
-      },
+      isVisible: (v) => v.paymentType === "card",
+      isRequired: (v) => v.paymentType === "card",
+      validate: (value, v) =>
+        v.paymentType === "card" && value.length < 16
+          ? "Введите 16 цифр"
+          : undefined,
     },
-    passport_id: { value: "" },
     passport: {
-      // Групповой узел — computed-свойства на группе
-      isVisible: (values) => values.paymentType === "bank",
-
-      number: {
-        value: "",
-        label: "Passport Number",
-        isRequired: (values) => values.paymentType === "bank",
-      },
-      issueDate: {
-        value: "",
-        label: "Issue Date",
-      },
-      resolve: {
-        resolver: async (user) => {
-          const data = await api.fetchPassportInfo(user.passport_id);
-          return { issueDate: data.issueDate };
-        },
-      },
+      isVisible: (v) => v.paymentType === "bank",
+      number:    { value: "", label: "Серия и номер", isRequired: true },
+      issueDate: { value: "", label: "Дата выдачи" },
     },
-
-    amount: {
-      value: 0,
-      label: "Amount",
-      isRequired: true,
-    },
+    amount: { value: 0, label: "Сумма", isRequired: true },
   },
-  initialValues: {
-    paymentType: "card",
-  },
+  initialValues: { paymentType: "card" },
 });
 ```
 
-### 2. Подключите компонент
+### 2. Используйте в компоненте
 
 ```tsx
 import { useForm } from "palistor/react/useForm";
@@ -95,202 +86,165 @@ function PaymentForm() {
     <form onSubmit={() => paymentStore.submit()}>
       <Select
         value={form.paymentType.value}
-        onChange={(e) => { form.paymentType.value = e.target.value; }}
+        onChange={(e) => (form.paymentType.value = e.target.value)}
         label={form.paymentType.label}
       />
 
       {form.cardNumber.isVisible && (
         <Input
           value={form.cardNumber.value}
-          onChange={(e) => { form.cardNumber.value = e.target.value; }}
+          onChange={(e) => (form.cardNumber.value = e.target.value)}
           label={form.cardNumber.label}
-          placeholder={form.cardNumber.placeholder}
           isRequired={form.cardNumber.isRequired}
+          isInvalid={form.cardNumber.isInvalid}
           errorMessage={form.cardNumber.errorMessage}
         />
       )}
 
-      {form.passport.isVisible && (
-        <PassportSection passport={form.passport} />
-      )}
+      {form.passport.isVisible && <PassportSection passport={form.passport} />}
 
-      <Input
-        value={form.amount.value}
-        onChange={(e) => { form.amount.value = Number(e.target.value); }}
-        type="number"
-        label={form.amount.label}
-        isRequired={form.amount.isRequired}
-      />
-
-      <button type="submit" disabled={form.submitting}>
-        {form.submitting ? "Sending..." : "Submit"}
-      </button>
+      <Button type="submit" isLoading={form.submitting}>
+        Оплатить
+      </Button>
     </form>
   );
 }
+```
 
-// Дочерний компонент — передаём поддерево через проп (tracking родителя)
+### 3. Изолированный ре-рендер дочернего компонента
+
+Если дочернему компоненту нужен **независимый** трекинг, передайте поддерево в `useForm`:
+
+```tsx
 function PassportSection({ passport }) {
+  // Собственный tracking proxy — ре-рендер только при изменении полей passport
+  const p = useForm(passport);
+
   return (
     <>
-      <Input
-        value={passport.number.value}
-        onChange={(e) => { passport.number.value = e.target.value; }}
-        label={passport.number.label}
-      />
-      <Input
-        value={passport.issueDate.value}
-        onChange={(e) => { passport.issueDate.value = e.target.value; }}
-        label={passport.issueDate.label}
-      />
+      <Input value={p.number.value} onChange={(e) => (p.number.value = e.target.value)} label={p.number.label} />
+      <Input value={p.issueDate.value} onChange={(e) => (p.issueDate.value = e.target.value)} label={p.issueDate.label} />
     </>
   );
 }
 ```
 
-### Изолированный re-render дочернего компонента
-
-Если дочернему компоненту нужен собственный трекинг (независимый re-render), передайте поддерево в `useForm`:
-
-```tsx
-function PassportSection({ passport }) {
-  const p = useForm(passport); // свой tracking, изолированный re-render
-  if (!p.isVisible) return null;
-  return (
-    <Input
-      value={p.number.value}
-      onChange={(e) => { p.number.value = e.target.value; }}
-      label={p.number.label}
-    />
-  );
-}
-```
+> **Без `useForm` в дочернем** — компонент рендерится каскадно вместе с родителем. Подходит для простых листовых компонентов.
 
 ---
 
-## Архитектура
+## Концепции
 
-### Два слоя
+### Два узла: лист и группа
 
-| Слой | Файлы | Что делает |
-|------|-------|-----------|
-| **ProxyStore** (framework-agnostic) | `store/*.ts` | Хранит значения + вычисленное состояние в `WeakMap<configNode, FieldState>`, пересчитывает по конфигу, версионирует ноды, уведомляет подписчиков |
-| **React-интеграция** | `react/*.ts` | Tracking proxy + `useSyncExternalStore` — гранулярная подписка: re-render только при изменении прочитанных нод |
+Тип узла определяется наличием свойства `value`:
+
+```
+Есть "value"  →  листовой узел (поле формы)
+Нет "value"   →  групповой узел (контейнер или секция)
+```
+
+```typescript
+const config = {
+  // Листовой узел — управляет значением
+  email: { value: "", isRequired: true },
+
+  // Групповой узел — контейнер с вычисленными свойствами
+  address: {
+    isVisible: (v) => v.showAddress,
+    city:    { value: "" },
+    country: { value: "RU" },
+  },
+};
+```
+
+### Как работает трекинг
+
+```
+Рендер: читаем form.email.value, form.phone.value
+        → accessed = { emailNode, phoneNode }
+
+SET form.city.value   → cityNode++  → snapshot не изменился → нет ре-рендера ✓
+SET form.email.value  → emailNode++ → snapshot изменился    → ре-рендер       ✓
+```
+
+Родитель, который только навигирует (`form.passport`), но не читает поля — **не ре-рендерится** при изменении полей внутри `passport`.
 
 ### Поток данных при SET
 
 ```
-form.passport.number.value = "XY999"
+form.email.value = "user@example.com"
   │
-  ├─ 1. formatter(value, allValues)         → processedValue
-  ├─ 2. storeValue → nodeState.set(node, { ...state, value: processedValue })
-  ├─ 3. setter(value, allValues)?           → applyPatch(patch) на другие поля
-  ├─ 4. recompute():
-  │     ├─ Фаза 1: computed values (функции) в топологическом порядке
-  │     └─ Фаза 2: FieldState (isVisible, isRequired, error, dirty…) для всех нод
-  ├─ 5. dirtyTracking: сравнение с initialValueMap
-  ├─ 6. onChange(fieldKey, newValue, previousValue, allValues) → optional patch
-  ├─ 7. version++ + nodeVersions.set(changedNode, version)
-  ├─ 8. notify per-node listeners
-  └─ 9. notify global listeners → useSyncExternalStore → re-render
-```
-
-### Submit pipeline
-
-```
-store.submit() / form.groupNode.submit()
-  │
-  ├─ 1. submitting = true → notify
-  ├─ 2. applyLeafBeforeSubmit → transformed snapshot (store не мутируется)
-  ├─ 3. groupNode.beforeSubmit(values)?  → transformed values
-  ├─ 4. validate all visible leaf nodes → collect errors
-  │     └─ если есть ошибки → revalidate = true, submitting = false
-  │                         → return { success: false, errors }
-  ├─ 5. onSubmit(values)                → Promise (await)
-  ├─ 6. afterSubmit(result, { reset })
-  └─ 7. submitting = false → return { success: true }
-```
-
-### Инициализация store
-
-```
-createProxyStore({ config, initialValues? })
-  │
-  ├─ 1. registerNodes — рекурсивный обход конфига
-  │     ├─ Листовые узлы (есть "value") → leafNodes[], начальный FieldState
-  │     └─ Групповые узлы с computed-свойствами → тоже в leafNodes[]
-  │
-  ├─ 2. initGroupSubmitting — submitting/dirty/revalidate для групп
-  ├─ 3. recompute() — вычисляет isVisible, isRequired, error… для всех нод
-  ├─ 4. captureInitialValues — снимок начальных значений (для dirty tracking)
-  ├─ 5. buildNodeMaps — маппинг узел → path, узел → parent
-  └─ 6. buildProxy(rootConfig) → store.proxy (кэшированный, referential equality)
+  ├─ 1. formatter(rawValue, allValues)    → нормализованное значение
+  ├─ 2. storeValue()                      → nodeState обновлён, valuesCache O(1)
+  ├─ 3. setter(value, allValues)?         → patch → applyPatch() смежных полей
+  ├─ 4. recompute(changedNodes)           → таргетированный пересчёт FieldState
+  ├─ 5. recomputeDirtyTargeted()          → dirty флаги вверх по дереву
+  ├─ 6. notifyChanged()                   → version++ → useSyncExternalStore → ре-рендер
+  └─ 7. onChangePipeline.fire()           → onChange callback (fire-and-forget)
 ```
 
 ---
 
 ## API Reference
 
-### `createProxyStore`
+### `createProxyStore(options)`
 
 ```typescript
 import { createProxyStore } from "palistor/store/store";
 
 const store = createProxyStore({
-  config: TConfig,                         // дерево ConfigNode
-  initialValues?: DeepPartialValues<...>,  // перекрывают value из конфига
+  config: { /* дерево ConfigNode */ },
+  initialValues?: { /* перекрывают значения из конфига */ },
 });
 ```
 
-**Возвращает `ProxyStore<TConfig>`:**
+**`ProxyStore<TConfig>` — возвращаемое значение:**
 
-| Свойство / метод | Описание |
-|---|---|
-| `store.proxy` | Реактивный прокси — структура повторяет конфиг |
-| `store.getValues()` | Все текущие значения в виде вложенного объекта |
-| `store.submit()` | Submit root: `beforeSubmit → validate → onSubmit → afterSubmit` |
-| `store.reset(values?)` | Сброс к defaults из конфига (или к переданным значениям) |
-| `store.subscribe(node, fn)` | Подписка на изменения конкретного узла; возвращает unsubscribe |
-| `store.subscribeGlobal(fn)` | Подписка на любые изменения; возвращает unsubscribe |
-| `store.getVersion()` | Глобальная версия (инкремент при каждом изменении) |
-| `store.getNodeVersion(node)` | Версия конкретного узла |
-| `store.setTranslator(fn \| null)` | Зарегистрировать i18n-функцию перевода |
-| `store.setNotifier(fn \| null)` | Зарегистрировать функцию уведомлений (для resolver `onError`) |
-| `store.getNotifier()` | Текущая функция уведомлений |
-| `store.persist` | Менеджер персистенции (`enable`, `disable`, `flush`) |
+| Свойство / метод | Тип | Описание |
+|---|---|---|
+| `store.proxy` | `ConfigProxy<TConfig>` | Реактивный прокси — структура повторяет конфиг |
+| `store.getValues()` | `DeepValues<TConfig>` | Все текущие значения вложенным объектом |
+| `store.submit()` | `Promise<SubmitResult>` | Submit root-группы |
+| `store.reset(values?)` | `void` | Сброс к defaults (или к переданным значениям) |
+| `store.set(data)` | `string` | Upsert entity; возвращает `id` |
+| `store.delete(id)` | `boolean` | Удалить entity из реестра |
+| `store.rekey(oldId, newId)` | `void` | Переименовать entity во всех списках |
+| `store.subscribe(node, fn)` | `() => void` | Подписка на изменения узла; возвращает unsubscribe |
+| `store.subscribeGlobal(fn)` | `() => void` | Подписка на любые изменения |
+| `store.getVersion()` | `number` | Глобальная версия (инкремент при каждом изменении) |
+| `store.getNodeVersion(node)` | `number` | Версия конкретного узла |
+| `store.setTranslator(fn \| null)` | `void` | Зарегистрировать i18n-функцию |
+| `store.setNotifier(fn \| null)` | `void` | Зарегистрировать функцию уведомлений |
+| `store.persist` | `PersistManager` | Менеджер персистенции |
 
 ---
 
-### `useForm`
+### `useForm(source)`
 
 ```typescript
 import { useForm } from "palistor/react/useForm";
 
-// Корневой — создаёт tracking proxy поверх store.proxy
-const form = useForm(store);
-
-// Дочерний — свой tracking поверх переданного поддерева (пропсом)
-const section = useForm(form.passport);
+const form = useForm(store);           // tracking поверх корневого proxy
+const section = useForm(form.address); // свой tracking для поддерева
 ```
 
-Возвращает типизированный proxy `ConfigProxy<TConfig>`. Компонент перерендерится только при изменении нод, к которым он обращался через `FIELD_STATE_PROPS` (`value`, `isVisible`, `error` и т.д.). Если компонент только навигировал по дереву (`form.passport`), не читая FIELD_STATE_PROPS — re-render не вызывается.
+Возвращает типизированный `ConfigProxy<TConfig>`. Ре-рендер только при изменении нод, к которым компонент обращался через `FIELD_STATE_PROPS`.
 
 **Паттерны подписки:**
 
 | Паттерн | Когда использовать |
 |---|---|
-| Один `useForm(store)` + пропсы вниз | Простые формы, листовые UI-компоненты |
-| `useForm(subtree)` в дочернем | Крупные секции с независимым re-render |
-| Проп без `useForm` в дочернем | Pure UI-компоненты, рендерятся каскадно за родителем |
+| `useForm(store)` + пропсы вниз | Простые формы, листовые UI-компоненты |
+| `useForm(subtree)` в дочернем | Крупные секции с независимым ре-рендером |
+| Проп без `useForm` | Pure UI-компоненты, рендерятся каскадно за родителем |
 
 ---
 
-### Чтение и запись через proxy
-
-#### Листовой узел (`FieldProxyNode<TValue>`)
+### Листовой узел — доступные свойства
 
 ```typescript
-// Чтение (реактивно — tracking)
+// Чтение (реактивно — добавляет ноду в tracking set)
 form.email.value          // → TValue
 form.email.label          // → string | undefined
 form.email.placeholder    // → string | undefined
@@ -301,16 +255,14 @@ form.email.isDisabled     // → boolean
 form.email.isVisible      // → boolean
 form.email.isInvalid      // → boolean | undefined
 form.email.errorMessage   // → string | undefined
-form.email.dirty          // → boolean (отличается от начального значения)
+form.email.dirty          // → boolean
 
-// Запись (триггерит formatter → setter → recompute → onChange → notify)
+// Запись — триггерит formatter → setter → recompute → notify
 form.email.value = "new@example.com";
-
-// Альтернатива через onValueChange
-form.email.onValueChange("new@example.com");
+form.email.onValueChange("new@example.com"); // эквивалентно
 ```
 
-#### Групповой узел (`GroupProxyNode`)
+### Групповой узел — доступные свойства
 
 ```typescript
 form.passport.isVisible     // → boolean
@@ -319,126 +271,198 @@ form.passport.isReadOnly    // → boolean | undefined
 form.passport.isDisabled    // → boolean | undefined
 form.passport.isInvalid     // → boolean | undefined
 form.passport.errorMessage  // → string | undefined
-form.passport.submitting    // → boolean (submit в процессе)
-form.passport.loading       // → boolean (async resolver загружается)
-form.passport.dirty         // → boolean (хоть одно поле изменилось)
+form.passport.submitting    // → boolean
+form.passport.loading       // → boolean (async resolver)
+form.passport.dirty         // → boolean (хотя бы одно поле изменилось)
 form.passport.revalidate    // → boolean (true после первого неудачного submit)
 
-await form.passport.submit();         // submit поддерева → SubmitResult
+await form.passport.submit();         // → SubmitResult
 form.passport.reset({ number: "" });  // сброс поддерева
 ```
 
 ---
 
-## ConfigNode — конфигурация поля/группы
-
-Тип узла определяется наличием свойства `value`:
-- Есть `value` → **листовой узел** (поле формы)
-- Нет `value`  → **групповой узел** (контейнер)
+### `ConfigNode` — схема поля
 
 ```typescript
-interface ConfigNode<TValue, TValues> {
-  // ─── Только листовые узлы ─────────────────────────────────────────────
+// Листовой узел (есть "value")
+interface LeafNode<TValue, TValues> {
   value?: TValue | ((values: TValues) => TValue);
-  validate?: (value: TValue, values: TValues) => string | undefined | false;
-  formatter?: (value: unknown, values: TValues) => TValue;
-  setter?: (value: TValue, values: TValues) => DeepPartialValues<TValues>;
+  validate?:     (value: TValue, values: TValues) => string | undefined | false;
+  formatter?:    (value: unknown, values: TValues) => TValue;
+  setter?:       (value: TValue, values: TValues) => DeepPartialValues<TValues>;
+  beforeSubmit?: (value: TValue, values: TValues) => TValue;
+  dependencies?: readonly string[];  // для топологической сортировки computed
   componentProps?: Record<string, unknown>;
-  types?: FieldTypeMeta;
-  dependencies?: readonly string[];   // порядок топосортировки computed values
 
-  // ─── Общие (лист и группа) ────────────────────────────────────────────
-  label?: string | ((values: TValues) => string);
+  label?:       string | ((values: TValues) => string);
   placeholder?: string | ((values: TValues) => string);
   description?: string | ((values: TValues) => string);
-  isVisible?: boolean | ((values: TValues) => boolean);   // default: true
-  isRequired?: boolean | ((values: TValues) => boolean);  // default: false
-  isDisabled?: boolean | ((values: TValues) => boolean);  // default: false
-  isReadOnly?: boolean | ((values: TValues) => boolean);  // default: false
-
-  // ─── Lifecycle ────────────────────────────────────────────────────────
-  beforeSubmit?: (value: TValue, values: TValues) => TValue;   // лист
-                 (values: TValues) => TValues;                 // группа
-  onSubmit?: (values: TValues) => Promise<unknown> | unknown;
-  afterSubmit?: (result: unknown, actions: { reset: () => void }) => void | Promise<void>;
-  reset?: (defaults: TValues) => TValues;
-  onChange?: (info: {
-    fieldKey: string;
-    newValue: unknown;
-    previousValue: unknown;
-    allValues: TValues;
-  }) => DeepPartialValues<TValues> | void | Promise<DeepPartialValues<TValues> | void>;
-
-  // ─── Async resolver (только групповые узлы) ───────────────────────────
-  resolve?: Resolve<...>;
-
-  // ─── Дочерние узлы (только групповые) ────────────────────────────────
-  [key: string]: ConfigNode | any;
+  isVisible?:   boolean | ((values: TValues) => boolean);  // default: true
+  isRequired?:  boolean | ((values: TValues) => boolean);  // default: false
+  isDisabled?:  boolean | ((values: TValues) => boolean);  // default: false
+  isReadOnly?:  boolean | ((values: TValues) => boolean);  // default: false
 }
+
+// Групповой узел (нет "value")
+interface GroupNode<TValues> {
+  beforeSubmit?: (values: TValues) => TValues;
+  onSubmit?:     (values: TValues) => Promise<unknown> | unknown;
+  afterSubmit?:  (result: unknown, actions: { reset: () => void }) => void | Promise<void>;
+  reset?:        (defaults: TValues) => TValues;
+  onChange?:     (info: OnChangeInfo<TValues>) => DeepPartialValues<TValues> | void | Promise<...>;
+  resolve?:      ResolveConfig<TValues>;
+
+  isVisible?:   boolean | ((values: TValues) => boolean);
+  isRequired?:  boolean | ((values: TValues) => boolean);
+  isDisabled?:  boolean | ((values: TValues) => boolean);
+  isReadOnly?:  boolean | ((values: TValues) => boolean);
+
+  [key: string]: LeafNode | GroupNode | ListNode | any;
+}
+
+// Список (массив длиной 1 или 2)
+type ListNode = [TemplateGroupNode] | [TemplateGroupNode, ListConfig];
 ```
 
 ---
 
-## FieldState (runtime)
-
-Вычисленное состояние узла, хранится внутри `WeakMap<configNode, FieldState>`:
+### `SubmitResult`
 
 ```typescript
-interface FieldState {
-  value: unknown;
-  label?: string;
-  placeholder?: string;
-  description?: string;
-  isRequired: boolean;
-  isReadOnly: boolean;
-  isDisabled: boolean;
-  isVisible: boolean;
-  isInvalid?: boolean;
-  errorMessage?: string;
-  dirty?: boolean;        // лист: значение ≠ initial; группа: хоть одно поле dirty
-  submitting?: boolean;   // только групповые узлы
-  revalidate?: boolean;   // true после первого неудачного submit
-  loading?: boolean;      // только узлы с resolve
-}
+type SubmitResult =
+  | { success: true;  result?: unknown }
+  | { success: false; errors: Array<{ path: string; message: string }> };
 ```
 
 ---
 
-## Async Resolver (`resolve`)
+## Рецепты
 
-Конфигурируется на групповом узле. Загружает данные асинхронно, с поддержкой auto-deps, retry и React Suspense.
+### Computed value
+
+```typescript
+createProxyStore({
+  config: {
+    price:    { value: 100 },
+    quantity: { value: 2 },
+    total:    { value: (v) => v.price * v.quantity, isReadOnly: true },
+  },
+});
+```
+
+### Цепочка computed (топологическая сортировка)
+
+```typescript
+config: {
+  price: { value: 100 },
+  tax:   { value: (v) => v.price * 0.2,       dependencies: ["price"] },
+  total: { value: (v) => v.price + v.tax,      dependencies: ["price", "tax"] },
+}
+```
+
+### formatter — нормализация при записи
+
+```typescript
+email: {
+  value: "",
+  formatter: (v) => String(v).trim().toLowerCase(),
+},
+```
+
+### setter — каскадное изменение нескольких полей
+
+```typescript
+country: {
+  value: "RU",
+  setter: (value) => ({ city: "" }), // сбрасываем city при смене country
+},
+```
+
+### onChange — реакция на изменение поля
+
+```typescript
+passport: {
+  onChange: ({ fieldKey, newValue, allValues }) => {
+    if (fieldKey === "number") return { issueDate: "" };
+  },
+  number:    { value: "" },
+  issueDate: { value: "" },
+},
+```
+
+### beforeSubmit — трансформация перед отправкой
+
+```typescript
+phone: {
+  value: "",
+  beforeSubmit: (value) => value.replace(/\D/g, ""), // не мутирует store
+},
+```
+
+### Групповой submit с валидацией
 
 ```typescript
 const store = createProxyStore({
   config: {
+    company: {
+      onSubmit: async (values) => api.saveCompany(values.company),
+      afterSubmit: (_result, { reset }) => {
+        showSuccessToast();
+        reset();
+      },
+      name:  { value: "", isRequired: true },
+      taxId: { value: "" },
+    },
+  },
+});
+
+const result = await store.proxy.company.submit();
+if (!result.success) {
+  console.log(result.errors);
+  // [{ path: "company.name", message: "Обязательное поле" }]
+}
+```
+
+### Получение значений для отправки
+
+```typescript
+const values = store.getValues();
+// → { paymentType: "bank", passport: { number: "AB123", issueDate: "2020-01-01" } }
+await api.submit(values);
+```
+
+---
+
+## Async Resolver
+
+Конфигурируется на групповом узле. Загружает данные асинхронно — с авто-трекингом зависимостей, retry и поддержкой React Suspense.
+
+```typescript
+const store = createProxyStore({
+  config: {
+    userId: { value: "" },
+
     userInfo: {
       resolve: {
-        /**
-         * values — tracking proxy: чтения автоматически отслеживаются как зависимости.
-         * Записи буферизуются и применяются пакетом после резолва.
-         */
+        // values — tracking proxy: GET-доступы автоматически становятся зависимостями.
+        // При изменении userId resolver перезапустится.
         resolver: async (values) => {
           const data = await api.getUser(values.userId);
           return { name: data.name, email: data.email };
         },
 
         // Мгновенный placeholder до завершения resolver
-        optimisticResolver: (values) => ({ name: "Loading..." }),
-
-        // Явные зависимости (дополняют auto-deps)
-        deps: ["userId"],
+        optimisticResolver: (values) => ({ name: "Загрузка..." }),
 
         onError: (error, ctx) => {
-          ctx.notify("Failed to load user", "USER_LOAD_ERROR");
+          ctx.notify("Не удалось загрузить данные", "USER_LOAD_ERROR");
         },
 
         options: {
           lazy: true,      // ждать первого обращения к узлу (default: true)
-          suspense: false, // бросать Promise для React Suspense (default: false)
-          retry: {
-            attempts: 3,
-            delay: 1000,   // ms
-          },
+          suspense: false, // throw promise для React Suspense (default: false)
+          retry: { attempts: 3, delay: 1000 },
         },
       },
 
@@ -447,10 +471,95 @@ const store = createProxyStore({
     },
   },
 });
+```
 
-// В компоненте
+```tsx
 const form = useForm(store);
+
+// Без Suspense — ручная проверка loading
 if (form.userInfo.loading) return <Spinner />;
+
+// С Suspense — автоматически
+<Suspense fallback={<Spinner />}>
+  <UserInfoSection />
+</Suspense>
+```
+
+**Поведение при изменении зависимости:**
+
+```
+userId меняется
+  → notifyChanged → findResolvesToRetrigger
+  → resetResolveState(idle) → triggerResolve()
+  → optimisticResolver применяется мгновенно
+  → resolver запускается заново
+```
+
+---
+
+## Списки и сущности
+
+Списки объявляются как массив длиной 1 или 2, где `[0]` — шаблон элемента:
+
+```typescript
+const store = createProxyStore({
+  config: {
+    users: [
+      // Шаблон — описывает поля каждого элемента
+      {
+        id:    { value: "" },
+        name:  { value: "", isRequired: true },
+        email: { value: "" },
+      },
+      // Опциональный конфиг списка
+      {
+        resolve: {
+          resolver: async () => {
+            const data = await api.getUsers();
+            return data; // Array<{ id, name, email }>
+          },
+        },
+      },
+    ],
+  },
+});
+```
+
+### List Proxy API
+
+```typescript
+const form = useForm(store);
+
+// Чтение
+form.users.items    // ReadonlyArray<EntityProjectionProxy>
+form.users.length   // number
+form.users.loading  // boolean
+form.users.dirty    // boolean — состав списка изменился vs. baseline
+
+// Итерация
+form.users.map((item, index, id) => <Row key={id} item={item} />)
+for (const item of form.users) { ... }
+
+// Мутации
+form.users.add({ name: "Alice", email: "alice@example.com" }); // объект → upsert + добавить
+form.users.add("existing-id");                                  // строка → добавить существующую
+form.users.remove("user-id");
+form.users.setItems(["id1", "id2", "id3"]);  // bulk замена
+form.users.getById("user-id");               // → EntityProjectionProxy | undefined
+```
+
+### Работа с entity
+
+```typescript
+// Создать / обновить entity — возвращает id
+const id = store.set({ name: "Bob", email: "bob@example.com" });
+
+// Если id не передан — генерируется временный (_tmp_...)
+// После сохранения на сервере переименуйте:
+store.rekey(tmpId, serverAssignedId);
+
+// Удалить entity
+store.delete(id);
 ```
 
 ---
@@ -459,10 +568,37 @@ if (form.userInfo.loading) return <Spinner />;
 
 Автосохранение состояния формы в любом хранилище.
 
-### Встроенные драйверы
+### React-хук (рекомендуется)
+
+```tsx
+import { usePersist } from "palistor/react/usePersist";
+
+function PaymentPage({ orderId }: { orderId: string }) {
+  usePersist(paymentStore, {
+    key: `payment-${orderId}`,   // ключ может зависеть от пропсов
+    driver: localStorageDriver,
+    debounce: 500,               // ms, default: 100
+    pick: ["cardNumber"],        // персистировать только эти top-level поля
+    // omit: ["cvv"],            // или исключить чувствительные поля
+  });
+
+  const form = useForm(paymentStore);
+  // ...
+}
+```
+
+### Вне React
 
 ```typescript
 import { localStorageDriver, sessionStorageDriver } from "palistor/store/persist";
+
+paymentStore.persist.enable({
+  key: "payment",
+  driver: localStorageDriver,
+});
+
+await paymentStore.persist.flush();  // принудительное сохранение
+paymentStore.persist.disable();
 ```
 
 ### Кастомный драйвер
@@ -477,86 +613,59 @@ const myDriver: PersistDriver = {
 };
 ```
 
-### React-хук (`usePersist`)
-
-```tsx
-import { usePersist } from "palistor/react/usePersist";
-
-function PaymentPage({ orderId }: { orderId: string }) {
-  usePersist(paymentStore, {
-    key: `payment-${orderId}`,      // ключ может зависеть от пропсов
-    driver: localStorageDriver,
-    debounce: 500,                  // ms (default: 100)
-    pick: ["cardNumber", "amount"], // персистировать только эти top-level поля
-    // omit: ["sensitiveField"],    // или исключить
-  });
-
-  const form = useForm(paymentStore);
-  // ...
-}
-```
-
-### Вне React
-
-```typescript
-paymentStore.persist.enable({
-  key: "payment",
-  driver: localStorageDriver,
-});
-
-await paymentStore.persist.flush(); // принудительное сохранение
-paymentStore.persist.disable();
-```
-
 **`PersistOptions`:**
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `key` | `string` | Ключ хранения |
-| `driver` | `PersistDriver` | Реализация хранилища |
-| `debounce` | `number` | Задержка записи в ms (default: 100) |
-| `serialize` | `fn` | Кастомный сериализатор (default: `JSON.stringify`) |
-| `deserialize` | `fn` | Кастомный десериализатор (default: `JSON.parse`) |
-| `pick` | `string[]` | Персистировать только эти top-level ключи |
-| `omit` | `string[]` | Исключить эти top-level ключи (игнорируется если задан `pick`) |
+| Поле | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `key` | `string` | — | Ключ хранения |
+| `driver` | `PersistDriver` | — | Реализация хранилища |
+| `debounce` | `number` | `100` | Задержка записи, ms |
+| `serialize` | `fn` | `JSON.stringify` | Кастомный сериализатор |
+| `deserialize` | `fn` | `JSON.parse` | Кастомный десериализатор |
+| `pick` | `string[]` | — | Персистировать только эти top-level ключи |
+| `omit` | `string[]` | — | Исключить эти ключи (игнорируется если задан `pick`) |
 
 ---
 
-## i18n (`useTranslator`)
+## i18n
 
-Регистрирует функцию перевода один раз (в layout/провайдере). Все компоненты с `useForm` получат переведённые `label`, `placeholder`, `description` автоматически. При смене локали — все компоненты перерендерятся.
+Регистрируйте функцию перевода один раз — в layout или провайдере. Все компоненты с `useForm` получат переведённые `label`, `placeholder`, `description` автоматически. При смене локали все компоненты перерендерятся.
 
 ```tsx
 import { useTranslations } from "next-intl";
 import { useTranslator } from "palistor/react/useTranslator";
 
-function Layout({ children }: { children: React.ReactNode }) {
+function RootLayout({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   useTranslator(paymentStore, t);
   return <>{children}</>;
 }
 ```
 
-В конфиге label/placeholder задаются как функции перевода:
+В конфиге `label` / `placeholder` задаются как функции-переводчики:
 
 ```typescript
-label: (t) => t("fields.cardNumber"),
+cardNumber: {
+  value: "",
+  label:       (t) => t("fields.cardNumber"),
+  placeholder: (t) => t("fields.cardNumber.placeholder"),
+},
 ```
 
-Без translator — возвращаются ключи как есть (удобно для тестов).
+> Без translator функции возвращают свой результат вызова как есть — удобно для тестов без i18n-окружения.
 
 ---
 
-## Уведомления (`useNotifier`)
+## Уведомления
 
-Регистрирует функцию уведомлений для использования в `resolve.onError`:
+Регистрирует функцию toast-уведомлений для использования внутри `resolve.onError`:
 
 ```tsx
 import { useNotifier } from "palistor/react/useNotifier";
 
-function Layout({ children }: { children: React.ReactNode }) {
-  const notifyError = useCallback((error: any, code?: string) => {
-    addToast({ title: code ?? "Unknown error", color: "danger" });
+function RootLayout({ children }: { children: React.ReactNode }) {
+  const notifyError = useCallback((error: unknown, code?: string) => {
+    addToast({ title: code ?? "Ошибка", color: "danger" });
   }, []);
 
   useNotifier(paymentStore, notifyError);
@@ -566,154 +675,43 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 ---
 
-## Примеры
-
-### Computed value
-
-```typescript
-const store = createProxyStore({
-  config: {
-    price:    { value: 0 },
-    quantity: { value: 1 },
-    total: {
-      value: (v) => v.price * v.quantity,
-      isReadOnly: true,
-    },
-  },
-});
-```
-
-### Цепочка computed (топологическая сортировка)
-
-```typescript
-const store = createProxyStore({
-  config: {
-    price:    { value: 100 },
-    tax:      { value: (v) => v.price * 0.2,          dependencies: ["price"] },
-    total:    { value: (v) => v.price + v.tax,         dependencies: ["price", "tax"] },
-  },
-});
-```
-
-### setter — каскадное изменение нескольких полей
-
-```typescript
-country: {
-  value: "US",
-  setter: (value) => ({ city: "" }), // сбрасываем city при смене country
-},
-city: { value: "" },
-```
-
-### formatter — нормализация при записи
-
-```typescript
-email: {
-  value: "",
-  formatter: (v) => String(v).trim().toLowerCase(),
-},
-```
-
-### beforeSubmit — трансформация значения перед отправкой
-
-```typescript
-phone: {
-  value: "",
-  // Убираем форматирование (не мутирует store)
-  beforeSubmit: (value) => value.replace(/\D/g, ""),
-},
-```
-
-### Групповой узел с submit/reset
-
-```typescript
-const store = createProxyStore({
-  config: {
-    accountType: { value: "personal" },
-    company: {
-      isVisible: (v) => v.accountType === "business",
-      onSubmit: async (values) => {
-        await api.saveCompany(values.company);
-      },
-      afterSubmit: (_result, { reset }) => {
-        showSuccessToast();
-        reset();
-      },
-      name:  { value: "", isRequired: (v) => v.accountType === "business" },
-      taxId: { value: "" },
-    },
-  },
-});
-
-const result = await store.proxy.company.submit();
-if (!result.success) {
-  console.log(result.errors); // [{ path: "company.name", message: "Required" }]
-}
-```
-
-### Получение значений для отправки
-
-```typescript
-const values = store.getValues();
-// → { paymentType: "bank", passport: { number: "AB123", issueDate: "2020-01-01" } }
-await api.submit(values);
-```
-
----
-
-## Submit Result
-
-```typescript
-type SubmitResult =
-  | { success: true; result?: unknown }
-  | { success: false; errors: Array<{ path: string; message: string }> };
-```
-
----
-
 ## Структура модуля
 
 ```
 palistor/
-├── index.ts                           # Публичный API
+├── index.ts                        # Публичный API
 ├── store/
-│   ├── store.ts                       # createProxyStore — фабрика, подписки, версии
-│   ├── types.ts                       # ConfigNode, FieldProxyNode, GroupProxyNode, ProxyStore…
-│   ├── compute.ts                     # FieldState, computeFieldState, resolveFlag
-│   ├── valuesCache.ts                 # Постоянно-актуальный кеш значений (O(1) вместо обхода дерева)
-│   ├── registerNodes.ts               # Инициализация leafNodes + nodeState
-│   ├── hasComputedProps.ts            # Проверка computed-свойств у группы
-│   ├── constants.ts                   # Символы + FIELD_STATE_PROPS, CONFIG_PROPS
-│   ├── writePipeline.ts               # formatter → storeValue → setter
-│   ├── submitPipeline.ts              # beforeSubmit → validate → onSubmit → afterSubmit
-│   ├── resetPipeline.ts               # reset к defaults
-│   ├── onChangePipeline.ts            # onChange callback
-│   ├── resolvePipeline.ts             # Async resolver: deps, retry, optimistic, suspense
-│   ├── applyPatch.ts                  # Применение патча значений
-│   ├── dirtyTracking.ts               # captureInitialValues, recomputeDirty
-│   ├── nodeMap.ts                     # path и parent маппинги
-│   ├── createValuesTrackingProxy.ts   # Auto-deps для async resolver
+│   ├── store/
+│   │   ├── palistor.ts             # Palistor — ядро системы (kernel + ProxyStore)
+│   │   ├── registerNodes.ts        # Инициализация leafNodes + nodeState
+│   │   └── types.ts                # ConfigNode, ProxyStore, ListState и др.
 │   ├── buildProxy/
-│   │   ├── buildProxy.ts              # Proxy GET/SET traps
-│   │   ├── computeProxyKeys.ts        # Ключи proxy (Object.keys / in)
-│   │   ├── handleLazyResolve.ts       # Ленивый запуск resolver при первом доступе
-│   │   ├── initProxyCaches.ts         # Кэш submitting/loading в nodeState
-│   │   ├── translatableProps.ts       # Свойства, проходящие через translator
-│   │   └── internalConfigKeys.ts      # Ключи, скрытые в proxy
-│   ├── init/
-│   │   ├── createNotificationHub.ts   # Версии нод, уведомления, dirty
-│   │   ├── createResolveManager.ts    # Запуск и перезапуск resolver-ов
-│   │   └── initGroupSubmitting.ts     # Инициализация submitting/dirty/revalidate
+│   │   ├── buildProxy.ts           # Proxy слой 1: GET/SET traps
+│   │   ├── buildListProxy.ts       # List proxy: items, add, remove, map…
+│   │   └── buildEntityProjectionProxy.ts  # Entity proxy через template
+│   ├── compute/
+│   │   └── recompute/              # recomputeLeaves, recomputeTargeted, topologicalSort
+│   ├── writePipeline/              # formatter → storeValue → setter
+│   ├── submitPipeline/             # beforeSubmit → validate → onSubmit → afterSubmit
+│   ├── resetPipeline/              # Сброс к defaults
+│   ├── onChangePipeline/           # onChange callback
+│   ├── resolvePipeline/            # Async resolver: deps, retry, optimistic, suspense
+│   ├── dirtyTracking/              # captureInitialValues, recomputeDirtyTargeted
+│   ├── entityRegistry/             # Нормализованный реестр сущностей
+│   ├── groupDeps/                  # Карта зависимостей между группами
+│   ├── traversal/                  # isLeaf / isGroup / isListNode / walkFull
+│   ├── valuesCache/                # buildValuesCache + O(1) updateValuesCacheEntry
+│   ├── init/                       # NotificationHub, ResolveManager, initGroupSubmitting
 │   └── persist/
-│       ├── persistManager.ts          # enable / disable / flush
-│       ├── drivers.ts                 # localStorageDriver, sessionStorageDriver
-│       └── types.ts                   # PersistDriver, PersistOptions
+│       ├── persistManager.ts       # enable / disable / flush
+│       ├── drivers.ts              # localStorageDriver, sessionStorageDriver
+│       └── types.ts                # PersistDriver, PersistOptions
 └── react/
-    ├── useForm.ts                     # React-хук: tracking proxy + useSyncExternalStore
-    ├── createTrackingProxy.ts         # Tracking proxy — записывает прочитанные ноды
-    ├── useTranslator.ts               # Регистрация i18n-функции
-    ├── useNotifier.ts                 # Регистрация функции уведомлений
-    └── usePersist.ts                  # React-интеграция persist
+    ├── useForm.ts                  # useSyncExternalStore + tracking proxy
+    ├── createTrackingProxy.ts      # Proxy слой 2: запись accessed нод
+    ├── useTranslator.ts            # Регистрация i18n-функции
+    ├── useNotifier.ts              # Регистрация функции уведомлений
+    └── usePersist.ts               # React-интеграция persist
 ```
 
 ---
@@ -721,3 +719,4 @@ palistor/
 ## Лицензия
 
 MIT
+
