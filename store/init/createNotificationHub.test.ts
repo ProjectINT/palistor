@@ -9,6 +9,8 @@ function makeDirtyDeps(rootConfig: AnyConfigNode = {} as AnyConfigNode) {
     rootConfig,
     nodeState: new WeakMap<object, any>(),
     initialValueMap: new WeakMap<object, unknown>(),
+    nodeParents: new WeakMap<object, object>(),
+    nodePaths: new WeakMap<object, string>(),
   };
 }
 

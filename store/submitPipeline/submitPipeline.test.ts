@@ -179,7 +179,7 @@ describe("SubmitPipeline", () => {
     const result = await store.submitPipeline.execute(root);
 
     expect(result).toEqual({ success: true, result: "ok" });
-    expect(onSubmit).toHaveBeenCalledWith({ x: 1 });
+    expect(onSubmit).toHaveBeenCalledWith({ x: 1 }, expect.any(Object));
   });
 
   it("возвращает success:false при наличии ошибок валидации", async () => {

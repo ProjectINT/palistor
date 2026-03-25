@@ -6,7 +6,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { CRYPTO_NETWORK_OPTIONS } from "../constants";
-import { usePaymentForm, type CryptoNetwork } from "@/config/paymentForm";
+import { usePaymentForm, type CryptoNetwork } from "@/config/appConfig";
 
 export function CryptoSection() {
   const t = useTranslations();

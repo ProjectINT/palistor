@@ -1,6 +1,6 @@
 import type { FieldState } from "../compute/index";
 import type { AnyConfigNode } from "../store/types";
-import { CONFIG_PROPS } from "../constants";
+import { walkFull } from "../traversal";
 
 /**
  * Инициализирует submitting: false, dirty: false, revalidate: false
@@ -10,7 +10,18 @@ export function initGroupSubmitting(
   node: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
 ) {
-  // Для текущего узла (группового) — инициализируем management flags
+  // Инициализируем сам корневой узел (walkFull его не посещает)
+  initGroupNode(node, nodeState);
+
+  walkFull(node, {
+    onLeaf() {}, // листья пропускаем
+    onGroupEnter(groupNode) {
+      initGroupNode(groupNode as AnyConfigNode, nodeState);
+    },
+  });
+}
+
+function initGroupNode(node: AnyConfigNode, nodeState: WeakMap<object, FieldState>) {
   const existing = nodeState.get(node);
   if (existing) {
     nodeState.set(node, {
@@ -30,13 +41,5 @@ export function initGroupSubmitting(
       dirty: false,
       revalidate: false,
     });
-  }
-
-  // Рекурсия в дочерние группы
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
-    const child = node[key];
-    if (!child || typeof child !== "object" || "value" in (child as object)) continue;
-    initGroupSubmitting(child as AnyConfigNode, nodeState);
   }
 }

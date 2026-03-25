@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/Input";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/appConfig";
 
 export function CardSection() {
   const t = useTranslations();

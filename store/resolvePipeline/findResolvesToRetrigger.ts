@@ -1,5 +1,5 @@
-import { type AnyConfigNode } from "../store/types";
-import type { Resolve, ResolveState } from "./types";
+import type { AnyResolveEntry } from "./initResolveStates";
+import type { ResolveState } from "./types";
 
 // ─── Check if changed paths intersect with resolve dependencies ──────────────
 
@@ -12,14 +12,14 @@ import type { Resolve, ResolveState } from "./types";
 export function findResolvesToRetrigger(
   changedPaths: Set<string>,
   resolveStates: Map<object, ResolveState>,
-  resolveEntries: Array<{ node: AnyConfigNode; resolve: Resolve }>,
-): Array<{ node: AnyConfigNode; resolve: Resolve }> {
+  resolveEntries: AnyResolveEntry[],
+): AnyResolveEntry[] {
   if (changedPaths.size === 0) return [];
 
-  const toRetrigger: Array<{ node: AnyConfigNode; resolve: Resolve }> = [];
+  const toRetrigger: AnyResolveEntry[] = [];
 
   for (const entry of resolveEntries) {
-    const state = resolveStates.get(entry.node);
+    const state = resolveStates.get(entry.node as object);
     if (!state) continue;
     // Only retrigger resolved or error nodes (not idle or pending)
     if (state.status !== "resolved" && state.status !== "error") continue;

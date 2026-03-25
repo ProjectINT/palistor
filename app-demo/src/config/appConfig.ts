@@ -1,46 +1,44 @@
 /**
- * Демо конфигурация формы оплаты
- * 
- * Демонстрирует все возможности Palistor:
- * - Условная видимость (isVisible)
- * - Условная обязательность (isRequired)
- * - Условная блокировка (isDisabled, isReadOnly)
- * - Валидация (validate)
- * - Форматтеры (formatter)
- * - Связанные изменения (setter)
- * - Зависимости (dependencies)
- * - i18n (label, placeholder, description)
- * - Computed values (value as function)
+ * Глобальная конфигурация приложения — единый Palistor store
+ *
+ * Демонстрирует комплексное глобальное состояние:
+ * - Форма оплаты: условная видимость, обязательность, валидация, форматтеры,
+ *   setter-зависимости, i18n, computed values, nested-поля
+ * - Каталог: списки (ListNode), async resolve с retry, фильтры, редактирование сущностей
  */
 
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import type { FormConfig, TranslateFn } from "@palistor";
-import { computed } from "./computed";
+
+import { payment } from "./payment";
 import { card } from "./card";
+import { bank } from "./bank";
+import { crypto } from "./crypto";
+import { contacts } from "./contacts";
+import { accountType } from "./accountType";
+import { address } from "./address";
+import { passport } from "./passport";
+import { checkboxes } from "./checkboxes";
+import { computed } from "./computed";
+import { catalog } from "./catalog/catalog";
 
 // ============================================================================
-// Типы формы
+// Типы
 // ============================================================================
 
 import type { Country, PaymentFormValues, PaymentType, AccountType, CryptoNetwork } from "./types";
-import { contacts } from "./contacts";
+import type { CatalogValues } from "./catalog/types";
 
-// Экспортируем типы для использования в компонентах
 export type { PaymentFormValues, PaymentType, AccountType, CryptoNetwork, Country };
-import { accountType } from "./accountType";
-import { address } from "./address";
-import { checkboxes } from "./checkboxes";
-import { bank } from "./bank";
-import { payment } from "./payment";
-import { crypto } from "./crypto";
-import { passport } from "./passport";
+export type { CatalogValues };
+export type AppValues = PaymentFormValues & CatalogValues;
 
 // ============================================================================
 // Конфигурация
 // ============================================================================
 
-export const paymentFormConfig = {
+export const appConfig = {
   // --------------------------------------------------------------------------
   // Тип оплаты — главный триггер для условной видимости
   // --------------------------------------------------------------------------
@@ -97,20 +95,25 @@ export const paymentFormConfig = {
   comment: {
     types: {
       dataType: "String" as const,
-      type: "string"
+      type: "string",
     },
     value: "",
     label: (t: TranslateFn) => t("form.comment"),
     placeholder: (t: TranslateFn) => t("form.commentPlaceholder"),
-    dependencies: [], // Пересчёт только при изменении себя
+    dependencies: [],
   },
-} satisfies FormConfig<PaymentFormValues>;
+
+  // --------------------------------------------------------------------------
+  // Каталог — фильтры, списки, редактирование сущностей
+  // --------------------------------------------------------------------------
+  ...catalog,
+};
 
 // ============================================================================
 // Значения по умолчанию
 // ============================================================================
 
-export const paymentFormDefaults: PaymentFormValues = {
+export const appDefaults: PaymentFormValues = {
   paymentType: "card",
   cardNumber: "",
   cardExpiry: "",
@@ -146,19 +149,30 @@ export const paymentFormDefaults: PaymentFormValues = {
 // Store
 // ============================================================================
 
-export const paymentStore = new Palistor({
-  config: paymentFormConfig,
-  initialValues: paymentFormDefaults,
+export const appStore = new Palistor({
+  config: appConfig,
+  initialValues: appDefaults,
 });
 
 /**
- * Хук для подключения компонентов к paymentStore.
+ * Хук для подключения компонентов к appStore.
  * Возвращает реактивный прокси — чтение поля = подписка на него.
  *
  * @example
- * const form = usePaymentForm();
- * form.email.value          // читаем
- * form.email.value = "x"    // пишем
+ * const app = useAppForm();
+ * app.email.value          // читаем
+ * app.email.value = "x"    // пишем
  */
-export const usePaymentForm = () => useForm(paymentStore) as any;
+export const useAppForm = () => useForm(appStore) as any;
 
+// ============================================================================
+// Обратная совместимость
+// ============================================================================
+
+export const paymentStore = appStore;
+export const paymentFormConfig = appConfig;
+export const paymentFormDefaults = appDefaults;
+export const usePaymentForm = useAppForm;
+
+export const catalogStore = appStore;
+export const useCatalogForm = useAppForm;

@@ -17,12 +17,13 @@ export interface ResolveErrorContext {
 export interface Resolve<T = Record<string, unknown>> {
   /**
    * Async data loader.
-   * `values` is a tracking write-proxy:
+   * `thisForm` is a tracking write-proxy of the current form/group values:
    *   - Read: tracks dependencies (auto-deps)
    *   - Write: buffers side-effects (batch)
+   * `store` is the ProxyStore instance for accessing other parts of the store.
    * Returns an object with values for THIS node's subtree.
    */
-  resolver: (values: any) => Promise<T>;
+  resolver: (thisForm: any, store: any) => Promise<T>;
 
   /**
    * Synchronous placeholder — set instantly before resolver completes.
@@ -86,4 +87,6 @@ export interface ResolveDeps {
   /** Initial value snapshot for dirty tracking — updated after resolver success. */
   initialValueMap: WeakMap<object, unknown>;
   valuesCache: ValuesCache;
+  /** The ProxyStore instance — passed as second argument to resolver. */
+  store: any;
 }

@@ -142,7 +142,7 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
    */
   beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
   /** Callback отправки формы. Вызывается после валидации в submit pipeline. */
-  onSubmit?: (values: TValues) => Promise<unknown> | unknown;
+  onSubmit?: (thisForm: TValues, store: any) => Promise<unknown> | unknown;
   /** Пост-обработка после успешного onSubmit. */
   afterSubmit?: (
     result: unknown,
@@ -262,18 +262,91 @@ export interface GroupProxyNode {
   setValues(patch: Record<string, unknown>): void;
 }
 
+// ─── Типы списков ────────────────────────────────────────────────────────────
+
+/**
+ * Конфигурация resolver-а для ListNode (аналог Resolve для группы, но возвращает
+ * массив entity-данных). Минимальный интерфейс без импорта Resolve из resolvePipeline
+ * (избегает циклических зависимостей).
+ */
+export interface ListResolveConfig {
+  /** Async data loader — returns array of entity records. */
+  resolver: (values: any) => Promise<Array<Record<string, unknown>>>;
+  /**
+   * Error handler called when resolver throws.
+   * ctx.notify — notification function from useNotifier.
+   */
+  onError?: (error: unknown, ctx: { notify: (...args: any[]) => void }) => void;
+  /** Explicit dependency paths — re-trigger resolver when these paths change. */
+  deps?: string[];
+  options?: {
+    /** Wait for first access to the list. Default: true */
+    lazy?: boolean;
+    /** Throw Promise for React Suspense. Default: false */
+    suspense?: boolean;
+  };
+}
+
+/**
+ * Конфигурация уровня списка (второй элемент ListNode-массива).
+ * Resolver и прочие опции уровня списка добавляются здесь.
+ */
+export interface ListConfig {
+  resolve?: ListResolveConfig;
+}
+
+/**
+ * Внутреннее состояние списка. Хранится в NodeRegistry.listStates,
+ * ключ — объект-массив конфига (сам ListNode).
+ */
+export interface ListState {
+  /** Шаблон элемента — describes поля для отображения. array[0]. */
+  template: object;
+  /** Конфигурация списка (resolve и т.д.). array[1] — опционально. */
+  listConfig?: ListConfig;
+  /** ID сущностей, входящих в список (в порядке отображения). */
+  itemIds: string[];
+  /** Инкрементируется при add/remove/setItems/resolve — для tracking. */
+  version: number;
+  /** Сохраняется при init/resolve — для dirty-tracking по составу. */
+  initialItemIds: string[];
+}
+
+/**
+ * Прокси-интерфейс для списка (ListNode в конфиге).
+ * TItem — тип одного элемента (EntityProjectionProxy в Phase 2B).
+ */
+export interface ListProxyNode<TItem> {
+  readonly items: ReadonlyArray<TItem>;
+  readonly length: number;
+  readonly loading: boolean;
+  /** true если состав списка изменился с момента init/последнего resolve. */
+  readonly dirty: boolean;
+  add(id: string): void;
+  add(values: Record<string, unknown>): TItem;
+  remove(id: string): void;
+  getById(id: string): TItem | undefined;
+  setItems(ids: string[]): void;
+  map<R>(fn: (item: TItem, index: number, id: string) => R): R[];
+  [Symbol.iterator](): Iterator<TItem>;
+}
+
 /**
  * Рекурсивно конвертирует узел конфига в его прокси-тип:
- * - Листовой узел (есть `value`) → `FieldProxyNode<TValue>`
- * - Групповой узел              → `GroupProxyNode & { дочерние поля… }`
+ * - ListNode (массив `[template, listConfig?]`) → `ListProxyNode<...>`
+ * - Листовой узел (есть `value`)               → `FieldProxyNode<TValue>`
+ * - Групповой узел                             → `GroupProxyNode & { дочерние поля… }`
  */
-type ConfigNodeToProxy<T> = T extends { value: any }
-  ? FieldProxyNode<ExtractNodeValue<T>>
-  : T extends Record<string, any>
-    ? GroupProxyNode & {
-        [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
-      }
-    : never;
+type ConfigNodeToProxy<T> =
+  T extends readonly [infer Item, ...any[]]
+    ? ListProxyNode<ConfigNodeToProxy<Item>>
+    : T extends { value: any }
+      ? FieldProxyNode<ExtractNodeValue<T>>
+      : T extends Record<string, any>
+        ? GroupProxyNode & {
+            [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
+          }
+        : never;
 
 /**
  * Полный прокси для конфига формы: каждый ключ маппируется в прокси-узел.
@@ -290,11 +363,13 @@ export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & 
  * Служебные ключи (validate, formatter, …) — пропускаются.
  */
 export type ExtractValues<T> = {
-  [K in keyof T as K extends ConfigSkipKeys ? never : K]: T[K] extends { value: any }
-    ? ExtractNodeValue<T[K]>
-    : T[K] extends Record<string, any>
-      ? ExtractValues<T[K]>
-      : never;
+  [K in keyof T as K extends ConfigSkipKeys ? never : K]: T[K] extends readonly [infer Item, ...any[]]
+    ? Array<ExtractValues<Item>>
+    : T[K] extends { value: any }
+      ? ExtractNodeValue<T[K]>
+      : T[K] extends Record<string, any>
+        ? ExtractValues<T[K]>
+        : never;
 };
 
 // ─── Интерфейсы Store ────────────────────────────────────────────────────────
@@ -386,4 +461,19 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * Используется для подлива серверных данных или bulk-изменений из React.
    */
   setValues(patch: DeepPartialValues<ExtractValues<TConfig>>): void;
+
+  /**
+   * Создать или обновить entity (или массив entities) в реестре.
+   * - Если entity с таким id не существует — создаётся, leaf-ноды регистрируются.
+   * - Если существует — рекурсивный merge; изменённые leaf-ноды уведомляются.
+   * - Batch-режим: массив обрабатывается одним recompute + notifyChanged.
+   */
+  set(data: import("../entityRegistry").EntityData | import("../entityRegistry").EntityData[]): void;
+
+  /**
+   * Удалить entity из реестра по ID.
+   * Очищает leaf-ноды, bindings и resolvedCache. Уведомляет подписчиков.
+   * No-op если entity не существует.
+   */
+  delete(id: string): void;
 }

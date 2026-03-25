@@ -1,5 +1,5 @@
 import type { AnyConfigNode } from "../../store/types";
-import { CONFIG_PROPS } from "../../constants";
+import { configKeys, isLeaf } from "../../traversal";
 import type { LeafEntry, GroupLeafMap } from "../../store/registerNodes";
 
 /**
@@ -20,14 +20,12 @@ export function collectGroupLeafNodes(
   if (ownLeaves) result.push(...ownLeaves);
 
   // Рекурсия в дочерние группы
-  for (const key of Object.keys(groupNode)) {
-    if (CONFIG_PROPS.has(key)) continue;
-
+  for (const key of configKeys(groupNode as Record<string, unknown>)) {
     const child = groupNode[key] as AnyConfigNode;
 
     if (!child || typeof child !== "object") continue;
 
-    if ("value" in child) continue; // уже в ownLeaves родителя
+    if (isLeaf(child)) continue; // уже в ownLeaves родителя
     result.push(...collectGroupLeafNodes(child, groupLeafMap));
   }
 

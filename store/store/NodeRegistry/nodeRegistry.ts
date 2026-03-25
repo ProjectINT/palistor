@@ -3,8 +3,8 @@ import { registerNodes, type GroupLeafMap, type LeafEntry, type InitialSlice } f
 import { buildNodeMaps } from "../nodeMap";
 import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
-import type { AnyConfigNode, TranslateFn } from "../types";
-import { isLeaf, isGroup } from "./nodeUtils";
+import type { AnyConfigNode, TranslateFn, ListState } from "../types";
+import { isLeaf, isGroup, isListNode } from "./nodeUtils";
 
 /**
  * Реестр узлов конфига.
@@ -35,6 +35,8 @@ export class NodeRegistry {
       "",
       this.groupLeafMap,
       translate,
+      this.listStates,
+      this.allListStates,
     );
 
     // Фаза 2: инициализируем submitting/dirty/revalidate для групп
@@ -82,6 +84,19 @@ export class NodeRegistry {
    * Гарантирует стабильность ссылок (===) на proxy.
    */
   readonly proxyCache: WeakMap<object, unknown> = new WeakMap();
+
+  /**
+   * ListState для каждого ListNode в конфиге.
+   * Ключ — объект-массив конфига (сам ListNode).
+   * Заполняется при registerNodes (Phase 2A).
+   */
+  readonly listStates: WeakMap<object, ListState> = new WeakMap();
+
+  /**
+   * Все ListState-объекты в порядке регистрации.
+   * Используется Palistor для регистрации списков в EntityRegistry.rekey() (Phase 2C).
+   */
+  readonly allListStates: ListState[] = [];
 
   // ─── Навигация ───────────────────────────────────────────────────────────
 
@@ -132,4 +147,61 @@ export class NodeRegistry {
 
   isLeaf = isLeaf;
   isGroup = isGroup;
+  isListNode = isListNode;
+
+  /**
+   * Зарегистрировать листовой узел, созданный в runtime (например, entity leaf при store.set()).
+   *
+   * Обновляет все WeakMap-ы реестра и добавляет запись в `leafNodes`,
+   * чтобы `bumpLeafVersions` (NotificationHub) автоматически захватил новый узел.
+   *
+   * @param node    Объект-узел (`{ value }`)
+   * @param path    Абсолютный dot-путь, e.g. "users.0.name"
+   * @param parent  Непосредственный родительский объект-узел
+   * @param state   Начальное FieldState
+   */
+  registerDynamicLeaf(
+    node: object,
+    path: string,
+    parent: object,
+    state: import("../../compute/index").FieldState,
+  ): void {
+    const entry: import("../registerNodes").LeafEntry = { node: node as import("../types").AnyConfigNode, path };
+    this.leafNodes.push(entry);
+    this.nodeState.set(node, state);
+    this.nodePaths.set(node, path);
+    this.nodeParents.set(node, parent);
+    // groupLeafMap: добавить в лист-список родителя
+    let list = this.groupLeafMap.get(parent);
+    if (!list) {
+      list = [];
+      this.groupLeafMap.set(parent, list);
+    }
+    list.push(entry);
+  }
+
+  /**
+   * Снять регистрацию листового узла (например, при удалении entity).
+   *
+   * Удаляет запись из `leafNodes` и из `groupLeafMap` родителя.
+   * WeakMap-записи (nodeState, nodePaths, nodeParents) утилизируются GC автоматически.
+   *
+   * @param node  Листовой объект-узел
+   */
+  unregisterLeaf(node: object): void {
+    // Удалить из leafNodes
+    const idx = this.leafNodes.findIndex((e) => e.node === node);
+    if (idx !== -1) {
+      this.leafNodes.splice(idx, 1);
+    }
+    // Удалить из groupLeafMap родителя
+    const parent = this.nodeParents.get(node);
+    if (parent) {
+      const list = this.groupLeafMap.get(parent);
+      if (list) {
+        const listIdx = list.findIndex((e) => e.node === node);
+        if (listIdx !== -1) list.splice(listIdx, 1);
+      }
+    }
+  }
 }

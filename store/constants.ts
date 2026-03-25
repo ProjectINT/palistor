@@ -17,6 +17,12 @@ export const SOURCE_PROXY: unique symbol = Symbol("sourceProxy");
 export const STORE_REF: unique symbol = Symbol("storeRef");
 
 /**
+ * Символ для получения entity ID из EntityProjectionProxy.
+ * Позволяет useForm(entity, templateSelector) извлечь entityId и store из proxy.
+ */
+export const ENTITY_ID: unique symbol = Symbol("entityId");
+
+/**
  * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
  * возвращает значение из FieldState (вычисленное), а не из конфига.
  */
@@ -78,4 +84,20 @@ export const GROUP_SPREAD_KEYS: string[] = [
   "loading",
   "submit",
   "reset",
+];
+
+/**
+ * Статический набор ключей для proxy списка (ListNode).
+ * Возвращается из computeProxyKeys вместо GROUP_SPREAD_KEYS, когда узел — массив.
+ */
+export const LIST_SPREAD_KEYS: string[] = [
+  "items",
+  "length",
+  "loading",
+  "dirty",
+  "add",
+  "remove",
+  "getById",
+  "setItems",
+  "map",
 ];

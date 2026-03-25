@@ -35,7 +35,7 @@ export function executeResolve(
   resolve: Resolve,
   deps: ResolveDeps,
 ): Promise<unknown> {
-  const { rootConfig, nodeState, resolveStates, recompute, notifyChanged, notify, getValues, initialValueMap, valuesCache } = deps;
+  const { rootConfig, nodeState, resolveStates, recompute, notifyChanged, notify, getValues, initialValueMap, valuesCache, store } = deps;
   const state = resolveStates.get(node);
   if (!state) return Promise.resolve();
 
@@ -106,7 +106,7 @@ export function executeResolve(
         const freshValues = getValues();
         const tracking = createValuesTrackingProxy(freshValues);
 
-        const result = await resolve.resolver(tracking.proxy);
+        const result = await resolve.resolver(tracking.proxy, store);
 
         // Re-check: if status changed during await, abort
         if (state.status !== "pending") return result;

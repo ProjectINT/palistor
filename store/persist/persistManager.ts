@@ -157,7 +157,7 @@ export class PersistManager {
       // Пересчитываем, объединяем и уведомляем подписчиков
       recomputeAndNotify(
         patchedNodes,
-        () => this.kernel.recomputeAll(),
+        () => this.kernel.recompute(),
         (c) => this.kernel.notifyChanged(c),
       );
     } catch {

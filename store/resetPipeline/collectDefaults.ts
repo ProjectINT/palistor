@@ -1,4 +1,4 @@
-import { CONFIG_PROPS } from "../constants";
+import { configKeys, isLeaf, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 
 /**
@@ -13,13 +13,12 @@ import type { AnyConfigNode } from "../store/types";
 export function collectDefaults(node: AnyConfigNode): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
-  for (const key of Object.keys(node)) {
-    if (CONFIG_PROPS.has(key)) continue;
-
+  for (const key of configKeys(node as Record<string, unknown>)) {
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
+    if (isListNode(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
 
-    if ("value" in child) {
+    if (isLeaf(child)) {
       const raw = child.value;
       result[key] = typeof raw === "function" ? "" : raw;
     } else {

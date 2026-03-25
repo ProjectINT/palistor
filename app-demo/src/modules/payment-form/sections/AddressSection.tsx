@@ -6,7 +6,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { COUNTRY_OPTIONS, CITIES_BY_COUNTRY } from "../constants";
-import { usePaymentForm, type Country } from "@/config/paymentForm";
+import { usePaymentForm, type Country } from "@/config/appConfig";
 
 export function AddressSection() {
   const t = useTranslations();

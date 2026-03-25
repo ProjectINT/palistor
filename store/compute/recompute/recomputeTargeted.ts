@@ -59,6 +59,8 @@ export function recomputeTargeted(
 
   for (const groupPath of orderedGroups) {
     const groupNode = resolveGroupByPath(rootConfig, groupPath);
+    // Entity-группы (пути "_entity_.*") не существуют в rootConfig — пропускаем
+    if (!groupNode) continue;
     const ownLeaves = groupLeafMap.get(groupNode) ?? [];
     const changed = recomputeLeaves(ownLeaves, nodeState, valuesCache, translate);
     for (const n of changed) allChanged.add(n);

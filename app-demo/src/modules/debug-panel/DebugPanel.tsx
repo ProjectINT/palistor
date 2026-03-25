@@ -2,16 +2,16 @@
 
 import { useTranslations } from "next-intl";
 
-import { usePaymentForm, paymentStore } from "@/config/paymentForm";
+import { usePaymentForm, paymentStore } from "@/config/appConfig";
+import { useCatalogForm, catalogStore } from "@/config/catalog/catalogConfig";
 
 export function DebugPanel() {
   const t = useTranslations();
-  // Вызываем usePaymentForm() чтобы подписаться на любые изменения store.
-  // Без чтения полей из proxy — подписка идёт на глобальную версию (перерисовка
-  // при любом изменении), что и нужно для debug-панели.
   usePaymentForm();
+  useCatalogForm();
 
-  const values = paymentStore.getValues();
+  const paymentValues = paymentStore.getValues();
+  const catalogValues = catalogStore.getValues();
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6 space-y-6">
@@ -19,14 +19,36 @@ export function DebugPanel() {
         {t("debug.stateTitle")}
       </h2>
 
-      {/* Values */}
+      {/* Payment store values */}
       <div>
         <h3 className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-          {t("debug.fieldsTitle")} — store.getValues()
+          paymentStore — {t("debug.fieldsTitle")}
         </h3>
-        <div className="max-h-96 overflow-auto">
+        <div className="max-h-80 overflow-auto">
           <pre className="text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 p-3 rounded-lg">
-            {JSON.stringify(values, null, 2)}
+            {JSON.stringify(paymentValues, null, 2)}
+          </pre>
+        </div>
+      </div>
+
+      {/* Catalog store values */}
+      <div>
+        <h3 className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+          catalogStore — lists & entities
+        </h3>
+        <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
+          <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-800">
+            <span className="text-zinc-500 dark:text-zinc-400">Users: </span>
+            <strong>{Array.isArray(catalogValues.users) ? (catalogValues.users as unknown[]).length : 0}</strong>
+          </div>
+          <div className="p-2 rounded bg-zinc-50 dark:bg-zinc-800">
+            <span className="text-zinc-500 dark:text-zinc-400">Products: </span>
+            <strong>{Array.isArray(catalogValues.products) ? (catalogValues.products as unknown[]).length : 0}</strong>
+          </div>
+        </div>
+        <div className="max-h-80 overflow-auto">
+          <pre className="text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 p-3 rounded-lg">
+            {JSON.stringify(catalogValues, null, 2)}
           </pre>
         </div>
       </div>

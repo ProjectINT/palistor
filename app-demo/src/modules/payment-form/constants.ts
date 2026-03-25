@@ -1,4 +1,4 @@
-import type { Country } from "@/config/paymentForm";
+import type { Country } from "@/config/appConfig";
 
 export const PAYMENT_TYPE_OPTIONS = [
   { value: "card", label: "paymentTypes.card" },

@@ -1,5 +1,5 @@
 import { type AnyConfigNode } from "../store/types";
-import { CONFIG_PROPS } from "../constants";
+import { configKeys, isLeaf } from "../traversal";
 import { pairKey } from "./pairKey";
 
 /**
@@ -19,11 +19,10 @@ export function createGroupDeps(
 
   // Self-зависимости вложенных групп
   function walk(node: AnyConfigNode): void {
-    for (const key of Object.keys(node)) {
-      if (CONFIG_PROPS.has(key)) continue;
+    for (const key of configKeys(node as Record<string, unknown>)) {
       const child = node[key] as AnyConfigNode;
       if (!child || typeof child !== "object") continue;
-      if ("value" in child) continue; // лист — не группа
+      if (isLeaf(child)) continue; // лист — не группа
       const path = nodePaths.get(child) ?? "";
       deps.add(pairKey(path, path));
       walk(child);

@@ -4,9 +4,46 @@
     "subtitle": "Тестовый стенд для формы",
     "tabs": {
       "payment": "Форма оплаты",
+      "lists": "Списки и сущности",
+      "async": "Асинхронные резольверы",
       "user": "Профиль пользователя",
       "debug": "Debug Panel"
     }
+  },
+  "catalog": {
+    "categoryFilter": "Фильтр категории",
+    "categoryFilterPlaceholder": "Все категории",
+    "search": "Поиск",
+    "searchPlaceholder": "Поиск...",
+    "userName": "Имя",
+    "userEmail": "Email",
+    "userRole": "Роль",
+    "productTitle": "Продукт",
+    "productPrice": "Цена",
+    "users": "Пользователи",
+    "products": "Продукты",
+    "addUser": "Добавить",
+    "removeUser": "Удалить",
+    "editUser": "Изменить",
+    "noUsers": "Нет пользователей",
+    "noProducts": "Нет продуктов",
+    "loadingUsers": "Загрузка пользователей...",
+    "loadingProducts": "Загрузка продуктов...",
+    "serverStatus": "Статус сервера",
+    "retry": "Повторить",
+    "listDirty": "Список изменён",
+    "entityCount": "Сущностей: {count}"
+  },
+  "async": {
+    "title": "Демо асинхронных резольверов",
+    "subtitle": "Демонстрация состояний загрузки, обработки ошибок, повторных попыток и авто-зависимостей",
+    "resolverStatus": "Статус резольвера",
+    "autoRetry": "Авто-повтор при ошибке",
+    "loadingState": "Загрузка...",
+    "errorState": "Произошла ошибка",
+    "resolvedState": "Данные загружены",
+    "autoDeps": "Авто-зависимости",
+    "autoDepsDescription": "Список продуктов перезагружается при смене фильтра категории"
   },
   "form": {
     "paymentType": "Тип оплаты",

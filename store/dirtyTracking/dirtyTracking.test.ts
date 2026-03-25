@@ -350,7 +350,7 @@ describe("submit pipeline validation", () => {
 
     const result = await store.submit();
     expect(result.success).toBe(true);
-    expect(config.onSubmit).toHaveBeenCalledWith({ email: "user@test.com" });
+    expect(config.onSubmit).toHaveBeenCalledWith({ email: "user@test.com" }, expect.any(Object));
   });
 
   it("submit sets submitting=true during execution", async () => {
@@ -380,7 +380,7 @@ describe("submit pipeline validation", () => {
     const store = new Palistor({ config });
 
     await store.submit();
-    expect(config.onSubmit).toHaveBeenCalledWith({ email: "user@test.com" });
+    expect(config.onSubmit).toHaveBeenCalledWith({ email: "user@test.com" }, expect.any(Object));
   });
 
   it("afterSubmit is called with result and reset action", async () => {

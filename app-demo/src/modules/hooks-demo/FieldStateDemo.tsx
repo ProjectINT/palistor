@@ -1,6 +1,6 @@
 "use client";
 
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/appConfig";
 
 interface FieldStateDemoProps {
   fieldKey: string;

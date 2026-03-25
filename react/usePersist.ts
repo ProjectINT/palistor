@@ -9,7 +9,7 @@
  * ```tsx
  * import { usePersist } from "@palistor/react/usePersist";
  * import { localStorageDriver } from "@palistor/store/persist";
- * import { paymentStore } from "./config/paymentForm";
+ * import { paymentStore } from "./config/appConfig";
  *
  * function PaymentPage({ orderId }: { orderId: string }) {
  *   // Ключ зависит от orderId — становится известен только в React

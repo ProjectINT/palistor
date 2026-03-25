@@ -4,9 +4,46 @@
     "subtitle": "Form testing stand",
     "tabs": {
       "payment": "Payment Form",
+      "lists": "Lists & Entities",
+      "async": "Async Resolvers",
       "user": "User Profile",
       "debug": "Debug Panel"
     }
+  },
+  "catalog": {
+    "categoryFilter": "Category Filter",
+    "categoryFilterPlaceholder": "All categories",
+    "search": "Search",
+    "searchPlaceholder": "Search...",
+    "userName": "Name",
+    "userEmail": "Email",
+    "userRole": "Role",
+    "productTitle": "Product",
+    "productPrice": "Price",
+    "users": "Users",
+    "products": "Products",
+    "addUser": "Add User",
+    "removeUser": "Remove",
+    "editUser": "Edit",
+    "noUsers": "No users loaded",
+    "noProducts": "No products",
+    "loadingUsers": "Loading users...",
+    "loadingProducts": "Loading products...",
+    "serverStatus": "Server Status",
+    "retry": "Retry",
+    "listDirty": "List modified",
+    "entityCount": "Entities: {count}"
+  },
+  "async": {
+    "title": "Async Resolvers Demo",
+    "subtitle": "Demonstrates loading states, error handling, retry, and auto-dependencies",
+    "resolverStatus": "Resolver Status",
+    "autoRetry": "Auto-retry on Error",
+    "loadingState": "Loading...",
+    "errorState": "Error occurred",
+    "resolvedState": "Data loaded",
+    "autoDeps": "Auto-dependencies",
+    "autoDepsDescription": "Products list re-fetches when category filter changes"
   },
   "form": {
     "paymentType": "Payment Type",

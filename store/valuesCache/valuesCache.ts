@@ -1,4 +1,4 @@
-import { CONFIG_PROPS } from "../constants";
+import { configKeys, isLeaf, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 
@@ -28,13 +28,18 @@ export function buildValuesCache(
   const nodeSlot = new WeakMap<object, { parent: Record<string, unknown>; key: string }>();
 
   function walk(node: AnyConfigNode, target: Record<string, unknown>) {
-    for (const key of Object.keys(node)) {
-      if (CONFIG_PROPS.has(key)) continue;
-
+    for (const key of configKeys(node as Record<string, unknown>)) {
       const child = node[key] as AnyConfigNode;
       if (!child || typeof child !== "object") continue;
+      if (isListNode(child)) {
+        // ListNode: register empty array in values + nodeSlot for later updates
+        const emptyArray: unknown[] = [];
+        target[key] = emptyArray;
+        nodeSlot.set(child as unknown as object, { parent: target, key });
+        continue;
+      }
 
-      if ("value" in child) {
+      if (isLeaf(child)) {
         target[key] = nodeState.get(child)?.value ?? "";
         nodeSlot.set(child, { parent: target, key });
       } else {

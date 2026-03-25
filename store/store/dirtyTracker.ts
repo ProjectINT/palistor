@@ -2,7 +2,6 @@ import type { AnyConfigNode } from "./types";
 import type { FieldState } from "../compute/index";
 import { captureInitialValues } from "../dirtyTracking/captureInitialValues";
 import { mergeInitialValues } from "../dirtyTracking/mergeInitialValues";
-import { recomputeDirty, type RecomputeDirtyResult } from "../dirtyTracking/recomputeDirty";
 import { collectInitialSnapshot } from "../dirtyTracking/collectInitialSnapshot";
 
 /**
@@ -29,11 +28,6 @@ export class DirtyTracker {
     patch: Record<string, unknown>,
   ): void {
     mergeInitialValues(node, nodeState, this._initialValues, patch);
-  }
-
-  /** Recompute dirty flags for the subtree rooted at `node`. */
-  recompute(node: AnyConfigNode, nodeState: WeakMap<object, FieldState>): RecomputeDirtyResult {
-    return recomputeDirty(node, nodeState, this._initialValues);
   }
 
   /** Collect initial snapshot for a subtree — used by reset to restore to initial state. */
