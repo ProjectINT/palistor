@@ -15,6 +15,8 @@
 │  createTrackingProxy.ts                                  │
 │  • GET FIELD_STATE_PROP → пишет config-ноду             │
 │    в refs.accessed (tracked set компонента)             │
+│  • GET items/map/length/dirty (ListProxy)               │
+│    → пишет listNode в refs.accessed                     │
 │  • GET дочернего узла → рекурсивный tracking proxy      │
 │  • SET → прозрачно в Store Proxy                        │
 └────────────────────┬────────────────────────────────────┘
@@ -30,6 +32,8 @@
 │  • GET на группу с resolve (pending + suspense)         │
 │    → throw promise (React Suspense)                     │
 │  • SET "value" → запускает Write Pipeline               │
+│  • OWNKEYS / DESC → computeProxyKeys → скрывает         │
+│    internal ключи конфига при spread / Object.keys()    │
 └────────────────────┬────────────────────────────────────┘
                      │
            ┌─────────┼──────────┐
@@ -60,7 +64,7 @@ Palistor<TConfig>  (implements ProxyStore)
   ├─ @internal nodes         NodeRegistry   — nodeState, nodePaths, nodeParents,
   │                                           leafNodes, groupLeafMap, proxyCache
   ├─ @internal services      ServiceRegistry — translator, notifier, делегаты
-  ├─ @internal dirty         DirtyTracker   — initialValueMap, capture, merge, recompute
+  ├─ @internal dirty         DirtyTracker   — initialValueMap(getter), capture, merge, collectSnapshot
   ├─ @internal values        ValuesCache    — мутабельный снапшот values
   ├─ @internal groupDepsMap  GroupDepsMap   — deps, trackingWrap, isBuilt
   ├─ @internal hub           NotificationHub — версии, подписки, postNotifyHook
@@ -74,11 +78,46 @@ Palistor<TConfig>  (implements ProxyStore)
   ├─ @internal onChangePipeline OnChangePipeline(kernel)
   ├─ @internal proxyBuilder     ProxyBuilder(kernel)
   │
-  └─ @internal persist       PersistManager(kernel)  — создаётся при init, активируется через enable() из usePersist
+  └─ persist               PersistManager  — публичный (ProxyStore), создаётся при init, активируется через enable() из usePersist
 ```
 
 Все пайплайны принимают `kernel` (Palistor) в конструкторе и читают из него нужные
 подсистемы напрямую — без россыпи deps-аргументов.
+
+> **Примечание:** `set()` и `delete()` входят в интерфейс `ProxyStore` (типизированы).
+> `rekey()` и `invalidate()` — публичные методы Palistor вне `ProxyStore` interface;
+> подробнее в секции «store.set / store.delete / store.rekey / store.invalidate».
+
+### Последовательность конструктора
+
+```
+new Palistor(options):
+  1. ServiceRegistry               translate/notify делегаты
+  2. NodeRegistry                  парсинг конфига, регистрация листьев + ListState
+  3. DirtyTracker + buildValuesCache
+  4. EntityRegistry + registerList(ls) для всех listStates
+  5. GroupDepsMap + первый recompute()   строит карту groupDeps через trackingWrap
+     dirty.capture(rootConfig)           snapshot baseline после init
+  6. NotificationHub               { leafNodes, nodePaths }
+  7. ResolveManager
+  8. Pipeline-классы               Write, Reset, Submit, onChange, ProxyBuilder
+     proxyBuilder.build(rootConfig)   → this._proxy
+  9. PersistManager
+ 10. hub.setPostNotifyHook(resolveManager.createPostNotifyHook())
+ 11. resolveManager.launchEager()  запуск eager (lazy: false) resolvers
+```
+
+### @internal методы Palistor
+
+| Метод | Описание |
+|---|---|
+| `recompute(changedNodes?)` | Два режима: с `changedNodes` → таргетированный; без → полный |
+| `notifyChanged(changed)` | Вызывает `hub.notifyChanged` с DirtyDeps |
+| `setValuesNode(node, patch)` | `formatPatch(writePipeline/formatPatch.ts) → applyPatch → recomputeAndNotify`. `formatPatch` — рекурсивно применяет formatter'ы к патчу перед записью. |
+| `triggerEntityTemplateResolve(entityId, templateNode, entityProxy)` | Запустить resolve для entity-template binding (вызывается из `useForm` на mount). Loading flag + resolver + markResolved. |
+| `executeEntityTemplateSubmit(entityId, templateNode, entityProxy)` | Submit entity через template: validate → onSubmit → afterSubmit |
+| `_setEntitiesRaw(items)` | Upsert entities без recompute/notify (возвращает changedNodes) |
+| `_syncListValuesCache(listNode)` | Перестроить массив в valuesCache из `listState.itemIds → entityProjectionObjs` |
 
 ---
 
@@ -87,18 +126,22 @@ Palistor<TConfig>  (implements ProxyStore)
 ```
 form.email.value = "X"   (SET trap в buildProxy)
   │
-  ├─ 1. formatValue()       node.formatter(raw, allValues)
-  ├─ 1.5 skip?              Object.is(formatted, current) → skipped (warn)
-  ├─ 2. storeValue()        nodeState.set(node, { ...state, value })
-  │                         + updateValuesCacheEntry O(1)
-  ├─ 3. runSetter()         node.setter(value, allValues, prev) → patch → applyPatch()
-  ├─ 4. recompute(changedNodes)  таргетированный пересчёт групп
-  ├─ 5. notifyChanged()
-  │      ├─ recomputeDirty
+  ├─── WritePipeline.execute(node, rawValue) → WriteResult { changed: Set<object>, skipped?: boolean }
+  │      ├─ 1.   formatValue()        node.formatter(raw, allValues)
+  │      ├─ 1.5  skip?                Object.is(formatted, current)
+  │      │                            → return { changed: empty, skipped: true }
+  │      ├─ 2.   storeValue()         nodeState.set(node, { ...state, value })
+  │      │                            + updateValuesCacheEntry O(1)
+  │      ├─ 2.5  runSetter()          node.setter(value, allValues, prev) → patch → applyPatch()
+  │      ├─ 3.   recompute(changedNodes)  таргетированный пересчёт групп
+  │      └─ 4.   mergeChanged()       → возвращает WriteResult { changed }
+  │
+  ├─ 5. notifyChanged(result.changed)    ← SET trap, после WritePipeline
+  │      ├─ recomputeDirtyTargeted
   │      ├─ nodeVersions[node]++ для changed-нод
   │      ├─ globalListeners → useSyncExternalStore → getSnapshot()
   │      └─ postNotifyHook → findResolvesToRetrigger → resetResolveState → triggerResolve
-  └─ 6. onFieldChange()     fire-and-forget onChange (поднимается к предкам)
+  └─ 6. onChangePipeline.fire()          ← SET trap, fire-and-forget onChange
 ```
 
 ---
@@ -106,15 +149,58 @@ form.email.value = "X"   (SET trap в buildProxy)
 ## Submit Pipeline
 
 ```
-form.submit()                (executeSubmit)
+form.submit()                (SubmitPipeline.execute(groupNode))
   ├─ 1. submitting = true, setGroupRevalidate(true) → recompute → notifyChanged
-  ├─ 2. applyLeafBeforeSubmit()   leaf-level beforeSubmit на snapshot
-  ├─ 4. group beforeSubmit()      group-level beforeSubmit
+  ├─ 2. getSubValues()             извлечь текущие values поддерева
+  ├─ 3. applyLeafBeforeSubmit()    leaf-level beforeSubmit трансформации
+  ├─ 4. group beforeSubmit()       group-level beforeSubmit трансформация
   ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
-  ├─ 6. onSubmit(values) → result
+  ├─ 6. onSubmit(values, store) → result
   ├─ 7. afterSubmit(result, { reset })
-  ├─ 8. clearPersist()
+  ├─ 8. persist.clear()
   └─ finally: submitting = false → recompute → notifyChanged
+```
+
+---
+
+## Reset Pipeline
+
+```
+form.reset(values?)          (ResetPipeline.execute(groupNode, values?))
+  │
+  ├─ 1. buildResetPatch(groupNode, initialValueMap, values?)
+  │        ├─ values переданы явно → используются как патч напрямую
+  │        └─ иначе → collectInitialSnapshot (или collectDefaults как fallback)
+  │                   → затем если groupNode.reset() задан → трансформировать базу через него
+  │
+  ├─ 2. applyPatch(groupNode, patch) → changedNodes
+  │
+  ├─ 3. если values переданы явно:
+  │        captureInitialValues(groupNode) — новая baseline (dirty = false)
+  │
+  ├─ 4. setGroupRevalidate(groupNode, false) → сбросить режим валидации
+  │
+  └─ 5. recomputeAndNotify(changedNodes)
+```
+
+---
+
+## onChange Pipeline
+
+```
+WritePipeline возвращает результат → SET trap вызывает OnChangePipeline.fire(node, newValue, prev):
+  │
+  ├─ findOnChangeAncestors(node, nodeParents)
+  │    обходит родителей вверх — собирает предков у which onChange === Function
+  │
+  └─ для каждого ancestor:
+       ├─ fieldKey = computeFieldKey(nodePath, ancestorPath)
+       │    относительный путь изменённого поля от ancestor (e.g. "address.city")
+       │
+       └─ Promise.resolve(ancestor.onChange({ fieldKey, newValue, previousValue, allValues }))
+            .then(patch) → если объект-патч возвращён:
+            │               applyPatch(ancestor, patch) + recomputeAndNotify
+            .catch()     → ошибки подавляются (fire-and-forget)
 ```
 
 ---
@@ -124,7 +210,8 @@ form.submit()                (executeSubmit)
 ```
 GET form.car → узел idle → triggerResolve()
   ├─ optimisticResolver → applyPatch, loading: true, notifyChanged
-  └─ resolver(trackingProxy)         ← auto-deps: read → accessedPaths, write → buffer
+  └─ resolver(trackingProxy)         ← createValuesTrackingProxy (resolvePipeline/, ≠ React tracking proxy)
+                                        auto-deps: read → accessedPaths, write → pendingWrites buffer
        ├─ OK  → batch flush: applyPatch(result) + buffered writes, loading: false,
        │        status: resolved, save auto-deps, mergeInitialValues (dirty baseline),
        │        recompute, notifyChanged (1 раз)
@@ -138,6 +225,18 @@ Deps: явные (config) ∪ auto-deps (из tracking proxy resolver'а)
 Suspense: status === "pending" → throw promise → React <Suspense> ловит
 Ошибки: НИКОГДА не бросаются — только реактивно через form.car.isInvalid
 ```
+
+### List resolve (executeListResolve)
+
+Отличается от group resolve — resolver ListNode'а возвращает `Array<EntityData>`, а не патч:
+
+- Нет trackingProxy: resolver получает plain-снапшот значений
+- Нет optimisticResolver, нет retry
+- Результат → `setEntitiesRaw(items)` — upsert entities, регистрация leaf-нод
+- `listState.itemIds` заполняется из `.id` каждого элемента результата
+- `listState.initialItemIds = [...itemIds]` → dirty = false сразу после resolve
+- `listState.version++` → React замечает изменение
+- `syncListValuesCache(listNode)` → valuesCache синхронизируется
 
 ---
 
@@ -159,9 +258,17 @@ SET form.email.value → emailNode++ → getSnapshot → изменилось �
 
 ```
 store/
-  constants.ts              символы CONFIG_NODE / SOURCE_PROXY / STORE_REF / ENTITY_ID,
-                            наборы FIELD_STATE_PROPS / CONFIG_PROPS /
-                            GROUP_SPREAD_KEYS / LIST_SPREAD_KEYS
+  constants.ts              символы CONFIG_NODE / SOURCE_PROXY / STORE_REF / ENTITY_ID
+                            FIELD_STATE_PROPS (12): value, label, placeholder, description,
+                              isRequired, isReadOnly, isDisabled, isVisible, isInvalid,
+                              errorMessage, dirty, loading
+                            SPREADABLE_FIELD_STATE_PROPS (11): FIELD_STATE_PROPS − {dirty, loading} + {onValueChange}
+                            CONFIG_PROPS: надмножество FIELD_STATE_PROPS + validate, formatter,
+                              setter, componentProps, types, dependencies, onSubmit, beforeSubmit,
+                              afterSubmit, reset, onChange, resolve, deps
+                            GROUP_SPREAD_KEYS (6): submitting, dirty, revalidate, loading, submit, reset
+                            LIST_SPREAD_KEYS (9): items, length, loading, dirty, add, remove,
+                              getById, setItems, map
   traversal/
     nodeClassifier.ts       Layer 1: isLeaf, isGroup, isListNode, configKeys
     walkFull.ts             Layer 2: walkFull + TreeVisitor interface
@@ -172,8 +279,10 @@ store/
     buildProxy.ts                  Proxy слой 1: ProxyBuilder (class)
     buildEntityProjectionProxy.ts  EntityProjectionProxy + leaf proxy (entity через template)
     buildListProxy.ts              ListProxyNode: items, add, remove, setItems, map, ...
-    computeProxyKeys.ts            ownKeys для spread (field / group / list)
-    handleLazyResolve.ts           lazy resolve trigger при GET группы
+    computeProxyKeys.ts            ownKeys для spread: SPREADABLE_FIELD_STATE_PROPS + componentProps для листа,
+                                   LIST_SPREAD_KEYS для списка, GROUP_SPREAD_KEYS для группы
+    handleLazyResolve.ts           idle → queueMicrotask(triggerResolve) (безопасно во время рендера);
+                                   pending + suspense=true → throw promise → React Suspense
     initProxyCaches.ts             WeakMap-кэши (onValueChange, submit, reset, setValues)
   compute/
     computeFieldState.ts    вычисление FieldState одного узла
@@ -183,19 +292,19 @@ store/
     resolveString.ts        resolve строки (string | fn → string) + translate
     types.ts                FieldState + вспомогательные типы
     recompute/
-      collectGroupLeafNodes.ts  сбор OWN листьев группы (не рекурсивно)
+      collectGroupLeafNodes.ts  сбор всех листьев поддерева группы (рекурсивно: own + дочерние группы через groupLeafMap)
       recomputeAndNotify.ts     хелпер: recompute → merge → notifyChanged
       recomputeLeaves.ts        пересчёт списка листьев (computed + fieldState)
       recomputeTargeted.ts      таргетированный пересчёт по groupDeps (BFS)
       topologicalSortComputed.ts  алгоритм Кана для computed-узлов
       types.ts                  TrackingWrap + RecomputeTargetedDeps
   dirtyTracking/
-    captureInitialValues.ts   снимок initial values для dirty baseline
-    collectInitialSnapshot.ts сбор плоского снапшота дерева
-    isDirtyValue.ts           сравнение value с initial (dirty check)
-    mergeInitialValues.ts     обновление baseline после resolve
-    recomputeDirty.ts         пересчёт флага dirty для каждого листа
-    setGroupRevalidate.ts     выставление revalidate=true для группы (submit)
+    captureInitialValues.ts    снимок initial values для dirty baseline
+    collectInitialSnapshot.ts  вложенный снапшот initial values для reset (рекурсивно; граница — дочерние группы с reset())
+    isDirtyValue.ts            сравнение value с initial (primitives: ===, objects: JSON.stringify)
+    mergeInitialValues.ts      обновление baseline после resolve
+    recomputeDirtyTargeted.ts  пересчёт dirty-флага для changed нод + propagation к предкам
+    setGroupRevalidate.ts      выставление revalidate=true/false для группы (submit/reset)
   groupDeps/
     createGroupDeps.ts        начальная карта self-зависимостей групп
     createTrackingValues.ts   proxy для перехвата кросс-групповых READ-доступов
@@ -205,6 +314,7 @@ store/
     resolveGroupByPath.ts     config-узел группы по строковому пути
   init/
     createNotificationHub.ts  класс NotificationHub: версионирование + подписки + dirty
+                              Конструктор: { leafNodes: LeafEntry[], nodePaths: WeakMap }
     createResolveManager.ts   класс ResolveManager: trigger, retrigger, eager launch
     initGroupSubmitting.ts    submitting/dirty/revalidate для групповых узлов
   onChangePipeline/
@@ -213,24 +323,27 @@ store/
     onChangePipeline.ts       класс OnChangePipeline
   persist/
     drivers.ts                localStorage / sessionStorage drivers
-    persistManager.ts         класс PersistManager: hydrate, flush, clear (принимает kernel)
-    types.ts                  PersistDriver + PersistOptions
+    persistManager.ts         класс PersistManager: enable, disable, hydrate, flush, clear, isEnabled
+    types.ts                  PersistDriver (getItem / setItem / removeItem) +
+                              PersistOptions (key, driver, serialize?, deserialize?, debounce?, pick?, omit?)
   resetPipeline/
     buildResetPatch.ts        построение патча сброса из defaults + overrides
     collectDefaults.ts        сбор дефолтных значений дерева
     resetPipeline.ts          класс ResetPipeline
   resolvePipeline/
-    applyPendingWrites.ts     сброс буфера write-операций после resolve
+    applyPendingWrites.ts         сброс буфера write-операций после resolve
     createValuesTrackingProxy.ts  tracking write-proxy для resolver (auto-deps)
-    executeResolve.ts         основная логика: init → optimistic → async → retry
-    findResolvesToRetrigger.ts  поиск resolve-нод, зависящих от changedPaths
-    initResolveStates.ts      инициализация resolveStates при старте
-    resetResolveState.ts      сброс статуса resolve-ноды в idle
-    types.ts                  Resolve, ResolveDeps, ResolveState
+    executeListResolve.ts         resolve для ListNode: resolver → Array<EntityData> → upsert entities → itemIds; ListResolveDeps
+    executeResolve.ts             основная логика для групп: init → optimistic → trackingProxy → async → retry
+    findResolvesToRetrigger.ts    поиск resolve-нод, зависящих от changedPaths
+    initResolveStates.ts          рекурсивный обход конфига: ноды с resolve → ResolveState (idle);
+                                  обрабатывает группы и ListNode (listConfig.resolve, Phase 2C)
+    resetResolveState.ts          сброс статуса resolve-ноды в idle
+    types.ts                      Resolve, ResolveDeps, ResolveState, ResolveStatus, ResolveErrorContext
   entityRegistry/
     entityRegistry.ts   класс EntityRegistry: upsert, get, delete, bind/unbind,
                         markResolved/isResolved/clearResolved, rekey, registerList
-    generateId.ts       генерация временного ID (`_tmp_<uuid>`)
+    generateId.ts       генерация временного ID (`_tmp_<ts_base36>_<rand8>_<seq>`)
     index.ts            реэкспорты
     types.ts            EntityNode, EntityLeafNode, EntityGroupNode, EntityData
   store/
@@ -238,8 +351,8 @@ store/
       nodeRegistry.ts   класс NodeRegistry (listStates: WeakMap, allListStates: ListState[])
       nodeUtils.ts      isLeaf (реэкспорт из traversal), isGroup, isListNode (length 1-2),
                         NodeUtils class — используется в buildProxy / computeProxyKeys
-    dirtyTracker.ts           класс DirtyTracker: initialValueMap, capture, merge, recompute
-    groupDepsMap.ts           класс GroupDepsMap: deps, trackingWrap, isBuilt
+    dirtyTracker.ts           класс DirtyTracker: initialValueMap(getter), capture, merge, collectSnapshot
+    groupDepsMap.ts           класс GroupDepsMap: deps (Set<string>), isBuilt, getTrackingWrap(), markBuilt()
     hasComputedProps.ts       проверка: есть ли computed-свойства у группы
     index.ts                  Palistor + реэкспорты публичных типов
     nodeMap.ts                buildNodeMaps: nodePaths + nodeParents
@@ -252,7 +365,7 @@ store/
     collectLeafStates.ts      сбор состояний листьев (для проверки ошибок)
     getSubValues.ts           извлечение values поддерева
     submitPipeline.ts         класс SubmitPipeline
-    types.ts                  SubmitDeps, SubmitResult
+    types.ts                  SubmitResult: `{ success: true; result? }` | `{ success: false; errors: {path, message}[] }`
   valuesCache/
     valuesCache.ts            buildValuesCache + updateValuesCacheEntry (O(1))
   writePipeline/
@@ -266,7 +379,9 @@ store/
 react/
   useForm.ts                  useSyncExternalStore + tracking proxy
   createTrackingProxy.ts      Proxy слой 2: запись accessed нод
-  useTranslator.ts            регистрация функции перевода (i18n)
+  useTranslator.ts            регистрация функции перевода (i18n);
+                              setTranslator(t) → hub.bumpLeafVersions() при смене (инкрементирует
+                              версии всех leaf-нод → ре-рендер компонентов с переводимыми полями)
   useNotifier.ts              регистрация функции уведомлений (toast)
   usePersist.ts               React-хук для подключения persist
 ```
@@ -281,7 +396,7 @@ react/
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Layer 3: Actions (конкретные операции)              │
-│  recomputeDirty, collectDefaults, buildValuesCache,  │
+│  recomputeDirtyTargeted, collectDefaults, buildValuesCache,  │
 │  captureInitialValues, collectLeafStates, …          │
 ├─────────────────────────────────────────────────────┤
 │  Layer 2: walkFull(node, visitor, path?)             │
@@ -319,11 +434,58 @@ interface TreeVisitor {
 }
 ```
 
-**Кто использует `walkFull`:** `captureInitialValues`, `collectLeafStates`.
+**Кто использует `walkFull`:** `captureInitialValues`, `collectLeafStates`, `initGroupSubmitting`.
 
-**Кто использует только Layer 1 (`configKeys` / `isLeaf` / `isListNode`):** функции, которые строят вложенный результат (рекурсия + объект-аккумулятор) — `collectDefaults`, `collectInitialSnapshot`, `buildValuesCache`, `recomputeDirty`, `setGroupRevalidate`, `initGroupSubmitting`, `createGroupDeps`.
+**Кто использует только Layer 1 (`configKeys` / `isLeaf` / `isListNode`):** функции, которые строят вложенный результат (рекурсия + объект-аккумулятор) — `collectDefaults`, `collectInitialSnapshot`, `buildValuesCache`, `recomputeDirtyTargeted`, `setGroupRevalidate`, `createGroupDeps`.
 
 **Параллельный обход (config + patch):** `formatPatch`, `applyPatch`, `mergeInitialValues` — итерируют по ключам patch, поэтому `configKeys()` не используется, только `isLeaf`/`isListNode` из traversal.
+
+---
+
+## DirtyTracking — отслеживание изменений
+
+`DirtyTracker` (`store/store/dirtyTracker.ts`) — класс, инкапсулирующий `initialValueMap: WeakMap<node, unknown>`.
+Методы:
+
+| Метод | Описание |
+|---|---|
+| `capture(node, nodeState)` | Снимок initial values через `walkFull` → записывает `state.value` в `initialValueMap`. Вызывается после init и после reset. |
+| `merge(node, nodeState, patch)` | Обновляет baseline по патчу — только узлы из patch. Вызывается после успешного resolve (чтобы resolver-данные не считались «dirty»). |
+| `collectSnapshot(node)` | Вложенный снапшот `initialValueMap` для подтерева — используется `buildResetPatch` при сбросе. |
+| `initialValueMap` (getter) | Прямой доступ к WeakMap — для модулей, принимающих deps-интерфейс. |
+
+### recomputeDirtyTargeted — алгоритм
+
+```
+WritePipeline/onChange возвращает changedNodes
+  │
+  └─ recomputeDirtyTargeted(changedNodes, ...):
+       │
+       ├─ 1. Для каждого ЛИСТА из changedNodes:
+       │      isDirtyValue(state.value, initialValueMap.get(leaf))
+       │      → leaf.dirty изменился → Set changed, запомнить groupPath
+       │
+       ├─ 2. BFS по affected group paths:
+       │      для каждой группы → aggregate anyChildDirty из immediate children
+       │      (isLeaf: dirty flag; isListNode: !arraysEqual(itemIds, initialItemIds))
+       │      → обновить group.dirty; если изменилось → bubble-up родителю в очередь
+       │      (bubble-up: nodeParents.get(groupNode) → parentPath → queue)
+       │
+       └─ 3. Возвращает { anyDirty: boolean, changed: Set<object> }
+              changed → notifyChanged → bumpVersion → React snapshot
+```
+
+### isDirtyValue — алгоритм
+
+```ts
+isDirtyValue(current, initial):
+  === → false
+  null == undefined (оба empty) → false
+  один null/undefined → true
+  разные typeof → true
+  typeof === "object" → JSON.stringify comparison (fallback: true при ошибке)
+  иначе → true
+```
 
 ---
 
@@ -348,7 +510,7 @@ updateValuesCacheEntry(cache, node, newValue)
 
 **Списки в valuesCache:** ListNode при обходе дерева получает пустой массив `[]`.
 `nodeSlot` регистрируется на объект-массив (а не на leaf-ноду). После каждой
-мутации списка (`add`, `remove`, `setItems`) вызывается `syncListValuesCache`,
+мутации списка (`add`, `remove`, `setItems`) вызывается `_syncListValuesCache` (приватный метод Palistor),
 который перестраивает `slot.parent[slot.key]` из `listState.itemIds` → массив
 POJO-зеркал (`entityProjectionObjs`). Это позволяет computed-выражениям вида
 `isVisible: (values) => values.users.length > 0` работать корректно.
@@ -458,6 +620,27 @@ recomputeLeaves(leafNodes[]):
       returns Set<object> изменённых узлов
 ```
 
+### FieldState — полный интерфейс
+
+```ts
+interface FieldState {
+  value: unknown;          // текущее значение (строка, число, любое)
+  label?: string;          // вычисленная метка
+  placeholder?: string;
+  description?: string;
+  isRequired: boolean;     // обязательное поле
+  isReadOnly: boolean;
+  isDisabled: boolean;
+  isVisible: boolean;
+  isInvalid?: boolean;     // ошибка валидации (только если revalidate=true)
+  errorMessage?: string;   // текст ошибки
+  submitting?: boolean;    // только для групп: идёт submit
+  dirty?: boolean;         // лист: ≠ initial; группа: хотя бы один dirty потомок
+  revalidate?: boolean;    // группа: показывать ошибки? (false до первого submit)
+  loading?: boolean;       // только для групп с resolve: идёт загрузка
+}
+```
+
 ### Call sites `recompute()`
 
 ```
@@ -468,8 +651,9 @@ recomputeLeaves(leafNodes[]):
 5. SubmitPipeline.execute (start) → полный (revalidate=true)
 6. SubmitPipeline.execute (end)   → полный
 7. ResetPipeline.execute()        → полный
-8. PersistManager.hydrateFromStorage() → полный
+8. PersistManager.enable() / .hydrate()   → полный (через private hydrateFromStorage)
 9. Palistor.setValuesNode()       → полный (патч может быть любым)
+10. ListProxy.add / remove / setItems     → полный (после каждой мутации списка: _syncListValuesCache → recompute() → notifyChanged)
 ```
 
 ---
@@ -497,12 +681,14 @@ EntityNode:
 
 | Метод | Описание |
 |---|---|
-| `upsert(data)` | Создать или слить entity по `data.id`. Рекурсивный merge: новые поля добавляются, существующие обновляются, отсутствующие не трогаются. Если `id` не задан — генерируется `_tmp_<uuid>`. |
+| `upsert(data)` | Создать или слить entity по `data.id`. Рекурсивный merge: новые поля добавляются, существующие обновляются, отсутствующие не трогаются. Если `id` не задан — генерируется `_tmp_<ts_base36>_<rand8>_<seq>`. |
 | `get(id)` | Получить EntityNode по ID |
 | `delete(id)` | Удалить entity + очистить bindings + resolvedCache. Возвращает `boolean`. |
 | `has(id)` | Проверить существование |
+| `size` | Количество entity в реестре |
 | `bind(id, templateNode)` | Зарегистрировать привязку entity↔template (вызывается из `useForm` на mount) |
 | `unbind(id, templateNode)` | Снять привязку (вызывается из `useForm` на unmount) |
+| `getBindings(id)` | Получить `ReadonlySet<object>` привязанных template-нод для entity |
 | `markResolved(id, templateNode)` | Пометить пару entity+template как resolved |
 | `isResolved(id, templateNode)` | Проверить resolved cache — skip resolve при повторном открытии |
 | `clearResolved(id, templateNode?)` | Сбросить resolved cache |
@@ -530,7 +716,7 @@ users: [
 
 `array[0]` — **template**: обычная group-нода, описывает поля элемента. Все правила
 (formatter, setter, validate, isRequired, onChange) работают на листьях template.  
-`array[1]` (опционально) — **listConfig**: конфигурация уровня списка (resolve и т.д.).
+`array[1]` (опционально) — **listConfig**: `ListConfig { resolve?: ListResolveConfig }` — единственное поле.
 
 ### ListState
 
@@ -597,11 +783,14 @@ buildEntityProjectionProxy(entityNode, templateNode, kernel, entityProxyCache, l
 
 `buildEntityLeafProxy` строит leaf proxy, где GET-трапы:
 - `value` → читает `entityLeaf.value` (или из `nodeState`, если leaf зарегистрирован)
-- `label/placeholder/description` → из templateField (строка или функция с entityValues)
-- `isRequired/isReadOnly/isDisabled/isVisible` → bool или функция с entityValues
-- `isInvalid/errorMessage` → вызывает `templateField.validate(value, entityValues)`
-- `dirty` → из `nodeState` (заполняется `recomputeDirty`)
+- `label/placeholder/description` → из templateField (строка или функция `(translate, entityValues)` — два аргумента)
+- `isRequired/isReadOnly/isDisabled/isVisible` → bool или функция `(entityValues)`
+- `isInvalid/errorMessage` → вызывает `templateField.validate(value, entityValues, translate)`
+- `dirty` → из `nodeState` (заполняется `recomputeDirtyTargeted`)
 - `onValueChange` → fn, вызывающий `writeEntityLeafValue`
+
+`ownKeys` листового proxy: `value, label, placeholder, description, isRequired, isReadOnly, isDisabled, isVisible, isInvalid, errorMessage, dirty, onValueChange`  
+(≠ FIELD_STATE_PROPS: включает `onValueChange`, не включает `loading`)
 
 SET trap на `"value"` → `writeEntityLeafValue`:
 1. `formatValue(rawValue, templateField, entityValues)` — formatter из template
@@ -610,13 +799,22 @@ SET trap на `"value"` → `writeEntityLeafValue`:
 4. `templateField.setter(value, entityValues, prev)` → applyPatch к sibling-нодам entity
 5. `kernel.recompute(changedNodes)` + `kernel.notifyChanged(allChanged)`
 
-Proxy экспортирует через `ownKeys` полный набор `FIELD_STATE_PROPS`.
+**Root entity proxy** (только если `"id" in entityNode`) дополнительно экспортирует через `ownKeys`:
+- `id` → значение из nodeState (строка), не через leaf proxy
+- `loading` / `submitting` → из `_getEntityBindingState(entityId, templateNode)` (внутренний Map)
+- `submit` → `kernel.executeEntityTemplateSubmit(entityId, templateNode, proxy)`
+
+**Вложенные группы:** если поле templateNode — это group-нода (нет `"value"`), proxy рекурсивно
+строит `buildEntityProjectionProxy(entityField, templateField, …)` вместо `buildEntityLeafProxy`.  
+**Phantom leaves:** если в entityNode поля нет, но в template оно есть — создаётся временный
+`{ value: templateField.value }` и оборачивается в leaf proxy (без кэширования).
+
 На entity proxy дополнительно доступны `ENTITY_ID` (symbol → entityId) и
 `STORE_REF` (symbol → kernel) — для извлечения в `useForm(entity, templateSelector)`.
 
 ---
 
-## store.set() / store.delete() / store.rekey()
+## store.set() / store.delete() / store.rekey() / store.invalidate()
 
 Публичные методы `Palistor` для управления entity-данными.
 
@@ -655,12 +853,60 @@ Entity не удаляется из списков автоматически �
    `itemIds` во всех зарегистрированных ListState
 2. Переносит запись в `entityProjectionObjs`
 3. Обновляет `nodeState` для id.value leaf
-4. `notifyChanged(...)`
+4. `recompute(changedNodes)` → merge changedNodes в результат
+5. `notifyChanged(merged)`
 
 ### store.invalidate(id, templateNode?)
 
 Сбрасывает resolved cache для entity (одного template или всех). Следующий `useForm(entity, selector)`
 заново запустит resolve. При `store.set()` resolved cache **не** сбрасывается — данные совместимы.
+
+---
+
+## Persist
+
+`PersistManager` создаётся внутри Palistor при инициализации и активируется через `persist.enable(options)` из `usePersist` хука.
+
+### PersistDriver
+
+```ts
+interface PersistDriver {
+  getItem(key: string): string | null | Promise<string | null>;
+  setItem(key: string, value: string): void | Promise<void>;
+  removeItem(key: string): void | Promise<void>;
+}
+```
+
+Встроенные реализации: `localStorageDriver`, `sessionStorageDriver` (экспортируются из root `index.ts`).
+
+### PersistOptions
+
+```ts
+interface PersistOptions {
+  key: string;           // уникальный ключ хранения
+  driver: PersistDriver;
+  serialize?: (values) => string;   // по умолчанию JSON.stringify
+  deserialize?: (raw) => object;    // по умолчанию JSON.parse
+  debounce?: number;                // задержка auto-save в ms (по умолчанию 100)
+  pick?: string[];    // персистить только указанные поля верхнего уровня
+  omit?: string[];    // исключить указанные поля (игнорируется если задано pick)
+}
+```
+
+### PersistManager API
+
+| Метод | Описание |
+|---|---|
+| `enable(options): Promise<void>` | Активировать: гидратация из storage + auto-save при изменениях |
+| `disable(): void` | Деактивировать: отписка от store, отмена таймеров |
+| `flush(): Promise<void>` | Принудительно сохранить без debounce |
+| `hydrate(): Promise<void>` | Принудительно перечитать из storage и применить |
+| `clear(): Promise<void>` | Удалить данные по текущему ключу |
+| `isEnabled(): boolean` | Активна ли персистенция в данный момент |
+
+Жизненный цикл через `usePersist`:
+- **mount** → `store.persist.enable(options)` (hydrate + auto-save subscribe)
+- **unmount** → `store.persist.flush()` + `store.persist.disable()`
 
 ---
 
@@ -786,5 +1032,57 @@ function EditUserModal({ userProxy }) {
 - Колбэки submit/reset/onChange задаются в конфиге, не при вызове useForm
 - `{...form.email}` — spread-safe: скрывает validate/formatter/setter через ownKeys
 - Entity mode: `useForm(entityProxy, selector)` — bind на mount, unbind на unmount, resolved cache после unmount сохраняется
+
+---
+
+## Публичный API (импорты)
+
+Palistor не имеет единого barrel-экспорта для всего. Точки входа:
+
+### `@palistor` (root `index.ts`) — типы
+
+```ts
+// Типы конфига и proxy
+import type {
+  FormConfig, TranslateFn, MaybeComputed, DeepPartialValues, FieldTypeMeta,
+  ConfigNode, FieldProxyNode, GroupProxyNode, ConfigProxy,
+  ExtractValues, ProxyStoreOptions, ProxyStore, Unsubscribe,
+} from "@palistor";
+
+// Типы resolve
+import type { Resolve, NotifyFn, ResolveErrorContext } from "@palistor";
+
+// Типы persist
+import type { PersistDriver, PersistOptions, PersistManager } from "@palistor";
+
+// value-экспорты из root
+import { useNotifier } from "@palistor";
+import { localStorageDriver, sessionStorageDriver } from "@palistor"; // также доступны из @palistor/store/persist
+```
+
+### `@palistor/store/store` — класс Palistor
+
+```ts
+import { Palistor } from "@palistor/store/store";
+```
+
+### `@palistor/react/*` — React хуки
+
+```ts
+import { useForm } from "@palistor/react/useForm";
+import { usePersist } from "@palistor/react/usePersist";
+import { useTranslator } from "@palistor/react/useTranslator";
+```
+
+### `@palistor/store/persist` — persist drivers
+
+```ts
+import { localStorageDriver, sessionStorageDriver } from "@palistor/store/persist";
+```
+
+> **Примечание:** Использование subpath imports (`/store/store`, `/react/useForm`) вместо barrel
+> объясняется тем, что root `index.ts` задумывался как только-типы, а конкретные реализации
+> подключаются напрямую по субпути. Символы `ENTITY_ID` и `STORE_REF` импортируются как
+> `import { ENTITY_ID, STORE_REF } from "@palistor/store/constants"` при необходимости прямого доступа.
 
 
