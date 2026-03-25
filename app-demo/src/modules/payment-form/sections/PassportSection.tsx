@@ -2,7 +2,7 @@
 
 import { Input } from "@/components/Input";
 import { Section } from "../../shared/Section";
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/appConfig";
 
 export function PassportSection() {
   const form = usePaymentForm();

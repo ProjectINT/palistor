@@ -5,7 +5,7 @@ import { Select, type SelectOption } from "@/components/Select";
 
 import { Section } from "@/modules/shared/Section";
 import { PAYMENT_TYPE_OPTIONS } from "../constants";
-import { usePaymentForm, type PaymentType } from "@/config/paymentForm";
+import { usePaymentForm, type PaymentType } from "@/config/appConfig";
 
 export function PaymentTypeSection() {
   const t = useTranslations();

@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-import { usePaymentForm, paymentStore } from "@/config/paymentForm";
+import { usePaymentForm, paymentStore } from "@/config/appConfig";
 import { useCatalogForm, catalogStore } from "@/config/catalog/catalogConfig";
 
 export function DebugPanel() {

@@ -9,7 +9,7 @@
  * ```tsx
  * import { useTranslations } from 'next-intl';
  * import { useTranslator } from '@palistor/react/useTranslator';
- * import { paymentStore } from './config/paymentForm';
+ * import { paymentStore } from './config/appConfig';
  *
  * function Layout({ children }: { children: React.ReactNode }) {
  *   const t = useTranslations();

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/Button";
 
-import { paymentStore, usePaymentForm } from "@/config/paymentForm";
+import { paymentStore, usePaymentForm } from "@/config/appConfig";
 
 export function FormActions() {
   const t = useTranslations();

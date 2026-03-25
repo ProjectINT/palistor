@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Checkbox } from "@/components/Checkbox";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/appConfig";
 
 export function AgreementsSection() {
   const t = useTranslations();

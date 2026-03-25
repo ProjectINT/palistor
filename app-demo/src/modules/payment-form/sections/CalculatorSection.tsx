@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/paymentForm";
+import { usePaymentForm } from "@/config/appConfig";
 import { Input } from "@/components/Input";
 
 export function CalculatorSection() {

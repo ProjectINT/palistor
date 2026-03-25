@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useTranslator } from "@palistor/react/useTranslator";
 import { usePersist } from "@palistor/react/usePersist";
 import { localStorageDriver } from "@palistor/store/persist";
-import { paymentStore } from "@/config/paymentForm";
+import { paymentStore } from "@/config/appConfig";
 import { catalogStore } from "@/config/catalog/catalogConfig";
 
 import { DemoHeader, type TabType } from "@/modules/header";

@@ -10,7 +10,7 @@
  * import { useCallback } from 'react';
  * import { useTranslations } from 'next-intl';
  * import { useNotifier } from '@palistor/react/useNotifier';
- * import { paymentStore } from './config/paymentForm';
+ * import { paymentStore } from './config/appConfig';
  *
  * function Layout({ children }: { children: React.ReactNode }) {
  *   const tErrors = useTranslations('Errors');
