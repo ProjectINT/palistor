@@ -237,9 +237,14 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
       return LIST_SPREAD_KEYS;
     },
 
-    getOwnPropertyDescriptor(_target, key: string | symbol) {
+    getOwnPropertyDescriptor(target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
       if (!LIST_SPREAD_KEYS.includes(key as string)) return undefined;
+      // Array targets have a non-configurable `length` property.
+      // The proxy invariant requires that we mirror this exactly.
+      if (key === "length") {
+        return { configurable: false, enumerable: false, writable: true, value: listState.itemIds.length };
+      }
       return { configurable: true, enumerable: true, writable: false };
     },
   });
