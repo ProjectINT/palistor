@@ -1,4 +1,3 @@
-import type { FieldState } from "../index";
 import {
   getNodeGroupPath,
   getRecipientGroups,

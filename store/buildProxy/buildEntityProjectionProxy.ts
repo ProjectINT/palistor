@@ -5,7 +5,6 @@ import type { Palistor } from "../store/palistor";
 import { storeValue } from "../writePipeline/storeValue";
 import { formatValue } from "../writePipeline/formatValue";
 import { mergeChanged } from "../writePipeline/mergeChanged";
-import { updateValuesCacheEntry } from "../valuesCache/valuesCache";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

@@ -119,7 +119,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     // ─── NodeRegistry ────────────────────────────────────────────────────────
 
     this.nodes = new NodeRegistry(rootConfig, initialValues as Record<string, unknown>, translate);
-    const { nodeState, nodePaths, nodeParents, leafNodes, groupLeafMap } = this.nodes;
+    const { nodeState, nodePaths, nodeParents, leafNodes } = this.nodes;
 
     // ─── DirtyTracker + ValuesCache ──────────────────────────────────────────
 

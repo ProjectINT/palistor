@@ -1,10 +1,24 @@
 {
-  "name": "palistor",
+  "name": "@projectint/palistor",
   "version": "0.0.1",
   "description": "State manager for react",
-  "main": "index.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "test": "test"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "state",
@@ -17,12 +31,16 @@
     "type": "git",
     "url": "https://github.com/ProjectINT/palistor"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "peerDependencies": {
     "react": "^19"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/react": "^19"
+    "@types/react": "^19",
+    "typescript": "^5.5.0"
   }
 }

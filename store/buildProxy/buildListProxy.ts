@@ -237,7 +237,7 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
       return LIST_SPREAD_KEYS;
     },
 
-    getOwnPropertyDescriptor(target, key: string | symbol) {
+    getOwnPropertyDescriptor(_target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
       if (!LIST_SPREAD_KEYS.includes(key as string)) return undefined;
       // Array targets have a non-configurable `length` property.

@@ -18,7 +18,7 @@ export class OnChangePipeline {
   constructor(private readonly kernel: Palistor<any>) {}
 
   fire(node: AnyConfigNode, newValue: unknown, previousValue: unknown): void {
-    const { nodeState, nodePaths, nodeParents } = this.kernel.nodes;
+    const { nodePaths, nodeParents } = this.kernel.nodes;
     const valuesCache = this.kernel.values;
 
     const ancestors = findOnChangeAncestors(node, nodeParents);
