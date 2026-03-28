@@ -9,6 +9,8 @@ export interface ValuesCache {
   readonly values: Record<string, unknown>;
   /** Маппинг config-node → { parent, key } для O(1) обновления. */
   readonly nodeSlot: WeakMap<object, { parent: Record<string, unknown>; key: string }>;
+  /** Маппинг group config-node → соответствующий вложенный объект values. */
+  readonly groupSlot: WeakMap<object, Record<string, unknown>>;
 }
 
 // ─── Build ───────────────────────────────────────────────────────────────────
@@ -26,6 +28,9 @@ export function buildValuesCache(
 ): ValuesCache {
   const values: Record<string, unknown> = {};
   const nodeSlot = new WeakMap<object, { parent: Record<string, unknown>; key: string }>();
+  const groupSlot = new WeakMap<object, Record<string, unknown>>();
+
+  groupSlot.set(rootConfig as object, values);
 
   function walk(node: AnyConfigNode, target: Record<string, unknown>) {
     for (const key of configKeys(node as Record<string, unknown>)) {
@@ -45,13 +50,14 @@ export function buildValuesCache(
       } else {
         const group: Record<string, unknown> = {};
         target[key] = group;
+        groupSlot.set(child as object, group);
         walk(child, group);
       }
     }
   }
 
   walk(rootConfig, values);
-  return { values, nodeSlot };
+  return { values, nodeSlot, groupSlot };
 }
 
 // ─── Update ──────────────────────────────────────────────────────────────────

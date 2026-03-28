@@ -250,6 +250,8 @@ export interface GroupProxyNode {
    * false до первого submit — ошибки скрыты.
    */
   readonly revalidate: boolean;
+  /** Текущие значения всех листовых полей поддерева в виде вложенного объекта. Живая ссылка (не клон). */
+  readonly values: Record<string, unknown>;
   /** Submit pipeline: submitting → beforeSubmit → validate → onSubmit → afterSubmit. */
   submit(): Promise<SubmitResult>;
   /** Reset поддерево к defaults из конфига (или к переданным значениям). */

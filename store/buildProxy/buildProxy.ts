@@ -79,6 +79,7 @@ export class ProxyBuilder {
             "dirty": () => currentNode?.[key as keyof FieldState] ?? false,
             "revalidate": () => currentNode?.[key as keyof FieldState] ?? false,
             "loading": () => currentNode?.[key as keyof FieldState] ?? false,
+            "values": () => kernel.values.groupSlot.get(node),
             "submit": () => getCached(caches.submit, node, () => () => kernel.submitPipeline.execute(node)),
             "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => kernel.resetPipeline.execute(node, vals)),
             "setValues": () => getCached(caches.setValues, node, () => (patch: Record<string, unknown>) => kernel.setValuesNode(node, patch)),

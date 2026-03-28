@@ -82,6 +82,7 @@ export const GROUP_SPREAD_KEYS: string[] = [
   "dirty",
   "revalidate",
   "loading",
+  "values",
   "submit",
   "reset",
 ];
