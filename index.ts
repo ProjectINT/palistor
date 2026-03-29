@@ -60,6 +60,7 @@ export type {
   FieldProxyNode,
   GroupProxyNode,
   ConfigProxy,
+  Palistor,
   ExtractValues,
   ProxyStoreOptions,
   ProxyStore,

@@ -500,6 +500,9 @@ buildValuesCache(rootConfig, nodeState)
        ├─ values    — вложенный объект { email: "…", passport: { number: "…" } }
        │              Мутируется в-месте (in-place) — стабильная ссылка навсегда
        └─ nodeSlot  — WeakMap<node, { parent, key }> для O(1) обновлений
+                      Заполняется для листовых узлов И для групп (virtual leaves).
+                      Для групп: parent = объект значений родительской группы.
+                      Используется в recomputeLeaves для получения group-scoped values.
 
 updateValuesCacheEntry(cache, node, newValue)
   └─ nodeSlot.get(node) → slot.parent[slot.key] = newValue   // O(1)

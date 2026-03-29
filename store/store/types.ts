@@ -359,6 +359,31 @@ export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & 
 };
 
 /**
+ * Маппит интерфейс значений формы на прокси-типы.
+ * В отличие от ConfigProxy (работает с конфиг-нодами), Palistor
+ * принимает простой интерфейс значений — удобно для типизации пропсов
+ * дочерних компонентов, получающих поддерево из useForm.
+ *
+ * @example
+ * ```ts
+ * interface CompanyFormData {
+ *   name: string;
+ *   email: string;
+ *   bank: { name: string; number: string };
+ * }
+ * type Props = { company: Palistor<CompanyFormData> };
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export type Palistor<T extends Record<string, any> = {}> = GroupProxyNode & {
+  [K in keyof T]: T[K] extends Array<infer Item>
+    ? Item extends Record<string, any>
+      ? ListProxyNode<Palistor<Item>>
+      : ListProxyNode<FieldProxyNode<Item>>
+    : FieldProxyNode<T[K]>;
+};
+
+/**
  * Рекурсивно извлекает типы значений из конфига формы.
  * Листовые узлы (содержащие `value`) → тип значения.
  * Групповые узлы → вложенный объект с теми же правилами.

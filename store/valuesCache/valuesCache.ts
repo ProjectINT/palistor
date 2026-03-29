@@ -51,6 +51,9 @@ export function buildValuesCache(
         const group: Record<string, unknown> = {};
         target[key] = group;
         groupSlot.set(child as object, group);
+        // Also register group in nodeSlot so virtual leaves (group nodes with
+        // computed props like isVisible) can resolve their parent-scoped values.
+        nodeSlot.set(child, { parent: target, key });
         walk(child, group);
       }
     }

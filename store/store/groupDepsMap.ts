@@ -51,14 +51,39 @@ export class GroupDepsMap {
    *
    * Использовать ТОЛЬКО при первом `recomputeAll` (`isBuilt === false`).
    * После завершения вызвать `markBuilt()`.
+   *
+   * Принимает group-scoped values (parent из nodeSlot):
+   * - Для листовых узлов: values = scope родительской группы,
+   *   currentGroupPath = recipientPath (= путь родительской группы).
+   * - Для групповых узлов (virtual leaves с isVisible и т.п.): values = scope
+   *   родителя группы (grandparent scope), currentGroupPath = путь родителя.
+   *   recipientPath при этом = собственный путь группы.
+   *
+   * Кэш использует составной ключ `currentGroupPath\0recipientPath`, чтобы
+   * избежать коллизии между листовыми и групповыми узлами с одинаковым recipientPath.
    */
   getTrackingWrap(): TrackingWrap {
     return (node: object, values: Record<string, unknown>): Record<string, unknown> => {
       const recipientPath = getNodeGroupPath(node, this._nodeParents, this._nodePaths);
-      const cached = this._proxyCache.get(recipientPath);
+
+      // Leaf node (has "value"): currentGroupPath = recipientPath (= parent group path).
+      // Group node (virtual leaf, no "value"): currentGroupPath = parent group's path
+      // (which is the root of the group-scoped values we receive),
+      // recipientPath = group's own path.
+      const isLeaf = "value" in (node as Record<string, unknown>);
+      const currentGroupPath: string = isLeaf
+        ? recipientPath
+        : (() => {
+            const parent = this._nodeParents.get(node);
+            return parent ? (this._nodePaths.get(parent) ?? "") : "";
+          })();
+
+      const cacheKey = `${currentGroupPath}\0${recipientPath}`;
+      const cached = this._proxyCache.get(cacheKey);
       if (cached) return cached;
-      const proxy = createTrackingValues(values, recipientPath, this._deps);
-      this._proxyCache.set(recipientPath, proxy);
+
+      const proxy = createTrackingValues(values, recipientPath, this._deps, currentGroupPath);
+      this._proxyCache.set(cacheKey, proxy);
       return proxy;
     };
   }

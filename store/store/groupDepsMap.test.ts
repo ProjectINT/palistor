@@ -66,11 +66,12 @@ describe("GroupDepsMap", () => {
       const gdm = new GroupDepsMap(nested, nodePaths, nodeParents);
       const wrap = gdm.getTrackingWrap();
 
-      // Симулируем вычисление isVisible для листа в группе passport:
-      // при чтении values.paymentType (из root) ожидаем запись "" → "passport"
-      const passportNumber = (nested as any).passport.number;
-      const values = { paymentType: "card", passport: { number: "" } };
-      const tracked = wrap(passportNumber, values as any);
+      // В новом дизайне cross-group deps отслеживаются через virtual leaves (group nodes):
+      // passport (group node with isVisible) получает scope родителя (root),
+      // который содержит paymentType. Чтение paymentType ≠ recipientPath "passport" → dep "" → "passport".
+      const passport = (nested as any).passport;
+      const rootValues = { paymentType: "card", passport: { number: "" } };
+      const tracked = wrap(passport, rootValues as any);
 
       void (tracked as any).paymentType;
       expect(gdm.deps.has(pairKey("", "passport"))).toBe(true);

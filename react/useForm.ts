@@ -50,7 +50,7 @@
  */
 
 import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
-import type { ProxyStore, ConfigProxy } from "../store/store";
+import type { ProxyStore, ConfigProxy, GroupProxyNode } from "../store/store";
 import {
   createTrackingProxy,
   unwrapTrackingProxy,
@@ -58,7 +58,7 @@ import {
 } from "./createTrackingProxy";
 import { ENTITY_ID, STORE_REF, CONFIG_NODE } from "../store/constants";
 import { buildEntityProjectionProxy } from "../store/buildProxy/buildEntityProjectionProxy";
-import type { Palistor } from "../store/store/palistor";
+import type { Palistor as PalistorClass } from "../store/store/palistor";
 import type { AnyConfigNode } from "../store/store/types";
 
 /**
@@ -91,6 +91,10 @@ function resolveInput<TConfig extends Record<string, any>>(
  *                tracking proxy поддерево (из пропса другого useForm)
  * @returns tracking proxy — типизированный по конфигу (или поддереву)
  */
+export function useForm<T extends GroupProxyNode>(
+  input: T,
+): T;
+
 export function useForm<TConfig extends Record<string, any>>(
   input: ProxyStore<TConfig> | ConfigProxy<TConfig>,
 ): ConfigProxy<TConfig>;
@@ -127,7 +131,7 @@ export function useForm(
 
   interface EntityMeta {
     entityId: string;
-    entityStore: Palistor<any>;
+    entityStore: PalistorClass<any>;
     templateNode: AnyConfigNode;
     entityProxy: object;
   }
@@ -136,7 +140,7 @@ export function useForm(
 
   if (isEntityMode && !entityMetaRef.current) {
     const entityId = (input as any)[ENTITY_ID] as string | undefined;
-    const entityStore = (input as any)[STORE_REF] as Palistor<any> | undefined;
+    const entityStore = (input as any)[STORE_REF] as PalistorClass<any> | undefined;
 
     if (!entityId || !entityStore) {
       throw new Error(
