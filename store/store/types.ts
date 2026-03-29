@@ -380,7 +380,9 @@ export type Palistor<T extends Record<string, any> = {}> = GroupProxyNode & {
     ? Item extends Record<string, any>
       ? ListProxyNode<Palistor<Item>>
       : ListProxyNode<FieldProxyNode<Item>>
-    : FieldProxyNode<T[K]>;
+    : T[K] extends Record<string, any>
+      ? Palistor<T[K]>
+      : FieldProxyNode<T[K]>;
 };
 
 /**

@@ -509,7 +509,8 @@ updateValuesCacheEntry(cache, node, newValue)
 ```
 
 Обновление происходит в `storeValue` при каждой записи. Все computed/validate/setter
-получают `valuesCache.values` как `allValues` — всегда актуальный снапшот.
+получают group-scoped values из `nodeSlot.get(node)?.parent` как `allValues` — значения
+родительской группы (для корневых полей совпадает с `valuesCache.values`).
 
 **Списки в valuesCache:** ListNode при обходе дерева получает пустой массив `[]`.
 `nodeSlot` регистрируется на объект-массив (а не на leaf-ноду). После каждой
@@ -613,7 +614,8 @@ recomputeLeaves(leafNodes[]):
   │   │     Алгоритм Кана (BFS по dependencies)
   │   │     Гарантирует порядок: subtotal → tax → total
   │   └─ для каждого в порядке сортировки:
-  │       computedValue = node.value(valuesCache.values)
+  │       groupValues = nodeSlot.get(node)?.parent ?? valuesCache.values
+  │       computedValue = node.value(groupValues)
   │       if changed → nodeState.set(...) + updateValuesCacheEntry O(1)
   │
   └─ Фаза 2: FieldState
