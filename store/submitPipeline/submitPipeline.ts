@@ -37,8 +37,10 @@ export class SubmitPipeline {
     const revalidateChanged = setGroupRevalidate(groupNode, true, nodeState);
 
     const changed1 = this.kernel.recompute();
+
     changed1.add(groupNode);
     for (const n of revalidateChanged) changed1.add(n);
+
     this.kernel.notifyChanged(changed1);
 
     try {
@@ -48,7 +50,7 @@ export class SubmitPipeline {
       // 3. Leaf-level beforeSubmit
       values = applyLeafBeforeSubmit(groupNode, values);
 
-      // 4. Group-level beforeSubmit
+      // 4. Group-level beforeSubmitstore
       if (typeof groupNode.beforeSubmit === "function") {
         values = await (
           groupNode.beforeSubmit as (v: Record<string, unknown>) => Promise<Record<string, unknown>> | Record<string, unknown>
@@ -74,7 +76,7 @@ export class SubmitPipeline {
       let result: unknown;
       if (typeof groupNode.onSubmit === "function") {
         result = await (
-          groupNode.onSubmit as (v: Record<string, unknown>, store: unknown) => Promise<unknown> | unknown
+          groupNode.onSubmit as (v: Record<string, unknown>, store: Palistor<any>) => Promise<unknown> | unknown
         )(values, this.kernel);
       }
 
