@@ -377,6 +377,12 @@ export function buildEntityProjectionProxy(
           }
           return submitFnRef;
         }
+        if (key === "values") {
+          return buildEntityValues(
+            rootEntityNode,
+            kernel.nodes.nodeState as WeakMap<object, { value: unknown }>,
+          );
+        }
       }
       // ─────────────────────────────────────────────────────────────────────
 
@@ -433,7 +439,7 @@ export function buildEntityProjectionProxy(
     ownKeys() {
       const hasId = "id" in entityNode;
       if (hasId) {
-        return ["id", ...templateKeys, "loading", "submitting", "submit"];
+        return ["id", ...templateKeys, "loading", "submitting", "submit", "values"];
       }
       return templateKeys;
     },
@@ -441,7 +447,7 @@ export function buildEntityProjectionProxy(
     getOwnPropertyDescriptor(_target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
       const hasId = "id" in entityNode;
-      const extraKeys = hasId ? ["loading", "submitting", "submit"] : [];
+      const extraKeys = hasId ? ["loading", "submitting", "submit", "values"] : [];
       const keys = hasId ? ["id", ...templateKeys, ...extraKeys] : templateKeys;
       if (!keys.includes(key as string)) return undefined;
       return { configurable: true, enumerable: true, writable: false };

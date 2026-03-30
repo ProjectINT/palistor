@@ -27,6 +27,8 @@
 │  buildProxy.ts                                          │
 │  • GET FIELD_STATE_PROP → читает из nodeState           │
 │  • GET CONFIG_NODE → возвращает сам config-узел         │
+│  • GET "values" на группе → groupSlot.get(node)         │
+│    (live-ссылка на вложенный объект valuesCache)        │
 │  • GET дочернего ключа → рекурсивный store proxy        │
 │  • GET на группу с resolve (idle) → triggerResolve      │
 │  • GET на группу с resolve (pending + suspense)         │
@@ -496,13 +498,18 @@ isDirtyValue(current, initial):
 
 ```
 buildValuesCache(rootConfig, nodeState)
-  └─ обходит дерево один раз → строит { values, nodeSlot }
-       ├─ values    — вложенный объект { email: "…", passport: { number: "…" } }
-       │              Мутируется в-месте (in-place) — стабильная ссылка навсегда
-       └─ nodeSlot  — WeakMap<node, { parent, key }> для O(1) обновлений
-                      Заполняется для листовых узлов И для групп (virtual leaves).
-                      Для групп: parent = объект значений родительской группы.
-                      Используется в recomputeLeaves для получения group-scoped values.
+  └─ обходит дерево один раз → строит { values, nodeSlot, groupSlot }
+       ├─ values     — вложенный объект { email: "…", passport: { number: "…" } }
+       │               Мутируется в-месте (in-place) — стабильная ссылка навсегда
+       ├─ nodeSlot   — WeakMap<node, { parent, key }> для O(1) обновлений
+       │               Заполняется для листовых узлов И для групп (virtual leaves).
+       │               Для групп: parent = объект значений родительской группы.
+       │               Используется в recomputeLeaves для получения group-scoped values.
+       └─ groupSlot  — WeakMap<groupNode, Record<string, unknown>>
+                       Маппинг каждого группового узла → соответствующий вложенный
+                       объект внутри values. Используется proxy для реализации
+                       group.values: proxy.passport.values === groupSlot.get(passportNode).
+                       Та же live-ссылка, что обновляется при каждой записи поля.
 
 updateValuesCacheEntry(cache, node, newValue)
   └─ nodeSlot.get(node) → slot.parent[slot.key] = newValue   // O(1)

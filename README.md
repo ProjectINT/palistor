@@ -275,9 +275,19 @@ form.passport.submitting    // → boolean
 form.passport.loading       // → boolean (async resolver)
 form.passport.dirty         // → boolean (хотя бы одно поле изменилось)
 form.passport.revalidate    // → boolean (true после первого неудачного submit)
+form.passport.values        // → Record<string, unknown> — live-снапшот значений группы
 
 await form.passport.submit();         // → SubmitResult
 form.passport.reset({ number: "" });  // сброс поддерева
+```
+
+`values` — живая ссылка на вложенный объект `valuesCache`, отражающий текущие значения всех листовых полей группы (рекурсивно). Обновляется in-place при каждой записи — стабильная ссылка, безопасна для передачи в API:
+
+```typescript
+const vals = form.passport.values;
+// → { number: "AB1234", issueDate: "2020-01-01" }
+
+await api.submit(vals); // стабильная ссылка, всегда актуальна
 ```
 
 ---
@@ -546,6 +556,34 @@ form.users.add("existing-id");                                  // строка 
 form.users.remove("user-id");
 form.users.setItems(["id1", "id2", "id3"]);  // bulk замена
 form.users.getById("user-id");               // → EntityProjectionProxy | undefined
+```
+
+### EntityProjectionProxy — свойства элемента списка
+
+Каждый элемент `form.users.items` — это `EntityProjectionProxy`. Доступные свойства:
+
+```typescript
+const item = form.users.items[0];
+
+item.id           // string — идентификатор entity
+item.name.value   // значение поля через template (с formatter/validate/isRequired)
+item.name.label   // computed label из template
+item.name.isRequired  // computed isRequired из template
+// ... все leaf props: value, label, placeholder, isRequired, isReadOnly, isDisabled,
+//     isVisible, isInvalid, errorMessage, dirty, onValueChange
+
+item.loading      // boolean — идёт ли resolve для этого entity
+item.submitting   // boolean — идёт ли submit для этого entity
+item.values       // Record<string, unknown> — plain объект значений entity
+await item.submit(); // → SubmitResult — submit этого entity через template
+```
+
+`item.values` — plain объект с текущими значениями полей entity, пригодный для передачи в API:
+
+```typescript
+form.users.map((item) => {
+  console.log(item.values); // → { name: "Alice", email: "alice@example.com" }
+});
 ```
 
 ### Работа с entity
