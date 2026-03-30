@@ -1,4 +1,4 @@
-import { type AnyConfigNode } from "../store/types";
+import { type AnyConfigNode, type ProxyStore } from "../store/types";
 import type { FieldState } from "../compute/index";
 import type { ValuesCache } from "../valuesCache/valuesCache";
 
@@ -23,13 +23,13 @@ export interface Resolve<T = Record<string, unknown>> {
    * `store` is the ProxyStore instance for accessing other parts of the store.
    * Returns an object with values for THIS node's subtree.
    */
-  resolver: (thisForm: any, store: any) => Promise<T>;
+  resolver: (thisForm: Record<string, unknown>, store: ProxyStore<any>) => Promise<T>;
 
   /**
    * Synchronous placeholder — set instantly before resolver completes.
    * Structure mirrors resolver return type.
    */
-  optimisticResolver?: (values: any) => Partial<T>;
+  optimisticResolver?: (values: Record<string, unknown>) => Partial<T>;
 
   /**
    * Error handler called after retry exhaustion.
@@ -88,5 +88,5 @@ export interface ResolveDeps {
   initialValueMap: WeakMap<object, unknown>;
   valuesCache: ValuesCache;
   /** The ProxyStore instance — passed as second argument to resolver. */
-  store: any;
+  store: ProxyStore<any>;
 }

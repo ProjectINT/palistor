@@ -35,8 +35,16 @@ export function executeResolve(
   resolve: Resolve,
   deps: ResolveDeps,
 ): Promise<unknown> {
-  const { rootConfig, nodeState, resolveStates, recompute, notifyChanged, notify, getValues, initialValueMap, valuesCache, store } = deps;
+  const {
+    rootConfig, nodeState,
+    resolveStates, recompute,
+    notifyChanged, notify,
+    getValues, initialValueMap,
+    valuesCache, store
+  } = deps;
+
   const state = resolveStates.get(node);
+
   if (!state) return Promise.resolve();
 
   // Deduplication: if already pending, return the same promise
@@ -124,6 +132,7 @@ export function executeResolve(
 
         // 2. Flush buffered side-effects
         const writes = tracking.getPendingWrites();
+
         if (writes.length > 0) {
           const writeChanged = applyPendingWrites(writes, rootConfig, nodeState, valuesCache);
           for (const n of writeChanged) changed.add(n);
@@ -157,6 +166,7 @@ export function executeResolve(
     if (state.status !== "pending") return; // aborted
 
     const changed = new Set<object>();
+
     changed.add(node);
 
     // Update loading / status / error
