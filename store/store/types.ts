@@ -333,22 +333,54 @@ export interface ListProxyNode<TItem> {
   [Symbol.iterator](): Iterator<TItem>;
 }
 
+// ─── Typed References ────────────────────────────────────────────────────────
+
+declare const __palistorRefBrand: unique symbol;
+declare const __typedListBrand: unique symbol;
+
+/** Opaque-ссылка на entity proxy. Передаётся как prop, разворачивается через useForm(). */
+export type PalistorRef<T extends Record<string, any>> = {
+  readonly [__palistorRefBrand]: T;
+} & object;
+
+/** Типизированный список entity. */
+export type PalistorList<T extends Record<string, any>> = ListProxyNode<PalistorRef<T>>;
+
+/** Маркерный тип для typed list node в конфиге. */
+export type TypedListNode<TEntity extends Record<string, any>> =
+  readonly [any, any?] & { readonly [__typedListBrand]: TEntity };
+
+/** Typed resolver для списка. */
+export type ListResolver<TEntity extends Record<string, any>> =
+  (values: any) => Promise<TEntity[]>;
+
+/** Typed template: каждый ключ Entity → ConfigNode с нужным типом value. */
+export type TemplateConfig<TEntity extends Record<string, any>> = {
+  [K in keyof TEntity]: ConfigNode<TEntity[K], TEntity>;
+};
+
+/** Извлечь entity type из PalistorRef. */
+export type InferEntity<T> = T extends PalistorRef<infer E> ? E : never;
+
 /**
  * Рекурсивно конвертирует узел конфига в его прокси-тип:
+ * - TypedListNode (defineList<TEntity>)         → `ListProxyNode<PalistorRef<TEntity>>`
  * - ListNode (массив `[template, listConfig?]`) → `ListProxyNode<...>`
  * - Листовой узел (есть `value`)               → `FieldProxyNode<TValue>`
  * - Групповой узел                             → `GroupProxyNode & { дочерние поля… }`
  */
 type ConfigNodeToProxy<T> =
-  T extends readonly [infer Item, ...any[]]
-    ? ListProxyNode<ConfigNodeToProxy<Item>>
-    : T extends { value: any }
-      ? FieldProxyNode<ExtractNodeValue<T>>
-      : T extends Record<string, any>
-        ? GroupProxyNode & {
-            [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
-          }
-        : never;
+  T extends { readonly [__typedListBrand]: infer TEntity extends Record<string, any> }
+    ? ListProxyNode<PalistorRef<TEntity>>
+    : T extends readonly [infer Item, ...any[]]
+      ? ListProxyNode<ConfigNodeToProxy<Item>>
+      : T extends { value: any }
+        ? FieldProxyNode<ExtractNodeValue<T>>
+        : T extends Record<string, any>
+          ? GroupProxyNode & {
+              [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K]>;
+            }
+          : never;
 
 /**
  * Полный прокси для конфига формы: каждый ключ маппируется в прокси-узел.

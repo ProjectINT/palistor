@@ -65,6 +65,12 @@ export type {
   ProxyStoreOptions,
   ProxyStore,
   Unsubscribe,
+  PalistorRef,
+  PalistorList,
+  TypedListNode,
+  ListResolver,
+  TemplateConfig,
+  InferEntity,
 } from "./store/store/types";
 
 // ============================================================================
@@ -73,3 +79,9 @@ export type {
 
 export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline/";
 export { useNotifier } from "./react/useNotifier";
+
+// ============================================================================
+// defineList — typed list helper
+// ============================================================================
+
+export { defineList } from "./store/defineList";
