@@ -29,30 +29,116 @@ React Component  →  Tracking Proxy (layer 2)  →  Store Proxy (layer 1)  → 
 
 ## Imports
 
+Everything is exported from the root `@projectint/palistor` entry point. Deep imports are available but optional.
+
 ```ts
-// Class
-import { Palistor } from "@palistor/store/store";
+// Root import (preferred) — covers all public API
+import {
+  Palistor, useForm, usePersist, useTranslator, useNotifier, defineList,
+  localStorageDriver, sessionStorageDriver,
+} from "@projectint/palistor";
 
-// React hooks
-import { useForm } from "@palistor/react/useForm";
-import { usePersist } from "@palistor/react/usePersist";
-import { useTranslator } from "@palistor/react/useTranslator";
-import { useNotifier } from "@palistor";
-
-// Types
 import type {
   FormConfig, TranslateFn, MaybeComputed, DeepPartialValues,
   ConfigNode, FieldProxyNode, GroupProxyNode, ConfigProxy,
-  ExtractValues, ProxyStoreOptions, ProxyStore,
-} from "@palistor";
+  ExtractValues, ProxyStoreOptions, ProxyStore, Unsubscribe,
+  Palistor as PalistorType, PalistorRef, PalistorList, InferEntity,
+  TypedListNode, ListResolver, TemplateConfig,
+  PersistDriver, PersistOptions, PersistManager,
+  Resolve, NotifyFn, ResolveErrorContext,
+} from "@projectint/palistor";
 
-// Persist
-import type { PersistDriver, PersistOptions } from "@palistor";
-import { localStorageDriver, sessionStorageDriver } from "@palistor";
-
-// Resolve
-import type { Resolve, NotifyFn, ResolveErrorContext } from "@palistor";
+// Deep imports (optional — for tree-shaking or code-splitting)
+import { Palistor } from "@projectint/palistor/store/store";
+import { useForm } from "@projectint/palistor/react/useForm";
+import { usePersist } from "@projectint/palistor/react/usePersist";
+import { useTranslator } from "@projectint/palistor/react/useTranslator";
+import { useNotifier } from "@projectint/palistor/react/useNotifier";
 ```
+
+> **Note:** `MaybeTranslatable` is not re-exported from the root. Import directly if needed:
+> `import type { MaybeTranslatable } from "@projectint/palistor/store/store";`
+
+## TypeScript Types
+
+### Inferring values type from config
+
+```ts
+const config = {
+  name: { value: "" },
+  age:  { value: 0 },
+  address: { city: { value: "" }, country: { value: "RU" } },
+};
+
+type FormValues = ExtractValues<typeof config>;
+// → { name: string; age: number; address: { city: string; country: string } }
+```
+
+Combine with `DeepPartialValues<FormValues>` for `initialValues` or patch objects.
+
+### Typing props without importing the config
+
+`Palistor<T>` maps a plain values interface to the proxy tree:
+
+```ts
+interface UserData { name: string; email: string; address: { city: string } }
+type Props = { user: Palistor<UserData> };
+// user.name → FieldProxyNode<string>, user.address → Palistor<{ city: string }>
+```
+
+For lists: `interface FormData { users: Array<{ name: string }> }` → `form.users → ListProxyNode<...>`.
+
+### Entity refs in props
+
+```ts
+import type { PalistorRef, InferEntity } from "@projectint/palistor";
+
+function UserRow({ user }: { user: PalistorRef<{ name: string; email: string }> }) {
+  const u = useForm(user, (s) => s.userTemplate);
+  return <span>{u.name.value}</span>;
+}
+```
+
+`PalistorList<TEntity>` is the corresponding typed list: `ListProxyNode<PalistorRef<TEntity>>`.
+
+### defineList — fully typed list node
+
+Prefer `defineList<TEntity>()` over raw array syntax:
+
+```ts
+import { defineList } from "@projectint/palistor";
+
+interface User { id: string; name: string; email: string }
+
+const users = defineList<User>({
+  template: {
+    id:    { value: "" },
+    name:  { value: "", isRequired: true },
+    email: { value: "" },
+  },
+  resolve: {
+    resolver: async (values) => api.getUsers(values.filter),
+    deps: ["filter"],
+    onError: (err, { notify }) => notify("Failed to load users"),
+  },
+});
+```
+
+### Config utility types reference
+
+| Type | Purpose |
+|------|---------|
+| `MaybeComputed<TResult, TValues>` | `isVisible`, `isRequired`, `value` — static or `(values) => T` |
+| `DeepPartialValues<T>` | `initialValues`, `setter` result, `setValues` patches |
+| `TranslateFn` | Compatible with next-intl `t`, i18next `t`, any `(...args) => string` |
+| `ExtractValues<TConfig>` | Derive plain values type from a config object |
+| `ConfigProxy<TConfig>` | Full proxy type returned by `useForm(store)` |
+| `Palistor<T>` | Values-based proxy — use for prop types in child components |
+| `PalistorRef<TEntity>` | Opaque entity proxy handle — for single entity props |
+| `PalistorList<TEntity>` | Typed list — `ListProxyNode<PalistorRef<TEntity>>` |
+| `InferEntity<T>` | Extract entity type from `PalistorRef<TEntity>` |
+| `TemplateConfig<TEntity>` | Typed template — keys of entity mapped to `ConfigNode<TEntity[K]>` |
+| `ListResolver<TEntity>` | Typed resolver — `(values) => Promise<TEntity[]>` |
 
 ## Config Declaration
 
@@ -63,9 +149,9 @@ Every form starts with a config object — a tree where leaves have `value` and 
 ```ts
 email: {
   value: "",                           // initial value (or computed: (values) => ...)
-  label: (t) => t("form.email"),       // translatable string
+  label: (t) => t("form.email"),       // translatable: (t, values?) => string
   placeholder: (t) => t("form.emailPlaceholder"),
-  description: "Contact email",        // static or (t, values) => ...
+  description: "Contact email",        // static or translatable
   isRequired: true,                    // static or (values) => boolean
   isVisible: (values) => values.contactMethod === "email",
   isReadOnly: false,
@@ -75,12 +161,13 @@ email: {
   },
   formatter: (value) => String(value).trim().toLowerCase(),
   setter: (value, values, prev) => ({
-    // patch sibling fields when this field changes
-    domain: value.split("@")[1] ?? "",
+    domain: value.split("@")[1] ?? "",   // patch sibling fields
   }),
-  onChange: ({ fieldKey, newValue, previousValue, allValues }) => {
-    // fire-and-forget side-effect when ANY field in this group changes
-    // return a patch object or void
+  onChange: async ({ fieldKey, newValue, previousValue, allValues }) => {
+    // fire-and-forget — runs on ANY field change in this group
+    // return patch object, void, or Promise<patch | void>
+    await analytics.track(fieldKey, newValue);
+    return { lastModified: Date.now() };
   },
   dependencies: ["contactMethod"],     // explicit deps for recompute
   types: { dataType: "String", type: "string" },
@@ -93,8 +180,8 @@ email: {
 ```ts
 passport: {
   // No `value` key → this is a group
-  number: { value: "", isRequired: true, validate: ... },
-  issuedDate: { value: "", ... },
+  number: { value: "", isRequired: true },
+  issuedDate: { value: "" },
 
   // Group-level hooks
   isVisible: (values) => values.needsPassport,
@@ -103,15 +190,22 @@ passport: {
   afterSubmit: (result, { reset }) => { reset(); },
   reset: (defaults) => ({ ...defaults, issuedDate: "" }),
   resolve: {
-    resolver: async (values, trackingProxy) => {
-      const data = await api.getPassport(values.userId);
+    resolver: async (thisForm, store) => {
+      // thisForm is a tracking write-proxy: reads → auto-deps, writes → batched
+      const data = await api.getPassport(thisForm.userId);
       return { number: data.number, issuedDate: data.date };
     },
-    deps: ["userId"],           // re-trigger when these change
-    lazy: true,                 // default; false = eager on init
-    suspense: false,            // throw promise for React <Suspense>
     optimisticResolver: (values) => ({ number: "Loading..." }),
-    onError: (error, { notify }) => notify("Failed to load passport"),
+    onError: (error, { notify }) => notify("Failed to load passport"),  // required
+    deps: ["userId"],           // explicit deps (merged with auto-deps after first run)
+    options: {
+      lazy: true,               // default; false = eager on init
+      suspense: false,          // throw Promise for React <Suspense>
+      retry: {                  // retry on error before calling onError
+        attempts: 3,            // default: 0 (no retries)
+        delay: 1000,            // default: 1000 ms
+      },
+    },
   },
 }
 ```
@@ -127,9 +221,9 @@ users: [
   {
     resolve: {
       resolver: async (values, store) => {
-        const users = await api.getUsers(values.filter);
-        return users; // Array<{ id, name, email, ... }>
+        return await api.getUsers(values.filter); // → Array<{ id, name, email }>
       },
+      onError: (err, { notify }) => notify(err.message),
       deps: ["filter"],
     },
   },
@@ -173,10 +267,7 @@ function EditUser({ userProxy }) {
 ### useTranslator — register i18n
 
 ```tsx
-function App() {
-  useTranslator(store, useTranslations()); // next-intl or any (key) => string
-  // ...
-}
+useTranslator(store, useTranslations()); // next-intl or any (key) => string
 ```
 
 ### useNotifier — register error notification
@@ -190,12 +281,25 @@ useNotifier(store, (message) => toast.error(message));
 ```tsx
 usePersist(store, {
   key: "order-form",
-  driver: localStorageDriver,  // or sessionStorageDriver
-  debounce: 300,               // ms, default
-  pick: ["email", "phone"],    // only persist these (optional)
-  omit: ["password"],          // exclude these (optional, ignored if pick set)
+  driver: localStorageDriver,     // or sessionStorageDriver, or custom PersistDriver
+  debounce: 100,                  // ms (default: 100). 0 = immediate
+  pick: ["email", "phone"],       // only persist these top-level keys (optional)
+  omit: ["password"],             // exclude these (optional, ignored if pick set)
+  serialize: JSON.stringify,      // custom serializer (default: JSON.stringify)
+  deserialize: JSON.parse,        // custom deserializer (default: JSON.parse)
 });
 ```
+
+**PersistManager** (`store.persist`) public methods:
+
+| Method | Description |
+|--------|-------------|
+| `enable(options)` | Activate: hydrate from storage + auto-save on changes |
+| `disable()` | Deactivate: unsubscribe, cancel timers |
+| `flush()` | Force-save to storage immediately (no debounce) |
+| `hydrate()` | Force re-read from storage |
+| `clear()` | Remove data from storage by current key |
+| `isEnabled()` | Whether persist is currently active |
 
 ## Field Proxy API (what you read in components)
 
@@ -220,8 +324,6 @@ Accessing `form.email` returns a `FieldProxyNode`:
 
 ## Group Proxy API
 
-Accessing `form.passport` (a group node) returns:
-
 | Property | Type | Description |
 |----------|------|-------------|
 | `isInvalid` | `boolean` | Any child invalid |
@@ -238,8 +340,6 @@ Plus all child fields as proxy sub-properties.
 
 ## List Proxy API
 
-Accessing `form.users` (a list node) returns:
-
 | Property/Method | Type | Description |
 |-----------------|------|-------------|
 | `items` | `ReadonlyArray<EntityProxy>` | All entities in order |
@@ -247,7 +347,8 @@ Accessing `form.users` (a list node) returns:
 | `loading` | `boolean` | List resolver running |
 | `dirty` | `boolean` | Item IDs differ from initial |
 | `map(fn)` | `R[]` | `(item, index, id) => R` — iterate for rendering |
-| `add(id \| values)` | `void` | Add existing entity by ID, or upsert from values object |
+| `add(id: string)` | `void` | Add existing entity by ID |
+| `add(values: Record)` | `TItem` | Add from values object — **returns created entity proxy** |
 | `remove(id)` | `void` | Remove from list (entity stays in registry) |
 | `getById(id)` | `EntityProxy` | Find item by ID |
 | `setItems(ids)` | `void` | Bulk replace list contents |
@@ -258,7 +359,7 @@ Accessing `form.users` (a list node) returns:
 ```ts
 // Entity operations
 store.set({ id: "u1", name: "Alice" });    // upsert entity (or array)
-store.delete("u1");                         // remove entity
+store.delete("u1");                         // remove entity from registry
 store.rekey("_tmp_1", "real_id");           // rename entity ID
 store.invalidate("u1", templateNode?);      // clear resolve cache
 
@@ -272,7 +373,7 @@ store.subscribe(node, listener);            // per-node
 store.subscribeGlobal(listener);            // any change
 
 // State
-store.getValues();                          // deep snapshot
+store.getValues();                          // deep snapshot (plain object)
 store.getVersion();                         // global version counter
 store.getNodeVersion(node);                 // per-node version
 
@@ -304,27 +405,12 @@ country: {
 }
 ```
 
-### Phone formatter
-
-```ts
-phone: {
-  value: "",
-  formatter: (value) => {
-    const digits = String(value).replace(/\D/g, "").slice(0, 11);
-    // format as +X (XXX) XXX-XX-XX
-    return formatPhoneDigits(digits);
-  },
-}
-```
-
 ### List rendering
 
 ```tsx
 function UserList() {
   const form = useForm(store);
-  return form.users.map((user, i, id) => (
-    <UserRow key={id} user={user} />
-  ));
+  return form.users.map((user, i, id) => <UserRow key={id} user={user} />);
 }
 ```
 
@@ -351,8 +437,10 @@ function EditModal({ entityProxy, onClose }) {
 | Missing `dependencies` for computed | Use `dependencies: ["fieldName"]` for cross-field computed/visibility |
 | Using `form.email.value` outside render | `store.getValues()` for non-reactive reads |
 | Calling `store.submit()` vs `form.group.submit()` | Root `submit()` submits entire form; group `submit()` submits sub-tree |
-| Expecting `store.delete(id)` to remove from lists | `delete` removes entity from registry; use `list.remove(id)` for list |
+| Expecting `store.delete(id)` to remove from lists | `delete` removes from registry; use `list.remove(id)` for list |
 | Array config with >2 elements | List node is `[template]` or `[template, listConfig]` — max 2 elements |
+| Ignoring `add(values)` return | `add(values)` returns the created `TItem` proxy — use it |
+| Omitting `resolve.onError` | `onError` is **required** on resolve config — always provide it |
 
 ## Pipelines Reference
 
@@ -361,8 +449,8 @@ function EditModal({ entityProxy, onClose }) {
 | **Write** | `form.field.value = X` | format → store → validate → recompute → dirty → notify → onChange |
 | **Submit** | `form.submit()` | submitting=true → revalidate → validate → `beforeSubmit` → `onSubmit` → `afterSubmit` → submitting=false |
 | **Reset** | `form.reset(vals?)` | build reset patch → apply → capture initial → recompute → notify |
-| **Resolve** | GET on idle group with resolver | optimistic → loading=true → resolver → apply patch → merge initial → loading=false → notify |
-| **onChange** | After write pipeline | fire ancestors' `onChange` handlers → apply returned patches |
+| **Resolve** | GET on idle group with resolver | optimistic → loading=true → resolver (+ retry) → apply patch → merge initial → loading=false → notify |
+| **onChange** | After write pipeline | fire ancestors' `onChange` handlers (async) → apply returned patches |
 
 ## Re-render Optimization
 

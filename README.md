@@ -60,6 +60,7 @@ import {
 - [Быстрый старт](#быстрый-старт)
 - [Концепции](#концепции)
 - [API Reference](#api-reference)
+- [Типизация](#типизация)
 - [Рецепты](#рецепты)
 - [Async Resolver](#async-resolver)
 - [Списки и сущности](#списки-и-сущности)
@@ -92,7 +93,7 @@ import {
 ### 1. Создайте store
 
 ```typescript
-import { createProxyStore } from "palistor/store/store";
+import { createProxyStore } from "@projectint/palistor";
 
 export const paymentStore = createProxyStore({
   config: {
@@ -125,7 +126,7 @@ export const paymentStore = createProxyStore({
 ### 2. Используйте в компоненте
 
 ```tsx
-import { useForm } from "palistor/react/useForm";
+import { useForm } from "@projectint/palistor";
 
 function PaymentForm() {
   const form = useForm(paymentStore);
@@ -239,7 +240,7 @@ form.email.value = "user@example.com"
 ### `createProxyStore(options)`
 
 ```typescript
-import { createProxyStore } from "palistor/store/store";
+import { createProxyStore } from "@projectint/palistor";
 
 const store = createProxyStore({
   config: { /* дерево ConfigNode */ },
@@ -271,7 +272,7 @@ const store = createProxyStore({
 ### `useForm(source)`
 
 ```typescript
-import { useForm } from "palistor/react/useForm";
+import { useForm } from "@projectint/palistor";
 
 const form = useForm(store);           // tracking поверх корневого proxy
 const section = useForm(form.address); // свой tracking для поддерева
@@ -391,6 +392,148 @@ type ListNode = [TemplateGroupNode] | [TemplateGroupNode, ListConfig];
 type SubmitResult =
   | { success: true;  result?: unknown }
   | { success: false; errors: Array<{ path: string; message: string }> };
+```
+
+---
+
+## Типизация
+
+### Вывод типа значений из конфига
+
+`ExtractValues<typeof config>` извлекает плоский тип значений из конфига. Листовые узлы (`value`) — тип значения; групповые — вложенный объект; списки — массив:
+
+```typescript
+const config = {
+  name:    { value: "" },
+  age:     { value: 0 },
+  address: {
+    city:    { value: "" },
+    country: { value: "RU" },
+  },
+};
+
+type FormValues = ExtractValues<typeof config>;
+// → { name: string; age: number; address: { city: string; country: string } }
+```
+
+`DeepPartialValues<FormValues>` — глубокая optional-версия, используется для `initialValues`, `setter`, `setValues`:
+
+```typescript
+const initial: DeepPartialValues<FormValues> = { address: { city: "Москва" } };
+```
+
+### Типизация пропсов без импорта конфига
+
+`Palistor<T>` маппит интерфейс значений на прокси-дерево. Используйте его для типизации пропсов дочерних компонентов:
+
+```typescript
+import type { Palistor } from "@projectint/palistor";
+
+interface UserData { name: string; email: string; address: { city: string } }
+
+type Props = { user: Palistor<UserData> };
+
+function UserForm({ user }: Props) {
+  const u = useForm(user);
+  return <input value={u.name.value} onChange={e => { u.name.value = e.target.value }} />;
+}
+// u.name     → FieldProxyNode<string>
+// u.address  → Palistor<{ city: string }> (GroupProxyNode + поля)
+```
+
+Массивы в `T` обрабатываются автоматически:
+
+```typescript
+interface FormData { users: Array<{ name: string; email: string }> }
+// form.users → ListProxyNode<Palistor<{ name: string; email: string }>>
+```
+
+### Типизированные entity-ссылки
+
+При передаче entity-прокси через пропсы используйте `PalistorRef<TEntity>`:
+
+```typescript
+import type { PalistorRef, InferEntity } from "@projectint/palistor";
+
+function UserRow({ user }: { user: PalistorRef<{ name: string; email: string }> }) {
+  const u = useForm(user, (s) => s.userTemplate);
+  return <span>{u.name.value}</span>;
+}
+
+// Получить тип entity обратно из ссылки:
+type UserEntity = InferEntity<PalistorRef<{ name: string; email: string }>>;
+// → { name: string; email: string }
+```
+
+`PalistorList<TEntity>` — типизированный список: `ListProxyNode<PalistorRef<TEntity>>`.
+
+### defineList — типизированный список
+
+Предпочитайте `defineList<TEntity>()` вместо сырого массива. Он проверяет, что ключи `template` соответствуют entity, а `resolver` возвращает `Promise<TEntity[]>`:
+
+```typescript
+import { defineList } from "@projectint/palistor";
+
+interface User { id: string; name: string; email: string }
+
+const users = defineList<User>({
+  template: {
+    id:    { value: "" },
+    name:  { value: "", isRequired: true },
+    email: { value: "" },
+  },
+  resolve: {
+    resolver: async (values) => api.getUsers(values.filter), // → Promise<User[]>
+    deps: ["filter"],
+  },
+});
+
+const config = { filter: { value: "" }, users };
+// store.proxy.users → ListProxyNode<PalistorRef<User>>
+```
+
+### Справочник типов
+
+| Тип | Назначение |
+|-----|-----------|
+| `ExtractValues<TConfig>` | Плоский тип значений из конфига |
+| `ConfigProxy<TConfig>` | Полный прокси — тип, возвращаемый `useForm(store)` |
+| `Palistor<T>` | Proxy на основе интерфейса значений — для пропсов дочерних компонентов |
+| `PalistorRef<TEntity>` | Непрозрачная ссылка на entity — для пропсов одного элемента |
+| `PalistorList<TEntity>` | Типизированный список: `ListProxyNode<PalistorRef<TEntity>>` |
+| `InferEntity<T>` | Извлечь тип entity из `PalistorRef<TEntity>` |
+| `MaybeComputed<TResult, TValues>` | `isVisible`, `isRequired`, `value` — константа или `(values) => T` |
+| `MaybeTranslatable<TResult, TValues>` | `label`, `placeholder` — константа или `(t, values) => string` |
+| `DeepPartialValues<T>` | Глубокая partial-версия: `initialValues`, патчи `setter`, `setValues` |
+| `TranslateFn` | Совместим с next-intl `t`, i18next `t` и любым `(...args) => string` |
+| `TemplateConfig<TEntity>` | Типизированный шаблон — каждый ключ entity → `ConfigNode<TEntity[K]>` |
+| `ListResolver<TEntity>` | Типизированный resolver — `(values) => Promise<TEntity[]>` |
+
+### Полный паттерн типизации
+
+```typescript
+import { Palistor, defineList } from "@projectint/palistor";
+import type { ExtractValues, PalistorRef, DeepPartialValues } from "@projectint/palistor";
+
+// 1. Вывести тип значений из конфига
+const config = {
+  filter: { value: "" },
+  users: defineList<{ id: string; name: string }>({
+    template: { id: { value: "" }, name: { value: "" } },
+  }),
+};
+
+type Values = ExtractValues<typeof config>;
+// → { filter: string; users: Array<{ id: string; name: string }> }
+
+// 2. Создать store — TConfig выводится из конфига
+const store = new Palistor({ config, initialValues: { filter: "active" } });
+
+// 3. Типизировать пропсы через Palistor<Values>
+type FormProps = { form: Palistor<Values> };
+
+// 4. Типизировать entity-пропсы через PalistorRef
+type UserRef = PalistorRef<{ id: string; name: string }>;
 ```
 
 ---
