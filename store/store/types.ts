@@ -396,14 +396,20 @@ export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & 
  * принимает простой интерфейс значений — удобно для типизации пропсов
  * дочерних компонентов, получающих поддерево из useForm.
  *
+ * **Важно:** из пакета этот тип экспортируется под именем `PalistorProxy`,
+ * так как имя `Palistor` занято одноимённым классом.
+ * Используйте `import type { PalistorProxy } from "@projectint/palistor"`.
+ *
  * @example
  * ```ts
+ * import type { PalistorProxy } from "@projectint/palistor";
+ *
  * interface CompanyFormData {
  *   name: string;
  *   email: string;
  *   bank: { name: string; number: string };
  * }
- * type Props = { company: Palistor<CompanyFormData> };
+ * type Props = { company: PalistorProxy<CompanyFormData> };
  * ```
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

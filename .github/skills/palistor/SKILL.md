@@ -42,7 +42,7 @@ import type {
   FormConfig, TranslateFn, MaybeComputed, DeepPartialValues,
   ConfigNode, FieldProxyNode, GroupProxyNode, ConfigProxy,
   ExtractValues, ProxyStoreOptions, ProxyStore, Unsubscribe,
-  Palistor as PalistorType, PalistorRef, PalistorList, InferEntity,
+  PalistorProxy, PalistorRef, PalistorList, InferEntity,
   TypedListNode, ListResolver, TemplateConfig,
   PersistDriver, PersistOptions, PersistManager,
   Resolve, NotifyFn, ResolveErrorContext,
@@ -78,13 +78,17 @@ Combine with `DeepPartialValues<FormValues>` for `initialValues` or patch object
 
 ### Typing props without importing the config
 
-`Palistor<T>` maps a plain values interface to the proxy tree:
+`PalistorProxy<T>` maps a plain values interface to the proxy tree:
 
 ```ts
+import type { PalistorProxy } from "@projectint/palistor";
+
 interface UserData { name: string; email: string; address: { city: string } }
-type Props = { user: Palistor<UserData> };
-// user.name → FieldProxyNode<string>, user.address → Palistor<{ city: string }>
+type Props = { user: PalistorProxy<UserData> };
+// user.name → FieldProxyNode<string>, user.address → PalistorProxy<{ city: string }>
 ```
+
+> **Note:** `Palistor<T>` (the mapped type in `types.ts`) is exported as `PalistorProxy` because the name `Palistor` is taken by the store class. Do not use `import type { Palistor }` for prop typing — it resolves to the class constructor type.
 
 For lists: `interface FormData { users: Array<{ name: string }> }` → `form.users → ListProxyNode<...>`.
 
@@ -133,7 +137,7 @@ const users = defineList<User>({
 | `TranslateFn` | Compatible with next-intl `t`, i18next `t`, any `(...args) => string` |
 | `ExtractValues<TConfig>` | Derive plain values type from a config object |
 | `ConfigProxy<TConfig>` | Full proxy type returned by `useForm(store)` |
-| `Palistor<T>` | Values-based proxy — use for prop types in child components |
+| `PalistorProxy<T>` | Values-based proxy — use for prop types in child components |
 | `PalistorRef<TEntity>` | Opaque entity proxy handle — for single entity props |
 | `PalistorList<TEntity>` | Typed list — `ListProxyNode<PalistorRef<TEntity>>` |
 | `InferEntity<T>` | Extract entity type from `PalistorRef<TEntity>` |
