@@ -60,7 +60,6 @@ export type {
   FieldProxyNode,
   GroupProxyNode,
   ConfigProxy,
-  Palistor,
   ExtractValues,
   ProxyStoreOptions,
   ProxyStore,
@@ -72,6 +71,7 @@ export type {
   TemplateConfig,
   InferEntity,
 } from "./store/store/types";
+export { Palistor } from "./store/store";
 
 // ============================================================================
 // Resolve — типы и хуки
@@ -79,6 +79,14 @@ export type {
 
 export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline/";
 export { useNotifier } from "./react/useNotifier";
+
+// ============================================================================
+// React hooks
+// ============================================================================
+
+export { useForm } from "./react/useForm";
+export { usePersist } from "./react/usePersist";
+export { useTranslator } from "./react/useTranslator";
 
 // ============================================================================
 // defineList — typed list helper

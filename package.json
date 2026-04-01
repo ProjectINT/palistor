@@ -1,6 +1,6 @@
 {
   "name": "@projectint/palistor",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "State manager for react",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -10,6 +10,36 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./store/store": {
+      "types": "./dist/store/store/index.d.ts",
+      "import": "./dist/store/store/index.js",
+      "default": "./dist/store/store/index.js"
+    },
+    "./store/persist": {
+      "types": "./dist/store/persist/index.d.ts",
+      "import": "./dist/store/persist/index.js",
+      "default": "./dist/store/persist/index.js"
+    },
+    "./react/useForm": {
+      "types": "./dist/react/useForm.d.ts",
+      "import": "./dist/react/useForm.js",
+      "default": "./dist/react/useForm.js"
+    },
+    "./react/usePersist": {
+      "types": "./dist/react/usePersist.d.ts",
+      "import": "./dist/react/usePersist.js",
+      "default": "./dist/react/usePersist.js"
+    },
+    "./react/useTranslator": {
+      "types": "./dist/react/useTranslator.d.ts",
+      "import": "./dist/react/useTranslator.js",
+      "default": "./dist/react/useTranslator.js"
+    },
+    "./react/useNotifier": {
+      "types": "./dist/react/useNotifier.d.ts",
+      "import": "./dist/react/useNotifier.js",
+      "default": "./dist/react/useNotifier.js"
     }
   },
   "files": [

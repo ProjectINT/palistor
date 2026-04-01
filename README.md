@@ -6,6 +6,54 @@ Palistor — библиотека управления состоянием фо
 
 ---
 
+## Установка
+
+Пакет публикуется в **GitHub Packages** (`@projectint`).
+
+### 1. Настройте `.npmrc`
+
+В корне проекта (или в `~/.npmrc`) добавьте:
+
+```
+@projectint:registry=https://npm.pkg.github.com
+```
+
+> Для приватных пакетов также потребуется токен:
+> ```
+> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT
+> ```
+
+### 2. Установите пакет
+
+```bash
+npm install @projectint/palistor
+# или
+yarn add @projectint/palistor
+# или
+pnpm add @projectint/palistor
+```
+
+**Peer-зависимости:** `react ^19`
+
+### 3. Импорт
+
+Все публичные symbol'ы доступны из корневого модуля:
+
+```typescript
+import {
+  Palistor,
+  useForm,
+  usePersist,
+  useTranslator,
+  useNotifier,
+  defineList,
+  localStorageDriver,
+  sessionStorageDriver,
+} from "@projectint/palistor";
+```
+
+---
+
 ## Содержание
 
 - [Возможности](#возможности)
