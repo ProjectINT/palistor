@@ -19,17 +19,6 @@ import type { FieldState } from "../compute";
 
 const translate = (k: string) => k;
 
-function makeNodeState(value: unknown): FieldState {
-  return {
-    value,
-    isVisible: true,
-    isRequired: false,
-    isDisabled: false,
-    isReadOnly: false,
-    dirty: false,
-    revalidate: false,
-  };
-}
 
 function runRegisterNodes(config: AnyConfigNode) {
   const leafNodes: ReturnType<typeof registerNodes> extends infer _ ? any[] : never = [];
@@ -220,7 +209,7 @@ describe("типизация ConfigNodeToProxy и ExtractValues", () => {
       itemIds: ["u1", "u2"],
       version: 1,
       initialItemIds: ["u1"],
-      listConfig: { resolve: {} },
+      listConfig: { resolve: { resolver: async () => [] } },
     };
     expect(ls.itemIds).toHaveLength(2);
     expect(ls.version).toBe(1);
