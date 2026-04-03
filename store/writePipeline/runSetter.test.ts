@@ -22,7 +22,7 @@ describe("runSetter", () => {
     ]);
     const cache = buildValuesCache(root, nodeState);
 
-    const changed = runSetter(node, "bank", root, nodeState, cache);
+    const changed = runSetter(node, "bank", root, nodeState, cache, undefined);
 
     expect(nodeState.get(targetNode)!.value).toBe("");
     expect(changed.has(targetNode)).toBe(true);
@@ -35,7 +35,7 @@ describe("runSetter", () => {
     const nodeState = new WeakMap<object, FieldState>([[node, makeState("x")]]);
     const cache = buildValuesCache(root, nodeState);
 
-    const changed = runSetter(node, "y", root, nodeState, cache);
+    const changed = runSetter(node, "y", root, nodeState, cache, undefined);
 
     expect(changed.size).toBe(0);
     expect(errorSpy).toHaveBeenCalledOnce();
@@ -53,8 +53,36 @@ describe("runSetter", () => {
     ]);
     const cache = buildValuesCache(root, nodeState);
 
-    runSetter(node, "y", root, nodeState, cache, "prev");
+    runSetter(node, "y", root, nodeState, cache, undefined, "prev");
 
     expect(setterSpy).toHaveBeenCalledWith("y", { source: "x", status: "active" }, "prev");
+  });
+
+  it("скоупит values и patch к родительской группе (вложенный setter)", () => {
+    // Структура: root → group → { trigger (setter), target }
+    const targetNode: AnyConfigNode = { value: "" };
+    const triggerNode: AnyConfigNode = {
+      value: false,
+      setter: (v: unknown, values: Record<string, unknown>) => {
+        // setter должен видеть sibling-значения группы, а не root
+        if (v) return { target: values.shared ?? "fallback" };
+        return {};
+      },
+    };
+    const sharedNode: AnyConfigNode = { value: "group-val" };
+    const groupNode: AnyConfigNode = { trigger: triggerNode, target: targetNode, shared: sharedNode };
+    const root: AnyConfigNode = { group: groupNode };
+    const nodeState = new WeakMap<object, FieldState>([
+      [triggerNode, makeState(false)],
+      [targetNode, makeState("")],
+      [sharedNode, makeState("group-val")],
+    ]);
+    const cache = buildValuesCache(root, nodeState);
+
+    // parentNode = groupNode, parentPath = "group"
+    const changed = runSetter(triggerNode, true, groupNode, nodeState, cache, "group");
+
+    expect(nodeState.get(targetNode)!.value).toBe("group-val");
+    expect(changed.has(targetNode)).toBe(true);
   });
 });

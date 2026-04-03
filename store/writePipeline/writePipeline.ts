@@ -44,10 +44,15 @@ export class WritePipeline {
     const stored = storeValue(node, processedValue, nodeState, valuesCache);
     if (!stored) return null;
 
-    // Фаза 2.5: Setter-ветка — патч зависимых полей
-    const patchedNodes = typeof node.setter === "function"
-      ? runSetter(node, processedValue, this.kernel.rootConfig as AnyConfigNode, nodeState, valuesCache, previousValue)
-      : new Set<object>();
+    // Фаза 2.5: Setter-ветка — патч зависимых полей (скоуп: родительская группа)
+    let patchedNodes: Set<object>;
+    if (typeof node.setter === "function") {
+      const parentNode = (this.kernel.nodes.nodeParents.get(node) ?? this.kernel.rootConfig) as AnyConfigNode;
+      const parentPath = this.kernel.nodes.nodePaths.get(parentNode);
+      patchedNodes = runSetter(node, processedValue, parentNode, nodeState, valuesCache, parentPath, previousValue);
+    } else {
+      patchedNodes = new Set<object>();
+    }
 
     // Фаза 3: Таргетированный пересчёт затронутых групп
     const changedSoFar = new Set<object>([node]);
