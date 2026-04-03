@@ -48,12 +48,6 @@ import type {
   Resolve, NotifyFn, ResolveErrorContext,
 } from "@projectint/palistor";
 
-// Deep imports (optional — for tree-shaking or code-splitting)
-import { Palistor } from "@projectint/palistor/store/store";
-import { useForm } from "@projectint/palistor/react/useForm";
-import { usePersist } from "@projectint/palistor/react/usePersist";
-import { useTranslator } from "@projectint/palistor/react/useTranslator";
-import { useNotifier } from "@projectint/palistor/react/useNotifier";
 ```
 
 > **Note:** `MaybeTranslatable` is not re-exported from the root. Import directly if needed:
@@ -107,24 +101,12 @@ function UserRow({ user }: { user: PalistorRef<{ name: string; email: string }> 
 
 ### defineList — fully typed list node
 
-Prefer `defineList<TEntity>()` over raw array syntax:
+Prefer `defineList<TEntity>()` over raw array syntax (same resolver shape as List Node):
 
 ```ts
-import { defineList } from "@projectint/palistor";
-
-interface User { id: string; name: string; email: string }
-
 const users = defineList<User>({
-  template: {
-    id:    { value: "" },
-    name:  { value: "", isRequired: true },
-    email: { value: "" },
-  },
-  resolve: {
-    resolver: async (values) => api.getUsers(values.filter),
-    deps: ["filter"],
-    onError: (err, { notify }) => notify("Failed to load users"),
-  },
+  template: { id: { value: "" }, name: { value: "", isRequired: true }, email: { value: "" } },
+  resolve: { resolver: async (values) => api.getUsers(values.filter), deps: ["filter"], onError: (err, { notify }) => notify("Failed") },
 });
 ```
 
@@ -174,8 +156,6 @@ email: {
     return { lastModified: Date.now() };
   },
   dependencies: ["contactMethod"],     // explicit deps for recompute
-  types: { dataType: "String", type: "string" },
-  componentProps: { maxLength: 100 },  // pass-through to UI component
 }
 ```
 
@@ -261,9 +241,25 @@ function PassportSection({ passport }: { passport: typeof form.passport }) {
   return <input value={p.number.value} onChange={e => { p.number.value = e.target.value }} />;
 }
 
-// Entity mode — bind entity from list to a template
-function EditUser({ userProxy }) {
-  const u = useForm(userProxy, (s) => s.editUserForm);
+// Entity mode — TWO forms. Choose based on your needs:
+//
+// 1. useForm(entityProxy)  — use when the list template already has all needed fields and rules.
+//    Entity comes from list.items or list.getById. Reads the list's own template.
+//    Most common case — just read/write what the list already defines.
+function EditUserSimple({ userProxy }: { userProxy: PalistorRef<UserData> }) {
+  const u = useForm(userProxy); // uses list's own template fields
+  return <input value={u.name.value} onChange={e => { u.name.value = e.target.value }} />;
+}
+
+// 2. useForm(entityProxy, (s) => s.editUserForm)  — use ONLY when the edit form needs
+//    DIFFERENT fields, validators, labels, or an async resolve that the list template doesn't have.
+//    Example: list shows (name, role), but editUserForm adds (email, bio, department, phone)
+//    with separate validators and a resolve that fetches extra data.
+//    The selector picks any group node from the store — its structure defines what's exposed.
+//    On mount: bind + triggerResolve (skipped if already resolved from a previous open).
+//    On unmount: unbind (resolved cache survives — next open is instant).
+function EditUserDetailed({ userProxy }: { userProxy: PalistorRef<UserData> }) {
+  const u = useForm(userProxy, (s) => s.editUserForm); // different template with extra fields
   return <input value={u.name.value} onChange={e => { u.name.value = e.target.value }} />;
 }
 ```
@@ -294,16 +290,7 @@ usePersist(store, {
 });
 ```
 
-**PersistManager** (`store.persist`) public methods:
-
-| Method | Description |
-|--------|-------------|
-| `enable(options)` | Activate: hydrate from storage + auto-save on changes |
-| `disable()` | Deactivate: unsubscribe, cancel timers |
-| `flush()` | Force-save to storage immediately (no debounce) |
-| `hydrate()` | Force re-read from storage |
-| `clear()` | Remove data from storage by current key |
-| `isEnabled()` | Whether persist is currently active |
+**PersistManager** (`store.persist`) public methods: `flush()` (force-save immediately), `clear()` (remove from storage), `enable(options)`, `disable()`, `hydrate()`, `isEnabled()`.
 
 ## Field Proxy API (what you read in components)
 
@@ -418,20 +405,6 @@ function UserList() {
 }
 ```
 
-### Entity edit in modal
-
-```tsx
-function EditModal({ entityProxy, onClose }) {
-  const u = useForm(entityProxy, (s) => s.editTemplate);
-  return (
-    <>
-      <input value={u.name.value} onChange={e => { u.name.value = e.target.value }} />
-      <button onClick={() => u.submit().then(onClose)}>Save</button>
-    </>
-  );
-}
-```
-
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -445,6 +418,7 @@ function EditModal({ entityProxy, onClose }) {
 | Array config with >2 elements | List node is `[template]` or `[template, listConfig]` — max 2 elements |
 | Ignoring `add(values)` return | `add(values)` returns the created `TItem` proxy — use it |
 | Omitting `resolve.onError` | `onError` is **required** on resolve config — always provide it |
+| `useForm(store, (s) => s.subForm)` — passing store as first arg with selector | Not valid. Use `useForm(store)` then access `.subForm` from the returned proxy. Two-arg form is entity-only: `useForm(entityProxy, selector)` where `entityProxy` comes from `list.items`/`list.getById` |
 
 ## Pipelines Reference
 
