@@ -88,6 +88,7 @@ export { useNotifier } from "./react/useNotifier";
 export { useForm } from "./react/useForm";
 export { usePersist } from "./react/usePersist";
 export { useTranslator } from "./react/useTranslator";
+export { useStoreContext } from "./react/useStoreContext";
 
 // ============================================================================
 // defineList — typed list helper

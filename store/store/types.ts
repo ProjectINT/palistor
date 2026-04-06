@@ -460,6 +460,27 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
   proxy: ConfigProxy<TConfig>;
 
   /**
+   * Нереактивный контекст — произвольные данные, доступные во всех callback-ах
+   * (resolve.resolver, onSubmit, onChange, …) через `store.context`.
+   *
+   * Устанавливается через `setContext()` или хук `useStoreContext()`.
+   * Не является частью формы — не попадает в getValues(), submit, persist.
+   *
+   * @example
+   * store.context.accountId; // read
+   */
+  readonly context: Record<string, unknown>;
+
+  /**
+   * Установить нереактивный контекст. Заменяет текущий context целиком.
+   * Вызывается из React (useStoreContext) или императивно.
+   *
+   * @example
+   * store.setContext({ accountId: "abc", tenant: "acme" });
+   */
+  setContext(ctx: Record<string, unknown>): void;
+
+  /**
    * Подписаться на изменение состояния конкретного узла конфига.
    * Возвращает функцию-отписку.
    */

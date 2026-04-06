@@ -104,6 +104,12 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   private readonly _proxy: ConfigProxy<TConfig>;
   private readonly _persist: PersistManager;
 
+  /**
+   * Нереактивный контекст — произвольные данные, доступные через `store.context`.
+   * Устанавливается через `setContext()` или хук `useStoreContext()`.
+   */
+  private _context: Record<string, unknown> = {};
+
   // ─── Конструктор ──────────────────────────────────────────────────────────
 
   constructor(options: ProxyStoreOptions<TConfig>) {
@@ -256,6 +262,14 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   get proxy(): ConfigProxy<TConfig> {
     return this._proxy;
+  }
+
+  get context(): Record<string, unknown> {
+    return this._context;
+  }
+
+  setContext(ctx: Record<string, unknown>): void {
+    this._context = ctx;
   }
 
   get persist(): PersistManager {
