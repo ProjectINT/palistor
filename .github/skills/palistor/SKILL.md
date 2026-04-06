@@ -34,7 +34,7 @@ Everything is exported from the root `@projectint/palistor` entry point. Deep im
 ```ts
 // Root import (preferred) — covers all public API
 import {
-  Palistor, useForm, usePersist, useTranslator, useNotifier, defineList,
+  Palistor, useForm, usePersist, useTranslator, useNotifier, useStoreContext, defineList,
   localStorageDriver, sessionStorageDriver,
 } from "@projectint/palistor";
 
@@ -275,6 +275,37 @@ useTranslator(store, useTranslations()); // next-intl or any (key) => string
 ```tsx
 useNotifier(store, (message) => toast.error(message));
 ```
+
+### useStoreContext — set non-reactive context
+
+Context is a non-reactive bag of global variables (accountId, tenant, etc.) that are **not form fields**. Context does not appear in `getValues()`, `submit`, or `persist`. It is available in all callbacks (resolve.resolver, onSubmit, onChange, …) via `store.context`.
+
+```tsx
+// In layout/provider — set context from React
+function Layout({ children }: { children: React.ReactNode }) {
+  const accountId = useAccountId();
+  useStoreContext(store, useMemo(() => ({ accountId }), [accountId]));
+  return <>{children}</>;
+}
+
+// Or imperatively (outside React):
+store.setContext({ accountId: "abc", tenant: "acme" });
+store.context.accountId; // read
+```
+
+In config — read from `store` argument:
+
+```ts
+resolve: {
+  resolver: async (values, store) => api.fetchUsers(store.context.accountId),
+  deps: ["filter"],
+},
+onSubmit: async (values, store) => {
+  await api.save({ ...values, accountId: store.context.accountId });
+},
+```
+
+**Lifecycle (hook):** mount → `store.setContext(ctx)`, unmount → `store.setContext({})`.
 
 ### usePersist — auto-save to storage
 
