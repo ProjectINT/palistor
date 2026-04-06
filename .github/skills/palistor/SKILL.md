@@ -147,6 +147,7 @@ email: {
   },
   formatter: (value) => String(value).trim().toLowerCase(),
   setter: (value, values, prev) => ({
+    email: value,
     domain: value.split("@")[1] ?? "",   // patch sibling fields
   }),
   onChange: async ({ fieldKey, newValue, previousValue, allValues }) => {
