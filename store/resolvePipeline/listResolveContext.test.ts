@@ -26,7 +26,7 @@ const userTemplate = {
 // ─── Тесты ────────────────────────────────────────────────────────────────────
 
 describe("list resolver читает store.context, установленный через useStoreContext", () => {
-  it("resolver получает accountId, засетанный через useStoreContext до resolve", async () => {
+  it("resolver получает accountId, засетанный через useStoreContext до resolve (проходит отдельно)", async () => {
     const capturedContext: Record<string, unknown>[] = [];
 
     const resolver = vi.fn(async (_values: unknown, store: any) => {
@@ -61,7 +61,7 @@ describe("list resolver читает store.context, установленный �
     unmount();
   });
 
-  it("после unmount useStoreContext контекст очищается и resolver не видит старые данные", async () => {
+  it("после unmount useStoreContext контекст очищается и resolver не видит старые данные (проходит отдельно)", async () => {
     const capturedContexts: Record<string, unknown>[] = [];
     let callCount = 0;
 
@@ -195,5 +195,43 @@ describe("list resolver читает store.context, установленный �
 
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
     expect((store.proxy as any).users.length).toBe(1);
+  });
+
+  it("изменение accountId через setContext автоматически перезапускает resolver", async () => {
+    const capturedContexts: Record<string, unknown>[] = [];
+
+    const resolver = vi.fn(async (_values: unknown, store: any) => {
+      capturedContexts.push({ ...store.context });
+      return [{ id: "u1", name: "Alice", role: "admin" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        users: [
+          userTemplate,
+          { resolve: { resolver, onError: vi.fn() } },
+        ],
+      } as any,
+    });
+
+    // Первый запуск: resolver читает store.context.accountId → автоматически
+    // добавляет $context.accountId в зависимости
+    store.setContext({ accountId: "acc-v1" });
+
+    void (store.proxy as any).users.items;
+    await act(() => flushPromises());
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(capturedContexts[0]).toMatchObject({ accountId: "acc-v1" });
+
+    // Меняем accountId — setContext вызывает retriggerByPaths("$context.accountId"),
+    // и resolver перезапускается автоматически без явного deps или изменения полей
+    act(() => {
+      store.setContext({ accountId: "acc-v2" });
+    });
+    await act(() => flushPromises());
+
+    expect(resolver).toHaveBeenCalledTimes(2);
+    expect(capturedContexts[1]).toMatchObject({ accountId: "acc-v2" });
   });
 });

@@ -1,6 +1,8 @@
 import type { EntityData } from "../entityRegistry";
 import type { ListResolveConfig, ListState } from "../store/types";
 import { recomputeAndNotify } from "../compute/recompute";
+import { createContextTrackingProxy } from "./createContextTrackingProxy";
+import type { ContextTrackingResult } from "./createContextTrackingProxy";
 import type { ResolveDeps } from "./types";
 
 // ─── List-specific deps ──────────────────────────────────────────────────────
@@ -86,11 +88,23 @@ export function executeListResolve(
   recomputeAndNotify(loadingChanged, recompute, notifyChanged);
 
   const promise = (async (): Promise<unknown> => {
+    let contextTracking: ContextTrackingResult | null = null;
+
     try {
       // Вызываем resolver со снимком текущих значений
       const { getValues } = deps;
       const values = getValues();
-      const result = await resolve.resolver(values, store);
+
+      // Оборачиваем store.context в tracking proxy для автоматических контекстных зависимостей
+      contextTracking = createContextTrackingProxy(store.context);
+      const storeProxy = new Proxy(store, {
+        get(target, key) {
+          if (key === "context") return contextTracking!.proxy;
+          return (target as any)[key];
+        },
+      });
+
+      const result = await resolve.resolver(values, storeProxy);
 
       // Прерываем, если статус изменился во время ожидания (например, reset)
       if (state.status !== "pending") return result;
@@ -124,9 +138,15 @@ export function executeListResolve(
         syncListValuesCache(listNode);
       }
 
-      // Авто-зависимости из поля deps
-      if (resolve.deps) {
-        state.dependencies = new Set<string>(resolve.deps);
+      // Авто-зависимости из поля deps + контекстные зависимости
+      const mergedDeps = new Set<string>(resolve.deps ?? []);
+      if (contextTracking) {
+        for (const key of contextTracking.getAccessedKeys()) {
+          mergedDeps.add(`$context.${key}`);
+        }
+      }
+      if (mergedDeps.size > 0) {
+        state.dependencies = mergedDeps;
       }
 
       // Обновляем loading = false, status = resolved
@@ -154,6 +174,15 @@ export function executeListResolve(
       nodeState.set(listNode, { ...(updatedSt ?? DEFAULT_LIST_STATE), loading: false });
       state.status = "error";
       state.error = err;
+
+      // Сохраняем контекстные зависимости даже в случае ошибки
+      if (contextTracking && contextTracking.getAccessedKeys().size > 0) {
+        const mergedDeps = new Set<string>(resolve.deps ?? []);
+        for (const key of contextTracking.getAccessedKeys()) {
+          mergedDeps.add(`$context.${key}`);
+        }
+        state.dependencies = mergedDeps;
+      }
 
       try {
         resolve.onError?.(err, { notify });
