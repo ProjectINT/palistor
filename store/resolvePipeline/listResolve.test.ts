@@ -591,3 +591,88 @@ describe("2C.5: Интеграционный сценарий", () => {
     expect((store.proxy as any).users.items[0].name.value).toBe("New User");
   });
 });
+
+// ─── Dep retrigger for list resolvers ────────────────────────────────────────
+
+describe("list resolver dep retrigger", () => {
+  it("reruns list resolver when explicit dep changes after resolution", async () => {
+    const calls: string[] = [];
+    const resolver = vi.fn(async (values: any) => {
+      calls.push(values.filter);
+      return [{ id: "u1", name: `User-for-${values.filter}`, role: "user" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        filter: { value: "admin" },
+        users: [
+          userTemplate,
+          { resolve: { resolver, onError: vi.fn(), deps: ["filter"] } },
+        ],
+      } as any,
+    });
+
+    // Trigger lazy resolve
+    void (store.proxy as any).users.items;
+    await flushPromises();
+
+    expect(calls).toEqual(["admin"]);
+    expect((store.proxy as any).users.length).toBe(1);
+    expect((store.proxy as any).users.items[0].name.value).toBe("User-for-admin");
+
+    // Change the dep field — resolver should retrigger
+    (store.proxy as any).filter.value = "moderator";
+    await flushPromises();
+
+    expect(calls).toEqual(["admin", "moderator"]);
+    expect((store.proxy as any).users.items[0].name.value).toBe("User-for-moderator");
+  });
+
+  it("reruns list resolver after completion when dep changes while pending", async () => {
+    const calls: string[] = [];
+    let resolveSecond!: (v: any) => void;
+    let callIndex = 0;
+
+    const resolver = vi.fn(async (values: any) => {
+      callIndex++;
+      const thisCall = callIndex;
+      if (thisCall === 2) {
+        return new Promise<any>((r) => { resolveSecond = r; });
+      }
+      calls.push(values.filter);
+      return [{ id: "u1", name: `User-for-${values.filter}`, role: "user" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        filter: { value: "a" },
+        users: [
+          userTemplate,
+          { resolve: { resolver, onError: vi.fn(), deps: ["filter"] } },
+        ],
+      } as any,
+    });
+
+    // Initial resolve
+    void (store.proxy as any).users.items;
+    await flushPromises();
+    expect(calls).toEqual(["a"]);
+
+    // Change dep → triggers call 2 (paused)
+    (store.proxy as any).filter.value = "b";
+    await Promise.resolve();
+
+    // Change dep again while call 2 is still pending
+    (store.proxy as any).filter.value = "c";
+    await Promise.resolve();
+
+    // Resolve call 2 with stale result
+    resolveSecond([{ id: "u1", name: "User-for-b", role: "user" }]);
+    await flushPromises();
+
+    // System should detect dep changed during pending and rerun with "c"
+    expect(resolver).toHaveBeenCalledTimes(3);
+    expect(calls).toEqual(["a", "c"]);
+    expect((store.proxy as any).users.items[0].name.value).toBe("User-for-c");
+  });
+});

@@ -203,9 +203,12 @@ describe("A. Тайминг и жизненный цикл резольвера"
 // ─── B. Поведение в состоянии "pending" ──────────────────────────────────────
 
 describe("B. Поведение в состоянии pending", () => {
-  it("B1. изменение dep пока resolver pending → dedup, resolver вызван 1 раз", async () => {
+  it("B1. изменение dep пока resolver pending → повторный запуск после завершения", async () => {
     const d = deferred<any[]>();
-    const resolver = vi.fn(() => d.promise);
+    const resolver = vi.fn((values: any) => {
+      if (values.filter === "a") return d.promise;
+      return Promise.resolve([{ id: "u2", name: "Bob" }]);
+    });
 
     const store = new Palistor({
       config: {
@@ -224,19 +227,20 @@ describe("B. Поведение в состоянии pending", () => {
     expect((store.proxy as any).users.loading).toBe(true);
     expect(resolver).toHaveBeenCalledTimes(1);
 
-    // Меняем dep пока pending — не вызовет новый resolver (status ещё pending)
+    // Меняем dep пока pending — ставит флаг pendingRetrigger, новый вызов не начинается
     (store.proxy as any).filter.value = "b";
     await Promise.resolve();
 
-    // Всё ещё только один вызов
+    // Всё ещё только один активный вызов
     expect(resolver).toHaveBeenCalledTimes(1);
 
     d.resolve([{ id: "u1", name: "Alice" }]);
     await flushPromises();
 
-    // После завершения — только один вызов итого
-    expect(resolver).toHaveBeenCalledTimes(1);
+    // После завершения первого вызова — автоматически запустился второй (для filter="b")
+    expect(resolver).toHaveBeenCalledTimes(2);
     expect((store.proxy as any).users.length).toBe(1);
+    expect((store.proxy as any).users.items[0].name.value).toBe("Bob");
   });
 
   it("B2. после завершения pending-резольвера следующее изменение dep работает", async () => {

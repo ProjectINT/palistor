@@ -363,6 +363,64 @@ describe("resolvePipeline", () => {
     });
   });
 
+  describe("dep retrigger while pending", () => {
+    it("should re-run resolver after completion if dep changed while pending", async () => {
+      const calls: string[] = [];
+      let resolveSecond!: (v: any) => void;
+      let callIndex = 0;
+
+      const resolver = vi.fn(async (values: any) => {
+        callIndex++;
+        const thisCall = callIndex;
+        if (thisCall === 2) {
+          // Second call — pause until manually resolved
+          return new Promise<any>((r) => { resolveSecond = r; });
+        }
+        calls.push(values.filter);
+        return { data: `results-for-${values.filter}` };
+      });
+
+      const config = {
+        filter: { value: "a" },
+        results: {
+          resolve: {
+            resolver,
+            onError: vi.fn(),
+            deps: ["filter"],
+          },
+          data: { value: "" },
+        },
+      };
+
+      const store = new Palistor({ config });
+      const proxy = store.proxy as any;
+
+      // Trigger initial lazy resolve
+      void proxy.results.data.value;
+      await flushPromises();
+
+      expect(calls).toEqual(["a"]);
+      expect(proxy.results.data.value).toBe("results-for-a");
+
+      // Change dep → triggers retrigger (call 2, which pauses)
+      proxy.filter.value = "b";
+      await Promise.resolve();
+
+      // Still pending (call 2 is paused). Change dep again while pending.
+      proxy.filter.value = "c";
+      await Promise.resolve();
+
+      // Resolve the paused call 2 — result is stale ("b"), but dep is now "c"
+      resolveSecond({ data: "results-for-b" });
+      await flushPromises();
+
+      // After stale call 2 completes, system should detect dep "filter" changed
+      // while pending and automatically re-run with the current value "c"
+      expect(resolver).toHaveBeenCalledTimes(3);
+      expect(proxy.results.data.value).toBe("results-for-c");
+    });
+  });
+
   describe("auto-deps", () => {
     it("should re-run resolver when read dependency changes", async () => {
       let callCount = 0;

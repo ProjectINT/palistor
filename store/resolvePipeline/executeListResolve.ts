@@ -67,7 +67,7 @@ export function executeListResolve(
   const state = resolveStates.get(listNode);
   if (!state) return Promise.resolve();
 
-  // Deduplication
+  // Дедупликация
   if (state.status === "pending" && state.promise) {
     return state.promise;
   }
@@ -76,65 +76,73 @@ export function executeListResolve(
   state.attempt = 0;
   state.error = null;
 
-  // Set loading = true on listNode's nodeState
+  // Устанавливаем loading = true в nodeState для listNode
   const nodeSt = nodeState.get(listNode);
   nodeState.set(listNode, { ...(nodeSt ?? DEFAULT_LIST_STATE), loading: true });
 
-  // Notify about loading: true
+  // Уведомляем об изменении loading: true
   const loadingChanged = new Set<object>([listNode]);
   recomputeAndNotify(loadingChanged, recompute, notifyChanged);
 
   const promise = (async (): Promise<unknown> => {
     try {
-      // Call resolver with current values snapshot
+      // Вызываем resolver со снимком текущих значений
       const { getValues } = deps;
       const values = getValues();
       const result = await resolve.resolver(values);
 
-      // Abort if state changed while awaiting (e.g. reset)
+      // Прерываем, если статус изменился во время ожидания (например, reset)
       if (state.status !== "pending") return result;
 
       // ── Success path ────────────────────────────────────────────────────
       const changed = new Set<object>([listNode]);
 
       if (Array.isArray(result) && result.length > 0) {
-        // Upsert all entities (registers leaves, returns changed nodes)
+        // Upsert всех сущностей (регистрирует листья, возвращает изменённые узлы)
         const entityChanged = setEntitiesRaw(result as EntityData[]);
         for (const n of entityChanged) changed.add(n);
 
-        // Update itemIds from resolver result
+        // Обновляем itemIds из результата resolver-а
         listState.itemIds = (result as Array<Record<string, unknown>>)
           .map((item) => item.id)
           .filter((id): id is string => typeof id === "string" && id !== "");
 
-        // Save as initial snapshot for dirty tracking
+        // Сохраняем как начальный снимок для dirty-трекинга
         listState.initialItemIds = [...listState.itemIds];
 
-        // Bump version → tracking proxy sees the change → React re-render
+        // Увеличиваем версию → tracking proxy видит изменение → React перерисовывается
         listState.version++;
 
-        // Sync valuesCache.values[listKey]
+        // Синхронизируем valuesCache.values[listKey]
         syncListValuesCache(listNode);
       } else if (Array.isArray(result) && result.length === 0) {
-        // Empty result — clear the list
+        // Пустой результат — очищаем список
         listState.itemIds = [];
         listState.initialItemIds = [];
         listState.version++;
         syncListValuesCache(listNode);
       }
 
-      // Auto-deps from deps field
+      // Авто-зависимости из поля deps
       if (resolve.deps) {
         state.dependencies = new Set<string>(resolve.deps);
       }
 
-      // Update loading = false, status = resolved
+      // Обновляем loading = false, status = resolved
       const updatedSt = nodeState.get(listNode);
       nodeState.set(listNode, { ...(updatedSt ?? DEFAULT_LIST_STATE), loading: false });
       state.status = "resolved";
       state.error = null;
 
       recomputeAndNotify(changed, recompute, notifyChanged);
+
+      // Если зависимость изменилась пока были в pending — перезапускаем немедленно
+      if (state.pendingRetrigger) {
+        state.pendingRetrigger = false;
+        state.status = "idle";
+        state.promise = null;
+        executeListResolve(listNode, resolve, listState, deps);
+      }
 
       return result;
     } catch (err) {
@@ -149,10 +157,19 @@ export function executeListResolve(
       try {
         resolve.onError?.(err, { notify });
       } catch {
-        // onError should not throw
+        // onError не должен бросать исключения
       }
 
       recomputeAndNotify(new Set([listNode]), recompute, notifyChanged);
+
+      // Если зависимость изменилась пока были в pending — перезапускаем немедленно
+      if (state.pendingRetrigger) {
+        state.pendingRetrigger = false;
+        state.status = "idle";
+        state.promise = null;
+        executeListResolve(listNode, resolve, listState, deps);
+      }
+
       return undefined;
     }
   })();

@@ -352,7 +352,7 @@ export type TypedListNode<TEntity extends Record<string, any>> =
 
 /** Typed resolver для списка. */
 export type ListResolver<TEntity extends Record<string, any>> =
-  (values: any) => Promise<TEntity[]>;
+  (values: any, store: ProxyStore<any>) => Promise<TEntity[]>;
 
 /** Typed template: каждый ключ Entity → ConfigNode с нужным типом value. */
 export type TemplateConfig<TEntity extends Record<string, any>> = {

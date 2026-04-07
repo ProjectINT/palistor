@@ -72,6 +72,11 @@ export interface ResolveState {
   dependencies: Set<string>;
   /** Current retry attempt number */
   attempt: number;
+  /**
+   * Set to true when a dep changes while this resolver is pending.
+   * After the current resolution completes, the resolver will be retriggered.
+   */
+  pendingRetrigger?: boolean;
 }
 
 // ─── Dependencies for resolve execution ──────────────────────────────────────

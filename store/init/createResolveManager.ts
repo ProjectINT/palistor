@@ -25,22 +25,22 @@ export interface ResolveManagerDeps {
   recompute: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
   notify: NotifyFn;
-  /** Initial value snapshot — passed to resolve pipeline for dirty tracking. */
+  /** Снимок начальных значений — передаётся в resolve-пайплайн для dirty-трекинга. */
   initialValueMap: WeakMap<object, unknown>;
   valuesCache: ValuesCache;
-  /** The ProxyStore instance — passed as second argument to resolver. */
+  /** Экземпляр ProxyStore — передаётся вторым аргументом в resolver. */
   store: any;
-  // ─── Phase 2C: list-specific ────────────────────────────────────────────
-  /** All ListState objects from NodeRegistry (for list resolve dispatch). */
+  // ─── Фаза 2C: специфика списков ─────────────────────────────────────────
+  /** Все объекты ListState из NodeRegistry (для диспетчеризации list resolve). */
   listStates: WeakMap<object, ListState>;
   /**
-   * Upsert entities and register their leaves without triggering notify.
-   * Called by executeListResolve after a list resolver succeeds.
+   * Upsert-ит сущности и регистрирует их листья без вызова notify.
+   * Вызывается из executeListResolve после успешного list resolver-а.
    */
   setEntitiesRaw: (items: EntityData[]) => Set<object>;
   /**
-   * Sync valuesCache.values[listKey] from listState.itemIds.
-   * Called by executeListResolve after updating itemIds.
+   * Синхронизирует valuesCache.values[listKey] с текущими listState.itemIds.
+   * Вызывается из executeListResolve после обновления itemIds.
    */
   syncListValuesCache: (listNode: object) => void;
 }
@@ -57,7 +57,7 @@ export interface ResolveManagerDeps {
  * - Запуск eager resolvers (lazy: false)
  */
 export class ResolveManager {
-  /** Resolve states for all nodes with resolve config. */
+  /** Resolve-состояния всех узлов с resolve-конфигом. */
   readonly states = new Map<object, ResolveState>();
 
   private readonly resolveEntries: AnyResolveEntry[];
@@ -132,9 +132,28 @@ export class ResolveManager {
         this.states,
         this.resolveEntries,
       );
+
+      // Отслеживаем узлы, которые только что запущены, чтобы не помечать их
+      // pendingRetrigger в том же тике (у них уже есть новое значение зависимости).
+      const justTriggeredNodes = new Set<object>(toRetrigger.map((e) => e.node as object));
+
       for (const entry of toRetrigger) {
         resetResolveState(entry.node as AnyConfigNode, this.states);
         this._executeEntry(entry);
+      }
+
+      // Помечаем resolver-ы, которые УЖЕ были в pending (не только что запущены),
+      // чьи зависимости изменились — они перезапустятся после завершения текущей резолюции.
+      for (const entry of this.resolveEntries) {
+        if (justTriggeredNodes.has(entry.node as object)) continue;
+        const state = this.states.get(entry.node as object);
+        if (!state || state.status !== "pending") continue;
+        for (const dep of state.dependencies) {
+          if (changedPaths.has(dep)) {
+            state.pendingRetrigger = true;
+            break;
+          }
+        }
       }
     };
   }
@@ -151,7 +170,7 @@ export class ResolveManager {
 
   // ─── Internal dispatch ─────────────────────────────────────────────────────
 
-  /** Dispatch entry to the correct execute function (group vs list). */
+  /** Диспетчеризует запись в нужную функцию выполнения (группа или список). */
   private _executeEntry(entry: AnyResolveEntry): void {
     if (entry.isListNode) {
       const listState = this.listStates.get(entry.node as object);
@@ -175,7 +194,7 @@ export class ResolveManager {
 
 // ─── Deprecated factory alias ─────────────────────────────────────────────────
 
-/** @deprecated Use `new ResolveManager(deps)` instead. */
+/** @deprecated Используйте `new ResolveManager(deps)`. */
 export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
   return new ResolveManager(deps);
 }
