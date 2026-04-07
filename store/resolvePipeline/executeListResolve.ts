@@ -62,6 +62,7 @@ export function executeListResolve(
     notify,
     setEntitiesRaw,
     syncListValuesCache,
+    store,
   } = deps;
 
   const state = resolveStates.get(listNode);
@@ -89,7 +90,7 @@ export function executeListResolve(
       // Вызываем resolver со снимком текущих значений
       const { getValues } = deps;
       const values = getValues();
-      const result = await resolve.resolver(values);
+      const result = await resolve.resolver(values, store);
 
       // Прерываем, если статус изменился во время ожидания (например, reset)
       if (state.status !== "pending") return result;

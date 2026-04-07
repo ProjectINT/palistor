@@ -273,7 +273,7 @@ export interface GroupProxyNode {
  */
 export interface ListResolveConfig {
   /** Async data loader — returns array of entity records. */
-  resolver: (values: any) => Promise<Array<Record<string, unknown>>>;
+  resolver: (values: any, store: ProxyStore<any>) => Promise<Array<Record<string, unknown>>>;
   /**
    * Error handler called when resolver throws.
    * ctx.notify — notification function from useNotifier.
