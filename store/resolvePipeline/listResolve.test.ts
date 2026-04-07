@@ -234,6 +234,28 @@ describe("2C.1: List resolver", () => {
     await flushPromises();
     expect(callCount).toBe(1);
   });
+
+  it("resolver получает store вторым аргументом", async () => {
+    let capturedStore: unknown;
+    const resolver = vi.fn(async (_values: unknown, store: unknown) => {
+      capturedStore = store;
+      return [{ id: "u1", name: "Alice", role: "admin" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        users: [
+          userTemplate,
+          { resolve: { resolver, onError: vi.fn() } },
+        ],
+      } as any,
+    });
+
+    void (store.proxy as any).users.items;
+    await flushPromises();
+
+    expect(capturedStore).toBe(store);
+  });
 });
 
 // ─── 2C.2: rekey — обновление itemIds ─────────────────────────────────────────
