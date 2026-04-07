@@ -116,7 +116,6 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     const { config, initialValues = {} } = options;
     const rootConfig = config as AnyConfigNode;
     this.rootConfig = rootConfig;
-
     // ─── Сервисы ────────────────────────────────────────────────────────────
 
     this.services = new ServiceRegistry();
@@ -185,6 +184,12 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     const postNotifyHook = this.resolveManager.createPostNotifyHook();
     if (postNotifyHook) this.hub.setPostNotifyHook(postNotifyHook);
+
+    // ─── Начальный контекст (Phase 4) ────────────────────────────────────────
+
+    if (options.context) {
+      this._context = options.context;
+    }
 
     // ─── Launch eager resolvers ──────────────────────────────────────────────
 
@@ -269,7 +274,23 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   setContext(ctx: Record<string, unknown>): void {
+    const changedKeys = new Set<string>();
+    // Keys that were added or changed
+    for (const key of Object.keys(ctx)) {
+      if (this._context[key] !== ctx[key]) changedKeys.add(key);
+    }
+    // Keys that were removed
+    for (const key of Object.keys(this._context)) {
+      if (!(key in ctx)) changedKeys.add(key);
+    }
+
     this._context = ctx;
+
+    if (changedKeys.size > 0) {
+      const changedPaths = new Set<string>();
+      for (const key of changedKeys) changedPaths.add(`$context.${key}`);
+      this.resolveManager.retriggerByPaths(changedPaths);
+    }
   }
 
   get persist(): PersistManager {

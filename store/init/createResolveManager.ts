@@ -56,6 +56,18 @@ export interface ResolveManagerDeps {
  * - Post-notify hook для retrigger по зависимостям
  * - Запуск eager resolvers (lazy: false)
  */
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function isContextSatisfied(
+  contextDeps: string[] | undefined,
+  context: Record<string, unknown>,
+): boolean {
+  if (!contextDeps || contextDeps.length === 0) return true;
+  return contextDeps.every((key) => context[key] != null);
+}
+
+// ─── Class ───────────────────────────────────────────────────────────────────
+
 export class ResolveManager {
   /** Resolve-состояния всех узлов с resolve-конфигом. */
   readonly states = new Map<object, ResolveState>();
@@ -65,6 +77,8 @@ export class ResolveManager {
   private readonly resolveDeps: ResolveDeps;
   private readonly listResolveDeps: ListResolveDeps;
   private readonly listStates: WeakMap<object, ListState>;
+  /** Entries waiting for their contextDeps to be satisfied before starting. */
+  private readonly pendingContextQueue = new Set<AnyResolveEntry>();
 
   constructor(deps: ResolveManagerDeps) {
     const {
@@ -168,10 +182,46 @@ export class ResolveManager {
     }
   }
 
+  /**
+   * Ретриггерить резолверы, зависящие от изменённых путей.
+   * Используется из `Palistor.setContext()` для реактивного перезапуска
+   * резолверов при изменении контекста.
+   */
+  retriggerByPaths(changedPaths: Set<string>): void {
+    if (changedPaths.size === 0) return;
+
+    const toRetrigger = findResolvesToRetrigger(
+      changedPaths,
+      this.states,
+      this.resolveEntries,
+    );
+
+    for (const entry of toRetrigger) {
+      resetResolveState(entry.node as AnyConfigNode, this.states);
+      this._executeEntry(entry);
+    }
+
+    // Flush pending context queue: launch entries whose contextDeps are now satisfied
+    for (const entry of this.pendingContextQueue) {
+      const resolve = entry.resolve as Resolve | undefined;
+      if (isContextSatisfied(resolve?.contextDeps, this.resolveDeps.store.context)) {
+        this.pendingContextQueue.delete(entry);
+        this._executeEntry(entry);
+      }
+    }
+  }
+
   // ─── Internal dispatch ─────────────────────────────────────────────────────
 
   /** Диспетчеризует запись в нужную функцию выполнения (группа или список). */
   private _executeEntry(entry: AnyResolveEntry): void {
+    // Phase 4 gating: если contextDeps не удовлетворены — откладываем в очередь
+    const resolve = entry.resolve as Resolve | undefined;
+    if (!isContextSatisfied(resolve?.contextDeps, this.resolveDeps.store.context)) {
+      this.pendingContextQueue.add(entry);
+      return;
+    }
+
     if (entry.isListNode) {
       const listState = this.listStates.get(entry.node as object);
       if (listState && entry.resolve) {

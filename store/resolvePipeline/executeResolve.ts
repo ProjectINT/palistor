@@ -1,6 +1,8 @@
 import { applyPatch } from "../applyPatch/applyPatch";
 import { type AnyConfigNode } from "../store/types";
 import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
+import { createContextTrackingProxy } from "./createContextTrackingProxy";
+import type { ContextTrackingResult } from "./createContextTrackingProxy";
 import { mergeInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../compute/recompute";
 import type { Resolve, ResolveDeps } from "./types";
@@ -98,6 +100,8 @@ export function executeResolve(
 
   const promise = (async (): Promise<unknown> => {
     let lastError: unknown;
+    // Tracks context keys accessed in the last attempt (for saving deps on error path)
+    let contextTracking: ContextTrackingResult | null = null;
 
     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
       state.attempt = attempt;
@@ -114,7 +118,16 @@ export function executeResolve(
         const freshValues = getValues();
         const tracking = createValuesTrackingProxy(freshValues);
 
-        const result = await resolve.resolver(tracking.proxy, store);
+        // Оборачиваем store.context в tracking proxy для автоматических контекстных зависимостей
+        contextTracking = createContextTrackingProxy(store.context);
+        const storeProxy = new Proxy(store, {
+          get(target, key) {
+            if (key === "context") return contextTracking!.proxy;
+            return (target as any)[key];
+          },
+        });
+
+        const result = await resolve.resolver(tracking.proxy, storeProxy);
 
         // Повторная проверка: если статус изменился во время ожидания — прерываем
         if (state.status !== "pending") return result;
@@ -150,6 +163,10 @@ export function executeResolve(
         const accessedPaths = tracking.getAccessedPaths();
         const mergedDeps = new Set<string>(resolve.deps ?? []);
         for (const p of accessedPaths) mergedDeps.add(p);
+        // Добавляем контекстные зависимости с префиксом $context.
+        for (const key of contextTracking!.getAccessedKeys()) {
+          mergedDeps.add(`$context.${key}`);
+        }
         state.dependencies = mergedDeps;
 
         // 5. Recompute + notify (однократно)
@@ -184,6 +201,16 @@ export function executeResolve(
     }
     state.status = "error";
     state.error = lastError;
+
+    // Сохраняем контекстные зависимости даже в случае ошибки
+    // (чтобы setContext мог ретриггерить резолверы со статусом "error")
+    if (contextTracking && contextTracking.getAccessedKeys().size > 0) {
+      const mergedDeps = new Set<string>(resolve.deps ?? []);
+      for (const key of contextTracking.getAccessedKeys()) {
+        mergedDeps.add(`$context.${key}`);
+      }
+      state.dependencies = mergedDeps;
+    }
 
     // Вызываем обработчик onError
     try {

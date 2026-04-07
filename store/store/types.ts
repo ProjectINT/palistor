@@ -449,6 +449,11 @@ export interface ProxyStoreOptions<TConfig extends Record<string, any>> {
    * Структура совпадает со структурой конфига, но все поля опциональны.
    */
   initialValues?: DeepPartialValues<ExtractValues<TConfig>>;
+  /**
+   * Начальный контекст. Если передан, eager resolvers увидят его при первом запуске.
+   * Аналогично вызову `setContext()` до `launchEager()`.
+   */
+  context?: Record<string, unknown>;
 }
 
 export interface ProxyStore<TConfig extends Record<string, any>> {

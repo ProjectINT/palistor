@@ -45,6 +45,18 @@ export interface Resolve<T = Record<string, unknown>> {
    */
   deps?: string[];
 
+  /**
+   * Context keys that must be present (non-null/undefined) before the resolver
+   * is allowed to start. The resolver is queued until all keys satisfy the check.
+   *
+   * Prevents the initial "flash of error" when context is set asynchronously
+   * (e.g., after the first render).
+   *
+   * @example
+   * contextDeps: ['accountId']  // resolver won't run until context.accountId != null
+   */
+  contextDeps?: string[];
+
   options?: {
     /** Wait for first access to the node. Default: true */
     lazy?: boolean;
