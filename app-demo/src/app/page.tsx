@@ -3,9 +3,7 @@
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useTranslator } from "@palistor/react/useTranslator";
-import { usePersist } from "@palistor/react/usePersist";
 import { useNotifier } from "@palistor/react/useNotifier";
-import { localStorageDriver } from "@palistor/store/persist";
 import { paymentStore } from "@/config/appConfig";
 import { catalogStore } from "@/config/catalog/catalogConfig";
 
@@ -25,10 +23,7 @@ export default function DemoPage() {
   const t = useTranslations();
   useTranslator(paymentStore, t);
   useTranslator(catalogStore, t);
-  usePersist(paymentStore, {
-    key: "payment-form-demo",
-    driver: localStorageDriver,
-  });
+  // usePersist is now managed inside PersistControls (inside PaymentForm tab)
 
   const [toasts, setToasts] = useState<Array<{ id: number; message: string }>>([]);
   const addToast = useCallback((message: string) => {

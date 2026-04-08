@@ -15,6 +15,7 @@ import {
   CommentSection,
 } from "./sections";
 import { FormActions } from "./FormActions";
+import { PersistControls } from "./PersistControls";
 
 export function PaymentForm() {
   return (
@@ -35,6 +36,7 @@ export function PaymentForm() {
         <CalculatorSection />
         <AgreementsSection />
         <CommentSection />
+        <PersistControls />
         <FormActions />
       </form>
     </div>
