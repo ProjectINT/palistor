@@ -254,7 +254,9 @@ describe("2C.1: List resolver", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    expect(capturedStore).toBe(store);
+    // storeProxy оборачивает store для отслеживания context-зависимостей,
+    // поэтому capturedStore !== store по ссылке, но делегирует все остальные свойства
+    expect((capturedStore as any).entityRegistry).toBe(store.entityRegistry);
   });
 });
 

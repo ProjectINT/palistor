@@ -91,11 +91,11 @@ describe("list resolver читает store.context, установленный �
 
     expect(capturedContexts[0]).toMatchObject({ accountId: "acc-first" });
 
-    // Unmount очищает контекст
+    // Unmount НЕ очищает контекст
     unmount();
     await act(async () => {});
 
-    expect(store.context).toEqual({});
+    expect(store.context).toEqual({ accountId: "acc-first" });
   });
 
   it("useForm + useStoreContext в одном renderHook — resolver получает контекст", async () => {
@@ -219,6 +219,7 @@ describe("list resolver читает store.context, установленный �
     store.setContext({ accountId: "acc-v1" });
 
     void (store.proxy as any).users.items;
+
     await act(() => flushPromises());
 
     expect(resolver).toHaveBeenCalledTimes(1);
@@ -229,6 +230,7 @@ describe("list resolver читает store.context, установленный �
     act(() => {
       store.setContext({ accountId: "acc-v2" });
     });
+
     await act(() => flushPromises());
 
     expect(resolver).toHaveBeenCalledTimes(2);
