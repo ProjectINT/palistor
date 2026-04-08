@@ -153,6 +153,27 @@ function buildEntityLeafProxy(
       );
       const translate = kernel.services.translate;
 
+      // ─── Lazy entity field resolve ────────────────────────────────────
+      // Trigger resolve on first access to value/loading (not eagerly on mount).
+      // Mirrors the queueMicrotask pattern from handleLazyResolve.ts.
+      if (
+        (key === "value" || key === "loading") &&
+        templateField.resolve &&
+        "id" in entityNode
+      ) {
+        const idLeaf = (entityNode as EntityNode).id;
+        const eid = (
+          (kernel.nodes.nodeState.get(idLeaf as object) as { value: unknown } | undefined)?.value ??
+          idLeaf.value
+        ) as string;
+        const state = kernel.resolveManager.entityStates.get(eid, templateField);
+        if (!state || state.status === "idle") {
+          queueMicrotask(() =>
+            kernel.resolveManager.triggerEntityFieldResolve(eid, templateField),
+          );
+        }
+      }
+
       switch (key) {
         case "value":
           return (
@@ -236,6 +257,19 @@ function buildEntityLeafProxy(
           return (nodeState.get(entityLeaf as object) as { dirty?: boolean } | undefined)
             ?.dirty ?? false;
 
+        case "loading": {
+          if ("id" in entityNode) {
+            const idLeaf = (entityNode as EntityNode).id;
+            const eid = (
+              (kernel.nodes.nodeState.get(idLeaf as object) as { value: unknown } | undefined)?.value ??
+              idLeaf.value
+            ) as string;
+            const state = kernel.resolveManager.entityStates.get(eid, templateField);
+            return state?.status === "pending";
+          }
+          return false;
+        }
+
         case "onValueChange":
           return (v: unknown) =>
             writeEntityLeafValue(entityLeaf, templateField, v, entityNode, kernel);
@@ -264,6 +298,7 @@ function buildEntityLeafProxy(
         "isInvalid",
         "errorMessage",
         "dirty",
+        "loading",
         "onValueChange",
       ];
     },
@@ -362,11 +397,11 @@ export function buildEntityProjectionProxy(
       if ("id" in entityNode) {
         if (key === "loading") {
           const eid = getEntityId();
-          return kernel._getEntityBindingState(eid, templateNode as object)?.loading ?? false;
+          return kernel.resolveManager.entityStates.get(eid, templateNode as object)?.status === "pending";
         }
         if (key === "submitting") {
           const eid = getEntityId();
-          return kernel._getEntityBindingState(eid, templateNode as object)?.submitting ?? false;
+          return kernel.resolveManager.entityStates.get(eid, templateNode as object)?.submitting === true;
         }
         if (key === "submit") {
           if (!submitFnRef) {

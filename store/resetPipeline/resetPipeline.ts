@@ -24,6 +24,12 @@ export class ResetPipeline {
     const initialValueMap = this.kernel.dirty.initialValueMap;
     const valuesCache = this.kernel.values;
 
+    // При полном сбросе формы очищаем состояния резолва entity-полей,
+    // чтобы они заново выполнились при загрузке сущностей через list resolver.
+    if (groupNode === this.kernel.rootConfig) {
+      this.kernel.resolveManager.entityStates.clearAll();
+    }
+
     const patch = buildResetPatch(groupNode, initialValueMap, values);
 
     const changed = applyPatch(groupNode, nodeState, patch, new Set(), valuesCache);

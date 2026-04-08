@@ -67,6 +67,11 @@ export interface Resolve<T = Record<string, unknown>> {
       attempts: number;  // default: 0 (no retries)
       delay: number;     // default: 1000 ms
     };
+    /**
+     * Skip field resolve if the entity leaf already has a value !== template default.
+     * Applies to per-entity field resolves only. Default: true
+     */
+    skipIfResolved?: boolean;
   };
 }
 
@@ -95,6 +100,11 @@ export interface ResolveState {
    * Used to detect infinite dependency cycles (A→B→A) and cap execution.
    */
   autoRetriggerCount?: number;
+  /**
+   * Submit pipeline in progress for entity-template binding.
+   * Used in entityStates keyed by (entityId, templateNode) to track submitting state.
+   */
+  submitting?: boolean;
 }
 
 // ─── Dependencies for resolve execution ──────────────────────────────────────
@@ -112,4 +122,61 @@ export interface ResolveDeps {
   valuesCache: ValuesCache;
   /** The ProxyStore instance — passed as second argument to resolver. */
   store: ProxyStore<any>;
+}
+
+// ─── EntityResolveStateMap ────────────────────────────────────────────────────
+
+/**
+ * Two-level Map for per-entity field resolve state.
+ * Key: (entityId, templateFieldNode) → ResolveState
+ *
+ * Used for Phase 0+ entity field resolve — resolve state is per-entity,
+ * not per-node (since the same entity may appear under different templates).
+ */
+export class EntityResolveStateMap {
+  private _map = new Map<string, Map<object, ResolveState>>();
+
+  get(entityId: string, node: object): ResolveState | undefined {
+    return this._map.get(entityId)?.get(node);
+  }
+
+  getOrCreate(entityId: string, node: object, deps: Set<string> = new Set()): ResolveState {
+    let byNode = this._map.get(entityId);
+    if (!byNode) {
+      byNode = new Map();
+      this._map.set(entityId, byNode);
+    }
+    let state = byNode.get(node);
+    if (!state) {
+      state = { status: "idle", promise: null, error: null, dependencies: deps, attempt: 0 };
+      byNode.set(node, state);
+    }
+    return state;
+  }
+
+  /**
+   * Delete resolve state(s) for an entity.
+   * - If `node` is provided: delete only that specific (entityId, node) entry.
+   * - If `node` is omitted: delete all entries for the entity.
+   */
+  delete(entityId: string, node?: object): void {
+    if (node === undefined) {
+      this._map.delete(entityId);
+    } else {
+      this._map.get(entityId)?.delete(node);
+    }
+  }
+
+  /** Remove all entries for all entities. Used on full form reset. */
+  clearAll(): void {
+    this._map.clear();
+  }
+
+  *entries(): Iterable<{ entityId: string; node: object; state: ResolveState }> {
+    for (const [entityId, byNode] of this._map) {
+      for (const [node, state] of byNode) {
+        yield { entityId, node, state };
+      }
+    }
+  }
 }

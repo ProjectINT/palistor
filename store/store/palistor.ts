@@ -162,8 +162,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       valuesCache: this.values,
       store: this,
       listStates: this.nodes.listStates,
-      setEntitiesRaw: (items) => this._setEntitiesRaw(items),
+      setEntitiesRaw: (items, listNode) => this._setEntitiesRaw(items, listNode),
       syncListValuesCache: (listNode) => this._syncListValuesCache(listNode),
+      entityRegistry: this.entityRegistry,
     });
 
     // ─── Pipeline классы ─────────────────────────────────────────────────────
@@ -333,35 +334,6 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   /**
-   * @internal Per-(entityId, templateNode) state tracking loading/submitting.
-   * Used by EntityProjectionProxy to expose loading/submitting flags.
-   */
-  private readonly _entityBindingStates = new Map<
-    string,
-    Map<object, { loading: boolean; submitting: boolean }>
-  >();
-
-  /**
-   * @internal Get or create entity binding state for (entityId, templateNode).
-   */
-  _getEntityBindingState(
-    entityId: string,
-    templateNode: object,
-  ): { loading: boolean; submitting: boolean } {
-    let byTemplate = this._entityBindingStates.get(entityId);
-    if (!byTemplate) {
-      byTemplate = new Map();
-      this._entityBindingStates.set(entityId, byTemplate);
-    }
-    let state = byTemplate.get(templateNode);
-    if (!state) {
-      state = { loading: false, submitting: false };
-      byTemplate.set(templateNode, state);
-    }
-    return state;
-  }
-
-  /**
    * Создать или обновить entity (или массив entities) в реестре.
    *
    * - Если entity с таким id не существует — создаётся и регистрируются leaf-ноды.
@@ -440,6 +412,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       this.nodes.unregisterLeaf(leaf);
     }
 
+    // Phase 4: cleanup per-entity field resolve states
+    this.resolveManager.cleanupEntityResolveStates(id);
+
     // Удалить entity из реестра (очищает bindings + resolvedCache)
     this.entityRegistry.delete(id);
 
@@ -457,78 +432,6 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    */
   invalidate(id: string, templateNode?: object): void {
     this.entityRegistry.clearResolved(id, templateNode);
-  }
-
-  /**
-   * Запустить resolve для entity-template binding.
-   * Вызывается из useForm(entity, templateSelector) при mount, если !isResolved.
-   *
-   * - Проверяет наличие templateNode.resolve.resolver
-   * - Deduplication: пропускает если уже loading
-   * - loading: true → resolver(entityProxy, store) → upsert result → markResolved → loading: false
-   * - При ошибке: onError → loading: false
-   *
-   * @internal
-   */
-  triggerEntityTemplateResolve(
-    entityId: string,
-    templateNode: AnyConfigNode,
-    entityProxy: object,
-  ): void {
-    const resolve = templateNode.resolve as
-      | {
-          resolver?: (...args: unknown[]) => unknown;
-          onError?: (...args: unknown[]) => void;
-        }
-      | undefined;
-    if (!resolve || typeof resolve.resolver !== "function") return;
-
-    const entityNode = this.entityRegistry.get(entityId);
-    if (!entityNode) return;
-
-    const bindingState = this._getEntityBindingState(entityId, templateNode as object);
-    // Deduplication: already in-flight
-    if (bindingState.loading) return;
-
-    const entityNodeObj = entityNode as unknown as object;
-
-    // Set loading: true → notify
-    bindingState.loading = true;
-    this.notifyChanged(new Set<object>([entityNodeObj]));
-
-    void (async () => {
-      try {
-        const result = await resolve.resolver!(entityProxy, this);
-
-        bindingState.loading = false;
-
-        if (result && typeof result === "object") {
-          // Merge result into entity
-          const changed = this._setEntitiesRaw([result as EntityData]);
-          this.entityRegistry.markResolved(entityId, templateNode as object);
-          // Also mark entityNode as changed so loading state re-renders
-          changed.add(entityNodeObj);
-          const recomputed = this.recompute(changed);
-          for (const n of changed) recomputed.add(n);
-          this.notifyChanged(recomputed);
-        } else {
-          // Resolver returned nothing — mark resolved, still notify
-          this.entityRegistry.markResolved(entityId, templateNode as object);
-          this.notifyChanged(new Set<object>([entityNodeObj]));
-        }
-      } catch (err) {
-        bindingState.loading = false;
-        try {
-          (resolve.onError as ((e: unknown, ctx: { notify: NotifyFn }) => void) | undefined)?.(
-            err,
-            { notify: this.services.notify },
-          );
-        } catch {
-          // swallow errors in onError
-        }
-        this.notifyChanged(new Set<object>([entityNodeObj]));
-      }
-    })();
   }
 
   /**
@@ -560,7 +463,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     // Шаг 2: Получить (или создать) объект состояния привязки { loading, submitting }
     // для пары (entityId, templateNode). Используется EntityProjectionProxy
     // для отображения спиннера в UI.
-    const bindingState = this._getEntityBindingState(entityId, templateNode as object);
+    const bindingState = this.resolveManager.entityStates.getOrCreate(entityId, templateNode as object);
     const entityNodeObj = entityNode as unknown as object;
 
     // Шаг 3: Поднять флаг submitting и уведомить подписчиков (React перерендерит
@@ -628,9 +531,12 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * Used internally by `set()` and by `executeListResolve` via the
    * `setEntitiesRaw` callback in ResolveManagerDeps.
    *
+   * Phase 4: when `listNode` is provided, triggers entity field resolves for
+   * each template field entry belonging to that list.
+   *
    * @internal
    */
-  _setEntitiesRaw(items: EntityData[]): Set<object> {
+  _setEntitiesRaw(items: EntityData[], listNode?: object): Set<object> {
     const changed = new Set<object>();
 
     for (const item of items) {
@@ -653,6 +559,19 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       // DFS-обход entity-дерева: зарегистрировать новые leaf-ноды
       // или обнаружить изменения в существующих.
       this.walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
+
+      // Phase 4: trigger entity field resolves for this entity.
+      // Only triggered when listNode is provided (i.e. called from a list resolver context).
+      if (listNode) {
+        const fieldEntries = this.resolveManager.listNodeToTemplateFieldEntries.get(
+          listNode as AnyConfigNode,
+        );
+        if (fieldEntries) {
+          for (const entry of fieldEntries) {
+            this.resolveManager.triggerEntityFieldResolve(entityId, entry.node);
+          }
+        }
+      }
     }
 
     return changed;

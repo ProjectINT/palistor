@@ -16,8 +16,9 @@ export interface ListResolveDeps extends ResolveDeps {
    * Upsert entities в EntityRegistry + зарегистрировать leaf-ноды.
    * Не вызывает recompute/notifyChanged — они вызываются после.
    * Возвращает Set изменённых leaf-нод.
+   * Phase 4: listNode передаётся для автоматического запуска entity field resolves.
    */
-  setEntitiesRaw: (items: EntityData[]) => Set<object>;
+  setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
 
   /**
    * Синхронизировать valuesCache.values[listKey] с текущими itemIds.
@@ -114,7 +115,8 @@ export function executeListResolve(
 
       if (Array.isArray(result) && result.length > 0) {
         // Upsert всех сущностей (регистрирует листья, возвращает изменённые узлы)
-        const entityChanged = setEntitiesRaw(result as EntityData[]);
+        // Pass listNode so that entity field resolves are triggered automatically (Phase 4).
+        const entityChanged = setEntitiesRaw(result as EntityData[], listNode);
         for (const n of entityChanged) changed.add(n);
 
         // Обновляем itemIds из результата resolver-а

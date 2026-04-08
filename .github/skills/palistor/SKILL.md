@@ -437,6 +437,365 @@ function UserList() {
 }
 ```
 
+## Lists & Entities — Complete Guide
+
+Lists are the mechanism for working with collections of typed entities (users, orders, products, etc.). Each list has a **template** that describes the shape of an entity and (optionally) a **resolver** that loads data asynchronously.
+
+### Declaring a list — raw array syntax
+
+```ts
+const config = {
+  filter: { value: "" },
+  users: [
+    // [0]: template — describes the shape of each entity
+    {
+      id:    { value: "" },
+      name:  { value: "", isRequired: true, label: (t) => t("user.name") },
+      email: { value: "", validate: (v) => !v.includes("@") ? "Invalid" : undefined },
+      role:  { value: "viewer" },
+    },
+    // [1]: list config (optional) — resolver, deps, onError
+    {
+      resolve: {
+        resolver: async (values, store) => {
+          // values contains ALL form values (not just list); access deps here
+          return await api.getUsers(values.filter, store.context.tenantId);
+        },
+        onError: (err, { notify }) => notify(err.message),  // required
+        deps: ["filter"],  // re-trigger resolve when filter changes
+      },
+    },
+  ],
+};
+```
+
+### Declaring a list — defineList (preferred, fully typed)
+
+```ts
+import { defineList } from "@projectint/palistor";
+import type { ListResolver, TemplateConfig } from "@projectint/palistor";
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+const users = defineList<User>({
+  template: {
+    id:    { value: "" },
+    name:  { value: "", isRequired: true },
+    email: { value: "" },
+    role:  { value: "viewer" },
+  },
+  resolve: {
+    resolver: async (values, store) => api.getUsers(values.filter),
+    onError: (err, { notify }) => notify(err.message),
+    deps: ["filter"],
+  },
+});
+
+const config = { filter: { value: "" }, users };
+```
+
+`defineList<T>()` returns a `TypedListNode<T>` — same runtime array `[template, listConfig?]` but with full type inference for template fields and resolver return type.
+
+### List resolve lifecycle
+
+1. **Lazy trigger**: Resolve starts on first access to `list.items`, `list.length`, or `list.map()` — NOT on store creation
+2. **Deferred via queueMicrotask**: Safe to call from React render (no "Cannot update during render" error)
+3. **Deduplication**: Multiple accesses while resolver is pending → resolver called only once
+4. **Auto-deps**: Resolver accesses to `values.filter` are tracked; future changes auto-retrigger
+5. **Success**: Resolver returns `Array<{ id, ...fields }>` → entities upserted via `store.set()` → `itemIds` updated → `initialItemIds` saved (dirty = false) → `loading = false` → notify
+6. **Error**: `onError` called → `loading = false` → notify
+7. **Pending retrigger**: If a dep changes WHILE resolver is pending, resolver re-runs automatically after completion with fresh values
+
+```tsx
+function UserList() {
+  const form = useForm(store);
+
+  if (form.users.loading) return <Spinner />;
+
+  return (
+    <ul>
+      {form.users.map((user, index, id) => (
+        <UserRow key={id} user={user} />
+      ))}
+    </ul>
+  );
+}
+```
+
+### Manual list (no resolver)
+
+```ts
+const config = {
+  items: [{ id: { value: "" }, name: { value: "" } }],  // no [1] element
+};
+
+const store = new Palistor({ config });
+
+// Populate manually
+store.set({ id: "u1", name: "Alice" });
+(store.proxy as any).items.add("u1");
+
+// Or add with values (auto-upserts entity)
+(store.proxy as any).items.add({ id: "u2", name: "Bob" });
+```
+
+### List operations
+
+```ts
+const form = useForm(store);
+
+// ─── Reading ─────────────────────────────────────────────
+form.users.items;              // ReadonlyArray<EntityProxy>
+form.users.length;             // number
+form.users.loading;            // boolean — resolver running?
+form.users.dirty;              // boolean — itemIds differ from initial?
+form.users.getById("u1");     // EntityProxy | undefined
+form.users.map((user, i, id) => <Row key={id} user={user} />);
+for (const user of form.users) { ... }  // Symbol.iterator
+
+// ─── Mutating ────────────────────────────────────────────
+form.users.add("u1");                    // add existing entity by ID
+form.users.add({ id: "u2", name: "Bob" }); // upsert entity + add to list
+form.users.remove("u1");                 // remove from list (entity STAYS in registry)
+form.users.setItems(["u1", "u2", "u3"]); // bulk replace
+```
+
+### Entity operations on store
+
+```ts
+// Upsert: create or merge entity fields (recursive merge — new fields added, existing updated, missing kept)
+store.set({ id: "u1", name: "Alice", email: "alice@example.com" });
+store.set([{ id: "u2", name: "Bob" }, { id: "u3", name: "Charlie" }]);  // batch
+
+// Remove from registry entirely (also clears bindings, resolve cache, nodeState)
+store.delete("u1");
+
+// Rename entity ID (updates registry, all list itemIds, bindings, resolve cache)
+store.rekey("_tmp_1", "server_assigned_id");
+
+// Clear resolve cache — next useForm(entity, template) mount will re-run resolve
+store.invalidate("u1");                          // all templates
+store.invalidate("u1", store.proxy.editForm);    // specific template
+```
+
+### Temporary IDs and rekey
+
+When creating an entity before server responds, use a temporary ID:
+
+```ts
+// User clicks "Add" → create with temp ID
+const tempId = `_tmp_${Date.now()}`;
+form.users.add({ id: tempId, name: "", email: "" });
+
+// Server responds with real ID → rename
+const savedUser = await api.createUser({ name, email });
+store.rekey(tempId, savedUser.id);
+// All lists containing tempId automatically update to savedUser.id
+```
+
+### Entity editing with separate template
+
+Use when the edit form needs **different fields, validators, or an async resolver** that the list template doesn't have.
+
+```ts
+const config = {
+  users: defineList<User>({
+    template: {
+      id:    { value: "" },
+      name:  { value: "" },
+      role:  { value: "viewer" },
+    },
+    resolve: { resolver: fetchUsers, onError: handleError, deps: ["filter"] },
+  }),
+
+  // Separate edit template — more fields + validation + per-entity resolve
+  editUserForm: {
+    id:    { value: "", isReadOnly: true },
+    name:  { value: "", isRequired: true },
+    email: { value: "", validate: validateEmail },
+    bio:   { value: "",
+      resolve: {
+        resolver: async (entityValues, store) => {
+          // Lazy: only runs when component renders bio.value or bio.loading
+          return await api.getUserBio(entityValues.id);
+        },
+        onError: (err, { notify }) => notify("Bio load failed"),
+        options: { skipIfResolved: true },  // default — skip if bio already has a non-default value
+      },
+    },
+    role:  { value: "viewer" },
+    // Template-level resolve: loads entity details on mount
+    resolve: {
+      resolver: async (entityProxy, store) => {
+        return await api.getUserDetails(entityProxy.id);
+      },
+      onError: (err, { notify }) => notify("Failed to load user details"),
+    },
+    // Template-level submit: saves edited entity
+    onSubmit: async (formValues, store) => {
+      await api.updateUser(formValues.id, formValues);
+    },
+    afterSubmit: (result, { reset }) => {
+      toast.success("User saved!");
+    },
+  },
+};
+```
+
+### Entity editing — component patterns
+
+```tsx
+// ─── Pattern 1: Simple list row (uses list's own template) ───────────────
+function UserRow({ user }: { user: PalistorRef<User> }) {
+  const u = useForm(user);
+  return (
+    <tr>
+      <td>{u.name.value}</td>
+      <td>{u.role.value}</td>
+    </tr>
+  );
+}
+
+// ─── Pattern 2: Edit form via separate template ──────────────────────────
+function EditUserModal({ user }: { user: PalistorRef<User> }) {
+  // Mount: bind + triggerEntityTemplateResolve (if not already resolved)
+  // Unmount: unbind (resolved cache survives — next open is instant)
+  const form = useForm(user, (s) => s.editUserForm);
+
+  // Template-level loading (resolve for the whole entity)
+  if (form.loading) return <Spinner />;
+
+  return (
+    <form onSubmit={async (e) => { e.preventDefault(); await form.submit(); }}>
+      <input value={form.name.value} onChange={e => { form.name.value = e.target.value }} />
+      <input value={form.email.value} onChange={e => { form.email.value = e.target.value }} />
+
+      {/* Per-field loading (bio has its own resolver — lazy, triggers on first read) */}
+      {form.bio.loading
+        ? <Spinner />
+        : <textarea value={form.bio.value} onChange={e => { form.bio.value = e.target.value }} />
+      }
+
+      <button type="submit" disabled={form.submitting}>
+        {form.submitting ? "Saving..." : "Save"}
+      </button>
+    </form>
+  );
+}
+
+// ─── Pattern 3: List + edit together ─────────────────────────────────────
+function UsersPage() {
+  const form = useForm(store);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  if (form.users.loading) return <Spinner />;
+
+  const editUser = editId ? form.users.getById(editId) : null;
+
+  return (
+    <>
+      <table>
+        {form.users.map((user, i, id) => (
+          <tr key={id} onClick={() => setEditId(id)}>
+            <UserRow user={user} />
+          </tr>
+        ))}
+      </table>
+      {editUser && <EditUserModal user={editUser} />}
+    </>
+  );
+}
+```
+
+### Entity resolve — two levels
+
+| Level | Trigger | Config location | What it does |
+|-------|---------|-----------------|--------------|
+| **Template resolve** | `useForm(entity, template)` mount, if not already resolved | `editUserForm.resolve.resolver` | Loads all entity data at once (e.g., user details API). Runs eagerly on mount. |
+| **Per-field resolve** | First access to `field.value` or `field.loading` (lazy) | `editUserForm.bio.resolve.resolver` | Loads a single field value. Deferred via `queueMicrotask`. |
+
+Template resolve runs once per (entity, template) pair and result is cached via `entityRegistry.markResolved()`. Call `store.invalidate(entityId, templateProxy)` to force re-run.
+
+Per-field resolve checks `skipIfResolved` (default `true`): if the field already has a non-default value (e.g., populated by template resolve or initial data), the field resolver is skipped.
+
+### Entity proxy properties
+
+Root entity proxy (from `useForm(entity, template)`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `[field]` | `EntityLeafProxy` | Each template field — value, label, validation, dirty, loading, etc. |
+| `loading` | `boolean` | Template-level resolve pending |
+| `submitting` | `boolean` | Entity submit pipeline running |
+| `submit()` | `Promise<SubmitResult>` | Run template's onSubmit for this entity |
+| `values` | `Record<string, unknown>` | Current entity values as plain object |
+
+Entity leaf proxy (from `form.fieldName`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `value` | `TValue` | R/W — read from entity, write through template formatter |
+| `label`, `placeholder`, `description` | `string \| undefined` | From template rules |
+| `isRequired`, `isReadOnly`, `isDisabled`, `isVisible` | `boolean` | Computed from template + entity values |
+| `isInvalid` | `boolean` | Template validation against current entity value |
+| `errorMessage` | `string \| undefined` | Template validation error |
+| `dirty` | `boolean` | Value differs from initial |
+| `loading` | `boolean` | Per-field resolve pending (lazy trigger on access) |
+| `onValueChange` | `(v) => void` | Callback setter |
+
+### Entity submit pipeline
+
+Called via `form.submit()` on an entity proxy:
+
+1. **Validate**: All template fields validated against current entity values
+2. **If errors**: Returns `{ success: false, errors: [...] }` — `onSubmit` NOT called
+3. **Call onSubmit**: `templateNode.onSubmit(entityProxy, store)` — async API call
+4. **Call afterSubmit**: `templateNode.afterSubmit(result, { reset })` — cleanup/feedback
+5. `submitting` flag managed automatically (true during pipeline, false when done)
+
+```tsx
+const result = await form.submit();
+if (!result.success) {
+  console.log(result.errors); // validation errors
+}
+```
+
+### Dirty tracking for lists
+
+- **List-level dirty**: `form.users.dirty` — true when `itemIds !== initialItemIds` (composition changed)
+- **Entity field dirty**: `form.name.dirty` — true when field value differs from initial value tracked at bind time
+- After successful list resolve: `initialItemIds` saved → `dirty = false`
+- After `add/remove/setItems`: `itemIds` change → `dirty = true`
+
+### List re-resolve behavior
+
+When a dep changes (e.g., `filter`):
+
+1. `postNotifyHook` detects that `filter` path changed and is in resolver's deps
+2. Resolve state reset to "idle"
+3. Next access to `list.items` → lazy trigger → resolver re-runs with new values
+4. If dep changes WHILE resolver is pending → `pendingRetrigger` flag set → after resolver finishes, automatically re-runs
+
+### Binding model (entity ↔ template)
+
+Many-to-many: one entity can be bound to multiple templates simultaneously, one template can display multiple entities.
+
+```
+Entity "u1" ←─ bind ──→ users list template (UserRow)
+             ←─ bind ──→ editUserForm template (EditUserModal)
+             ←─ bind ──→ userSummary template (SidePanel)
+```
+
+- `bind(entityId, templateNode)` on mount — registers the relationship
+- `unbind(entityId, templateNode)` on unmount — deregisters
+- `markResolved(entityId, templateNode)` after resolve — cached for next mount
+- `isResolved(entityId, templateNode)` checked before triggering resolve
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -446,11 +805,16 @@ function UserList() {
 | Missing `dependencies` for computed | Use `dependencies: ["fieldName"]` for cross-field computed/visibility |
 | Using `form.email.value` outside render | `store.getValues()` for non-reactive reads |
 | Calling `store.submit()` vs `form.group.submit()` | Root `submit()` submits entire form; group `submit()` submits sub-tree |
-| Expecting `store.delete(id)` to remove from lists | `delete` removes from registry; use `list.remove(id)` for list |
+| Expecting `store.delete(id)` to remove from lists | `delete` removes from registry; use `list.remove(id)` for list, then `store.delete(id)` if you also want to clear registry |
 | Array config with >2 elements | List node is `[template]` or `[template, listConfig]` — max 2 elements |
 | Ignoring `add(values)` return | `add(values)` returns the created `TItem` proxy — use it |
 | Omitting `resolve.onError` | `onError` is **required** on resolve config — always provide it |
 | `useForm(store, (s) => s.subForm)` — passing store as first arg with selector | Not valid. Use `useForm(store)` then access `.subForm` from the returned proxy. Two-arg form is entity-only: `useForm(entityProxy, selector)` where `entityProxy` comes from `list.items`/`list.getById` |
+| Using `list.items[0]` as React key | Use the `id` argument from `list.map((item, i, id) => ...)` — entity proxy references may change |
+| Reading entity fields outside `useForm` | Always wrap entity proxy in `useForm(entity)` or `useForm(entity, template)` for reactivity |
+| Expecting field resolve to run without accessing the field | Per-field resolve is lazy — triggers only on `.value` or `.loading` read. Fields not rendered are NOT resolved |
+| Confusing `store.invalidate` with `store.delete` | `invalidate` only clears resolve cache (next mount re-runs resolve). `delete` removes entity entirely |
+| Not providing `id` field in template | Every list template MUST have `id: { value: "" }` — it's the entity key |
 
 ## Pipelines Reference
 
@@ -458,8 +822,12 @@ function UserList() {
 |----------|---------|-------|
 | **Write** | `form.field.value = X` | format → store → validate → recompute → dirty → notify → onChange |
 | **Submit** | `form.submit()` | submitting=true → revalidate → validate → `beforeSubmit` → `onSubmit` → `afterSubmit` → submitting=false |
+| **Entity Submit** | `entityForm.submit()` | submitting=true → validate template fields → `onSubmit(entityProxy, store)` → `afterSubmit` → submitting=false |
 | **Reset** | `form.reset(vals?)` | build reset patch → apply → capture initial → recompute → notify |
 | **Resolve** | GET on idle group with resolver | optimistic → loading=true → resolver (+ retry) → apply patch → merge initial → loading=false → notify |
+| **List Resolve** | GET on `list.items`/`length`/`map` | queueMicrotask → loading=true → resolver → upsert entities → update itemIds → save initialItemIds → loading=false → notify |
+| **Entity Template Resolve** | `useForm(entity, template)` mount | check isResolved → loading=true → resolver(entityProxy, store) → upsert result → markResolved → loading=false → notify |
+| **Entity Field Resolve** | GET on `field.value`/`field.loading` | queueMicrotask → check skipIfResolved → loading=true → resolver(entityValues, store) → write value → loading=false → notify |
 | **onChange** | After write pipeline | fire ancestors' `onChange` handlers (async) → apply returned patches |
 
 ## Re-render Optimization
