@@ -111,6 +111,19 @@ export function initResolveStates(
 
       if (!("value" in child)) {
         walk(child);
+      } else if (child.resolve && typeof (child.resolve as any).resolver === "function") {
+        // Leaf node with resolve → per-entity field resolve (e.g. bio inside editUser template group).
+        // Use the parent group node as listNode — it won't appear in listNodeToTemplateFieldEntries
+        // (since it's not a list), but the entry will be in templateFieldEntryMap for lazy triggering
+        // from buildEntityProjectionProxy.
+        entries.push({
+          node: child,
+          resolve: child.resolve as unknown as Resolve,
+          isListNode: false,
+          isTemplateField: true,
+          listNode: node,
+          fieldKey: key,
+        });
       }
     }
   }

@@ -142,8 +142,14 @@ function buildEntityLeafProxy(
 
   const leafProxy = new Proxy(entityLeaf as unknown as Record<string, unknown>, {
     get(_target, key: string | symbol) {
-      // Transparent for tracking proxy — exposes the entity leaf as config node
-      if (key === CONFIG_NODE) return entityLeaf;
+      // Transparent for tracking proxy — exposes the entity leaf as config node.
+      // If entityLeaf is a phantom (not yet in nodeState), return templateField instead,
+      // so the tracking proxy subscribes to templateField's version — which IS bumped
+      // by notifyChanged when the field resolves. Without this, phantom leaves are
+      // never "changed" from getSnapshot's perspective, blocking re-render after resolve.
+      if (key === CONFIG_NODE) {
+        return nodeState.has(entityLeaf as object) ? entityLeaf : templateField;
+      }
 
       if (typeof key === "symbol") return undefined;
 

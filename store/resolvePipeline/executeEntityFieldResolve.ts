@@ -179,6 +179,20 @@ export function executeEntityFieldResolve(
           // Seed initialValueMap so the resolved value becomes the dirty baseline.
           // Without this, the field would immediately appear dirty after resolve.
           initialValueMap.set(entityLeaf as object, result);
+        } else if (entityLeaf === null && result !== undefined) {
+          // The entity doesn't have this field yet (e.g. bio is in editUser template
+          // but not in the users list template). Use store._setEntitiesRaw to create
+          // the leaf on the entity and register it in nodeState + valuesCache.
+          const storeRef = store as { _setEntitiesRaw?: (items: Record<string, unknown>[]) => Set<object> };
+          if (typeof storeRef._setEntitiesRaw === "function") {
+            const newlyChanged = storeRef._setEntitiesRaw([{ id: entityId, [fieldKey]: result }]);
+            for (const n of newlyChanged) changed.add(n);
+            // Re-read entityLeaf now that the field exists in the entity
+            const freshLeaf = (entityNode as Record<string, unknown>)[fieldKey];
+            if (freshLeaf && typeof freshLeaf === "object" && "value" in freshLeaf) {
+              initialValueMap.set(freshLeaf as object, result);
+            }
+          }
         }
 
         // Clear loading from entity leaf nodeState
