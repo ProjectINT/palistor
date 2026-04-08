@@ -36,8 +36,7 @@ import type { ProxyStore } from "../store/store";
 /**
  * Регистрирует нереактивный контекст в ProxyStore.
  *
- * При изменении `ctx` — заменяет контекст целиком.
- * При unmount — очищает контекст (пустой объект).
+ * При изменении `ctx` — мержит новые ключи в существующий контекст.
  *
  * @param store — ProxyStore, созданный через new Palistor()
  * @param ctx   — объект с произвольными данными (accountId, tenant, …)
@@ -48,8 +47,5 @@ export function useStoreContext<TConfig extends Record<string, any>>(
 ): void {
   useEffect(() => {
     store.setContext(ctx);
-    return () => {
-      store.setContext({});
-    };
   }, [store, ctx]);
 }

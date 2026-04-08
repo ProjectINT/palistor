@@ -275,16 +275,11 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   setContext(ctx: Record<string, unknown>): void {
     const changedKeys = new Set<string>();
-    // Keys that were added or changed
     for (const key of Object.keys(ctx)) {
       if (this._context[key] !== ctx[key]) changedKeys.add(key);
     }
-    // Keys that were removed
-    for (const key of Object.keys(this._context)) {
-      if (!(key in ctx)) changedKeys.add(key);
-    }
 
-    this._context = ctx;
+    this._context = { ...this._context, ...ctx };
 
     if (changedKeys.size > 0) {
       const changedPaths = new Set<string>();
