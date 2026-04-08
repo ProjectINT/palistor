@@ -76,6 +76,7 @@ export function executeEntityFieldResolve(
     notify,
     store,
     valuesCache,
+    initialValueMap,
     entityStates,
   } = deps;
 
@@ -175,6 +176,9 @@ export function executeEntityFieldResolve(
             nodeState,
             valuesCache,
           );
+          // Seed initialValueMap so the resolved value becomes the dirty baseline.
+          // Without this, the field would immediately appear dirty after resolve.
+          initialValueMap.set(entityLeaf as object, result);
         }
 
         // Clear loading from entity leaf nodeState

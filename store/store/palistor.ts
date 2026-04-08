@@ -655,6 +655,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
             dirty: false,
             revalidate: false,
           });
+          // Seed initialValueMap so recomputeDirtyTargeted compares against the entity's
+          // loaded value instead of `undefined` — prevents spurious dirty=true on first load.
+          this.dirty.initialValueMap.set(childObj, leaf.value);
           // Привязать leaf к POJO-зеркалу через nodeSlot.
           // При следующих updateValuesCacheEntry(node, newValue)
           // значение в projectionObj обновится автоматически за O(1).

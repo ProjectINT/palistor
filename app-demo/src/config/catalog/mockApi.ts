@@ -58,6 +58,27 @@ export function fetchUserBio(userId: string): Promise<string> {
   );
 }
 
+export function updateUser(
+  id: string,
+  data: { name?: string; email?: string; role?: string },
+): Promise<void> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      if (Math.random() < 0.25) {
+        reject(new Error("Server error: failed to save changes"));
+        return;
+      }
+      const user = mockUsers.find((u) => u.id === id);
+      if (user) {
+        if (data.name !== undefined) user.name = data.name;
+        if (data.email !== undefined) user.email = data.email;
+        if (data.role !== undefined) user.role = data.role;
+      }
+      resolve();
+    }, 600),
+  );
+}
+
 let failCount = 0;
 export function fetchUnreliableData(): Promise<{ status: string; timestamp: number }> {
   return new Promise((resolve, reject) =>

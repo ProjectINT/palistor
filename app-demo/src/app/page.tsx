@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useTranslator } from "@palistor/react/useTranslator";
 import { usePersist } from "@palistor/react/usePersist";
+import { useNotifier } from "@palistor/react/useNotifier";
 import { localStorageDriver } from "@palistor/store/persist";
 import { paymentStore } from "@/config/appConfig";
 import { catalogStore } from "@/config/catalog/catalogConfig";
@@ -28,6 +29,14 @@ export default function DemoPage() {
     key: "payment-form-demo",
     driver: localStorageDriver,
   });
+
+  const [toasts, setToasts] = useState<Array<{ id: number; message: string }>>([]);
+  const addToast = useCallback((message: string) => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message }]);
+    setTimeout(() => setToasts((prev) => prev.filter((n) => n.id !== id)), 4000);
+  }, []);
+  useNotifier(catalogStore, addToast);
 
   const [activeTab, setActiveTab] = useState<TabType>("form");
 
@@ -55,6 +64,21 @@ export default function DemoPage() {
           </div>
         </div>
       </div>
+
+      {/* Notification toasts (from useNotifier — triggered by resolve onError) */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 space-y-2 z-50">
+          {toasts.map((n) => (
+            <div
+              key={n.id}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg text-sm max-w-xs animate-in fade-in slide-in-from-bottom-2"
+            >
+              <span className="text-red-200">✕</span>
+              {n.message}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import type { TranslateFn } from "@palistor";
-import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio } from "./mockApi";
+import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, updateUser } from "./mockApi";
 
 export const catalogFormConfig = {
   // --- Filter fields ---
@@ -98,9 +98,16 @@ export const catalogFormConfig = {
     nested: true,
     resolve: {
       resolver: async (entityProxy: any) => {
-        return await fetchUserDetails(entityProxy.id);
+        const details = await fetchUserDetails(entityProxy.id);
+        return { id: entityProxy.id, ...details };
       },
       onError: (err: Error, { notify }: any) => notify?.("Failed to load user details"),
+    },
+    onSubmit: async (formValues: Record<string, unknown>) => {
+      await updateUser(formValues.id as string, formValues as { name?: string; email?: string; role?: string });
+    },
+    afterSubmit: (_result: unknown, _actions: { reset: () => void }) => {
+      // Success feedback is handled by the UI component
     },
     name: {
       value: "",

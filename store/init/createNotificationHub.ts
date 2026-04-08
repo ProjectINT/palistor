@@ -19,7 +19,7 @@ export interface DirtyDeps {
 export interface NotificationHubDeps {
   leafNodes: LeafEntry[];
   /** Маппинг узлов на их dot-пути (заполняется buildNodeMaps). */
-  nodePaths: WeakMap<AnyConfigNode, string>;
+  nodePaths: WeakMap<object, string>;
 }
 
 // ─── Class ───────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ export interface NotificationHubDeps {
  */
 export class NotificationHub {
   private readonly leafNodes: LeafEntry[];
-  private readonly nodePaths: WeakMap<AnyConfigNode, string>;
+  private readonly nodePaths: WeakMap<object, string>;
 
   /** Подписчики на изменение каждого поля. */
   private readonly nodeListeners = new WeakMap<AnyConfigNode, Set<() => void>>();
