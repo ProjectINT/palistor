@@ -7,10 +7,10 @@ import type { AnyConfigNode } from "../store/types";
 function makeDirtyDeps(rootConfig: AnyConfigNode = {} as AnyConfigNode) {
   return {
     rootConfig,
-    nodeState: new WeakMap<object, any>(),
-    initialValueMap: new WeakMap<object, unknown>(),
-    nodeParents: new WeakMap<object, object>(),
-    nodePaths: new WeakMap<object, string>(),
+    nodeState: new WeakMap<AnyConfigNode, any>(),
+    initialValueMap: new WeakMap<AnyConfigNode, unknown>(),
+    nodeParents: new WeakMap<AnyConfigNode, AnyConfigNode>(),
+    nodePaths: new WeakMap<AnyConfigNode, string>(),
   };
 }
 
