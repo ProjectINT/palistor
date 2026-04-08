@@ -7,7 +7,7 @@ import { resetResolveState } from "./resetResolveState";
 // ─── Entry types ──────────────────────────────────────────────────────────────
 
 export type GroupResolveEntry = { node: AnyConfigNode; resolve: Resolve; isListNode: false };
-export type ListResolveEntry = { node: object; resolve: ListConfig["resolve"]; isListNode: true };
+export type ListResolveEntry = { node: AnyConfigNode; resolve: ListConfig["resolve"]; isListNode: true };
 export type AnyResolveEntry = GroupResolveEntry | ListResolveEntry;
 
 // ─── Initialization ──────────────────────────────────────────────────────────
@@ -46,12 +46,12 @@ export function initResolveStates(
           const listConfig = child[1] as ListConfig | undefined;
           if (listConfig?.resolve && typeof listConfig.resolve.resolver === "function") {
             entries.push({
-              node: child as unknown as object,
+              node: child,
               resolve: listConfig.resolve,
               isListNode: true,
             });
             resetResolveState(
-              child as unknown as AnyConfigNode,
+              child,
               resolveStates,
               new Set(listConfig.resolve.deps ?? []),
             );
