@@ -12,9 +12,15 @@ export const mockProducts = [
 ];
 
 export const mockUserDetails: Record<string, object> = {
-  u1: { bio: "Senior developer", department: "Engineering", phone: "+1-555-0101" },
-  u2: { bio: "Product manager", department: "Product", phone: "+1-555-0102" },
-  u3: { bio: "Content writer", department: "Marketing", phone: "+1-555-0103" },
+  u1: { department: "Engineering", phone: "+1-555-0101" },
+  u2: { department: "Product", phone: "+1-555-0102" },
+  u3: { department: "Marketing", phone: "+1-555-0103" },
+};
+
+export const mockUserBios: Record<string, string> = {
+  u1: "Senior developer and open source contributor with 10+ years of experience.",
+  u2: "Product manager passionate about user experience and data-driven decisions.",
+  u3: "Content writer specializing in technical documentation and blog posts.",
 };
 
 export function fetchUsers(): Promise<typeof mockUsers> {
@@ -39,6 +45,16 @@ export function fetchUserDetails(userId: string): Promise<object> {
       if (details) resolve({ ...details });
       else reject(new Error(`User ${userId} not found`));
     }, 500),
+  );
+}
+
+export function fetchUserBio(userId: string): Promise<string> {
+  return new Promise((resolve, reject) =>
+    setTimeout(() => {
+      const bio = mockUserBios[userId];
+      if (bio !== undefined) resolve(bio);
+      else reject(new Error(`Bio for user ${userId} not found`));
+    }, 700),
   );
 }
 

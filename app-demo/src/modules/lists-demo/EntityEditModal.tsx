@@ -32,10 +32,13 @@ export function EntityEditModal({ entityId, onClose }: EntityEditModalProps) {
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="text-xs text-zinc-400 dark:text-zinc-500 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg px-3 py-2">
+              name / email / role / department / phone — template resolve (500ms) · bio — per-field lazy resolve (700ms)
+            </div>
             <Field label={editForm.name.label} value={editForm.name.value} onChange={editForm.name.onValueChange} placeholder="Name" required={editForm.name.isRequired} error={editForm.name.isInvalid ? editForm.name.errorMessage : undefined} />
             <Field label={editForm.email.label} value={editForm.email.value} onChange={editForm.email.onValueChange} placeholder="Email" required={editForm.email.isRequired} error={editForm.email.isInvalid ? editForm.email.errorMessage : undefined} />
             <Field label={editForm.role.label} value={editForm.role.value} onChange={editForm.role.onValueChange} placeholder="Role" />
-            <Field label={editForm.bio.label} value={editForm.bio.value} onChange={editForm.bio.onValueChange} placeholder="Bio" />
+            <BioField label={editForm.bio.label} value={editForm.bio.value} onChange={editForm.bio.onValueChange} placeholder={editForm.bio.placeholder} loading={editForm.bio.loading} />
             <Field label={editForm.department.label} value={editForm.department.value} onChange={editForm.department.onValueChange} placeholder="Department" />
             <Field label={editForm.phone.label} value={editForm.phone.value} onChange={editForm.phone.onValueChange} placeholder="Phone" />
           </div>
@@ -88,6 +91,44 @@ function Field({
         }`}
       />
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function BioField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  loading,
+}: {
+  label?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  loading?: boolean;
+}) {
+  return (
+    <div>
+      <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+        {label ?? "Bio"}
+        {loading && (
+          <span className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin" />
+        )}
+        {loading && <span className="text-zinc-400">lazy resolve…</span>}
+      </label>
+      {loading ? (
+        <div className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 text-sm text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 min-h-[38px]">
+          Fetching bio...
+        </div>
+      ) : (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder ?? "Tell about yourself..."}
+          className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      )}
     </div>
   );
 }

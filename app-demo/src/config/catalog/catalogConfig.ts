@@ -1,7 +1,7 @@
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import type { TranslateFn } from "@palistor";
-import { fetchUsers, fetchProducts, fetchUnreliableData } from "./mockApi";
+import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio } from "./mockApi";
 
 export const catalogFormConfig = {
   // --- Filter fields ---
@@ -96,6 +96,12 @@ export const catalogFormConfig = {
   // --- Entity editing template ---
   editUser: {
     nested: true,
+    resolve: {
+      resolver: async (entityProxy: any) => {
+        return await fetchUserDetails(entityProxy.id);
+      },
+      onError: (err: Error, { notify }: any) => notify?.("Failed to load user details"),
+    },
     name: {
       value: "",
       label: (t: TranslateFn) => t("catalog.userName"),
@@ -116,6 +122,16 @@ export const catalogFormConfig = {
       value: "",
       label: "Bio",
       placeholder: "Tell about yourself...",
+      resolve: {
+        resolver: async (entityValues: any) => {
+          return await fetchUserBio(entityValues.id);
+        },
+        onError: (err: Error, { notify }: any) => {
+          console.log('err', err);
+          notify?.("Failed to load bio");
+        },
+        options: { skipIfResolved: true },
+      },
     },
     department: {
       value: "",

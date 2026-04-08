@@ -336,12 +336,10 @@ export class ResolveManager {
         if (state) {
           const count = (state.autoRetriggerCount ?? 0) + 1;
           if (count > MAX_AUTO_RETRIGGERS) {
-            if (process.env.NODE_ENV !== "production") {
-              console.warn(
-                `Palistor: resolver auto-retrigger cap (${MAX_AUTO_RETRIGGERS}) reached. ` +
-                `Possible circular dependency. Node deps: [${[...state.dependencies].join(", ")}]`,
-              );
-            }
+            console.warn(
+              `Palistor: resolver auto-retrigger cap (${MAX_AUTO_RETRIGGERS}) reached. ` +
+              `Possible circular dependency. Node deps: [${[...state.dependencies].join(", ")}]`,
+            );
             continue;
           }
           state.autoRetriggerCount = count;
