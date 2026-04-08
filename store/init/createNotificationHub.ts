@@ -51,6 +51,14 @@ export class NotificationHub {
   /** Хук, вызываемый после каждого notifyChanged (resolve retrigger и т.д.) */
   private postNotifyHook: ((changedPaths: Set<string>) => void) | null = null;
 
+  /**
+   * Re-entrancy guard: предотвращает рекурсивный вызов postNotifyHook.
+   * Пути, накопленные во время активного хука, откладываются и обрабатываются
+   * последовательно после завершения текущего вызова.
+   */
+  private isDispatchingHook = false;
+  private pendingHookPaths: Set<string> | null = null;
+
   constructor(deps: NotificationHubDeps) {
     this.leafNodes = deps.leafNodes;
     this.nodePaths = deps.nodePaths;
@@ -97,6 +105,9 @@ export class NotificationHub {
     this.notifyGlobals();
 
     // Post-notify hook (resolve retrigger и т.д.)
+    // Re-entrancy guard: если notifyChanged вызван рекурсивно (например,
+    // из executeListResolve во время postNotifyHook), пути накапливаются
+    // и обрабатываются последовательно после завершения внешнего вызова.
     if (this.postNotifyHook) {
       const changedPaths = new Set<string>();
       for (const n of changed) {
@@ -104,7 +115,25 @@ export class NotificationHub {
         if (p) changedPaths.add(p);
       }
       if (changedPaths.size > 0) {
-        this.postNotifyHook(changedPaths);
+        if (this.isDispatchingHook) {
+          // Рекурсивный вызов: откладываем пути
+          if (!this.pendingHookPaths) this.pendingHookPaths = new Set();
+          for (const p of changedPaths) this.pendingHookPaths.add(p);
+        } else {
+          this.isDispatchingHook = true;
+          try {
+            this.postNotifyHook(changedPaths);
+            // Дрейнируем пути, накопленные во время вызова хука
+            while (this.pendingHookPaths !== null && this.pendingHookPaths.size > 0) {
+              const pending = this.pendingHookPaths;
+              this.pendingHookPaths = null;
+              this.postNotifyHook(pending);
+            }
+          } finally {
+            this.isDispatchingHook = false;
+            this.pendingHookPaths = null;
+          }
+        }
       }
     }
   }

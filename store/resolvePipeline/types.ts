@@ -89,6 +89,12 @@ export interface ResolveState {
    * After the current resolution completes, the resolver will be retriggered.
    */
   pendingRetrigger?: boolean;
+  /**
+   * Number of consecutive automatic retriggers (via postNotifyHook).
+   * Reset when the resolver is triggered manually (triggerResolve / retriggerByPaths).
+   * Used to detect infinite dependency cycles (A→B→A) and cap execution.
+   */
+  autoRetriggerCount?: number;
 }
 
 // ─── Dependencies for resolve execution ──────────────────────────────────────

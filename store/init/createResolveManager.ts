@@ -56,6 +56,15 @@ export interface ResolveManagerDeps {
  * - Post-notify hook для retrigger по зависимостям
  * - Запуск eager resolvers (lazy: false)
  */
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Максимальное число автоматических перезапусков одного resolver-а подряд
+ * (через postNotifyHook). При превышении — предупреждение и пропуск.
+ * Защищает от циклических зависимостей вида A→B→A.
+ */
+const MAX_AUTO_RETRIGGERS = 10;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function isContextSatisfied(
@@ -120,6 +129,9 @@ export class ResolveManager {
   triggerResolve = (node: AnyConfigNode): void => {
     const entry = this.resolveEntryMap.get(node);
     if (!entry) return;
+    // Ручной запуск сбрасывает счётчик автоматических перезапусков
+    const state = this.states.get(node as object);
+    if (state) state.autoRetriggerCount = 0;
     this._executeEntry(entry);
   };
 
@@ -152,6 +164,20 @@ export class ResolveManager {
       const justTriggeredNodes = new Set<object>(toRetrigger.map((e) => e.node as object));
 
       for (const entry of toRetrigger) {
+        const state = this.states.get(entry.node as object);
+        if (state) {
+          const count = (state.autoRetriggerCount ?? 0) + 1;
+          if (count > MAX_AUTO_RETRIGGERS) {
+            if (process.env.NODE_ENV !== "production") {
+              console.warn(
+                `Palistor: resolver auto-retrigger cap (${MAX_AUTO_RETRIGGERS}) reached. ` +
+                `Possible circular dependency. Node deps: [${[...state.dependencies].join(", ")}]`,
+              );
+            }
+            continue;
+          }
+          state.autoRetriggerCount = count;
+        }
         resetResolveState(entry.node as AnyConfigNode, this.states);
         this._executeEntry(entry);
       }
@@ -197,6 +223,9 @@ export class ResolveManager {
     );
 
     for (const entry of toRetrigger) {
+      // setContext — явное внешнее изменение, сбрасываем счётчик авто-перезапусков
+      const state = this.states.get(entry.node as object);
+      if (state) state.autoRetriggerCount = 0;
       resetResolveState(entry.node as AnyConfigNode, this.states);
       this._executeEntry(entry);
     }
