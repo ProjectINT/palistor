@@ -23,8 +23,14 @@ export const mockUserBios: Record<string, string> = {
   u3: "Content writer specializing in technical documentation and blog posts.",
 };
 
-export function fetchUsers(): Promise<typeof mockUsers> {
-  return new Promise((resolve) => setTimeout(() => resolve([...mockUsers]), 800));
+export function fetchUsers(accountId?: string): Promise<typeof mockUsers> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      // In a real app, accountId would be used to scope the request
+      void accountId;
+      resolve([...mockUsers]);
+    }, 800),
+  );
 }
 
 export function fetchProducts(category?: string): Promise<typeof mockProducts> {

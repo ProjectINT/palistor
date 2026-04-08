@@ -1,7 +1,9 @@
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
+import { defineList } from "@palistor/store/defineList";
 import type { TranslateFn } from "@palistor";
 import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, updateUser, createUser } from "./mockApi";
+import type { User } from "./types";
 
 export const catalogFormConfig = {
   // --- Filter fields ---
@@ -20,9 +22,9 @@ export const catalogFormConfig = {
   // --- Refresh trigger for users list (increment to force re-resolve) ---
   usersRefreshKey: { value: 0 },
 
-  // --- Users list (ListNode: [template, listConfig]) ---
-  users: [
-    {
+  // --- Users list (defineList<User> — preferred typed API) ---
+  users: defineList<User>({
+    template: {
       id: { value: "" },
       name: {
         value: "",
@@ -38,18 +40,19 @@ export const catalogFormConfig = {
         label: (t: TranslateFn) => t("catalog.userRole"),
       },
     },
-    {
-      resolve: {
-        resolver: async (values: Record<string, unknown>) => {
-          // Read usersRefreshKey to register it as an auto-dep:
-          // incrementing it from the UI will re-trigger this resolver
-          void values.usersRefreshKey;
-          const users = await fetchUsers();
-          return users;
-        },
+    resolve: {
+      resolver: async (values: Record<string, unknown>, store: any) => {
+        // Read usersRefreshKey to register it as an auto-dep:
+        // incrementing it from the UI will re-trigger this resolver
+        void values.usersRefreshKey;
+        const accountId = store?.context?.accountId as string | undefined;
+        const users = await fetchUsers(accountId);
+        return users;
       },
+      onError: (err: unknown, { notify }: { notify: (msg: string) => void }) =>
+        notify(err instanceof Error ? err.message : "Failed to load users"),
     },
-  ],
+  }),
 
   // --- Products list (ListNode with auto-deps on categoryFilter) ---
   products: [

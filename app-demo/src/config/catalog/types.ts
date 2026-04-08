@@ -1,3 +1,10 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 export interface CatalogValues {
   categoryFilter: string;
   searchQuery: string;
