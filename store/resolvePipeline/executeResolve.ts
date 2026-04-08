@@ -85,8 +85,9 @@ export function executeResolve(
       if (optimisticResult && typeof optimisticResult === "object") {
         applyPatch(node, nodeState, optimisticResult as Record<string, unknown>, allChanged, valuesCache);
       }
-    } catch {
+    } catch (error) {
       // Ошибка optimistic resolver не критична — продолжаем с async resolver
+      console.warn('Error in optimistic resolver:', error);
     }
   }
 
