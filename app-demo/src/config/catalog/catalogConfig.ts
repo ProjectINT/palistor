@@ -1,7 +1,7 @@
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import type { TranslateFn } from "@palistor";
-import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, updateUser } from "./mockApi";
+import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, updateUser, createUser } from "./mockApi";
 
 export const catalogFormConfig = {
   // --- Filter fields ---
@@ -16,6 +16,9 @@ export const catalogFormConfig = {
     label: (t: TranslateFn) => t("catalog.search"),
     placeholder: (t: TranslateFn) => t("catalog.searchPlaceholder"),
   },
+
+  // --- Refresh trigger for users list (increment to force re-resolve) ---
+  usersRefreshKey: { value: 0 },
 
   // --- Users list (ListNode: [template, listConfig]) ---
   users: [
@@ -37,7 +40,10 @@ export const catalogFormConfig = {
     },
     {
       resolve: {
-        resolver: async () => {
+        resolver: async (values: Record<string, unknown>) => {
+          // Read usersRefreshKey to register it as an auto-dep:
+          // incrementing it from the UI will re-trigger this resolver
+          void values.usersRefreshKey;
           const users = await fetchUsers();
           return users;
         },
@@ -90,6 +96,40 @@ export const catalogFormConfig = {
     timestamp: {
       value: 0,
       label: "Last Check",
+    },
+  },
+
+  // --- Add user form ---
+  addUser: {
+    nested: true,
+    name: {
+      value: "",
+      label: (t: TranslateFn) => t("catalog.userName"),
+      isRequired: true,
+      validate: (v: string) => (!v.trim() ? "Name is required" : undefined),
+    },
+    email: {
+      value: "",
+      label: (t: TranslateFn) => t("catalog.userEmail"),
+      isRequired: true,
+      validate: (v: string) => (v && !v.includes("@") ? "Invalid email" : undefined),
+    },
+    onSubmit: async (formValues: Record<string, unknown>, store: any) => {
+      const tempId = `_tmp_${Date.now()}`;
+      const name = formValues.name as string;
+      const email = formValues.email as string;
+      store.proxy.users.add({ id: tempId, name, email, role: "user" });
+      try {
+        const saved = await createUser({ name, email });
+        store.rekey(tempId, saved.id);
+      } catch (e) {
+        store.proxy.users.remove(tempId);
+        store.delete(tempId);
+        throw e;
+      }
+    },
+    afterSubmit: (_result: unknown, { reset }: { reset: () => void }) => {
+      reset();
     },
   },
 

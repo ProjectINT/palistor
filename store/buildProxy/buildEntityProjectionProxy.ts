@@ -1,4 +1,4 @@
-import { CONFIG_NODE, CONFIG_PROPS, ENTITY_ID, STORE_REF } from "../constants";
+import { CONFIG_NODE, CONFIG_PROPS, ENTITY_ID, ENTITY_ID_LEAF, STORE_REF } from "../constants";
 import type { AnyConfigNode } from "../store/types";
 import type { EntityNode, EntityLeafNode, EntityGroupNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
@@ -384,6 +384,10 @@ export function buildEntityProjectionProxy(
           );
         }
         return undefined;
+      }
+      // Expose the id leaf node for tracking proxy — lets it subscribe to rekey() changes
+      if (key === ENTITY_ID_LEAF && "id" in entityNode) {
+        return (entityNode as EntityNode).id as object;
       }
       if (key === STORE_REF) return kernel;
 

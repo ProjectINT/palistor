@@ -79,6 +79,22 @@ export function updateUser(
   );
 }
 
+let userIdCounter = 100;
+
+export function createUser(data: {
+  name: string;
+  email: string;
+}): Promise<{ id: string; name: string; email: string; role: string }> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      const id = `u${++userIdCounter}`;
+      const newUser = { id, name: data.name, email: data.email, role: "user" };
+      mockUsers.push(newUser);
+      resolve(newUser);
+    }, 800),
+  );
+}
+
 let failCount = 0;
 export function fetchUnreliableData(): Promise<{ status: string; timestamp: number }> {
   return new Promise((resolve, reject) =>
