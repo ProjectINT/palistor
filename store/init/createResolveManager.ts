@@ -73,7 +73,7 @@ export class ResolveManager {
   readonly states = new Map<object, ResolveState>();
 
   private readonly resolveEntries: AnyResolveEntry[];
-  private readonly resolveEntryMap: Map<object, AnyResolveEntry>;
+  private readonly resolveEntryMap: Map<AnyConfigNode, AnyResolveEntry>;
   private readonly resolveDeps: ResolveDeps;
   private readonly listResolveDeps: ListResolveDeps;
   private readonly listStates: WeakMap<object, ListState>;
@@ -89,7 +89,7 @@ export class ResolveManager {
 
     this.listStates = listStates;
     this.resolveEntries = initResolveStates(rootConfig, this.states);
-    this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node as object, e]));
+    this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node, e]));
 
     this.resolveDeps = {
       rootConfig,
@@ -118,7 +118,7 @@ export class ResolveManager {
    * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
    */
   triggerResolve = (node: AnyConfigNode): void => {
-    const entry = this.resolveEntryMap.get(node as object);
+    const entry = this.resolveEntryMap.get(node);
     if (!entry) return;
     this._executeEntry(entry);
   };
