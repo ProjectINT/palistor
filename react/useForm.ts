@@ -51,7 +51,7 @@
 
 import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
 import type { ProxyStore, ConfigProxy, GroupProxyNode } from "../store/store";
-import type { PalistorRef, PalistorList, Palistor } from "../store/store/types";
+import type { PalistorRef, PalistorList, Palistor, PalistorEntityProxy } from "../store/store/types";
 import {
   createTrackingProxy,
   unwrapTrackingProxy,
@@ -92,8 +92,11 @@ function resolveInput<TConfig extends Record<string, any>>(
  *                tracking proxy поддерево (из пропса другого useForm)
  * @returns tracking proxy — типизированный по конфигу (или поддереву)
  */
-export function useForm<T extends Record<string, any>>(input: PalistorRef<T>): Palistor<T>;
+export function useForm<T extends Record<string, any>>(input: PalistorRef<T>): PalistorEntityProxy<T>;
 export function useForm<T extends Record<string, any>>(input: PalistorList<T>): PalistorList<T>;
+export function useForm<T extends Record<string, any> & { id?: any }>(
+  input: Palistor<T>,
+): PalistorEntityProxy<T>;
 export function useForm<T extends GroupProxyNode>(
   input: T,
 ): T;
