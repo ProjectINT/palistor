@@ -2,7 +2,8 @@
  * Phase 4 integration tests: entity field resolve lifecycle.
  *
  * Covers:
- * - List resolver loads entities → entity field resolves triggered automatically
+ * - List resolver loads entities → entity field resolves are NOT eagerly triggered (lazy-only)
+ * - Explicit triggerEntityFieldResolve works correctly
  * - store.set() — no listNode provided → field resolves NOT triggered automatically
  * - delete(entityId) → cleanupEntityResolveStates called → entityStates cleared
  * - createPostNotifyHook: entity path change triggers retrigger of dependent field resolve
@@ -57,32 +58,41 @@ function makeConfig(fieldResolver: (...args: any[]) => Promise<unknown> = async 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("Phase 4 — entity field resolve lifecycle", () => {
-  // ─── 4.1: list resolve → entity field resolves triggered ─────────────────
+  // ─── 4.1: list resolve → entity field resolves NOT eagerly triggered ───────
 
-  describe("4.1: list resolver triggers entity field resolves", () => {
-    it("list resolver completes → field resolve for each entity is triggered", async () => {
+  describe("4.1: list resolver does NOT eagerly trigger entity field resolves (lazy-only)", () => {
+    it("list resolver completes → field resolve is NOT called automatically", async () => {
       const { config, fieldResolve } = makeConfig();
       new Palistor({ config: config as any });
 
+      await flushPromises(5);
+
+      // Field resolver should NOT be called — lazy-only behavior
+      expect(fieldResolve.resolver).not.toHaveBeenCalled();
+    });
+
+    it("explicit triggerEntityFieldResolve works after list resolver loads entities", async () => {
+      const { config, template, fieldResolve } = makeConfig();
+      const store = new Palistor({ config: config as any });
+
+      await flushPromises(5);
+
+      // Manually trigger field resolve (simulates lazy access from component)
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
       await flushPromises(5);
 
       expect(fieldResolve.resolver).toHaveBeenCalledTimes(1);
-    });
-
-    it("field resolve resolver receives entity values as first arg", async () => {
-      const { config, fieldResolve } = makeConfig();
-      new Palistor({ config: config as any });
-
-      await flushPromises(5);
-
       const args = fieldResolve.resolver.mock.calls[0];
       expect(args[0]).toMatchObject({ id: "u1", name: "Alice" });
     });
 
-    it("field resolve result written to entity leaf", async () => {
-      const { config } = makeConfig(async () => true);
+    it("field resolve result written to entity leaf after explicit trigger", async () => {
+      const { config, template } = makeConfig(async () => true);
       const store = new Palistor({ config: config as any });
 
+      await flushPromises(5);
+
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
       await flushPromises(5);
 
       const entity = store.entityRegistry.get("u1");
@@ -92,17 +102,20 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
       expect((nodeState ?? isActiveLeaf).value).toBe(true);
     });
 
-    it("entityStates has a resolved state for (entityId, templateFieldNode) after success", async () => {
+    it("entityStates has a resolved state for (entityId, templateFieldNode) after explicit trigger", async () => {
       const { config, template } = makeConfig(async () => true);
       const store = new Palistor({ config: config as any });
 
+      await flushPromises(5);
+
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
       await flushPromises(5);
 
       const state = store.resolveManager.entityStates.get("u1", template.isActive as object);
       expect(state?.status).toBe("resolved");
     });
 
-    it("multiple entities from list resolver — field resolve triggered for each", async () => {
+    it("multiple entities from list resolver — field resolves NOT triggered until explicit call", async () => {
       const fieldResolve = {
         resolver: vi.fn(async () => true),
         onError: vi.fn(),
@@ -127,8 +140,16 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
           },
         ],
       };
-      new Palistor({ config: config as any });
+      const store = new Palistor({ config: config as any });
 
+      await flushPromises(5);
+
+      // No field resolves triggered automatically
+      expect(fieldResolve.resolver).not.toHaveBeenCalled();
+
+      // Trigger explicitly for both entities
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
+      store.resolveManager.triggerEntityFieldResolve("u2", template.isActive as any);
       await flushPromises(5);
 
       expect(fieldResolve.resolver).toHaveBeenCalledTimes(2);
@@ -174,6 +195,10 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
 
       await flushPromises(5);
 
+      // Explicitly trigger field resolve so entityStates has an entry
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
+      await flushPromises(5);
+
       // Verify state exists after resolve
       const beforeDelete = store.resolveManager.entityStates.get("u1", template.isActive as object);
       expect(beforeDelete).toBeDefined();
@@ -213,22 +238,23 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
 
     it("entity field path change → resolved entity field resolve retriggered", async () => {
       const resolverCalls: unknown[] = [];
+      const template = {
+        id: { value: "" },
+        name: { value: "" },
+        isActive: {
+          value: false,
+          resolve: {
+            resolver: vi.fn(async (entityValues: any) => {
+              resolverCalls.push(entityValues.name);
+              return entityValues.name === "Alice";
+            }),
+            onError: vi.fn(),
+          },
+        },
+      };
       const config = {
         users: [
-          {
-            id: { value: "" },
-            name: { value: "" },
-            isActive: {
-              value: false,
-              resolve: {
-                resolver: vi.fn(async (entityValues: any) => {
-                  resolverCalls.push(entityValues.name);
-                  return entityValues.name === "Alice";
-                }),
-                onError: vi.fn(),
-              },
-            },
-          },
+          template,
           {
             resolve: {
               resolver: vi.fn(async () => [{ id: "u1", name: "Alice", isActive: false }]),
@@ -240,6 +266,10 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
       };
 
       const store = new Palistor({ config: config as any });
+      await flushPromises(5);
+
+      // Explicitly trigger field resolve (lazy-only)
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
       await flushPromises(5);
 
       // u1.isActive field resolve runs and reads "name" via tracking proxy
@@ -304,6 +334,10 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
       const store = new Palistor({ config: config as any });
       await flushPromises(5);
 
+      // Explicitly trigger field resolve (lazy-only)
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
+      await flushPromises(5);
+
       // isActive field resolve is now pending (waiting for Promise to resolve)
       const state = store.resolveManager.entityStates.get("u1", template.isActive as object);
       expect(state?.status).toBe("pending");
@@ -329,7 +363,11 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
 
       await flushPromises(5);
 
-      // State is resolved after initial load
+      // Explicitly trigger field resolve (lazy-only)
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
+      await flushPromises(5);
+
+      // State is resolved after explicit trigger
       const stateBefore = store.resolveManager.entityStates.get("u1", template.isActive as object);
       expect(stateBefore?.status).toBe("resolved");
 
@@ -347,6 +385,10 @@ describe("Phase 4 — entity field resolve lifecycle", () => {
       const { config, template } = makeConfig(async () => true);
       const store = new Palistor({ config: config as any });
 
+      await flushPromises(5);
+
+      // Explicitly trigger field resolve (lazy-only)
+      store.resolveManager.triggerEntityFieldResolve("u1", template.isActive as any);
       await flushPromises(5);
 
       // Manually call resetPipeline.execute with a non-root node

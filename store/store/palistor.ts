@@ -560,18 +560,9 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       // или обнаружить изменения в существующих.
       this.walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
 
-      // Phase 4: trigger entity field resolves for this entity.
-      // Only triggered when listNode is provided (i.e. called from a list resolver context).
-      if (listNode) {
-        const fieldEntries = this.resolveManager.listNodeToTemplateFieldEntries.get(
-          listNode as AnyConfigNode,
-        );
-        if (fieldEntries) {
-          for (const entry of fieldEntries) {
-            this.resolveManager.triggerEntityFieldResolve(entityId, entry.node);
-          }
-        }
-      }
+      // Entity field resolves are lazy-only: triggered when a component first reads
+      // field.value or field.loading (via queueMicrotask in buildEntityProjectionProxy).
+      // This avoids N×M concurrent requests for large lists where N = entities, M = resolve fields.
     }
 
     return changed;
