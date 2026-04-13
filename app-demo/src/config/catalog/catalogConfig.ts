@@ -2,7 +2,7 @@ import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import { defineList } from "@palistor/store/defineList";
 import type { TranslateFn } from "@palistor";
-import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, updateUser, createUser } from "./mockApi";
+import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, fetchUserStatus, updateUser, createUser } from "./mockApi";
 import type { User } from "./types";
 
 export const catalogFormConfig = {
@@ -38,6 +38,23 @@ export const catalogFormConfig = {
       role: {
         value: "",
         label: (t: TranslateFn) => t("catalog.userRole"),
+      },
+      // Template field with its own per-entity resolver.
+      // After the list resolver returns all users, Palistor automatically triggers
+      // fetchUserStatus for EACH entity independently.
+      // Also triggers lazily on first access to isActive.value / isActive.loading.
+      isActive: {
+        value: null as boolean | null,
+        resolve: {
+          resolver: async (entityValues: Record<string, unknown>) => {
+            return await fetchUserStatus(entityValues.id as string);
+          },
+          onError: (_err: unknown, { notify }: { notify: (msg: string) => void }) =>
+            notify("Failed to check user status"),
+          options: {
+            skipIfResolved: false, // always re-check — status can change
+          },
+        },
       },
     },
     resolve: {

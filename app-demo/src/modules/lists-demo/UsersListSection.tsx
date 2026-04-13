@@ -32,6 +32,7 @@ export function UsersListSection() {
       <div className="text-xs text-zinc-400 dark:text-zinc-500 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg px-3 py-2 space-y-0.5">
         <div><span className="font-medium text-zinc-500 dark:text-zinc-400">Add</span> → temp ID instantly → <span className="font-medium text-zinc-500 dark:text-zinc-400">rekey</span> when server responds (800ms)</div>
         <div><span className="font-medium text-zinc-500 dark:text-zinc-400">Remove</span> = list only · <span className="font-medium text-zinc-500 dark:text-zinc-400">Delete</span> = list + registry · <span className="font-medium text-zinc-500 dark:text-zinc-400">↻</span> = invalidate resolve cache</div>
+        <div><span className="font-medium text-zinc-500 dark:text-zinc-400">status…</span> badge = per-entity field resolver — auto-triggers after list loads, each user resolves independently</div>
       </div>
 
       {/* List status */}

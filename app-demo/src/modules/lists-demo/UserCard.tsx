@@ -47,6 +47,29 @@ export function UserCard({ user, onEdit, onRemove, onDelete, onInvalidate }: Use
             </span>
           )
         )}
+        {/* Per-entity field resolver: isActive resolves independently after list loads */}
+        {!isTemp && (
+          (u as any).isActive.loading ? (
+            <span
+              title="Checking status via per-entity field resolver..."
+              className="flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-200 dark:border-zinc-700 flex-shrink-0"
+            >
+              <span className="w-2 h-2 border border-zinc-400 border-t-transparent rounded-full animate-spin" />
+              status…
+            </span>
+          ) : (u as any).isActive.value !== null ? (
+            <span
+              title="Resolved by: per-entity template field resolver (auto-triggered after list load)"
+              className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${
+                (u as any).isActive.value
+                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              {(u as any).isActive.value ? "● online" : "○ offline"}
+            </span>
+          ) : null
+        )}
       </div>
       <div className="flex gap-2 flex-shrink-0 ml-3">
         {!isTemp && (

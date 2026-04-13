@@ -712,12 +712,79 @@ function UsersPage() {
 }
 ```
 
-### Entity resolve — two levels
+### Entity resolve — three levels
 
 | Level | Trigger | Config location | What it does |
 |-------|---------|-----------------|--------------|
-| **Template resolve** | `useForm(entity, template)` mount, if not already resolved | `editUserForm.resolve.resolver` | Loads all entity data at once (e.g., user details API). Runs eagerly on mount. |
-| **Per-field resolve** | First access to `field.value` or `field.loading` (lazy) | `editUserForm.bio.resolve.resolver` | Loads a single field value. Deferred via `queueMicrotask`. |
+| **List resolver** | First access to `list.items` / `list.length` / `list.map` (lazy) | `users[1].resolve.resolver` | Loads the entity list — returns `Array<{ id, ...fields }>`. After completion, automatically triggers all template field resolvers for all returned entities. |
+| **Template field resolve (in list template)** | Automatically after list resolver completes **or** first access to `field.value` / `field.loading` (lazy) | `users[0].isActive.resolve.resolver` | Loads a single field value per entity. Each entity resolves independently. Triggered automatically for all entities after list load, or lazily on first field access. |
+| **Template resolve (edit form)** | `useForm(entity, template)` mount, if not already resolved | `editUserForm.resolve.resolver` | Loads all entity data at once (e.g., user details API). Runs eagerly on mount. |
+
+### Template field resolver in list template
+
+Declare `resolve` on individual fields inside the list template. After the list resolver completes, Palistor **automatically triggers** the field resolver for every returned entity. Fields also resolve lazily when a component first accesses `.value` or `.loading`.
+
+```ts
+const users = defineList<User>({
+  template: {
+    id:    { value: "" },
+    name:  { value: "" },
+    email: { value: "" },
+
+    // Per-entity field resolver: runs independently for each entity.
+    // Triggered automatically after the list resolver loads entities,
+    // or lazily when a component first reads isActive.value / isActive.loading.
+    isActive: {
+      value: null as boolean | null,
+      resolve: {
+        resolver: async (entityValues, store) => {
+          return await api.isUserActive(entityValues.id as string);
+        },
+        onError: (_err, { notify }) => notify("Failed to check status"),
+        options: {
+          skipIfResolved: false, // re-check every time — status can change
+        },
+      },
+    },
+  },
+  resolve: {
+    resolver: async (values) => api.getUsers(values.filter),
+    onError: (err, { notify }) => notify("Failed to load users"),
+    deps: ["filter"],
+  },
+});
+```
+
+**Displaying loading state per field in a list row:**
+
+```tsx
+function UserRow({ user }: { user: PalistorRef<User> }) {
+  const u = useForm(user);  // reads from list template
+
+  return (
+    <div>
+      <span>{u.name.value}</span>
+
+      {/* isActive resolves independently — each user card shows its own spinner */}
+      {u.isActive.loading ? (
+        <span>checking status…</span>
+      ) : u.isActive.value !== null ? (
+        <span>{u.isActive.value ? "● online" : "○ offline"}</span>
+      ) : null}
+    </div>
+  );
+}
+```
+
+**Key behaviors:**
+
+- After `list.items` resolves, field resolvers **auto-trigger for all entities** — no component interaction required
+- Each entity's field resolvers run **in parallel and independently** — `u1.isActive` can resolve before `u3.isActive`
+- `skipIfResolved: true` (default) — skips if entity already has a non-default value (e.g., set by list resolver)
+- `skipIfResolved: false` — always re-runs, even if entity already has the value
+- Field resolver receives **entity values** (`entityValues.id`, `entityValues.name`, …), not full form values
+- After resolve, the field's value becomes the **dirty baseline** (so `dirty` starts as `false`)
+- `deps: ["fieldName"]` causes retrigger when that entity field changes (entity-scoped deps, not form-level)
 
 Template resolve runs once per (entity, template) pair and result is cached via `entityRegistry.markResolved()`. Call `store.invalidate(entityId, templateProxy)` to force re-run.
 
@@ -812,7 +879,8 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | `useForm(store, (s) => s.subForm)` — passing store as first arg with selector | Not valid. Use `useForm(store)` then access `.subForm` from the returned proxy. Two-arg form is entity-only: `useForm(entityProxy, selector)` where `entityProxy` comes from `list.items`/`list.getById` |
 | Using `list.items[0]` as React key | Use the `id` argument from `list.map((item, i, id) => ...)` — entity proxy references may change |
 | Reading entity fields outside `useForm` | Always wrap entity proxy in `useForm(entity)` or `useForm(entity, template)` for reactivity |
-| Expecting field resolve to run without accessing the field | Per-field resolve is lazy — triggers only on `.value` or `.loading` read. Fields not rendered are NOT resolved |
+| Expecting field resolve to run without accessing the field | Per-field resolve in **edit templates** is lazy — triggers only on `.value` or `.loading` read. BUT: template field resolvers declared **in the list template** (`users[0].field.resolve`) auto-trigger for ALL entities after the list resolver completes (no component access needed) |
+| Using `resolve` on template field and expecting form-level deps | Template field resolvers receive **entity values** (not full form values). `deps: ["fieldName"]` matches entity field names, not top-level form keys |
 | Confusing `store.invalidate` with `store.delete` | `invalidate` only clears resolve cache (next mount re-runs resolve). `delete` removes entity entirely |
 | Not providing `id` field in template | Every list template MUST have `id: { value: "" }` — it's the entity key |
 
@@ -825,9 +893,10 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | **Entity Submit** | `entityForm.submit()` | submitting=true → validate template fields → `onSubmit(entityProxy, store)` → `afterSubmit` → submitting=false |
 | **Reset** | `form.reset(vals?)` | build reset patch → apply → capture initial → recompute → notify |
 | **Resolve** | GET on idle group with resolver | optimistic → loading=true → resolver (+ retry) → apply patch → merge initial → loading=false → notify |
-| **List Resolve** | GET on `list.items`/`length`/`map` | queueMicrotask → loading=true → resolver → upsert entities → update itemIds → save initialItemIds → loading=false → notify |
+| **List Resolve** | GET on `list.items`/`length`/`map` | queueMicrotask → loading=true → resolver → upsert entities → update itemIds → save initialItemIds → **auto-trigger template field resolves for all entities** → loading=false → notify |
+| **Template Field Resolve (auto)** | After List Resolve completes | For each entity × each template field with `resolve`: `triggerEntityFieldResolve(entityId, fieldNode)` (parallel per entity, independent) |
 | **Entity Template Resolve** | `useForm(entity, template)` mount | check isResolved → loading=true → resolver(entityProxy, store) → upsert result → markResolved → loading=false → notify |
-| **Entity Field Resolve** | GET on `field.value`/`field.loading` | queueMicrotask → check skipIfResolved → loading=true → resolver(entityValues, store) → write value → loading=false → notify |
+| **Entity Field Resolve (lazy)** | GET on `field.value`/`field.loading` | queueMicrotask → check skipIfResolved → loading=true → resolver(entityValues, store) → write value → loading=false → notify |
 | **onChange** | After write pipeline | fire ancestors' `onChange` handlers (async) → apply returned patches |
 
 ## Re-render Optimization

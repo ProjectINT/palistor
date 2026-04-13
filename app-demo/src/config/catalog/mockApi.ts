@@ -4,6 +4,13 @@ export const mockUsers = [
   { id: "u3", name: "Charlie Brown", email: "charlie@example.com", role: "editor" },
 ];
 
+// Per-entity status — each user resolves independently with different delays
+const mockUserStatuses: Record<string, { isActive: boolean; delay: number }> = {
+  u1: { isActive: true, delay: 400 },
+  u2: { isActive: false, delay: 700 },
+  u3: { isActive: true, delay: 250 },
+};
+
 export const mockProducts = [
   { id: "p1", title: "Laptop Pro", price: 1299, category: "electronics", inStock: true },
   { id: "p2", title: "Wireless Mouse", price: 29, category: "electronics", inStock: true },
@@ -31,6 +38,18 @@ export function fetchUsers(accountId?: string): Promise<typeof mockUsers> {
       resolve([...mockUsers]);
     }, 800),
   );
+}
+
+/**
+ * Per-entity resolver: fetches the online status of a single user.
+ * Each entity resolves independently — different users can have different delays.
+ * Triggered automatically after the list resolver completes (or lazily on first field access).
+ */
+export function fetchUserStatus(userId: string): Promise<boolean> {
+  const entry = mockUserStatuses[userId];
+  const delay = entry?.delay ?? 500;
+  const isActive = entry?.isActive ?? false;
+  return new Promise((resolve) => setTimeout(() => resolve(isActive), delay));
 }
 
 export function fetchProducts(category?: string): Promise<typeof mockProducts> {

@@ -3,12 +3,13 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  isActive?: boolean | null;
 }
 
 export interface CatalogValues {
   categoryFilter: string;
   searchQuery: string;
-  users: Array<{ id: string; name: string; email: string; role: string }>;
+  users: Array<{ id: string; name: string; email: string; role: string; isActive: boolean | null }>;
   products: Array<{
     id: string;
     title: string;
