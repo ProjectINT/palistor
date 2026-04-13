@@ -398,6 +398,18 @@ export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & 
 };
 
 /**
+ * Прокси для отдельной entity: id отображается как string,
+ * остальные поля — аналогично Palistor<T>.
+ */
+export type PalistorEntityProxy<T extends { id?: any }> = GroupProxyNode & {
+  readonly id: string;
+} & {
+  [K in Exclude<keyof T, "id">]: T[K] extends Record<string, any>
+    ? Palistor<T[K]>
+    : FieldProxyNode<T[K]>;
+};
+
+/**
  * Маппит интерфейс значений формы на прокси-типы.
  * В отличие от ConfigProxy (работает с конфиг-нодами), Palistor
  * принимает простой интерфейс значений — удобно для типизации пропсов
