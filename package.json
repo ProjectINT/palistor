@@ -1,6 +1,6 @@
 {
   "name": "@projectint/palistor",
-  "version": "0.0.13",
+  "version": "0.0.17",
   "description": "State manager for react",
   "main": "dist/index.js",
   "module": "dist/index.js",

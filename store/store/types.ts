@@ -19,7 +19,7 @@ export type TranslateFn = (...args: any[]) => string;
  * Тип конфигурации формы: объект, где каждый ключ — узел конфига с типами TValues.
  */
 export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
-import type { NotifyFn } from "../resolvePipeline";
+import type { NotifyFn, Resolve } from "../resolvePipeline";
 import type { SubmitResult } from "../submitPipeline/submitPipeline";
 
 // ─── Утилитарные типы ────────────────────────────────────────────────────────
@@ -160,6 +160,13 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
     previousValue: unknown;
     allValues: TValues;
   }) => DeepPartialValues<TValues> | void | Promise<DeepPartialValues<TValues> | void>;
+  /**
+   * Per-entity field resolver (only valid inside a list template).
+   * resolver receives the entity's current values and returns the new field value.
+   * Triggered automatically after the list resolver completes, or lazily on first
+   * access to field.value / field.loading.
+   */
+  resolve?: Resolve<TValue>;
 }
 
 // ─── Proxy-типы ──────────────────────────────────────────────────────────────
@@ -388,6 +395,18 @@ type ConfigNodeToProxy<T> =
  */
 export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & {
   [K in keyof TConfig]: ConfigNodeToProxy<TConfig[K]>;
+};
+
+/**
+ * Прокси для отдельной entity: id отображается как string,
+ * остальные поля — аналогично Palistor<T>.
+ */
+export type PalistorEntityProxy<T extends { id?: any }> = GroupProxyNode & {
+  readonly id: string;
+} & {
+  [K in Exclude<keyof T, "id">]: T[K] extends Record<string, any>
+    ? Palistor<T[K]>
+    : FieldProxyNode<T[K]>;
 };
 
 /**

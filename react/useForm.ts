@@ -51,7 +51,7 @@
 
 import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
 import type { ProxyStore, ConfigProxy, GroupProxyNode } from "../store/store";
-import type { PalistorRef, PalistorList, Palistor } from "../store/store/types";
+import type { PalistorRef, PalistorList, Palistor, PalistorEntityProxy } from "../store/store/types";
 import {
   createTrackingProxy,
   unwrapTrackingProxy,
@@ -92,8 +92,11 @@ function resolveInput<TConfig extends Record<string, any>>(
  *                tracking proxy поддерево (из пропса другого useForm)
  * @returns tracking proxy — типизированный по конфигу (или поддереву)
  */
-export function useForm<T extends Record<string, any>>(input: PalistorRef<T>): Palistor<T>;
+export function useForm<T extends Record<string, any>>(input: PalistorRef<T>): PalistorEntityProxy<T>;
 export function useForm<T extends Record<string, any>>(input: PalistorList<T>): PalistorList<T>;
+export function useForm<T extends Record<string, any> & { id?: any }>(
+  input: Palistor<T>,
+): PalistorEntityProxy<T>;
 export function useForm<T extends GroupProxyNode>(
   input: T,
 ): T;
@@ -228,20 +231,23 @@ export function useForm(
     const meta = entityMetaRef.current;
     if (!meta) return;
 
-    // 3A.3: bind entity to template on mount
+    // Привязываем entity к template — регистрируем, что этот шаблон сейчас отображает данную entity
     meta.entityStore.entityRegistry.bind(meta.entityId, meta.templateNode);
 
-    // 3B.1: trigger resolve if not already resolved
+    // Запускаем resolve на уровне template, если он ещё не выполнялся для этой entity+template пары
     if (!meta.entityStore.entityRegistry.isResolved(meta.entityId, meta.templateNode)) {
-      meta.entityStore.triggerEntityTemplateResolve(
+      meta.entityStore.resolveManager.triggerEntityTemplateResolve(
         meta.entityId,
         meta.templateNode,
         meta.entityProxy,
       );
     }
 
+    // Per-field resolves are now triggered lazily from the entity leaf proxy GET trap
+    // (on first access to .value or .loading) — no eager loop needed here.
+
     return () => {
-      // 3A.3: unbind entity from template on unmount
+      // При размонтировании отвязываем entity от template — шаблон больше не отображает эту entity
       meta.entityStore.entityRegistry.unbind(meta.entityId, meta.templateNode);
     };
   }, []); // bind once on mount, unbind on unmount

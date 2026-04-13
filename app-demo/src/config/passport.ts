@@ -1,10 +1,18 @@
 /**
  * Конфиг для вложенного поля passport
- * Демонстрирует nested структуру
+ * Демонстрирует nested структуру + group submit pipeline (Phase 5)
  */
 
 import type { FormConfig, TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
+
+// Mock API — имитация сохранения паспорта на сервере
+async function mockSavePassport(_values: { id: string | null; number: string; issueDate: string; expiryDate: string }): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 800));
+  if (Math.random() < 0.2) {
+    throw new Error("Server error: failed to save passport");
+  }
+}
 
 export const passport: FormConfig<PaymentFormValues> = {
   passport: {
@@ -81,6 +89,33 @@ export const passport: FormConfig<PaymentFormValues> = {
         dataType: "String" as const,
         type: "date"
       }
-    }
+    },
+
+    // -------------------------------------------------------------------------
+    // Group Submit Pipeline (Phase 5 Demo)
+    // -------------------------------------------------------------------------
+
+    // Preprocess values before submission — strip spaces from passport number
+    beforeSubmit: (values: any) => ({
+      ...values,
+      number: String(values.number ?? "").replace(/\s/g, ""),
+    }),
+
+    // Mock async save to server
+    onSubmit: async (passportValues: any) => {
+      await mockSavePassport(passportValues);
+    },
+
+    // Called after successful submit — `ctx.reset()` resets the group if needed
+    afterSubmit: (_result: any, _ctx: any) => {
+      // Optional: _ctx.reset() to clear after save
+    },
+
+    // Custom reset — clears dates but keeps the id
+    reset: (defaults: any) => ({
+      ...defaults,
+      issueDate: "",
+      expiryDate: "",
+    }),
   } as any
 };

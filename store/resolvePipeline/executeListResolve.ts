@@ -3,6 +3,7 @@ import type { ListResolveConfig, ListState } from "../store/types";
 import { recomputeAndNotify } from "../compute/recompute";
 import { createContextTrackingProxy } from "./createContextTrackingProxy";
 import type { ContextTrackingResult } from "./createContextTrackingProxy";
+import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
 import type { ResolveDeps } from "./types";
 
 // ─── List-specific deps ──────────────────────────────────────────────────────
@@ -16,8 +17,9 @@ export interface ListResolveDeps extends ResolveDeps {
    * Upsert entities в EntityRegistry + зарегистрировать leaf-ноды.
    * Не вызывает recompute/notifyChanged — они вызываются после.
    * Возвращает Set изменённых leaf-нод.
+   * Phase 4: listNode передаётся для автоматического запуска entity field resolves.
    */
-  setEntitiesRaw: (items: EntityData[]) => Set<object>;
+  setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
 
   /**
    * Синхронизировать valuesCache.values[listKey] с текущими itemIds.
@@ -89,11 +91,14 @@ export function executeListResolve(
 
   const promise = (async (): Promise<unknown> => {
     let contextTracking: ContextTrackingResult | null = null;
+    let valuesTracking: ReturnType<typeof createValuesTrackingProxy> | null = null;
 
     try {
-      // Вызываем resolver со снимком текущих значений
+      // Вызываем resolver со снимком текущих значений через tracking proxy
+      // для автоматической регистрации зависимостей (deps)
       const { getValues } = deps;
-      const values = getValues();
+      const freshValues = getValues();
+      valuesTracking = createValuesTrackingProxy(freshValues);
 
       // Оборачиваем store.context в tracking proxy для автоматических контекстных зависимостей
       contextTracking = createContextTrackingProxy(store.context);
@@ -104,7 +109,7 @@ export function executeListResolve(
         },
       });
 
-      const result = await resolve.resolver(values, storeProxy);
+      const result = await resolve.resolver(valuesTracking.proxy, storeProxy);
 
       // Прерываем, если статус изменился во время ожидания (например, reset)
       if (state.status !== "pending") return result;
@@ -114,7 +119,8 @@ export function executeListResolve(
 
       if (Array.isArray(result) && result.length > 0) {
         // Upsert всех сущностей (регистрирует листья, возвращает изменённые узлы)
-        const entityChanged = setEntitiesRaw(result as EntityData[]);
+        // Pass listNode so that entity field resolves are triggered automatically (Phase 4).
+        const entityChanged = setEntitiesRaw(result as EntityData[], listNode);
         for (const n of entityChanged) changed.add(n);
 
         // Обновляем itemIds из результата resolver-а
@@ -138,16 +144,15 @@ export function executeListResolve(
         syncListValuesCache(listNode);
       }
 
-      // Авто-зависимости из поля deps + контекстные зависимости
+      // Авто-зависимости: явные deps + values tracking + контекстные зависимости
       const mergedDeps = new Set<string>(resolve.deps ?? []);
+      for (const p of valuesTracking.getAccessedPaths()) mergedDeps.add(p);
       if (contextTracking) {
         for (const key of contextTracking.getAccessedKeys()) {
           mergedDeps.add(`$context.${key}`);
         }
       }
-      if (mergedDeps.size > 0) {
-        state.dependencies = mergedDeps;
-      }
+      state.dependencies = mergedDeps;
 
       // Обновляем loading = false, status = resolved
       const updatedSt = nodeState.get(listNode);
@@ -176,10 +181,15 @@ export function executeListResolve(
       state.error = err;
 
       // Сохраняем контекстные зависимости даже в случае ошибки
-      if (contextTracking && contextTracking.getAccessedKeys().size > 0) {
+      {
         const mergedDeps = new Set<string>(resolve.deps ?? []);
-        for (const key of contextTracking.getAccessedKeys()) {
-          mergedDeps.add(`$context.${key}`);
+        if (valuesTracking) {
+          for (const p of valuesTracking.getAccessedPaths()) mergedDeps.add(p);
+        }
+        if (contextTracking) {
+          for (const key of contextTracking.getAccessedKeys()) {
+            mergedDeps.add(`$context.${key}`);
+          }
         }
         state.dependencies = mergedDeps;
       }

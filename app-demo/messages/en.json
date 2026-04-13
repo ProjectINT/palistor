@@ -172,5 +172,18 @@
   },
   "hooksDemo": {
     "title": "Individual Hooks Demo"
+  },
+  "storeContext": {
+    "title": "useStoreContext Demo",
+    "subtitle": "Non-reactive context (accountId, tenant) available in resolver/onSubmit via store.context",
+    "description": "useStoreContext sets a non-reactive bag of global variables — not form fields. Available in all callbacks via store.context.",
+    "currentContext": "Current Context",
+    "switchAccount": "Switch accountId:",
+    "switchTenant": "Switch tenant:",
+    "resolverNote": "The users resolver reads store.context.accountId on each call. Change the account above and hit ↻ Refresh List to see it in action."
+  },
+  "onChange": {
+    "lastModified": "Last email change:",
+    "description": "updated via onChange handler"
   }
 }

@@ -60,7 +60,7 @@ describe("3B.1: Template resolve pipeline", () => {
     const { buildEntityProjectionProxy } = await import("../buildProxy/buildEntityProjectionProxy");
     const eProxy = buildEntityProjectionProxy(entityNode, editUserTemplate as any, store);
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     await flushPromises();
 
     expect(editUserTemplate.resolve.resolver).toHaveBeenCalledTimes(1);
@@ -82,16 +82,16 @@ describe("3B.1: Template resolve pipeline", () => {
       () => new Promise((r) => { resolvePromise = r; }),
     );
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
 
     // loading: true after trigger (synchronously set before async resolve)
-    const bindingState = store._getEntityBindingState("u1", editUserTemplate as any);
-    expect(bindingState.loading).toBe(true);
+    const bindingState = store.resolveManager.entityStates.get("u1", editUserTemplate as any);
+    expect(bindingState?.status).toBe("pending");
 
     resolvePromise({ id: "u1", email: "alice@corp.com" });
     await flushPromises();
 
-    expect(bindingState.loading).toBe(false);
+    expect(bindingState?.status).not.toBe("pending");
   });
 
   it("resolver result is merged into entity via upsert", async () => {
@@ -108,7 +108,7 @@ describe("3B.1: Template resolve pipeline", () => {
     const { buildEntityProjectionProxy } = await import("../buildProxy/buildEntityProjectionProxy");
     const eProxy = buildEntityProjectionProxy(entityNode, editUserTemplate as any, store);
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     await flushPromises();
 
     // Entity should now have email and role fields
@@ -129,7 +129,7 @@ describe("3B.1: Template resolve pipeline", () => {
 
     expect(store.entityRegistry.isResolved("u1", editUserTemplate)).toBe(false);
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     await flushPromises();
 
     expect(store.entityRegistry.isResolved("u1", editUserTemplate)).toBe(true);
@@ -148,7 +148,7 @@ describe("3B.1: Template resolve pipeline", () => {
 
     // Check if isResolved before triggering — should skip
     if (!store.entityRegistry.isResolved("u1", editUserTemplate as any)) {
-      store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+      store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     }
     await flushPromises();
 
@@ -169,8 +169,8 @@ describe("3B.1: Template resolve pipeline", () => {
     const { buildEntityProjectionProxy } = await import("../buildProxy/buildEntityProjectionProxy");
     const eProxy = buildEntityProjectionProxy(entityNode, editUserTemplate as any, store);
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy); // second call
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy); // second call
 
     resolveFirst({ id: "u1", email: "alice@corp.com" });
     await flushPromises();
@@ -189,13 +189,13 @@ describe("3B.1: Template resolve pipeline", () => {
     const { buildEntityProjectionProxy } = await import("../buildProxy/buildEntityProjectionProxy");
     const eProxy = buildEntityProjectionProxy(entityNode, editUserTemplate as any, store);
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     await flushPromises();
 
     expect(editUserTemplate.resolve.onError).toHaveBeenCalledWith(err, expect.objectContaining({ notify: expect.any(Function) }));
     // loading: false after error
-    const bindingState = store._getEntityBindingState("u1", editUserTemplate as any);
-    expect(bindingState.loading).toBe(false);
+    const bindingState = store.resolveManager.entityStates.get("u1", editUserTemplate as any);
+    expect(bindingState?.status).not.toBe("pending");
   });
 
   it("no-op if templateNode has no resolver", async () => {
@@ -209,12 +209,12 @@ describe("3B.1: Template resolve pipeline", () => {
     const eProxy = buildEntityProjectionProxy(entityNode, templateNoResolver as any, store);
 
     // Should not throw
-    store.triggerEntityTemplateResolve("e1", templateNoResolver as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("e1", templateNoResolver as any, eProxy);
     await flushPromises();
 
     // No binding state created (no-op)
-    const state = store._getEntityBindingState("e1", templateNoResolver as any);
-    expect(state.loading).toBe(false);
+    const state = store.resolveManager.entityStates.get("e1", templateNoResolver as any);
+    expect(state?.status === "pending").toBe(false);
   });
 
   it("EntityProjectionProxy.loading reactive via proxy access", async () => {
@@ -232,7 +232,7 @@ describe("3B.1: Template resolve pipeline", () => {
 
     expect(eProxy.loading).toBe(false);
 
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     expect(eProxy.loading).toBe(true);
 
     resolveIt({ id: "u1", email: "x@x.com" });
@@ -307,14 +307,14 @@ describe("3B.2: Template submit pipeline", () => {
     const submitPromise = store.executeEntityTemplateSubmit("u1", template as any, eProxy);
 
     // submitting: true synchronously set
-    const bindingState = store._getEntityBindingState("u1", template as any);
-    expect(bindingState.submitting).toBe(true);
+    const bindingState = store.resolveManager.entityStates.get("u1", template as any);
+    expect(bindingState?.submitting).toBe(true);
     expect(eProxy.submitting).toBe(true);
 
     resolveSubmit({ ok: true });
     await submitPromise;
 
-    expect(bindingState.submitting).toBe(false);
+    expect(bindingState?.submitting).toBe(false);
     expect(eProxy.submitting).toBe(false);
   });
 
@@ -486,7 +486,7 @@ describe("3B.3: store.invalidate()", () => {
 
     // First resolve
     editUserTemplate.resolve.resolver.mockResolvedValueOnce({ id: "u1", email: "alice@corp.com", role: "admin" });
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     await flushPromises();
     expect(store.entityRegistry.isResolved("u1", editUserTemplate)).toBe(true);
     expect(editUserTemplate.resolve.resolver).toHaveBeenCalledTimes(1);
@@ -497,7 +497,7 @@ describe("3B.3: store.invalidate()", () => {
 
     // Trigger again → resolver called again
     editUserTemplate.resolve.resolver.mockResolvedValueOnce({ id: "u1", email: "alice2@corp.com", role: "admin" });
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
     await flushPromises();
 
     expect(editUserTemplate.resolve.resolver).toHaveBeenCalledTimes(2);
@@ -527,7 +527,7 @@ describe("3B.4: Notifications for loading/submitting state changes", () => {
     );
 
     const callsBeforeTrigger = listener.mock.calls.length;
-    store.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
+    store.resolveManager.triggerEntityTemplateResolve("u1", editUserTemplate as any, eProxy);
 
     // Should have notified about loading: true
     expect(listener.mock.calls.length).toBeGreaterThan(callsBeforeTrigger);

@@ -66,6 +66,7 @@ export type {
   Unsubscribe,
   PalistorRef,
   PalistorList,
+  PalistorEntityProxy,
   TypedListNode,
   ListResolver,
   TemplateConfig,

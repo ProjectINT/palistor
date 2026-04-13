@@ -10,11 +10,14 @@
  */
 
 export type { NotifyFn, ResolveErrorContext, Resolve, ResolveStatus, ResolveState, ResolveDeps } from "./types";
+export { EntityResolveStateMap } from "./types";
 export type { ListResolveDeps } from "./executeListResolve";
-export type { AnyResolveEntry, GroupResolveEntry, ListResolveEntry } from "./initResolveStates";
+export type { AnyResolveEntry, GroupResolveEntry, ListResolveEntry, TemplateFieldResolveEntry } from "./initResolveStates";
 export { initResolveStates } from "./initResolveStates";
 export { executeResolve } from "./executeResolve";
 export { executeListResolve } from "./executeListResolve";
+export { executeEntityFieldResolve } from "./executeEntityFieldResolve";
+export type { EntityFieldResolveDeps } from "./executeEntityFieldResolve";
 export { findResolvesToRetrigger } from "./findResolvesToRetrigger";
 export { resetResolveState } from "./resetResolveState";
 

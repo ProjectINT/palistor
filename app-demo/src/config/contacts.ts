@@ -17,6 +17,9 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
         return t("validation.email");
       }
     },
+    onChange: async () => {
+      return { lastModified: Date.now() };
+    },
   },
 
   phone: {

@@ -16,7 +16,7 @@
  * per-leaf отслеживания строк.
  */
 
-import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF } from "../store/constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF } from "../store/constants";
 import type { ProxyStore } from "../store/store";
 
 export interface TrackingRefs {
@@ -140,6 +140,19 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
 
       // Дочерний объект → рекурсивный tracking proxy
       const result = (target as any)[key];
+
+      // Entity id access: the entity proxy returns the id string directly (not via a
+      // leaf proxy), so we would normally miss tracking it. Detect by checking if the
+      // entity proxy exposes ENTITY_ID_LEAF and register that leaf for subscriptions.
+      // This ensures rekey() → idLeaf version bump → getSnapshot detects change → re-render.
+      if (key === "id") {
+        const idLeaf = (target as any)[ENTITY_ID_LEAF] as object | undefined;
+        if (idLeaf && !refs.accessed.has(idLeaf)) {
+          refs.accessed.add(idLeaf);
+          refs.lastVersions.set(idLeaf, store.getNodeVersion(idLeaf));
+        }
+      }
+
       if (result && typeof result === "object") {
         refs.hasNavigated = true;
         return createTrackingProxy(result, refs, store, cache);

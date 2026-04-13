@@ -23,6 +23,13 @@ export const STORE_REF: unique symbol = Symbol("storeRef");
 export const ENTITY_ID: unique symbol = Symbol("entityId");
 
 /**
+ * Символ для получения объекта id-листа (EntityLeafNode) из EntityProjectionProxy.
+ * Используется tracking proxy для регистрации подписки на id — чтобы rekey()
+ * корректно триггерил перерендер компонентов, читающих `entity.id`.
+ */
+export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
+
+/**
  * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
  * возвращает значение из FieldState (вычисленное), а не из конфига.
  */

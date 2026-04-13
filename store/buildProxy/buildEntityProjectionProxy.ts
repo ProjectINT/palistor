@@ -1,4 +1,4 @@
-import { CONFIG_NODE, CONFIG_PROPS, ENTITY_ID, STORE_REF } from "../constants";
+import { CONFIG_NODE, CONFIG_PROPS, ENTITY_ID, ENTITY_ID_LEAF, STORE_REF } from "../constants";
 import type { AnyConfigNode } from "../store/types";
 import type { EntityNode, EntityLeafNode, EntityGroupNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
@@ -142,8 +142,14 @@ function buildEntityLeafProxy(
 
   const leafProxy = new Proxy(entityLeaf as unknown as Record<string, unknown>, {
     get(_target, key: string | symbol) {
-      // Transparent for tracking proxy — exposes the entity leaf as config node
-      if (key === CONFIG_NODE) return entityLeaf;
+      // Transparent for tracking proxy — exposes the entity leaf as config node.
+      // If entityLeaf is a phantom (not yet in nodeState), return templateField instead,
+      // so the tracking proxy subscribes to templateField's version — which IS bumped
+      // by notifyChanged when the field resolves. Without this, phantom leaves are
+      // never "changed" from getSnapshot's perspective, blocking re-render after resolve.
+      if (key === CONFIG_NODE) {
+        return nodeState.has(entityLeaf as object) ? entityLeaf : templateField;
+      }
 
       if (typeof key === "symbol") return undefined;
 
@@ -152,6 +158,27 @@ function buildEntityLeafProxy(
         nodeState as WeakMap<object, { value: unknown }>,
       );
       const translate = kernel.services.translate;
+
+      // ─── Lazy entity field resolve ────────────────────────────────────
+      // Trigger resolve on first access to value/loading (not eagerly on mount).
+      // Mirrors the queueMicrotask pattern from handleLazyResolve.ts.
+      if (
+        (key === "value" || key === "loading") &&
+        templateField.resolve &&
+        "id" in entityNode
+      ) {
+        const idLeaf = (entityNode as EntityNode).id;
+        const eid = (
+          (kernel.nodes.nodeState.get(idLeaf as object) as { value: unknown } | undefined)?.value ??
+          idLeaf.value
+        ) as string;
+        const state = kernel.resolveManager.entityStates.get(eid, templateField);
+        if (!state || state.status === "idle") {
+          queueMicrotask(() =>
+            kernel.resolveManager.triggerEntityFieldResolve(eid, templateField),
+          );
+        }
+      }
 
       switch (key) {
         case "value":
@@ -236,6 +263,19 @@ function buildEntityLeafProxy(
           return (nodeState.get(entityLeaf as object) as { dirty?: boolean } | undefined)
             ?.dirty ?? false;
 
+        case "loading": {
+          if ("id" in entityNode) {
+            const idLeaf = (entityNode as EntityNode).id;
+            const eid = (
+              (kernel.nodes.nodeState.get(idLeaf as object) as { value: unknown } | undefined)?.value ??
+              idLeaf.value
+            ) as string;
+            const state = kernel.resolveManager.entityStates.get(eid, templateField);
+            return state?.status === "pending";
+          }
+          return false;
+        }
+
         case "onValueChange":
           return (v: unknown) =>
             writeEntityLeafValue(entityLeaf, templateField, v, entityNode, kernel);
@@ -264,6 +304,7 @@ function buildEntityLeafProxy(
         "isInvalid",
         "errorMessage",
         "dirty",
+        "loading",
         "onValueChange",
       ];
     },
@@ -344,6 +385,10 @@ export function buildEntityProjectionProxy(
         }
         return undefined;
       }
+      // Expose the id leaf node for tracking proxy — lets it subscribe to rekey() changes
+      if (key === ENTITY_ID_LEAF && "id" in entityNode) {
+        return (entityNode as EntityNode).id as object;
+      }
       if (key === STORE_REF) return kernel;
 
       if (typeof key === "symbol") return undefined;
@@ -362,11 +407,11 @@ export function buildEntityProjectionProxy(
       if ("id" in entityNode) {
         if (key === "loading") {
           const eid = getEntityId();
-          return kernel._getEntityBindingState(eid, templateNode as object)?.loading ?? false;
+          return kernel.resolveManager.entityStates.get(eid, templateNode as object)?.status === "pending";
         }
         if (key === "submitting") {
           const eid = getEntityId();
-          return kernel._getEntityBindingState(eid, templateNode as object)?.submitting ?? false;
+          return kernel.resolveManager.entityStates.get(eid, templateNode as object)?.submitting === true;
         }
         if (key === "submit") {
           if (!submitFnRef) {

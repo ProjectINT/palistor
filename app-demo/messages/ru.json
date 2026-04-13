@@ -172,5 +172,18 @@
   },
   "hooksDemo": {
     "title": "Демонстрация хуков для отдельных полей"
+  },
+  "storeContext": {
+    "title": "Демо useStoreContext",
+    "subtitle": "Нереактивный контекст (accountId, tenant) доступен в resolver/onSubmit через store.context",
+    "description": "useStoreContext устанавливает нереактивный контейнер глобальных переменных — не полей формы. Доступен во всех коллбэках через store.context.",
+    "currentContext": "Текущий контекст",
+    "switchAccount": "Сменить accountId:",
+    "switchTenant": "Сменить tenant:",
+    "resolverNote": "Резольвер пользователей читает store.context.accountId при каждом вызове. Смените аккаунт выше и нажмите ↻ Обновить список."
+  },
+  "onChange": {
+    "lastModified": "Последнее изменение email:",
+    "description": "обновлено через onChange"
   }
 }
