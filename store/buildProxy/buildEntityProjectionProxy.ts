@@ -484,7 +484,8 @@ export function buildEntityProjectionProxy(
     ownKeys() {
       const hasId = "id" in entityNode;
       if (hasId) {
-        return ["id", ...templateKeys, "loading", "submitting", "submit", "values"];
+        const keysWithoutId = templateKeys.filter((k) => k !== "id");
+        return ["id", ...keysWithoutId, "loading", "submitting", "submit", "values"];
       }
       return templateKeys;
     },
@@ -493,7 +494,8 @@ export function buildEntityProjectionProxy(
       if (typeof key === "symbol") return undefined;
       const hasId = "id" in entityNode;
       const extraKeys = hasId ? ["loading", "submitting", "submit", "values"] : [];
-      const keys = hasId ? ["id", ...templateKeys, ...extraKeys] : templateKeys;
+      const keysWithoutId = hasId ? templateKeys.filter((k) => k !== "id") : templateKeys;
+      const keys = hasId ? ["id", ...keysWithoutId, ...extraKeys] : keysWithoutId;
       if (!keys.includes(key as string)) return undefined;
       return { configurable: true, enumerable: true, writable: false };
     },

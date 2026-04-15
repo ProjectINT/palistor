@@ -492,6 +492,54 @@ describe("Стабильность ссылок на proxy", () => {
   });
 });
 
+// ─── EntityProjectionProxy: ownKeys без дубликатов ───────────────────────────
+
+describe("EntityProjectionProxy — ownKeys deduplication", () => {
+  it("Reflect.ownKeys(entity proxy) не содержит 'id' дважды когда шаблон тоже содержит id", () => {
+    // Регрессионный тест на баг: ownKeys возвращал ["id", "id", ...] когда
+    // templateKeys уже содержал "id" (потому что шаблон объявляет id: { value: "" }).
+    // Проксирование через Proxy бросало TypeError: trap returned duplicate entries.
+    const store = makeSingleUserStore();
+    store.set({ id: "u1", name: "Alice", role: "admin" });
+    const form = store.proxy as any;
+    form.users.add("u1");
+
+    const entityProxy = form.users.items[0];
+    const keys = Reflect.ownKeys(entityProxy) as string[];
+    const idCount = keys.filter((k) => k === "id").length;
+    expect(idCount).toBe(1);
+  });
+
+  it("spread {...entityProxy} не бросает TypeError при дубле id в шаблоне", () => {
+    const store = makeSingleUserStore();
+    store.set({ id: "u1", name: "Alice", role: "admin" });
+    const form = store.proxy as any;
+    form.users.add("u1");
+
+    const entityProxy = form.users.items[0];
+    expect(() => ({ ...entityProxy })).not.toThrow();
+  });
+
+  it("Object.keys(entityProxy) содержит ожидаемые ключи", () => {
+    const store = makeSingleUserStore();
+    store.set({ id: "u1", name: "Alice", role: "admin" });
+    const form = store.proxy as any;
+    form.users.add("u1");
+
+    const entityProxy = form.users.items[0];
+    const keys = Object.keys(entityProxy);
+    expect(keys).toContain("id");
+    expect(keys).toContain("name");
+    expect(keys).toContain("role");
+    expect(keys).toContain("loading");
+    expect(keys).toContain("submitting");
+    expect(keys).toContain("submit");
+    expect(keys).toContain("values");
+    // Убеждаемся что нет дубликатов
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 // ─── Store.set() + list write через EntityProjectionProxy ────────────────────
 
 describe("store.set() + EntityProjectionProxy sync", () => {
