@@ -69,6 +69,8 @@ export const CONFIG_PROPS = new Set<string>([
   // Resolve props
   "resolve",
   "deps",
+  // Node kind marker — set by registerNodes/entity factories, invisible to user code
+  "__kind",
 ]);
 
 export const SPREADABLE_FIELD_STATE_PROPS = [

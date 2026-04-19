@@ -1,6 +1,6 @@
 import { type FieldState, resolveFlag } from "../compute/index";
 import { TranslateFn, type AnyConfigNode, type ListState, type ListConfig } from "./types";
-import { configKeys } from "../traversal";
+import { configKeys, hasChildren } from "../traversal";
 import { hasComputedProps } from "./hasComputedProps";
 import { isListNode } from "./NodeRegistry/nodeUtils";
 
@@ -86,6 +86,9 @@ export function registerNodes<TNode extends AnyConfigNode>(
     if (!child || typeof child !== "object") continue;
 
     const path = parentPath ? `${parentPath}.${key}` : key;
+
+    // Проставить маркер __kind на каждый узел конфига
+    (child as any).__kind = hasChildren(child) ? "group" : "leaf";
 
     if (Array.isArray(child)) {
       // ListNode: создать ListState + зарегистрировать template как обычную группу

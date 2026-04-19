@@ -1,5 +1,5 @@
 import { type AnyConfigNode } from "../store/types";
-import { configKeys, isLeaf } from "../traversal";
+import { configKeys, isLeafNode } from "../traversal";
 import { pairKey } from "./pairKey";
 
 /**
@@ -22,7 +22,7 @@ export function createGroupDeps(
     for (const key of configKeys(node as Record<string, unknown>)) {
       const child = node[key] as AnyConfigNode;
       if (!child || typeof child !== "object") continue;
-      if (isLeaf(child)) continue; // лист — не группа
+      if (isLeafNode(child)) continue; // лист — не группа
       const path = nodePaths.get(child) ?? "";
       deps.add(pairKey(path, path));
       walk(child);

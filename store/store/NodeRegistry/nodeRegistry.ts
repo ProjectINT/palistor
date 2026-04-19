@@ -4,7 +4,7 @@ import { buildNodeMaps } from "../nodeMap";
 import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
 import type { AnyConfigNode, TranslateFn, ListState } from "../types";
-import { isLeaf, isGroup, isListNode } from "./nodeUtils";
+import { isLeafNode, isGroupNode, isListNode } from "./nodeUtils";
 
 /**
  * Реестр узлов конфига.
@@ -145,8 +145,8 @@ export class NodeRegistry {
     }
   }
 
-  isLeaf = isLeaf;
-  isGroup = isGroup;
+  isLeafNode = isLeafNode;
+  isGroupNode = isGroupNode;
   isListNode = isListNode;
 
   /**

@@ -1,4 +1,4 @@
-import { configKeys, isLeaf } from "../traversal";
+import { configKeys, isLeafNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 
 /**
@@ -15,7 +15,7 @@ export function applyLeafBeforeSubmit(
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
 
-    if (isLeaf(child)) {
+    if (isLeafNode(child)) {
       if (typeof (child as AnyConfigNode).beforeSubmit === "function") {
         result[key] = (
           (child as AnyConfigNode).beforeSubmit as (v: unknown, vals: Record<string, unknown>) => unknown

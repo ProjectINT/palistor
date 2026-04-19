@@ -1,6 +1,6 @@
 import type { AnyConfigNode } from "../store/types";
 import { CONFIG_PROPS } from "../constants";
-import { isLeaf } from "../traversal";
+import { isLeafNode } from "../traversal";
 import { formatValue } from "./formatValue";
 
 /**
@@ -29,7 +29,7 @@ export function formatPatch(
 
     const patchValue = patch[key];
 
-    if (isLeaf(child)) {
+    if (isLeafNode(child)) {
       // Листовой узел — прогоняем через formatter
       result[key] = formatValue(patchValue, child, allValues);
     } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {

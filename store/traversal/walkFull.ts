@@ -1,4 +1,4 @@
-import { configKeys, isLeaf, isListNode } from "./nodeClassifier";
+import { configKeys, isLeafNode, isListNode } from "./nodeClassifier";
 import type { AnyConfigNode } from "../store/types";
 
 export interface TreeVisitor {
@@ -51,7 +51,7 @@ export function walkFull(
       continue;
     }
 
-    if (isLeaf(child as object)) {
+    if (isLeafNode(child as object)) {
       visitor.onLeaf(child as object, key, path, node);
     } else {
       const enter = visitor.onGroupEnter?.(child as AnyConfigNode, key, path, node);

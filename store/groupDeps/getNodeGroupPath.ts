@@ -1,3 +1,5 @@
+import { isGroupNode } from "../traversal";
+
 /**
  * Определить путь группы, к которой принадлежит узел.
  *
@@ -11,7 +13,7 @@ export function getNodeGroupPath(
   nodePaths: WeakMap<object, string>,
 ): string {
   // Групповой узел → его собственный путь
-  if (!("value" in (node as Record<string, unknown>))) {
+  if (isGroupNode(node)) {
     return nodePaths.get(node) ?? "";
   }
   // Листовой → путь родительской группы

@@ -1,5 +1,6 @@
 import { CONFIG_PROPS } from "../constants";
 import { isListNode } from "../store/NodeRegistry/nodeUtils";
+import { isGroupNode } from "../traversal";
 import { type AnyConfigNode, type ListConfig } from "../store/types";
 import type { Resolve, ResolveState } from "./types";
 import { resetResolveState } from "./resetResolveState";
@@ -64,7 +65,7 @@ export function initResolveStates(
       }
 
       // Recurse into nested groups within the template field
-      if (!("value" in field)) {
+      if (isGroupNode(field)) {
         walkTemplateFields(field, listNode);
       }
     }
@@ -109,7 +110,7 @@ export function initResolveStates(
         continue;
       }
 
-      if (!("value" in child)) {
+      if (isGroupNode(child)) {
         walk(child);
       } else if (child.resolve && typeof (child.resolve as any).resolver === "function") {
         // Leaf node with resolve → per-entity field resolve (e.g. bio inside editUser template group).

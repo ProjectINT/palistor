@@ -1,4 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
+import { isGroupNode } from "../traversal";
 import type { AnyConfigNode } from "./types";
 
 /**
@@ -28,7 +29,7 @@ export function buildNodeMaps(
     nodeParents.set(child, node);
 
     // Рекурсия в групповые узлы (листья не имеют дочерних)
-    if (!("value" in child)) {
+    if (isGroupNode(child)) {
       buildNodeMaps(child, nodePaths, nodeParents, path);
     }
   }

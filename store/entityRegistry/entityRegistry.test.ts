@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { EntityRegistry } from "./entityRegistry";
 import type { EntityNode } from "./types";
+import { isGroupNode } from "../traversal/nodeClassifier";
 
 // ─── Тестовые данные ─────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ describe("EntityRegistry", () => {
 
       const passport = node.passport as EntityNode;
       expect(passport).toBeDefined();
-      expect("value" in passport).toBe(false); // это группа, не leaf
+      expect(isGroupNode(passport as object)).toBe(true); // это группа, не leaf
       expect((passport.number as any).value).toBe("123");
       expect((passport.issueDate as any).value).toBe("2020-01-01");
     });

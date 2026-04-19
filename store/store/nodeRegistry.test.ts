@@ -177,25 +177,25 @@ describe("NodeRegistry", () => {
     });
   });
 
-  describe("isLeaf / isGroup", () => {
-    it("isLeaf возвращает true для листового узла", () => {
+  describe("isLeafNode / isGroupNode", () => {
+    it("isLeafNode возвращает true для листового узла", () => {
       const reg = new NodeRegistry(flat, {}, translate);
-      expect(reg.isLeaf((flat as any).email)).toBe(true);
+      expect(reg.isLeafNode((flat as any).email)).toBe(true);
     });
 
-    it("isLeaf возвращает false для группового узла", () => {
+    it("isLeafNode возвращает false для группового узла", () => {
       const reg = new NodeRegistry(nested, {}, translate);
-      expect(reg.isLeaf((nested as any).passport)).toBe(false);
+      expect(reg.isLeafNode((nested as any).passport)).toBe(false);
     });
 
-    it("isGroup возвращает true для группового узла", () => {
+    it("isGroupNode возвращает true для группового узла", () => {
       const reg = new NodeRegistry(nested, {}, translate);
-      expect(reg.isGroup((nested as any).passport)).toBe(true);
+      expect(reg.isGroupNode((nested as any).passport)).toBe(true);
     });
 
-    it("isGroup возвращает false для листового узла", () => {
+    it("isGroupNode возвращает false для листового узла", () => {
       const reg = new NodeRegistry(flat, {}, translate);
-      expect(reg.isGroup((flat as any).email)).toBe(false);
+      expect(reg.isGroupNode((flat as any).email)).toBe(false);
     });
   });
 
