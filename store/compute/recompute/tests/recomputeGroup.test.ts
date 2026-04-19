@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { collectGroupLeafNodes } from "../collectGroupLeafNodes";
+import { collectGroupComputeNodes } from "../collectGroupComputeNodes";
 import { recomputeLeaves } from "../recomputeLeaves";
 import type { AnyConfigNode } from "../../../types";
 import type { FieldState } from "../../index";
-import type { GroupLeafMap } from "../../../registerNodes";
+import type { GroupComputeMap } from "../../../registerNodes";
 import type { ValuesCache } from "../../../valuesCache";
 
 const translate = (...args: any[]) => String(args[0]);
@@ -12,11 +12,11 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
   return { values, nodeSlot: new WeakMap() };
 }
 
-describe("collectGroupLeafNodes + recomputeLeaves (group subtree)", () => {
+describe("collectGroupComputeNodes + recomputeLeaves (group subtree)", () => {
   it("возвращает пустой Set, если у группы нет листьев в карте", () => {
     const root = {} as AnyConfigNode;
-    const groupLeafMap: GroupLeafMap = new WeakMap();
-    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const groupComputeMap: GroupComputeMap = new WeakMap();
+    const leaves = collectGroupComputeNodes(root, groupComputeMap);
     const result = recomputeLeaves(leaves, new WeakMap(), makeCache(), translate);
     expect(result.size).toBe(0);
   });
@@ -24,12 +24,12 @@ describe("collectGroupLeafNodes + recomputeLeaves (group subtree)", () => {
   it("пересчитывает прямые листья группы и возвращает changed", () => {
     const fieldNode = {} as unknown as AnyConfigNode;
     const root = { field: fieldNode } as unknown as AnyConfigNode;
-    const groupLeafMap: GroupLeafMap = new WeakMap([
+    const groupComputeMap: GroupComputeMap = new WeakMap([
       [root, [{ node: fieldNode, path: "field" }]],
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const leaves = collectGroupComputeNodes(root, groupComputeMap);
     const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
     // fieldNode не имел предыдущего состояния → должен быть в changed
@@ -41,13 +41,13 @@ describe("collectGroupLeafNodes + recomputeLeaves (group subtree)", () => {
     const childGroup = { x: childField } as unknown as AnyConfigNode;
     const root = { child: childGroup } as unknown as AnyConfigNode;
 
-    const groupLeafMap: GroupLeafMap = new WeakMap([
+    const groupComputeMap: GroupComputeMap = new WeakMap([
       [root, []],
       [childGroup, [{ node: childField, path: "child.x" }]],
     ]);
     const nodeState = new WeakMap<object, FieldState>();
 
-    const leaves = collectGroupLeafNodes(root, groupLeafMap);
+    const leaves = collectGroupComputeNodes(root, groupComputeMap);
     const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
     expect(result.has(childField)).toBe(true);

@@ -87,6 +87,7 @@ export const SPREADABLE_FIELD_STATE_PROPS = [
  * Дочерние узлы добавляются динамически в computeProxyKeys.
  */
 export const GROUP_SPREAD_KEYS: string[] = [
+  "value",
   "submitting",
   "dirty",
   "revalidate",

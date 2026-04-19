@@ -3,7 +3,7 @@ import { recomputeLeaves } from "../recomputeLeaves";
 import type { AnyConfigNode } from "../../../types";
 import type { FieldState } from "../../index";
 
-import type { LeafEntry } from "../../../registerNodes";
+import type { ComputeEntry } from "../../../registerNodes";
 import type { ValuesCache } from "../../../valuesCache";
 
 const translate = (...args: any[]) => String(args[0]);
@@ -20,7 +20,7 @@ describe("recomputeLeaves", () => {
 
   it("добавляет новый узел (без prev-состояния) в changed", () => {
     const node = {} as unknown as AnyConfigNode;
-    const leaf: LeafEntry = { node, path: "field" };
+    const leaf: ComputeEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
 
     const result = recomputeLeaves([leaf], nodeState, makeCache(), translate);
@@ -31,7 +31,7 @@ describe("recomputeLeaves", () => {
 
   it("не добавляет узел в changed, если состояние не изменилось", () => {
     const node = {} as unknown as AnyConfigNode;
-    const leaf: LeafEntry = { node, path: "field" };
+    const leaf: ComputeEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
     // Состояние уже соответствует тому, что вернёт computeFieldState
     const prevState: FieldState = {
@@ -52,7 +52,7 @@ describe("recomputeLeaves", () => {
     const computedNode = {
       value: () => 99,
     } as unknown as AnyConfigNode;
-    const leaf: LeafEntry = { node: computedNode, path: "total" };
+    const leaf: ComputeEntry = { node: computedNode, path: "total" };
     const nodeState = new WeakMap<object, FieldState>();
     const prevState: FieldState = {
       value: 42,
@@ -71,7 +71,7 @@ describe("recomputeLeaves", () => {
 
   it("сохраняет флаги submitting, dirty, revalidate из prev-состояния", () => {
     const node = {} as unknown as AnyConfigNode;
-    const leaf: LeafEntry = { node, path: "field" };
+    const leaf: ComputeEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
     // Ставим isRequired=true и revalidate=true → это вызовет isInvalid
     const prevState: FieldState = {
@@ -88,7 +88,7 @@ describe("recomputeLeaves", () => {
 
     // Изменим isVisible, чтобы вызвать пересчёт (используем узел с isVisible=false)
     const visibleNode = { isVisible: false } as unknown as AnyConfigNode;
-    const visibleLeaf: LeafEntry = { node: visibleNode, path: "hidden" };
+    const visibleLeaf: ComputeEntry = { node: visibleNode, path: "hidden" };
     const visibleState: FieldState = {
       value: "",
       isVisible: true, // было true, станет false → изменится

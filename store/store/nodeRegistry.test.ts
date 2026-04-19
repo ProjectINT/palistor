@@ -39,7 +39,7 @@ describe("NodeRegistry", () => {
   describe("конструктор — инициализация узлов", () => {
     it("регистрирует все листовые узлы", () => {
       const reg = new NodeRegistry(flat, {}, translate);
-      const leafPaths = reg.leafNodes.map((e) => e.path);
+      const leafPaths = reg.computeNodes.map((e) => e.path);
       expect(leafPaths).toContain("email");
       expect(leafPaths).toContain("name");
       expect(leafPaths).toContain("age");
@@ -82,7 +82,7 @@ describe("NodeRegistry", () => {
 
     it("регистрирует листья вложенных уровней", () => {
       const reg = new NodeRegistry(nested, {}, translate);
-      const paths = reg.leafNodes.map((e) => e.path);
+      const paths = reg.computeNodes.map((e) => e.path);
       expect(paths).toContain("email");
       expect(paths).toContain("passport.number");
       expect(paths).toContain("passport.issueDate");
@@ -170,8 +170,8 @@ describe("NodeRegistry", () => {
       expect(reg.findByPath("nonexistent")).toBeUndefined();
     });
 
-    it("возвращает undefined для пути к группе (группы не в leafNodes)", () => {
-      // Группы без computed-props не попадают в leafNodes
+    it("возвращает undefined для пути к группе (группы без computed-props не в computeNodes)", () => {
+      // Группы без computed-props не попадают в computeNodes
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.findByPath("passport")).toBeUndefined();
     });
@@ -199,11 +199,11 @@ describe("NodeRegistry", () => {
     });
   });
 
-  describe("forEachLeaf", () => {
+  describe("forEachCompute", () => {
     it("итерирует по всем листьям", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       const collected: string[] = [];
-      reg.forEachLeaf((entry) => collected.push(entry.path));
+      reg.forEachCompute((entry) => collected.push(entry.path));
       expect(collected).toContain("email");
       expect(collected).toContain("passport.number");
       expect(collected).toContain("passport.issueDate");
@@ -211,10 +211,10 @@ describe("NodeRegistry", () => {
     });
   });
 
-  describe("groupLeafMap и proxyCache", () => {
-    it("groupLeafMap заполняется при инициализации", () => {
+  describe("groupComputeMap и proxyCache", () => {
+    it("groupComputeMap заполняется при инициализации", () => {
       const reg = new NodeRegistry(nested, {}, translate);
-      const passportLeaves = reg.groupLeafMap.get((nested as any).passport);
+      const passportLeaves = reg.groupComputeMap.get((nested as any).passport);
       expect(passportLeaves).toBeDefined();
       expect(passportLeaves!.length).toBeGreaterThan(0);
     });
@@ -227,10 +227,10 @@ describe("NodeRegistry", () => {
   });
 
   describe("узлы с computed-props на группе", () => {
-    it("группа с isVisible попадает в leafNodes как виртуальный лист", () => {
+    it("группа с isVisible попадает в computeNodes", () => {
       const reg = new NodeRegistry(withComputed, {}, translate);
-      const paths = reg.leafNodes.map((e) => e.path);
-      // passport — групповой узел с isVisible функцией → должен быть в leafNodes
+      const paths = reg.computeNodes.map((e) => e.path);
+      // passport — групповой узел с isVisible функцией → должен быть в computeNodes
       expect(paths).toContain("passport");
     });
   });

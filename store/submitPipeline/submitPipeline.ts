@@ -1,7 +1,6 @@
 import { type AnyConfigNode } from "../store/types";
 import type { Palistor } from "../store/palistor";
 import { setGroupRevalidate } from "../dirtyTracking";
-import { getSubValues } from "./getSubValues";
 import { collectLeafStates } from "./collectLeafStates";
 import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
 import type { SubmitResult } from "./types";
@@ -59,8 +58,10 @@ export class SubmitPipeline {
           value = await (node.beforeSubmit as Function)(value, parentValues);
         }
       } else {
-        // 2. Group: collect subtree values
-        let values = getSubValues(this.kernel.values, node, this.kernel.rootConfig, this.kernel.nodes.nodePaths);
+        // 2. Group: unified entry — nodeState.value is the groupSlot reference for non-root groups;
+        // root config may not be in nodeState, so fall back to groupSlot directly.
+        const groupValue = (nodeState.get(node)?.value ?? this.kernel.values.groupSlot.get(node) ?? {}) as Record<string, unknown>;
+        let values = structuredClone(groupValue) as Record<string, unknown>;
 
         // 3. Leaf-level beforeSubmit on group subtree
         values = applyLeafBeforeSubmit(node, values);

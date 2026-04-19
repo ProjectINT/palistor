@@ -1,6 +1,6 @@
 import { type FieldState, computeFieldState, fieldStateChanged } from "../index";
 import type { TranslateFn } from "../../store/types";
-import type { LeafEntry } from "../../store/registerNodes";
+import type { ComputeEntry } from "../../store/registerNodes";
 import { updateValuesCacheEntry, type ValuesCache } from "../../valuesCache/valuesCache";
 import { topologicalSortComputed } from "./topologicalSortComputed";
 import type { TrackingWrap } from "./types";
@@ -22,14 +22,14 @@ import type { TrackingWrap } from "./types";
  * Возвращает Set узлов, чьё состояние изменилось (для notify).
  */
 export function recomputeLeaves(
-  leafNodes: LeafEntry[],
+  computeNodes: ComputeEntry[],
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
   translate: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
   // ── Фаза 1: Пересчёт computed-значений ──────────────────────────────────
-  const computedEntries = leafNodes.filter(({ node }) => typeof node.value === "function");
+  const computedEntries = computeNodes.filter(({ node }) => typeof node.value === "function");
   const changed = new Set<object>();
 
   if (computedEntries.length > 0) {
@@ -64,7 +64,7 @@ export function recomputeLeaves(
 
   // ── Фаза 2: Пересчёт FieldState (флаги, валидация, строки) ──────────────
 
-  for (const { node } of leafNodes) {
+  for (const { node } of computeNodes) {
     const prev = nodeState.get(node);
     const currentValue = prev?.value ?? "";
     // Preserve revalidate flag: skip validation when revalidate is false

@@ -83,31 +83,31 @@ describe("isListNode", () => {
 describe("registerNodes — array guard", () => {
   it("регистрирует обычные листы, игнорирует ListNode (длина 1)", () => {
     const config = makeConfigWithList1();
-    const leafNodes: any[] = [];
+    const computeNodes: any[] = [];
     const nodeState = new WeakMap<object, FieldState>();
-    const groupLeafMap = new WeakMap();
+    const groupComputeMap = new WeakMap();
 
     expect(() =>
-      registerNodes(config, undefined, leafNodes, nodeState, "", groupLeafMap, translate),
+      registerNodes(config, undefined, computeNodes, nodeState, "", groupComputeMap, translate),
     ).not.toThrow();
 
     // Только 'name' должен быть зарегистрирован
-    expect(leafNodes).toHaveLength(1);
-    expect(leafNodes[0].path).toBe("name");
+    expect(computeNodes).toHaveLength(1);
+    expect(computeNodes[0].path).toBe("name");
   });
 
   it("регистрирует обычные листы, игнорирует ListNode (длина 2)", () => {
     const config = makeConfigWithList2();
-    const leafNodes: any[] = [];
+    const computeNodes: any[] = [];
     const nodeState = new WeakMap<object, FieldState>();
-    const groupLeafMap = new WeakMap();
+    const groupComputeMap = new WeakMap();
 
     expect(() =>
-      registerNodes(config, undefined, leafNodes, nodeState, "", groupLeafMap, translate),
+      registerNodes(config, undefined, computeNodes, nodeState, "", groupComputeMap, translate),
     ).not.toThrow();
 
-    expect(leafNodes).toHaveLength(1);
-    expect(leafNodes[0].path).toBe("name");
+    expect(computeNodes).toHaveLength(1);
+    expect(computeNodes[0].path).toBe("name");
   });
 });
 
