@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { findOnChangeAncestors } from "./findOnChangeAncestors";
+import { findOnChangeNodes } from "./findOnChangeAncestors";
 import { computeFieldKey } from "./computeFieldKey";
 import { Palistor } from "../store/palistor";
 import type { AnyConfigNode } from "../store/types";
@@ -77,29 +77,37 @@ describe("computeFieldKey", () => {
   it("однословный путь относительно прямого родителя", () => {
     expect(computeFieldKey("form.name", "form")).toBe("name");
   });
+
+  it("self-reference: возвращает последний сегмент для вложенного leaf", () => {
+    expect(computeFieldKey("form.country", "form.country")).toBe("country");
+  });
+
+  it("self-reference: возвращает имя для корневого leaf", () => {
+    expect(computeFieldKey("name", "name")).toBe("name");
+  });
 });
 
-// ─── findOnChangeAncestors ───────────────────────────────────────────────────
+// ─── findOnChangeNodes ───────────────────────────────────────────────────────
 
-describe("findOnChangeAncestors", () => {
-  it("возвращает пустой массив если нет родителей", () => {
+describe("findOnChangeNodes", () => {
+  it("возвращает пустой массив если нет родителей и нет onChange на самом узле", () => {
     const node = {};
     const parents = new WeakMap<object, object>();
-    expect(findOnChangeAncestors(node, parents)).toEqual([]);
+    expect(findOnChangeNodes(node, parents)).toEqual([]);
   });
 
   it("пропускает родителей без onChange", () => {
     const node = {};
     const parent: AnyConfigNode = { someField: {} };
     const parents = new WeakMap<object, object>([[node, parent]]);
-    expect(findOnChangeAncestors(node, parents)).toEqual([]);
+    expect(findOnChangeNodes(node, parents)).toEqual([]);
   });
 
   it("собирает родителя с onChange", () => {
     const node = {};
     const parent: AnyConfigNode = { onChange: vi.fn() };
     const parents = new WeakMap<object, object>([[node, parent]]);
-    expect(findOnChangeAncestors(node, parents)).toEqual([parent]);
+    expect(findOnChangeNodes(node, parents)).toEqual([parent]);
   });
 
   it("собирает нескольких предков с onChange снизу вверх", () => {
@@ -112,7 +120,7 @@ describe("findOnChangeAncestors", () => {
       [parent, grandparent],
       [grandparent, root],
     ]);
-    const result = findOnChangeAncestors(node, parents);
+    const result = findOnChangeNodes(node, parents);
     expect(result).toEqual([parent, grandparent]);
   });
 
@@ -124,8 +132,109 @@ describe("findOnChangeAncestors", () => {
       [node, parent],
       [parent, grandparent],
     ]);
-    expect(findOnChangeAncestors(node, parents)).toEqual([grandparent]);
+    expect(findOnChangeNodes(node, parents)).toEqual([grandparent]);
+  });
+
+  it("включает сам узел если у него есть onChange", () => {
+    const node: AnyConfigNode = { value: "", onChange: vi.fn() };
+    const parent: AnyConfigNode = { onChange: vi.fn() };
+    const parents = new WeakMap<object, object>([[node, parent]]);
+    const result = findOnChangeNodes(node, parents);
+    expect(result).toEqual([node, parent]);
+  });
+
+  it("включает только сам узел если у предков нет onChange", () => {
+    const node: AnyConfigNode = { value: "", onChange: vi.fn() };
+    const parent: AnyConfigNode = {};
+    const parents = new WeakMap<object, object>([[node, parent]]);
+    expect(findOnChangeNodes(node, parents)).toEqual([node]);
   });
 });
 
+// ─── Leaf onChange — интеграционные тесты (через proxy) ─────────────────────
+
+describe("Leaf onChange (integration via proxy)", () => {
+  function flushPromises() {
+    return new Promise<void>((r) => setTimeout(r, 0));
+  }
+
+  it("3.1: вызывается с { fieldKey, newValue, previousValue, allValues }", async () => {
+    const onChangeSpy = vi.fn();
+    const config = { name: { value: "Alice", onChange: onChangeSpy } };
+    const store = new Palistor({ config });
+    store.proxy.name.value = "Bob";
+    await flushPromises();
+    expect(onChangeSpy).toHaveBeenCalledWith({
+      fieldKey: "name",
+      newValue: "Bob",
+      previousValue: "Alice",
+      allValues: expect.objectContaining({ name: "Bob" }),
+    });
+  });
+
+  it("3.2: patch из leaf onChange применяется к parent group", async () => {
+    const config = {
+      country: {
+        value: "US",
+        onChange: async ({ newValue }: { newValue: unknown }) => {
+          return { city: newValue === "RU" ? "Moscow" : "New York" };
+        },
+      },
+      city: { value: "" },
+    };
+    const store = new Palistor({ config });
+    store.proxy.country.value = "RU";
+    await flushPromises();
+    expect(store.proxy.city.value).toBe("Moscow");
+  });
+
+  it("3.3: ошибка в leaf onChange не блокирует запись значения", async () => {
+    const config = {
+      toggle: { value: false, onChange: () => { throw new Error("boom"); } },
+    };
+    const store = new Palistor({ config });
+    store.proxy.toggle.value = true;
+    await flushPromises();
+    expect(store.proxy.toggle.value).toBe(true);
+  });
+
+  it("3.4: leaf onChange и parent group onChange оба вызываются", async () => {
+    const leafSpy = vi.fn();
+    const groupSpy = vi.fn();
+    const config = {
+      name: { value: "", onChange: leafSpy },
+      onChange: groupSpy,
+    };
+    const store = new Palistor({ config });
+    store.proxy.name.value = "test";
+    await flushPromises();
+    expect(leafSpy).toHaveBeenCalledWith(expect.objectContaining({ fieldKey: "name" }));
+    expect(groupSpy).toHaveBeenCalledWith(expect.objectContaining({ fieldKey: "name" }));
+  });
+
+  it("3.5: async patch из leaf onChange применяется после резолва промиса", async () => {
+    const config = {
+      search: {
+        value: "",
+        onChange: async ({ newValue }: { newValue: unknown }) => {
+          return { results: `found:${newValue}` };
+        },
+      },
+      results: { value: "" },
+    };
+    const store = new Palistor({ config });
+    store.proxy.search.value = "hello";
+    await flushPromises();
+    expect(store.proxy.results.value).toBe("found:hello");
+  });
+
+  it("3.6: leaf onChange не вызывается если значение не изменилось", async () => {
+    const spy = vi.fn();
+    const config = { name: { value: "same", onChange: spy } };
+    const store = new Palistor({ config });
+    store.proxy.name.value = "same";
+    await flushPromises();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
 

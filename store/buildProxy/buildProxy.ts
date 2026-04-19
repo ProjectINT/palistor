@@ -114,7 +114,12 @@ export class ProxyBuilder {
           "errorMessage": currentNode ? currentNode.errorMessage : node.errorMessage,
           "dirty":        currentNode?.dirty,
           "loading":      currentNode?.loading,
+          "submitting":   currentNode?.submitting ?? false,
         };
+
+        if (key === "submit") {
+          return getCached(caches.submit, node, () => () => kernel.submitPipeline.execute(node));
+        }
 
         if (key in fieldStateHandlers) {
           const field = fieldStateHandlers[key];

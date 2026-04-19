@@ -151,14 +151,86 @@ email: {
     domain: value.split("@")[1] ?? "",   // patch sibling fields
   }),
   onChange: async ({ fieldKey, newValue, previousValue, allValues }) => {
-    // fire-and-forget — runs on ANY field change in this group
-    // return patch object, void, or Promise<patch | void>
+    // fire-and-forget — runs when THIS field changes
+    // fieldKey = own field name (last segment of path)
+    // return patch to parent group, void, or Promise<patch | void>
     await analytics.track(fieldKey, newValue);
     return { lastModified: Date.now() };
+  },
+  onSubmit: async (value, store, parent) => {
+    // full submit pipeline — called via proxy.email.submit()
+    // value = field value, parent = proxy of parent group
+    await api.saveEmail(value);
   },
   dependencies: ["contactMethod"],     // explicit deps for recompute
 }
 ```
+
+### Leaf-Level Callbacks (onChange & onSubmit)
+
+`onChange` and `onSubmit` work on **both** leaf and group nodes with the same signatures.
+
+#### Leaf onChange — fire-and-forget on value change
+
+Fires automatically when the leaf's own value changes. `fieldKey` is the field's own name (last path segment). Returned patch applies to the **parent group** (leaf cannot patch itself, only siblings).
+
+If both the leaf AND an ancestor group have `onChange`, **both** fire (leaf first, then ancestors).
+
+```ts
+const config = {
+  country: {
+    value: "",
+    onChange: async ({ newValue }) => {
+      const cities = await api.getCities(newValue);
+      return { city: cities[0]?.name ?? "" }; // patch applied to parent group
+    },
+  },
+  city: { value: "" },
+};
+```
+
+#### Leaf onSubmit — explicit submit pipeline per field
+
+`onSubmit` on a leaf runs a **full submit pipeline** (`submitting → revalidate → validate → beforeSubmit → onSubmit → afterSubmit`) — identical to group submit. Triggered **only** by explicit `proxy.field.submit()`, never automatically on value change.
+
+The third argument `parent` is the proxy of the parent group — gives access to sibling fields and entity ID.
+
+```ts
+const config = {
+  isActive: {
+    value: false,
+    onSubmit: async (value, store, parent) => {
+      // value = true/false (field value)
+      // parent.id — entity ID (in list context)
+      // parent.name.value — sibling field
+      await api.patch(`/users/${parent.id}`, { isActive: value });
+    },
+  },
+  name: { value: "Alice" },
+};
+// Trigger: store.proxy.isActive.submit()
+```
+
+#### Combining onChange + onSubmit on one field
+
+```ts
+priority: {
+  value: "normal",
+  // onChange — auto on every change (cascading update)
+  onChange: async ({ newValue, allValues }) => {
+    return { urgencyLabel: newValue === "high" ? "!" : "" };
+  },
+  // onSubmit — explicit save via proxy.priority.submit()
+  onSubmit: async (value, store, parent) => {
+    await api.updateTask(parent.id, { priority: value });
+  },
+}
+```
+
+| Callback | Intent | Trigger | Returns patch? |
+|----------|--------|---------|----------------|
+| `onChange` | Cascading side-effects (update siblings) | Auto on value write | Yes — to parent group |
+| `onSubmit` | Save to backend (full pipeline) | Explicit `proxy.field.submit()` | No — result in `SubmitResult` |
 
 ### Group Node (container)
 
@@ -341,6 +413,8 @@ Accessing `form.email` returns a `FieldProxyNode`:
 | `isInvalid` | `boolean \| undefined` | R | `undefined` before revalidate, then `true/false` |
 | `errorMessage` | `string \| undefined` | R | Validation error string |
 | `dirty` | `boolean` | R | Value differs from initial |
+| `submitting` | `boolean` | R | Submit pipeline in progress (leaf `onSubmit`) |
+| `submit()` | `Promise<SubmitResult>` | R | Run submit pipeline for this leaf field |
 | `onValueChange` | `(v) => void` | R | Callback form of value setter |
 
 **Spread-safe:** `{...form.email}` yields only these properties (config internals hidden).
@@ -897,7 +971,8 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | **Template Field Resolve (auto)** | After List Resolve completes | For each entity × each template field with `resolve`: `triggerEntityFieldResolve(entityId, fieldNode)` (parallel per entity, independent) |
 | **Entity Template Resolve** | `useForm(entity, template)` mount | check isResolved → loading=true → resolver(entityProxy, store) → upsert result → markResolved → loading=false → notify |
 | **Entity Field Resolve (lazy)** | GET on `field.value`/`field.loading` | queueMicrotask → check skipIfResolved → loading=true → resolver(entityValues, store) → write value → loading=false → notify |
-| **onChange** | After write pipeline | fire ancestors' `onChange` handlers (async) → apply returned patches |
+| **Leaf Submit** | `proxy.field.submit()` | submitting=true → revalidate → validate → `beforeSubmit(value, parentValues)` → `onSubmit(value, store, parent)` → `afterSubmit` → submitting=false |
+| **onChange** | After write pipeline | fire own + ancestors' `onChange` handlers (leaf first, async) → apply returned patches to parent group |
 
 ## Re-render Optimization
 

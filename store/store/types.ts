@@ -142,7 +142,11 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
    */
   beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
   /** Callback отправки формы. Вызывается после валидации в submit pipeline. */
-  onSubmit?: (thisForm: TValues, store: ProxyStore<any>) => Promise<unknown> | unknown;
+  onSubmit?: (
+    value: TValue | TValues,
+    store: ProxyStore<any>,
+    parent?: any,
+  ) => Promise<unknown> | unknown;
   /** Пост-обработка после успешного onSubmit. */
   afterSubmit?: (
     result: unknown,
@@ -226,6 +230,10 @@ export interface FieldProxyNode<TValue = unknown> {
     особенных случаев.
   */
   readonly onValueChange: (v: ProxyValueType<TValue>) => void;
+  /** true пока выполняется submit pipeline (аналогично GroupProxyNode). */
+  readonly submitting: boolean;
+  /** Submit pipeline: submitting → beforeSubmit → validate → onSubmit → afterSubmit. */
+  submit(): Promise<SubmitResult>;
 }
 
 /** Извлекает тип значения из узла конфига. */

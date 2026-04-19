@@ -1,18 +1,23 @@
 import { type AnyConfigNode } from "../store/types";
 
 /**
- * Поднимается от изменённого узла к корню, собирая все группы с `onChange`.
+ * Собирает все узлы с `onChange` от самого узла вверх до корня.
  *
- * Обходит цепочку родителей снизу вверх. Порядок в результате:
- * ближайший предок первым (снизу вверх).
+ * Порядок: сам узел (если есть onChange) первым, затем ближайший предок и т.д.
  */
-export function findOnChangeAncestors(
+export function findOnChangeNodes(
   node: object,
   nodeParents: WeakMap<object, object>,
 ): AnyConfigNode[] {
   const result: AnyConfigNode[] = [];
-  let current = nodeParents.get(node);
 
+  // Сам узел
+  if (typeof (node as AnyConfigNode).onChange === "function") {
+    result.push(node as AnyConfigNode);
+  }
+
+  // Предки
+  let current = nodeParents.get(node);
   while (current) {
     if (typeof (current as AnyConfigNode).onChange === "function") {
       result.push(current as AnyConfigNode);

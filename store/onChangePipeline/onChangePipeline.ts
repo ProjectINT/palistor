@@ -2,15 +2,16 @@ import { type AnyConfigNode } from "../store/types";
 import type { Palistor } from "../store/palistor";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify } from "../compute/recompute";
-import { findOnChangeAncestors } from "./findOnChangeAncestors";
+import { findOnChangeNodes } from "./findOnChangeAncestors";
 import { computeFieldKey } from "./computeFieldKey";
 
 /**
  * OnChangePipeline — fire-and-forget вызов onChange хендлеров
- * всех групп-предков при изменении поля.
+ * при изменении поля: сначала на самом узле (если есть onChange),
+ * затем на всех группах-предках с onChange.
  *
- * Для каждого предка с `onChange`:
- * - вычисляется `fieldKey` — путь изменённого поля относительно этого предка
+ * Для каждого узла с `onChange`:
+ * - вычисляется `fieldKey` — имя поля (для самого узла) или путь относительно предка
  * - onChange вызывается асинхронно, не блокируя pipeline записи
  * - если onChange вернул объект-патч — он применяется к store
  */
@@ -21,20 +22,19 @@ export class OnChangePipeline {
     const { nodePaths, nodeParents } = this.kernel.nodes;
     const valuesCache = this.kernel.values;
 
-    const ancestors = findOnChangeAncestors(node, nodeParents);
-    if (ancestors.length === 0) return;
+    const onChangeNodes = findOnChangeNodes(node, nodeParents);
+    if (onChangeNodes.length === 0) return;
 
     const nodePath = nodePaths.get(node) ?? "";
 
-    for (const ancestor of ancestors) {
-      const ancestorPath = nodePaths.get(ancestor) ?? "";
-      const fieldKey = computeFieldKey(nodePath, ancestorPath);
+    for (const target of onChangeNodes) {
+      const targetPath = nodePaths.get(target) ?? "";
+      const fieldKey = computeFieldKey(nodePath, targetPath);
       const allValues = valuesCache.values;
 
-      Promise.resolve(
-        (ancestor.onChange as Function)({ fieldKey, newValue, previousValue, allValues }),
-      )
-        .then((patch) => this.applyOnChangeResult(patch, ancestor))
+      Promise.resolve()
+        .then(() => (target.onChange as Function)({ fieldKey, newValue, previousValue, allValues }))
+        .then((patch) => this.applyOnChangeResult(patch, target))
         .catch(() => {
           // onChange ошибки не блокируют работу — fire-and-forget
         });
@@ -42,11 +42,16 @@ export class OnChangePipeline {
   }
 
   /** @internal */
-  private applyOnChangeResult(patch: unknown, ancestor: AnyConfigNode): void {
+  private applyOnChangeResult(patch: unknown, sourceNode: AnyConfigNode): void {
     if (!patch || typeof patch !== "object" || Object.keys(patch as object).length === 0) return;
 
+    // For leaf onChange: apply patch to parent group (leaf cannot patch itself)
+    const targetNode = ("value" in sourceNode)
+      ? ((this.kernel.nodes.nodeParents.get(sourceNode) ?? this.kernel.rootConfig) as AnyConfigNode)
+      : sourceNode;
+
     const patchChanged = applyPatch(
-      ancestor,
+      targetNode,
       this.kernel.nodes.nodeState,
       patch as Record<string, unknown>,
       new Set(),
