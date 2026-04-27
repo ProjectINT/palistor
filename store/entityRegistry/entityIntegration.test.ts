@@ -215,10 +215,10 @@ describe("store.delete()", () => {
 
   it("удалённые leaf-ноды убираются из leafNodes (защита от утечки памяти)", () => {
     const store = makeStore();
-    const leafCountBefore = store.nodes.leafNodes.length;
+    const leafCountBefore = store.nodes.computeNodes.length;
     store.set({ id: "u1", name: "Alice", email: "alice@example.com" });
-    expect(store.nodes.leafNodes.length).toBeGreaterThan(leafCountBefore);
+    expect(store.nodes.computeNodes.length).toBeGreaterThan(leafCountBefore);
     store.delete("u1");
-    expect(store.nodes.leafNodes.length).toBe(leafCountBefore);
+    expect(store.nodes.computeNodes.length).toBe(leafCountBefore);
   });
 });

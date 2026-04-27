@@ -1,5 +1,6 @@
 import type { EntityNode, EntityGroupNode, EntityData } from "./types";
 import { generateTmpId } from "./generateId";
+import { isLeafNode, isGroupNode } from "../traversal/nodeClassifier";
 
 /**
  * Создать новую EntityNode из плоского объекта данных.
@@ -11,15 +12,20 @@ import { generateTmpId } from "./generateId";
  */
 export function createEntityNode(data: EntityData, id: string): EntityNode {
   const node: EntityNode = { id: { value: id } };
+  (node.id as any).__kind = "leaf";
   for (const key of Object.keys(data)) {
     if (key === "id") continue;
     const val = data[key];
     if (val !== null && typeof val === "object" && !Array.isArray(val)) {
       node[key] = createGroupNode(val as Record<string, unknown>);
     } else {
-      node[key] = { value: val };
+      const leaf = { value: val };
+      (leaf as any).__kind = "leaf";
+      node[key] = leaf;
     }
   }
+  // EntityNode root is a group container
+  (node as any).__kind = "group";
   return node;
 }
 
@@ -33,9 +39,12 @@ function createGroupNode(obj: Record<string, unknown>): EntityGroupNode {
     if (val !== null && typeof val === "object" && !Array.isArray(val)) {
       group[key] = createGroupNode(val as Record<string, unknown>);
     } else {
-      group[key] = { value: val };
+      const leaf = { value: val };
+      (leaf as any).__kind = "leaf";
+      group[key] = leaf;
     }
   }
+  (group as any).__kind = "group";
   return group;
 }
 
@@ -62,10 +71,10 @@ export function mergeEntityNode(
 
     if (val !== null && typeof val === "object" && !Array.isArray(val)) {
       // Вложенный объект
-      if (existing && typeof existing === "object" && !("value" in existing)) {
+      if (existing && typeof existing === "object" && isGroupNode(existing as object)) {
         // Существующая группа → рекурсивный merge
         mergeEntityNode(existing as EntityGroupNode, val as Record<string, unknown>);
-      } else if (existing && "value" in existing) {
+      } else if (existing && isLeafNode(existing as object)) {
         // Был leaf, стал группой — заменяем (редкий случай)
         target[key] = createGroupNode(val as Record<string, unknown>);
       } else {
@@ -73,12 +82,14 @@ export function mergeEntityNode(
         target[key] = createGroupNode(val as Record<string, unknown>);
       }
     } else {
-      if (existing && "value" in existing) {
+      if (existing && isLeafNode(existing as object)) {
         // Обновляем существующий leaf
         (existing as { value: unknown }).value = val;
       } else {
         // Новый leaf
-        target[key] = { value: val };
+        const leaf = { value: val };
+        (leaf as any).__kind = "leaf";
+        target[key] = leaf;
       }
     }
   }

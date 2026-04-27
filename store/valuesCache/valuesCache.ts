@@ -1,4 +1,4 @@
-import { configKeys, isLeaf, isListNode } from "../traversal";
+import { configKeys, isLeafNode, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 
@@ -44,16 +44,18 @@ export function buildValuesCache(
         continue;
       }
 
-      if (isLeaf(child)) {
+      if (isLeafNode(child)) {
         target[key] = nodeState.get(child)?.value ?? "";
         nodeSlot.set(child, { parent: target, key });
       } else {
         const group: Record<string, unknown> = {};
         target[key] = group;
         groupSlot.set(child as object, group);
-        // Also register group in nodeSlot so virtual leaves (group nodes with
-        // computed props like isVisible) can resolve their parent-scoped values.
+        // Also register group in nodeSlot so nodes can resolve their parent-scoped values.
         nodeSlot.set(child, { parent: target, key });
+        // Update group's nodeState.value to reference the group object (Phase 2).
+        const state = nodeState.get(child);
+        if (state) nodeState.set(child, { ...state, value: group });
         walk(child, group);
       }
     }

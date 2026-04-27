@@ -4,6 +4,7 @@ import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify } from "../compute/recompute";
 import { findOnChangeNodes } from "./findOnChangeAncestors";
 import { computeFieldKey } from "./computeFieldKey";
+import { isLeafNode } from "../traversal";
 
 /**
  * OnChangePipeline — fire-and-forget вызов onChange хендлеров
@@ -46,7 +47,7 @@ export class OnChangePipeline {
     if (!patch || typeof patch !== "object" || Object.keys(patch as object).length === 0) return;
 
     // For leaf onChange: apply patch to parent group (leaf cannot patch itself)
-    const targetNode = ("value" in sourceNode)
+    const targetNode = isLeafNode(sourceNode)
       ? ((this.kernel.nodes.nodeParents.get(sourceNode) ?? this.kernel.rootConfig) as AnyConfigNode)
       : sourceNode;
 

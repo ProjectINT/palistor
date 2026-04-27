@@ -8,6 +8,7 @@ import { handleLazyResolve } from "./handleLazyResolve";
 import { initProxyCaches } from "./initProxyCaches";
 import { buildListProxy } from "./buildListProxy";
 import { isListNode } from "../store/NodeRegistry/nodeUtils";
+import { isGroupNode } from "../traversal";
 
 /** Возвращает закэшированное значение, создавая при первом обращении. */
 function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V): V {
@@ -70,10 +71,10 @@ export class ProxyBuilder {
         }
 
         const currentNode = kernel.nodes.nodeState.get(node);
-        const isGroupNode = !("value" in node);
+        const isGroup = isGroupNode(node);
 
         // ── Групповой узел: методы и состояние ───────────────────────────
-        if (isGroupNode) {
+        if (isGroup) {
           const handlers = {
             "submitting": () => currentNode?.[key as keyof FieldState] ?? false,
             "dirty": () => currentNode?.[key as keyof FieldState] ?? false,
@@ -137,6 +138,13 @@ export class ProxyBuilder {
 
       set(_target, key: string | symbol, newValue: unknown) {
         if (key !== "value") return false;
+
+        // Group write: delegate to setValuesNode, bypass writePipeline
+        // (Object.is() comparison on objects would always be false in writePipeline)
+        if (isGroupNode(node)) {
+          kernel.setValuesNode(node, newValue as Record<string, unknown>);
+          return true;
+        }
 
         // Захватываем предыдущее значение для onChange
         const previousValue = kernel.nodes.nodeState.get(node)?.value;

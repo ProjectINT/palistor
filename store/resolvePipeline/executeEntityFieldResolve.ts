@@ -8,6 +8,7 @@ import type { ContextTrackingResult } from "./createContextTrackingProxy";
 import type { Resolve, ResolveDeps } from "./types";
 import { EntityResolveStateMap } from "./types";
 import type { TemplateFieldResolveEntry } from "./initResolveStates";
+import { isLeafNode } from "../traversal";
 
 // ─── Deps ────────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ function buildEntityValuesFromNode(
   for (const key of Object.keys(entityNode)) {
     const field = (entityNode as Record<string, unknown>)[key];
     if (field && typeof field === "object") {
-      if ("value" in field) {
+      if (isLeafNode(field as object)) {
         values[key] =
           (nodeState.get(field as object) as { value: unknown } | undefined)?.value ??
           (field as EntityLeafNode).value;
@@ -101,7 +102,7 @@ export function executeEntityFieldResolve(
   // Get entity leaf node for this field
   const entityLeafField = (entityNode as Record<string, unknown>)[fieldKey];
   const entityLeaf =
-    entityLeafField && typeof entityLeafField === "object" && "value" in entityLeafField
+    entityLeafField && typeof entityLeafField === "object" && isLeafNode(entityLeafField as object)
       ? (entityLeafField as { value: unknown })
       : null;
 
@@ -189,7 +190,7 @@ export function executeEntityFieldResolve(
             for (const n of newlyChanged) changed.add(n);
             // Re-read entityLeaf now that the field exists in the entity
             const freshLeaf = (entityNode as Record<string, unknown>)[fieldKey];
-            if (freshLeaf && typeof freshLeaf === "object" && "value" in freshLeaf) {
+            if (freshLeaf && typeof freshLeaf === "object" && isLeafNode(freshLeaf as object)) {
               initialValueMap.set(freshLeaf as object, result);
             }
           }

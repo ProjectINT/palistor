@@ -3,6 +3,7 @@ import { createGroupDeps } from "../groupDeps/createGroupDeps";
 import { createTrackingValues } from "../groupDeps/createTrackingValues";
 import { getNodeGroupPath } from "../groupDeps/getNodeGroupPath";
 import type { TrackingWrap } from "../compute/recompute";
+import { isLeafNode } from "../traversal";
 
 /**
  * Карта зависимостей между группами.
@@ -70,7 +71,7 @@ export class GroupDepsMap {
       // Group node (virtual leaf, no "value"): currentGroupPath = parent group's path
       // (which is the root of the group-scoped values we receive),
       // recipientPath = group's own path.
-      const isLeaf = "value" in (node as Record<string, unknown>);
+      const isLeaf = isLeafNode(node);
       const currentGroupPath: string = isLeaf
         ? recipientPath
         : (() => {

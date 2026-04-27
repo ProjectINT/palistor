@@ -1,6 +1,6 @@
 export type { TrackingWrap, RecomputeTargetedDeps } from "./types";
 export { topologicalSortComputed } from "./topologicalSortComputed";
-export { collectGroupLeafNodes } from "./collectGroupLeafNodes";
+export { collectGroupComputeNodes } from "./collectGroupComputeNodes";
 export { recomputeLeaves } from "./recomputeLeaves";
 export { recomputeTargeted } from "./recomputeTargeted";
 export { recomputeAndNotify } from "./recomputeAndNotify";

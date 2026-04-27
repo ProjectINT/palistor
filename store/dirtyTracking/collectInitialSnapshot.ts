@@ -1,4 +1,4 @@
-import { configKeys, isLeaf, isListNode } from "../traversal";
+import { configKeys, isLeafNode, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 
 /**
@@ -19,7 +19,7 @@ export function collectInitialSnapshot(
     if (!child || typeof child !== "object") continue;
     if (isListNode(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
 
-    if (isLeaf(child)) {
+    if (isLeafNode(child)) {
       const initial = initialValueMap.get(child);
       if (initial !== undefined) {
         result[key] = initial;

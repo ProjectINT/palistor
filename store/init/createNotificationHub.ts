@@ -1,6 +1,6 @@
 import type { AnyConfigNode, ListState } from "../store/types";
 import type { FieldState } from "../compute/index";
-import type { LeafEntry } from "../store/registerNodes";
+import type { ComputeEntry } from "../store/registerNodes";
 import { recomputeDirtyTargeted } from "../dirtyTracking/recomputeDirtyTargeted";
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export interface DirtyDeps {
 }
 
 export interface NotificationHubDeps {
-  leafNodes: LeafEntry[];
+  computeNodes: ComputeEntry[];
   /** Маппинг узлов на их dot-пути (заполняется buildNodeMaps). */
   nodePaths: WeakMap<object, string>;
 }
@@ -33,7 +33,7 @@ export interface NotificationHubDeps {
  * - post-notify hook для внешних подсистем (resolve retrigger)
  */
 export class NotificationHub {
-  private readonly leafNodes: LeafEntry[];
+  private readonly computeNodes: ComputeEntry[];
   private readonly nodePaths: WeakMap<object, string>;
 
   /** Подписчики на изменение каждого поля. */
@@ -60,7 +60,7 @@ export class NotificationHub {
   private pendingHookPaths: Set<string> | null = null;
 
   constructor(deps: NotificationHubDeps) {
-    this.leafNodes = deps.leafNodes;
+    this.computeNodes = deps.computeNodes;
     this.nodePaths = deps.nodePaths;
   }
 
@@ -167,7 +167,7 @@ export class NotificationHub {
    */
   bumpLeafVersions(): void {
     this.version++;
-    for (const { node } of this.leafNodes) {
+    for (const { node } of this.computeNodes) {
       this.nodeVersions.set(node, this.version);
     }
     this.notifyGlobals();

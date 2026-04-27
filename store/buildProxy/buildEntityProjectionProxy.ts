@@ -5,6 +5,7 @@ import type { Palistor } from "../store/palistor";
 import { storeValue } from "../writePipeline/storeValue";
 import { formatValue } from "../writePipeline/formatValue";
 import { mergeChanged } from "../writePipeline/mergeChanged";
+import { isLeafNode } from "../traversal";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ function buildEntityValues(
   for (const key of Object.keys(entityNode)) {
     const field = (entityNode as Record<string, unknown>)[key];
     if (field && typeof field === "object") {
-      if ("value" in field) {
+      if (isLeafNode(field as object)) {
         values[key] = (nodeState.get(field as object) as { value: unknown } | undefined)?.value
           ?? (field as EntityLeafNode).value;
       } else {
@@ -90,7 +91,7 @@ function writeEntityLeafValue(
         if (
           entityField &&
           typeof entityField === "object" &&
-          "value" in entityField
+          isLeafNode(entityField as object)
         ) {
           storeValue(
             entityField as unknown as AnyConfigNode,
@@ -443,7 +444,7 @@ export function buildEntityProjectionProxy(
       const entityField = (entityNode as Record<string, unknown>)[key as string];
 
       if (entityField && typeof entityField === "object") {
-        if ("value" in entityField) {
+        if (isLeafNode(entityField as object)) {
           // Leaf field — build entity leaf proxy through template field
           return buildEntityLeafProxy(
             entityField as EntityLeafNode,
@@ -465,7 +466,7 @@ export function buildEntityProjectionProxy(
 
       // Entity does not yet have this field.
       // If template has a leaf here, return a phantom proxy showing template defaults.
-      if ("value" in (templateField as AnyConfigNode)) {
+      if (isLeafNode(templateField as AnyConfigNode)) {
         const phantom: EntityLeafNode = {
           value: (templateField as AnyConfigNode).value,
         };

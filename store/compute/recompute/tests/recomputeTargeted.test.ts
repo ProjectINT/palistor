@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { recomputeTargeted } from "../recomputeTargeted";
 import type { AnyConfigNode } from "../../../types";
 import type { FieldState } from "../../index";
-import type { GroupLeafMap } from "../../../registerNodes";
+import type { GroupComputeMap } from "../../../registerNodes";
 import type { ValuesCache } from "../../../valuesCache";
 import { pairKey } from "../../../groupDeps";
 
@@ -19,7 +19,7 @@ describe("recomputeTargeted", () => {
 
     const nodeParents = new WeakMap<object, object>([[fieldNode, root]]);
     const nodePaths = new WeakMap<object, string>([[root, ""], [fieldNode, "field"]]);
-    const groupLeafMap: GroupLeafMap = new WeakMap([
+    const groupComputeMap: GroupComputeMap = new WeakMap([
       [root, [{ node: fieldNode, path: "field" }]],
     ]);
     const nodeState = new WeakMap<object, FieldState>();
@@ -27,7 +27,7 @@ describe("recomputeTargeted", () => {
 
     const result = recomputeTargeted(new Set([fieldNode]), {
       rootConfig: root,
-      groupLeafMap,
+      groupComputeMap,
       nodeState,
       nodeParents,
       nodePaths,
@@ -60,7 +60,7 @@ describe("recomputeTargeted", () => {
       [recipientGroup, "recipient"],
       [recipientField, "recipient.r"],
     ]);
-    const groupLeafMap: GroupLeafMap = new WeakMap([
+    const groupComputeMap: GroupComputeMap = new WeakMap([
       [donorGroup, [{ node: donorField, path: "donor.d" }]],
       [recipientGroup, [{ node: recipientField, path: "recipient.r" }]],
     ]);
@@ -70,7 +70,7 @@ describe("recomputeTargeted", () => {
 
     const result = recomputeTargeted(new Set([donorField]), {
       rootConfig: root,
-      groupLeafMap,
+      groupComputeMap,
       nodeState,
       nodeParents,
       nodePaths,
@@ -90,12 +90,12 @@ describe("recomputeTargeted", () => {
 
     const nodeParents = new WeakMap<object, object>([[groupNode, root]]);
     const nodePaths = new WeakMap<object, string>([[root, ""], [groupNode, "g"]]);
-    const groupLeafMap: GroupLeafMap = new WeakMap([[groupNode, []]]);
+    const groupComputeMap: GroupComputeMap = new WeakMap([[groupNode, []]]);
     const nodeState = new WeakMap<object, FieldState>();
 
     const result = recomputeTargeted(new Set([groupNode]), {
       rootConfig: root,
-      groupLeafMap,
+      groupComputeMap,
       nodeState,
       nodeParents,
       nodePaths,

@@ -1,10 +1,10 @@
 import { type AnyConfigNode } from "../store/types";
 import type { Palistor } from "../store/palistor";
 import { setGroupRevalidate } from "../dirtyTracking";
-import { getSubValues } from "./getSubValues";
 import { collectLeafStates } from "./collectLeafStates";
 import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
 import type { SubmitResult } from "./types";
+import { isLeafNode } from "../traversal";
 
 export type { SubmitResult };
 
@@ -28,7 +28,7 @@ export class SubmitPipeline {
   constructor(private readonly kernel: Palistor<any>) {}
 
   async execute(node: AnyConfigNode): Promise<SubmitResult> {
-    const isLeafNode = "value" in node;
+    const isLeaf = isLeafNode(node);
     const nodeState = this.kernel.nodes.nodeState;
 
     // 1. submitting = true + revalidate = true → recompute → notify
@@ -47,7 +47,7 @@ export class SubmitPipeline {
     try {
       let value: unknown;
 
-      if (isLeafNode) {
+      if (isLeaf) {
         // 2. Leaf: get own current value
         value = nodeState.get(node)?.value;
 
@@ -58,8 +58,10 @@ export class SubmitPipeline {
           value = await (node.beforeSubmit as Function)(value, parentValues);
         }
       } else {
-        // 2. Group: collect subtree values
-        let values = getSubValues(this.kernel.values, node, this.kernel.rootConfig, this.kernel.nodes.nodePaths);
+        // 2. Group: unified entry — nodeState.value is the groupSlot reference for non-root groups;
+        // root config may not be in nodeState, so fall back to groupSlot directly.
+        const groupValue = (nodeState.get(node)?.value ?? this.kernel.values.groupSlot.get(node) ?? {}) as Record<string, unknown>;
+        let values = structuredClone(groupValue) as Record<string, unknown>;
 
         // 3. Leaf-level beforeSubmit on group subtree
         values = applyLeafBeforeSubmit(node, values);
@@ -75,7 +77,7 @@ export class SubmitPipeline {
       }
 
       // 5. Валидация
-      if (isLeafNode) {
+      if (isLeaf) {
         const leafState = nodeState.get(node);
         if (leafState?.isInvalid && leafState.errorMessage) {
           const nodePath = this.kernel.nodes.nodePaths.get(node) ?? "";
@@ -104,7 +106,7 @@ export class SubmitPipeline {
 
       // 7. afterSubmit
       if (typeof node.afterSubmit === "function") {
-        const reset = isLeafNode
+        const reset = isLeaf
           ? () => this.kernel.resetPipeline.execute(
               (this.kernel.nodes.nodeParents.get(node) ?? this.kernel.rootConfig) as AnyConfigNode,
             )
@@ -118,7 +120,7 @@ export class SubmitPipeline {
       }
 
       // 8. Очистка persist после успешного submit (group only)
-      if (!isLeafNode) {
+      if (!isLeaf) {
         await this.kernel.persist.clear();
       }
 

@@ -21,6 +21,7 @@ import {
   findResolvesToRetrigger,
   resetResolveState,
 } from "../resolvePipeline/index";
+import { isLeafNode } from "../traversal";
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,7 @@ export class ResolveManager {
         const templateDefault = (entry.node as AnyConfigNode).value;
         if (
           entityLeaf &&
-          "value" in entityLeaf &&
+          isLeafNode(entityLeaf as object) &&
           entityLeaf.value !== templateDefault &&
           entityLeaf.value !== undefined &&
           entityLeaf.value !== null

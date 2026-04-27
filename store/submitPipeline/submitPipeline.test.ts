@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
-import { getSubValues } from "./getSubValues";
 import { collectLeafStates } from "./collectLeafStates";
 import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
 import { Palistor } from "../store/palistor";
@@ -19,66 +18,11 @@ function makeState(overrides: Partial<FieldState> = {}): FieldState {
   };
 }
 
-function makeCache(values: Record<string, unknown>) {
-  return {
-    values,
-    nodeSlot: new WeakMap(),
-    groupSlot: new WeakMap(),
-  };
-}
-
 function makeNodeState(entries: Array<[object, FieldState]>): WeakMap<object, FieldState> {
   const map = new WeakMap<object, FieldState>();
   for (const [node, state] of entries) map.set(node, state);
   return map;
 }
-
-// ─── getSubValues ─────────────────────────────────────────────────────────────
-
-describe("getSubValues", () => {
-  it("возвращает весь кеш для корневого узла", () => {
-    const root: AnyConfigNode = { name: { value: "" } };
-    const cache = makeCache({ name: "Alice" });
-    const nodePaths = new WeakMap<object, string>();
-
-    const result = getSubValues(cache, root, root, nodePaths);
-
-    expect(result).toEqual({ name: "Alice" });
-  });
-
-  it("возвращает поддерево по пути для вложенной группы", () => {
-    const sub: AnyConfigNode = { city: { value: "" } };
-    const root: AnyConfigNode = { address: sub };
-    const cache = makeCache({ address: { city: "Moscow" } });
-    const nodePaths = new WeakMap<object, string>([[sub, "address"]]);
-
-    const result = getSubValues(cache, sub, root, nodePaths);
-
-    expect(result).toEqual({ city: "Moscow" });
-  });
-
-  it("возвращает snapshot — мутации не влияют на кеш", () => {
-    const root: AnyConfigNode = { x: { value: "" } };
-    const cache = makeCache({ x: 1 });
-    const nodePaths = new WeakMap<object, string>();
-
-    const result = getSubValues(cache, root, root, nodePaths);
-    result["x"] = 999;
-
-    expect(cache.values["x"]).toBe(1);
-  });
-
-  it("возвращает пустой объект если путь не найден в кеше", () => {
-    const sub: AnyConfigNode = { field: { value: "" } };
-    const root: AnyConfigNode = { nested: sub };
-    const cache = makeCache({});
-    const nodePaths = new WeakMap<object, string>([[sub, "missing.path"]]);
-
-    const result = getSubValues(cache, sub, root, nodePaths);
-
-    expect(result).toEqual({});
-  });
-});
 
 // ─── collectLeafStates ───────────────────────────────────────────────────────
 

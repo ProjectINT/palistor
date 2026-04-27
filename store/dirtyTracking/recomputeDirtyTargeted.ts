@@ -1,4 +1,4 @@
-import { configKeys, isLeaf, isListNode } from "../traversal";
+import { configKeys, isLeafNode, isListNode } from "../traversal";
 import { resolveGroupByPath } from "../groupDeps/resolveGroupByPath";
 import { getNodeGroupPath } from "../groupDeps/getNodeGroupPath";
 import type { AnyConfigNode } from "../store/types";
@@ -39,7 +39,7 @@ export function recomputeDirtyTargeted(
   // 1. Пересчитать dirty только для ЛИСТЬЕВ из changedNodes
   const affectedGroupPaths = new Set<string>();
   for (const node of changedNodes) {
-    if (isLeaf(node)) {
+    if (isLeafNode(node)) {
       const state = nodeState.get(node);
       if (state) {
         const initial = initialValueMap.get(node);

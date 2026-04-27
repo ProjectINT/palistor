@@ -1,10 +1,5 @@
-export { isLeaf } from "../../traversal/nodeClassifier";
-
-/** Является ли узел групповым (нет "value"). */
-export function isGroup(node: object): boolean {
-  return !("value" in (node as Record<string, unknown>));
-}
-
+import { isLeafNode, isGroupNode } from "../../traversal/nodeClassifier";
+export { isLeafNode, isGroupNode } from "../../traversal/nodeClassifier";
 /**
  * Является ли узел списком (массив длины 1-2).
  * array[0] — template (обычная группа), array[1] — опциональный listConfig.
@@ -18,10 +13,8 @@ export function isListNode(node: unknown): node is readonly [object, ...unknown[
 
 /** Утилитарный класс для проверки типа узла. Инициализируется без аргументов. */
 export class NodeUtils {
-  isLeaf(node: object): boolean {
-    return "value" in (node as Record<string, unknown>);
-  }
-  isGroup = isGroup;
+  isLeafNode = isLeafNode;
+  isGroupNode = isGroupNode;
   isListNode = isListNode;
 }
 

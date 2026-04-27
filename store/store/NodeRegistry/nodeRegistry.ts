@@ -1,10 +1,10 @@
 import { type FieldState } from "../../compute/index";
-import { registerNodes, type GroupLeafMap, type LeafEntry, type InitialSlice } from "../registerNodes";
+import { registerNodes, type GroupComputeMap, type ComputeEntry, type InitialSlice } from "../registerNodes";
 import { buildNodeMaps } from "../nodeMap";
 import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
 import type { AnyConfigNode, TranslateFn, ListState } from "../types";
-import { isLeaf, isGroup, isListNode } from "./nodeUtils";
+import { isLeafNode, isGroupNode, isListNode } from "./nodeUtils";
 
 /**
  * Реестр узлов конфига.
@@ -30,10 +30,10 @@ export class NodeRegistry {
     registerNodes(
       rootConfig,
       initialValues as InitialSlice<AnyConfigNode>,
-      this.leafNodes,
+      this.computeNodes,
       this.nodeState,
       "",
-      this.groupLeafMap,
+      this.groupComputeMap,
       translate,
       this.listStates,
       this.allListStates,
@@ -68,16 +68,17 @@ export class NodeRegistry {
   readonly nodeParents: WeakMap<object, object> = new WeakMap();
 
   /**
-   * Все листовые узлы в порядке обхода (DFS).
-   * Используется NotificationHub для bumpLeafVersions.
+   * Все compute-узлы в порядке обхода (DFS).
+   * Содержит листовые узлы и групповые узлы с computed-свойствами.
+   * Используется NotificationHub для bumpLeafVersions().
    */
-  readonly leafNodes: LeafEntry[] = [];
+  readonly computeNodes: ComputeEntry[] = [];
 
   /**
-   * Маппинг группового узла → массив его прямых листовых записей.
-   * Используется recomputeGroup для пересчёта поддерева.
+   * Маппинг группового узла → массив его прямых дочерних записей (листья + группы с computed-свойствами).
+   * Используется recomputeTargeted для пересчёта поддерева.
    */
-  readonly groupLeafMap: GroupLeafMap = new WeakMap();
+  readonly groupComputeMap: GroupComputeMap = new WeakMap();
 
   /**
    * Кэш Proxy-объектов — один прокси на узел конфига.
@@ -130,23 +131,23 @@ export class NodeRegistry {
     return getNodeGroupPath(node, this.nodeParents, this.nodePaths);
   }
 
-  /** Найти узел по dot-пути. Перебирает leafNodes и проверяет их пути. */
+  /** Найти узел по dot-пути. Перебирает computeNodes и проверяет их пути. */
   findByPath(path: string): object | undefined {
-    for (const entry of this.leafNodes) {
+    for (const entry of this.computeNodes) {
       if (entry.path === path) return entry.node;
     }
     return undefined;
   }
 
-  /** Перебрать все листовые узлы. */
-  forEachLeaf(callback: (entry: LeafEntry) => void): void {
-    for (const entry of this.leafNodes) {
+  /** Перебрать все compute-узлы. */
+  forEachCompute(callback: (entry: ComputeEntry) => void): void {
+    for (const entry of this.computeNodes) {
       callback(entry);
     }
   }
 
-  isLeaf = isLeaf;
-  isGroup = isGroup;
+  isLeafNode = isLeafNode;
+  isGroupNode = isGroupNode;
   isListNode = isListNode;
 
   /**
@@ -166,16 +167,16 @@ export class NodeRegistry {
     parent: object,
     state: import("../../compute/index").FieldState,
   ): void {
-    const entry: import("../registerNodes").LeafEntry = { node: node as import("../types").AnyConfigNode, path };
-    this.leafNodes.push(entry);
+    const entry: ComputeEntry = { node: node as import("../types").AnyConfigNode, path };
+    this.computeNodes.push(entry);
     this.nodeState.set(node, state);
     this.nodePaths.set(node, path);
     this.nodeParents.set(node, parent);
-    // groupLeafMap: добавить в лист-список родителя
-    let list = this.groupLeafMap.get(parent);
+    // groupComputeMap: добавить в список родительской группы
+    let list = this.groupComputeMap.get(parent);
     if (!list) {
       list = [];
-      this.groupLeafMap.set(parent, list);
+      this.groupComputeMap.set(parent, list);
     }
     list.push(entry);
   }
@@ -189,15 +190,15 @@ export class NodeRegistry {
    * @param node  Листовой объект-узел
    */
   unregisterLeaf(node: object): void {
-    // Удалить из leafNodes
-    const idx = this.leafNodes.findIndex((e) => e.node === node);
+    // Удалить из computeNodes
+    const idx = this.computeNodes.findIndex((e) => e.node === node);
     if (idx !== -1) {
-      this.leafNodes.splice(idx, 1);
+      this.computeNodes.splice(idx, 1);
     }
-    // Удалить из groupLeafMap родителя
+    // Удалить из groupComputeMap родителя
     const parent = this.nodeParents.get(node);
     if (parent) {
-      const list = this.groupLeafMap.get(parent);
+      const list = this.groupComputeMap.get(parent);
       if (list) {
         const listIdx = list.findIndex((e) => e.node === node);
         if (listIdx !== -1) list.splice(listIdx, 1);

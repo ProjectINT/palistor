@@ -1,6 +1,6 @@
 import type { FieldState } from "../index";
 import type { AnyConfigNode, TranslateFn } from "../../store/types";
-import type { GroupLeafMap } from "../../store/registerNodes";
+import type { GroupComputeMap } from "../../store/registerNodes";
 import type { ValuesCache } from "../../valuesCache/valuesCache";
 
 // ─── Типы ────────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export type TrackingWrap = (node: object, values: Record<string, unknown>) => Re
  */
 export interface RecomputeTargetedDeps {
   rootConfig: AnyConfigNode;
-  groupLeafMap: GroupLeafMap;
+  groupComputeMap: GroupComputeMap;
   nodeState: WeakMap<object, FieldState>;
   nodeParents: WeakMap<object, object>;
   nodePaths: WeakMap<object, string>;

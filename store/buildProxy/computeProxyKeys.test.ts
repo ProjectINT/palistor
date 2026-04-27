@@ -74,7 +74,7 @@ describe("computeProxyKeys", () => {
         validate: () => undefined,
       };
       const keys = computeProxyKeys(node);
-      expect(keys).toEqual(["submitting", "dirty", "revalidate", "loading", "values", "submit", "reset"]);
+      expect(keys).toEqual(["value", "submitting", "dirty", "revalidate", "loading", "values", "submit", "reset"]);
     });
 
     it("does not include child node keys", () => {

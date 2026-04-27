@@ -6,7 +6,7 @@
  *      re-render (та же leaf нода).
  *
  * 4.2: bumpLeafVersions с entity leafs — entity leafs registered via
- *      registerDynamicLeaf in shared leafNodes array → translator change
+ *      registerDynamicLeaf in shared computeNodes array → translator change
  *      бампит всё автоматически. Верифицировать.
  *
  * 4.3: E2E — полный сценарий:
@@ -231,29 +231,29 @@ describe("4.1: Shared leaf notifications", () => {
 describe("4.2: bumpLeafVersions с entity leafs", () => {
   /**
    * Entity leafs added via registerDynamicLeaf must end up in the shared
-   * `leafNodes` array so that bumpLeafVersions() covers them.
+   * `computeNodes` array so that bumpLeafVersions() covers them.
    */
-  it("entity leaf nodes added via registerDynamicLeaf are included in leafNodes array", () => {
+  it("entity leaf nodes added via registerDynamicLeaf are included in computeNodes array", () => {
     const store = new Palistor({
       config: {
         users: [{ id: { value: "" }, name: { value: "" } }],
       } as any,
     });
 
-    const leafCountBefore = store.nodes.leafNodes.length;
+    const leafCountBefore = store.nodes.computeNodes.length;
 
     // store.set() triggers _walkAndSyncEntityNode → registerDynamicLeaf for each leaf
     store.set({ id: "u1", name: "Alice" });
 
     // id + name = 2 new entity leaf nodes
-    expect(store.nodes.leafNodes.length).toBe(leafCountBefore + 2);
+    expect(store.nodes.computeNodes.length).toBe(leafCountBefore + 2);
 
     // The actual entity leaf node objects must be present in the array
     const entityNode = store.entityRegistry.get("u1")!;
     const idLeaf = entityNode.id as object;
     const nameLeaf = (entityNode as any).name as object;
 
-    const leafNodeObjects = store.nodes.leafNodes.map((l) => l.node);
+    const leafNodeObjects = store.nodes.computeNodes.map((l) => l.node);
     expect(leafNodeObjects).toContain(idLeaf);
     expect(leafNodeObjects).toContain(nameLeaf);
   });
@@ -266,16 +266,16 @@ describe("4.2: bumpLeafVersions с entity leafs", () => {
     });
 
     store.set({ id: "u1", name: "Alice" });
-    const countAfterFirst = store.nodes.leafNodes.length;
+    const countAfterFirst = store.nodes.computeNodes.length;
 
     // Add a new field 'email' to entity u1 — registers a new leaf
     store.set({ id: "u1", email: "alice@corp.com" } as any);
 
-    expect(store.nodes.leafNodes.length).toBe(countAfterFirst + 1);
+    expect(store.nodes.computeNodes.length).toBe(countAfterFirst + 1);
 
     const entityNode = store.entityRegistry.get("u1")!;
     const emailLeaf = (entityNode as any).email as object;
-    const leafNodeObjects = store.nodes.leafNodes.map((l) => l.node);
+    const leafNodeObjects = store.nodes.computeNodes.map((l) => l.node);
     expect(leafNodeObjects).toContain(emailLeaf);
   });
 

@@ -19,17 +19,17 @@ function makeDirtyDeps(rootConfig: AnyConfigNode = {} as AnyConfigNode) {
 describe("NotificationHub", () => {
   describe("конструктор", () => {
     it("создаётся без ошибок", () => {
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       expect(hub).toBeTruthy();
     });
 
     it("начальная версия равна 0", () => {
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       expect(hub.getVersion()).toBe(0);
     });
 
     it("начальная версия узла равна 0", () => {
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       expect(hub.getNodeVersion({})).toBe(0);
     });
   });
@@ -38,7 +38,7 @@ describe("NotificationHub", () => {
     it("вызывает per-node подписчика при notifyChanged", () => {
       const node = {};
       const nodePaths = new WeakMap<object, string>();
-      const hub = new NotificationHub({ leafNodes: [], nodePaths });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths });
       const listener = vi.fn();
       hub.subscribe(node, listener);
 
@@ -49,7 +49,7 @@ describe("NotificationHub", () => {
 
     it("отписка через returned unsubscribe", () => {
       const node = {};
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       const listener = vi.fn();
       const unsub = hub.subscribe(node, listener);
       unsub();
@@ -61,7 +61,7 @@ describe("NotificationHub", () => {
 
     it("инкрементирует глобальную версию при notifyChanged", () => {
       const node = {};
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       hub.notifyChanged(new Set([node]), makeDirtyDeps());
 
       expect(hub.getVersion()).toBe(1);
@@ -69,14 +69,14 @@ describe("NotificationHub", () => {
 
     it("обновляет версию конкретного узла", () => {
       const node = {};
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       hub.notifyChanged(new Set([node]), makeDirtyDeps());
 
       expect(hub.getNodeVersion(node)).toBe(1);
     });
 
     it("не уведомляет, если changed пустой", () => {
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       const global = vi.fn();
       hub.subscribeGlobal(global);
 
@@ -90,7 +90,7 @@ describe("NotificationHub", () => {
   describe("subscribeGlobal", () => {
     it("вызывает глобального подписчика при notifyChanged", () => {
       const node = {};
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       const global = vi.fn();
       hub.subscribeGlobal(global);
 
@@ -101,7 +101,7 @@ describe("NotificationHub", () => {
 
     it("глобальная отписка работает", () => {
       const node = {};
-      const hub = new NotificationHub({ leafNodes: [], nodePaths: new WeakMap() });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths: new WeakMap() });
       const global = vi.fn();
       const unsub = hub.subscribeGlobal(global);
       unsub();
@@ -116,7 +116,7 @@ describe("NotificationHub", () => {
     it("инкрементирует глобальную версию и версии leaf-узлов", () => {
       const leaf = {};
       const hub = new NotificationHub({
-        leafNodes: [{ node: leaf, path: "email" }],
+        computeNodes: [{ node: leaf, path: "email" }],
         nodePaths: new WeakMap(),
       });
       const global = vi.fn();
@@ -135,7 +135,7 @@ describe("NotificationHub", () => {
       const node = {};
       const nodePaths = new WeakMap<object, string>();
       nodePaths.set(node, "email");
-      const hub = new NotificationHub({ leafNodes: [], nodePaths });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths });
       const hook = vi.fn();
       hub.setPostNotifyHook(hook);
 
@@ -148,7 +148,7 @@ describe("NotificationHub", () => {
       const node = {};
       const nodePaths = new WeakMap<object, string>();
       nodePaths.set(node, "email");
-      const hub = new NotificationHub({ leafNodes: [], nodePaths });
+      const hub = new NotificationHub({ computeNodes: [], nodePaths });
       const hook = vi.fn();
       hub.setPostNotifyHook(hook);
       hub.setPostNotifyHook(null);

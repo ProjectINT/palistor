@@ -1,5 +1,5 @@
 import { CONFIG_PROPS } from "../constants";
-import { isLeaf } from "../traversal";
+import { isLeafNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 
@@ -24,7 +24,7 @@ export function mergeInitialValues(
 
     const patchValue = patch[key];
 
-    if (isLeaf(child)) {
+    if (isLeafNode(child)) {
       const state = nodeState.get(child);
       if (state) {
         initialValueMap.set(child, state.value);

@@ -1,6 +1,6 @@
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify as _recomputeAndNotify } from "../compute/recompute";
-import { recomputeTargeted, collectGroupLeafNodes, recomputeLeaves } from "../compute/recompute";
+import { recomputeTargeted, collectGroupComputeNodes, recomputeLeaves } from "../compute/recompute";
 import { ProxyBuilder } from "../buildProxy/buildProxy";
 import { PersistManager } from "../persist/persistManager";
 import { ResetPipeline } from "../resetPipeline/resetPipeline";
@@ -20,7 +20,7 @@ import { DirtyTracker } from "./dirtyTracker";
 import { GroupDepsMap } from "./groupDepsMap";
 import { EntityRegistry } from "../entityRegistry";
 import type { EntityData } from "../entityRegistry";
-import { isLeaf, configKeys } from "../traversal";
+import { isLeafNode, configKeys } from "../traversal";
 
 import type {
   AnyConfigNode,
@@ -49,7 +49,7 @@ import type { FieldState } from "../compute/index";
 export class Palistor<TConfig extends Record<string, any>> implements ProxyStore<TConfig> {
   // ─── @internal подсистемы ─────────────────────────────────────────────────
 
-  /** @internal Реестр узлов: nodeState, nodePaths, nodeParents, leafNodes, groupLeafMap, proxyCache. */
+  /** @internal Реестр узлов: nodeState, nodePaths, nodeParents, computeNodes, groupComputeMap, proxyCache. */
   readonly nodes: NodeRegistry;
 
   /** @internal Глобальные сервисы: translator, notifier и их делегаты. */
@@ -124,7 +124,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     // ─── NodeRegistry ────────────────────────────────────────────────────────
 
     this.nodes = new NodeRegistry(rootConfig, initialValues as Record<string, unknown>, translate);
-    const { nodeState, nodePaths, nodeParents, leafNodes } = this.nodes;
+    const { nodeState, nodePaths, nodeParents, computeNodes } = this.nodes;
 
     // ─── DirtyTracker + ValuesCache ──────────────────────────────────────────
 
@@ -148,7 +148,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
     // ─── NotificationHub ────────────────────────────────────────────────────
 
-    this.hub = new NotificationHub({ leafNodes, nodePaths });
+    this.hub = new NotificationHub({ computeNodes, nodePaths });
 
     // ─── ResolveManager ──────────────────────────────────────────────────────
 
@@ -210,13 +210,13 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
    * @internal
    */
   recompute(changedNodes?: Set<object>): Set<object> {
-    const { nodeState, nodePaths, nodeParents, groupLeafMap } = this.nodes;
+    const { nodeState, nodePaths, nodeParents, groupComputeMap } = this.nodes;
     const { translate } = this.services;
 
     if (changedNodes && changedNodes.size > 0) {
       return recomputeTargeted(changedNodes, {
         rootConfig: this.rootConfig,
-        groupLeafMap,
+        groupComputeMap,
         nodeState,
         nodeParents,
         nodePaths,
@@ -226,16 +226,16 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       });
     }
 
-    const leafNodes = collectGroupLeafNodes(this.rootConfig, groupLeafMap);
+    const computeNodes = collectGroupComputeNodes(this.rootConfig, groupComputeMap);
 
     if (!this.groupDepsMap.isBuilt) {
       const trackingWrap = this.groupDepsMap.getTrackingWrap();
-      const result = recomputeLeaves(leafNodes, nodeState, this.values, translate, trackingWrap);
+      const result = recomputeLeaves(computeNodes, nodeState, this.values, translate, trackingWrap);
       this.groupDepsMap.markBuilt();
       return result;
     }
 
-    return recomputeLeaves(leafNodes, nodeState, this.values, translate);
+    return recomputeLeaves(computeNodes, nodeState, this.values, translate);
   }
 
   /**
@@ -393,7 +393,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   /**
    * Удалить entity из реестра по ID.
    *
-   * - Удаляет leaf-ноды entity из NodeRegistry (leafNodes, groupLeafMap).
+   * - Удаляет leaf-ноды entity из NodeRegistry (computeNodes, groupComputeMap).
    * - Очищает bindings и resolvedCache.
    * - Уведомляет подписчиков.
    *
@@ -628,7 +628,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       const childObj = child as object;
       const childPath = `${prefix}.${key}`;
 
-      if (isLeaf(childObj)) {
+      if (isLeafNode(childObj)) {
         // ── Листовой узел (EntityLeafNode): { value: <текущее значение> } ──
         const leaf = childObj as { value: unknown };
         if (!this.nodes.nodeState.has(childObj)) {
@@ -704,7 +704,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     for (const key of Object.keys(node)) {
       const child = node[key];
       if (!child || typeof child !== "object") continue;
-      if (isLeaf(child as object)) {
+      if (isLeafNode(child as object)) {
         // Leaf-нода: объект с полем "value" → добавить в результат
         result.add(child as object);
       } else {
@@ -740,7 +740,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       // Формируем dot-path для сообщения об ошибке (e.g. "address.city")
       const path = parentPath ? `${parentPath}.${key}` : key;
 
-      if (isLeaf(templateField as object)) {
+      if (isLeafNode(templateField as object)) {
         // Leaf-поле template — проверяем, есть ли validate() функция
         if (typeof (templateField as Record<string, unknown>).validate === "function") {
           // Извлечь текущее значение из entity. Приоритет:
@@ -799,7 +799,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     for (const key of Object.keys(entityNode)) {
       const field = entityNode[key];
       if (field && typeof field === "object") {
-        if (isLeaf(field as object)) {
+        if (isLeafNode(field as object)) {
           // Leaf: читаем value из nodeState (актуальное), fallback на field.value
           values[key] =
             (this.nodes.nodeState.get(field as object) as { value: unknown } | undefined)?.value ??

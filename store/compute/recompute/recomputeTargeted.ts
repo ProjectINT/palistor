@@ -25,7 +25,7 @@ export function recomputeTargeted(
 ): Set<object> {
 
   const {
-    rootConfig, groupLeafMap,
+    rootConfig, groupComputeMap,
     nodeState, nodeParents, nodePaths,
     groupDeps, valuesCache, translate,
   } = deps;
@@ -60,8 +60,8 @@ export function recomputeTargeted(
     const groupNode = resolveGroupByPath(rootConfig, groupPath);
     // Entity-группы (пути "_entity_.*") не существуют в rootConfig — пропускаем
     if (!groupNode) continue;
-    const ownLeaves = groupLeafMap.get(groupNode) ?? [];
-    const changed = recomputeLeaves(ownLeaves, nodeState, valuesCache, translate);
+    const ownEntries = groupComputeMap.get(groupNode) ?? [];
+    const changed = recomputeLeaves(ownEntries, nodeState, valuesCache, translate);
     for (const n of changed) allChanged.add(n);
   }
 

@@ -1,6 +1,6 @@
 import { type FieldState, resolveFlag } from "../compute/index";
 import { TranslateFn, type AnyConfigNode, type ListState, type ListConfig } from "./types";
-import { configKeys } from "../traversal";
+import { configKeys, hasChildren } from "../traversal";
 import { hasComputedProps } from "./hasComputedProps";
 import { isListNode } from "./NodeRegistry/nodeUtils";
 
@@ -43,24 +43,23 @@ export type InitialSlice<TNode> = {
 };
 
 /**
- * Фаза 1: Собираем все листовые узлы и устанавливаем начальные value.
+ * Фаза 1: Собираем все вычисляемые узлы и устанавливаем начальные value.
  * Ещё не вычисляем computed — для этого нужны все values.
  */
 type MaybeFlag = boolean | ((values: any) => boolean) | undefined;
 
-export type LeafEntry = { node: AnyConfigNode; path: string };
+export type ComputeEntry = { node: AnyConfigNode; path: string };
 
 /**
- * Маппинг группового узла → массив его прямых листовых записей.
- * Для групп с computed-свойствами (isVisible на группе) виртуальный лист
- * хранится в массиве самой группы. Дочерние группы хранят свои листья отдельно.
+ * Маппинг группового узла → массив его прямых дочерних записей (листья + группы с computed-свойствами).
+ * Все записи хранятся под родительской группой — единообразно.
  *
- * Используется recomputeGroup для скопированного пересчёта поддерева.
+ * Используется recomputeTargeted для пересчёта поддерева.
  */
-export type GroupLeafMap = WeakMap<object, LeafEntry[]>;
+export type GroupComputeMap = WeakMap<object, ComputeEntry[]>;
 
-/** Получить или создать массив листьев для группы. */
-function getOrCreateLeafList(map: GroupLeafMap, group: object): LeafEntry[] {
+/** Получить или создать массив записей для группы. */
+function getOrCreateComputeList(map: GroupComputeMap, group: object): ComputeEntry[] {
   let list = map.get(group);
   if (!list) {
     list = [];
@@ -72,10 +71,10 @@ function getOrCreateLeafList(map: GroupLeafMap, group: object): LeafEntry[] {
 export function registerNodes<TNode extends AnyConfigNode>(
   node: TNode,
   initialSlice: InitialSlice<TNode> | undefined,
-  leafNodes: LeafEntry[],
+  computeNodes: ComputeEntry[],
   nodeState: WeakMap<object, FieldState>,
   parentPath = "",
-  groupLeafMap: GroupLeafMap,
+  groupComputeMap: GroupComputeMap,
   translate: TranslateFn,
   listStates?: WeakMap<object, ListState>,
   allListStates?: ListState[],
@@ -86,6 +85,9 @@ export function registerNodes<TNode extends AnyConfigNode>(
     if (!child || typeof child !== "object") continue;
 
     const path = parentPath ? `${parentPath}.${key}` : key;
+
+    // Проставить маркер __kind на каждый узел конфига
+    (child as any).__kind = hasChildren(child) ? "group" : "leaf";
 
     if (Array.isArray(child)) {
       // ListNode: создать ListState + зарегистрировать template как обычную группу
@@ -102,17 +104,17 @@ export function registerNodes<TNode extends AnyConfigNode>(
         listStates.set(child, listState);
         if (allListStates) allListStates.push(listState);
         // Регистрируем поля template как обычную группу (path = ключ списка)
-        registerNodes(template, undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates, allListStates);
+        registerNodes(template, undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates);
       }
       continue;
     }
 
     if ("value" in child) {
       // Листовой узел: запоминаем, ставим начальный value (computed позже)
-      const entry: LeafEntry = { node: child, path };
-      leafNodes.push(entry);
-      // Добавляем в leaf-list текущей группы (node — родитель)
-      if (groupLeafMap) getOrCreateLeafList(groupLeafMap, node).push(entry);
+      const entry: ComputeEntry = { node: child, path };
+      computeNodes.push(entry);
+      // Добавляем в compute-list текущей группы (node — родитель)
+      getOrCreateComputeList(groupComputeMap, node).push(entry);
 
       const rawSlice = initialSlice as Record<string, unknown> | undefined;
       const sliceValues = (rawSlice ?? {}) as Record<string, unknown>;
@@ -130,14 +132,9 @@ export function registerNodes<TNode extends AnyConfigNode>(
       });
     }
 
-    // Если промежуточный узел имеет computed-свойства (isVisible на группе),
-    // регистрируем его тоже как "виртуальный" лист
-    if (!("value" in child) && hasComputedProps(child)) {
-      const entry: LeafEntry = { node: child, path };
-      leafNodes.push(entry);
-      // Виртуальный лист группы хранится в её собственном leaf-list
-      if (groupLeafMap) getOrCreateLeafList(groupLeafMap, child).push(entry);
-
+    // Групповой узел: всегда добавляем в nodeState (value заполнится в buildValuesCache).
+    // Если есть computed-свойства (isVisible и т.п.) — добавляем в computeNodes под РОДИТЕЛЕМ.
+    if (!("value" in child)) {
       const sliceValues = (initialSlice as Record<string, unknown> | undefined ?? {}) as Record<string, unknown>;
       nodeState.set(child, {
         value: undefined,
@@ -148,9 +145,15 @@ export function registerNodes<TNode extends AnyConfigNode>(
         dirty: false,
         revalidate: false,
       });
+      if (hasComputedProps(child)) {
+        const entry: ComputeEntry = { node: child, path };
+        computeNodes.push(entry);
+        // Группа с computed-свойствами хранится под РОДИТЕЛЕМ (единообразно с листьями)
+        getOrCreateComputeList(groupComputeMap, node).push(entry);
+      }
     }
 
     // Рекурсия в дочерние
-    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, leafNodes, nodeState, path, groupLeafMap, translate, listStates, allListStates);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates);
   }
 }
