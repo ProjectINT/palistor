@@ -1,4 +1,4 @@
-import { CONFIG_NODE } from "../constants";
+import { CONFIG_NODE, ENTITY_ID } from "../constants";
 import { type AnyConfigNode } from "../store/types";
 import type { Palistor } from "../store/palistor";
 import type { FieldState } from "../compute/index";
@@ -40,10 +40,28 @@ function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V):
  */
 export class ProxyBuilder {
   private readonly caches = initProxyCaches();
+  /** Compound cache for entity-leaf mode: (storage, via) → proxy. */
+  private readonly _entityLeafProxyCache = new WeakMap<object, Map<object, object>>();
 
   constructor(private readonly kernel: Palistor<any>) {}
 
-  build(node: AnyConfigNode): any {
+  build(node: AnyConfigNode, opts?: { via?: AnyConfigNode; parentEntityProxy?: object }): any {
+    const via = opts?.via;
+
+    if (via !== undefined) {
+      // Entity-leaf mode: use compound (storage × via) cache for stable proxy identity.
+      let leafMap = this._entityLeafProxyCache.get(node as object);
+      if (leafMap?.has(via as object)) return leafMap.get(via as object);
+
+      const proxy = this._buildEntityLeafProxy(node, via, opts?.parentEntityProxy);
+      if (!leafMap) {
+        leafMap = new Map();
+        this._entityLeafProxyCache.set(node as object, leafMap);
+      }
+      leafMap.set(via as object, proxy);
+      return proxy;
+    }
+
     const proxyCache = this.kernel.nodes.proxyCache;
     if (proxyCache.has(node)) return proxyCache.get(node);
 
@@ -197,5 +215,208 @@ export class ProxyBuilder {
 
     proxyCache.set(node, proxyNode);
     return proxyNode;
+  }
+
+  /**
+   * Build a thin reactive proxy for an entity leaf accessed through a template field.
+   *
+   * - `storage` — the entity leaf node (holds the actual value in nodeState)
+   * - `rules`   — the template field node (provides label, validate, formatter, etc.)
+   *
+   * Replaces the old `buildEntityLeafProxy` helper. Called from ProxyBuilder.build(node, { via }).
+   */
+  private _buildEntityLeafProxy(
+    storage: AnyConfigNode,
+    rules: AnyConfigNode,
+    parentEntityProxy?: object,
+  ): any {
+    const kernel = this.kernel;
+    const nodeState = kernel.nodes.nodeState;
+
+    let submitFnRef: (() => Promise<unknown>) | null = null;
+    let onValueChangeFn: ((v: unknown) => void) | null = null;
+
+    return new Proxy(storage as Record<string, unknown>, {
+      get(_target, key: string | symbol) {
+        // CONFIG_NODE: expose storage when materialized, rules (templateField) for phantoms.
+        // Phantoms return rules so the tracking proxy subscribes to templateField's version —
+        // which IS bumped by notifyChanged when the field resolves/materialises.
+        if (key === CONFIG_NODE) {
+          return nodeState.has(storage as object) ? storage : rules;
+        }
+
+        if (typeof key === "symbol") return undefined;
+
+        // Entity values from view (registered lazily in buildEntityProjectionProxy GET trap).
+        const view = kernel.nodes.nodeViews.get(storage as object)?.get(rules as object);
+        const allValues: Record<string, unknown> = view ? view.parent.getValues() : {};
+        const translate = kernel.services.translate;
+        const currentState = nodeState.get(storage as object) as
+          | { value: unknown; dirty?: boolean; submitting?: boolean; loading?: boolean }
+          | undefined;
+
+        // ─── Lazy entity field resolve ──────────────────────────────────────
+        // Trigger per-leaf template resolve on first access to value/loading.
+        if ((key === "value" || key === "loading") && rules.resolve) {
+          // For phantom leaves the NodeView may not be registered yet; fall back
+          // to the entity projection proxy passed at construction time.
+          const entityProxy = view?.parent?.proxy ?? parentEntityProxy;
+          const entityId = entityProxy
+            ? (entityProxy as Record<symbol, unknown>)[ENTITY_ID] as string | undefined
+            : undefined;
+          if (entityId) {
+            const state = kernel.resolveManager.entityStates.get(entityId, rules);
+            if (!state || state.status === "idle") {
+              queueMicrotask(() =>
+                kernel.resolveManager.triggerEntityFieldResolve(entityId, rules),
+              );
+            }
+          }
+        }
+
+        switch (key) {
+          case "value":
+            return currentState?.value ?? storage.value;
+
+          case "label": {
+            const v = rules.label;
+            return typeof v === "function" ? v(translate, allValues) : v;
+          }
+          case "placeholder": {
+            const v = rules.placeholder;
+            return typeof v === "function" ? v(translate, allValues) : v;
+          }
+          case "description": {
+            const v = rules.description;
+            return typeof v === "function" ? v(translate, allValues) : v;
+          }
+
+          case "isRequired": {
+            const v = rules.isRequired;
+            if (v === undefined) return false;
+            return typeof v === "function"
+              ? Boolean((v as (vals: unknown) => boolean)(allValues))
+              : Boolean(v);
+          }
+          case "isReadOnly": {
+            const v = rules.isReadOnly;
+            if (v === undefined) return false;
+            return typeof v === "function"
+              ? Boolean((v as (vals: unknown) => boolean)(allValues))
+              : Boolean(v);
+          }
+          case "isDisabled": {
+            const v = rules.isDisabled;
+            if (v === undefined) return false;
+            return typeof v === "function"
+              ? Boolean((v as (vals: unknown) => boolean)(allValues))
+              : Boolean(v);
+          }
+          case "isVisible": {
+            const v = rules.isVisible;
+            if (v === undefined) return true;
+            return typeof v === "function"
+              ? Boolean((v as (vals: unknown) => boolean)(allValues))
+              : Boolean(v);
+          }
+
+          case "errorMessage": {
+            if (typeof rules.validate !== "function") return undefined;
+            const currentValue = currentState?.value ?? storage.value;
+            const result = (rules.validate as (
+              v: unknown,
+              vals: Record<string, unknown>,
+              t: (...args: unknown[]) => string,
+            ) => string | undefined | false)(currentValue, allValues, translate);
+            return result || undefined;
+          }
+
+          case "isInvalid": {
+            if (typeof rules.validate !== "function") return false;
+            const currentValue = currentState?.value ?? storage.value;
+            const result = (rules.validate as (
+              v: unknown,
+              vals: Record<string, unknown>,
+              t: (...args: unknown[]) => string,
+            ) => string | undefined | false)(currentValue, allValues, translate);
+            return !!result;
+          }
+
+          case "dirty":
+            return currentState?.dirty ?? false;
+
+          case "loading":
+            return currentState?.loading ?? false;
+
+          case "submitting":
+            return currentState?.submitting ?? false;
+
+          case "submit": {
+            if (!submitFnRef) {
+              submitFnRef = () => {
+                if (!nodeState.has(storage as object)) return Promise.resolve(); // phantom: no-op
+                return kernel.submitPipeline.execute(storage, { via: rules });
+              };
+            }
+            return submitFnRef;
+          }
+
+          case "onValueChange": {
+            if (!onValueChangeFn) {
+              onValueChangeFn = (v: unknown) => {
+                if (!nodeState.has(storage as object)) return; // phantom: no-op
+                const prev = (nodeState.get(storage as object) as { value: unknown } | undefined)?.value;
+                const result = kernel.writePipeline.execute(storage, v, prev, { via: rules });
+                if (!result || result.skipped) return;
+                kernel.notifyChanged(result.changed);
+                const newVal = (nodeState.get(storage as object) as { value: unknown } | undefined)?.value ?? v;
+                kernel.onChangePipeline.fire(storage, newVal, prev, { via: rules });
+              };
+            }
+            return onValueChangeFn;
+          }
+
+          default:
+            return undefined;
+        }
+      },
+
+      set(_target, key: string | symbol, newValue: unknown) {
+        if (key !== "value") return false;
+        if (!nodeState.has(storage as object)) return true; // phantom: no-op
+        const prev = (nodeState.get(storage as object) as { value: unknown } | undefined)?.value;
+        const result = kernel.writePipeline.execute(storage, newValue, prev, { via: rules });
+        if (!result || result.skipped) return true;
+        kernel.notifyChanged(result.changed);
+        const newVal = (nodeState.get(storage as object) as { value: unknown } | undefined)?.value ?? newValue;
+        kernel.onChangePipeline.fire(storage, newVal, prev, { via: rules });
+        return true;
+      },
+
+      ownKeys() {
+        return [
+          "value",
+          "label",
+          "placeholder",
+          "description",
+          "isRequired",
+          "isReadOnly",
+          "isDisabled",
+          "isVisible",
+          "isInvalid",
+          "errorMessage",
+          "dirty",
+          "loading",
+          "submitting",
+          "submit",
+          "onValueChange",
+        ];
+      },
+
+      getOwnPropertyDescriptor(_target, key: string | symbol) {
+        if (typeof key === "symbol") return undefined;
+        return { configurable: true, enumerable: true, writable: true };
+      },
+    });
   }
 }

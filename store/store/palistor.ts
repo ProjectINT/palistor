@@ -124,6 +124,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     // ─── NodeRegistry ────────────────────────────────────────────────────────
 
     this.nodes = new NodeRegistry(rootConfig, initialValues as Record<string, unknown>, translate);
+    this.nodes.setKernel(this);
     const { nodeState, nodePaths, nodeParents, computeNodes } = this.nodes;
 
     // ─── DirtyTracker + ValuesCache ──────────────────────────────────────────

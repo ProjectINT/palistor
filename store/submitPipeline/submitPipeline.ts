@@ -5,8 +5,18 @@ import { collectLeafStates } from "./collectLeafStates";
 import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
 import type { SubmitResult } from "./types";
 import { isLeafNode } from "../traversal";
+import { computeFieldState } from "../compute";
 
 export type { SubmitResult };
+
+/**
+ * Context passed when submitting an entity leaf through a template field.
+ * The view (parentProxy, parentValues, onReset) is resolved via NodeRegistry.getView(node, via).
+ */
+export interface EntityLeafSubmitOptions {
+  /** templateField — source of callbacks: beforeSubmit, validate, onSubmit, afterSubmit */
+  via: AnyConfigNode;
+}
 
 // ─── Submit pipeline ─────────────────────────────────────────────────────────
 
@@ -27,19 +37,20 @@ export type { SubmitResult };
 export class SubmitPipeline {
   constructor(private readonly kernel: Palistor<any>) {}
 
-  async execute(node: AnyConfigNode): Promise<SubmitResult> {
+  async execute(node: AnyConfigNode, entityOpts?: EntityLeafSubmitOptions): Promise<SubmitResult> {
+    const view = this.kernel.nodes.getView(node, entityOpts?.via);
     const isLeaf = isLeafNode(node);
     const nodeState = this.kernel.nodes.nodeState;
 
     // 1. submitting = true + revalidate = true → recompute → notify
-    const prevState = nodeState.get(node);
-    nodeState.set(node, { ...prevState!, submitting: true });
+    const prevState = nodeState.get(view.storage);
+    nodeState.set(view.storage, { ...prevState!, submitting: true });
 
-    const revalidateChanged = setGroupRevalidate(node, true, nodeState);
+    const revalidateChanged = setGroupRevalidate(view.storage, true, nodeState);
 
     const changed1 = this.kernel.recompute();
 
-    changed1.add(node);
+    changed1.add(view.storage);
     for (const n of revalidateChanged) changed1.add(n);
 
     this.kernel.notifyChanged(changed1);
@@ -49,27 +60,25 @@ export class SubmitPipeline {
 
       if (isLeaf) {
         // 2. Leaf: get own current value
-        value = nodeState.get(node)?.value;
+        value = nodeState.get(view.storage)?.value;
 
         // 3. Leaf beforeSubmit(value, parentValues)
-        if (typeof node.beforeSubmit === "function") {
-          const parentNode = (this.kernel.nodes.nodeParents.get(node) ?? this.kernel.rootConfig) as AnyConfigNode;
-          const parentValues = this.kernel.values.groupSlot.get(parentNode) ?? this.kernel.values.values;
-          value = await (node.beforeSubmit as Function)(value, parentValues);
+        if (typeof view.rules.beforeSubmit === "function") {
+          value = await (view.rules.beforeSubmit as Function)(value, view.parent.getValues());
         }
       } else {
         // 2. Group: unified entry — nodeState.value is the groupSlot reference for non-root groups;
         // root config may not be in nodeState, so fall back to groupSlot directly.
-        const groupValue = (nodeState.get(node)?.value ?? this.kernel.values.groupSlot.get(node) ?? {}) as Record<string, unknown>;
+        const groupValue = (nodeState.get(view.storage)?.value ?? this.kernel.values.groupSlot.get(view.storage) ?? {}) as Record<string, unknown>;
         let values = structuredClone(groupValue) as Record<string, unknown>;
 
         // 3. Leaf-level beforeSubmit on group subtree
-        values = applyLeafBeforeSubmit(node, values);
+        values = applyLeafBeforeSubmit(view.storage, values);
 
         // 4. Group-level beforeSubmit
-        if (typeof node.beforeSubmit === "function") {
+        if (typeof view.rules.beforeSubmit === "function") {
           values = await (
-            node.beforeSubmit as (v: Record<string, unknown>) => Promise<Record<string, unknown>> | Record<string, unknown>
+            view.rules.beforeSubmit as (v: Record<string, unknown>) => Promise<Record<string, unknown>> | Record<string, unknown>
           )(values);
         }
 
@@ -78,14 +87,30 @@ export class SubmitPipeline {
 
       // 5. Валидация
       if (isLeaf) {
-        const leafState = nodeState.get(node);
-        if (leafState?.isInvalid && leafState.errorMessage) {
-          const nodePath = this.kernel.nodes.nodePaths.get(node) ?? "";
-          return { success: false, errors: [{ path: nodePath, message: leafState.errorMessage }] };
+        if (entityOpts?.via) {
+          // Entity leaf: validate directly via template rules — not covered by the recompute system
+          // (computeFieldState runs on the node itself, but entity leaves carry no rules; those live on templateField).
+          const { isInvalid, errorMessage } = computeFieldState(
+            view.rules as Record<string, any>,
+            value,
+            view.parent.getValues(),
+            true,
+            this.kernel.services.translate,
+          );
+          if (isInvalid && errorMessage) {
+            const nodePath = this.kernel.nodes.nodePaths.get(view.storage as object) ?? "";
+            return { success: false, errors: [{ path: nodePath, message: errorMessage }] };
+          }
+        } else {
+          const leafState = nodeState.get(view.storage);
+          if (leafState?.isInvalid && leafState.errorMessage) {
+            const nodePath = this.kernel.nodes.nodePaths.get(view.storage as object) ?? "";
+            return { success: false, errors: [{ path: nodePath, message: leafState.errorMessage }] };
+          }
         }
       } else {
         const errors: Array<{ path: string; message: string }> = [];
-        const leaves = collectLeafStates(node, nodeState);
+        const leaves = collectLeafStates(view.storage, nodeState);
         for (const { path, state } of leaves) {
           if (state.isInvalid && state.errorMessage) {
             errors.push({ path, message: state.errorMessage });
@@ -96,23 +121,17 @@ export class SubmitPipeline {
 
       // 6. onSubmit(value, store, parent)
       let result: unknown;
-      if (typeof node.onSubmit === "function") {
-        const parentNode = this.kernel.nodes.nodeParents.get(node) as AnyConfigNode | undefined;
-        const parentProxy = parentNode
-          ? this.kernel.nodes.proxyCache.get(parentNode)
-          : undefined;
-        result = await (node.onSubmit as Function)(value, this.kernel, parentProxy);
+      if (typeof view.rules.onSubmit === "function") {
+        result = await (view.rules.onSubmit as Function)(value, this.kernel, view.parent.proxy);
       }
 
       // 7. afterSubmit
-      if (typeof node.afterSubmit === "function") {
+      if (typeof view.rules.afterSubmit === "function") {
         const reset = isLeaf
-          ? () => this.kernel.resetPipeline.execute(
-              (this.kernel.nodes.nodeParents.get(node) ?? this.kernel.rootConfig) as AnyConfigNode,
-            )
-          : () => this.kernel.resetPipeline.execute(node);
+          ? view.onReset
+          : () => this.kernel.resetPipeline.execute(view.storage);
         await (
-          node.afterSubmit as (
+          view.rules.afterSubmit as (
             r: unknown,
             actions: { reset: () => void },
           ) => void | Promise<void>
@@ -127,10 +146,10 @@ export class SubmitPipeline {
       return { success: true, result };
     } finally {
       // 9. submitting = false → recompute → notify
-      const finalState = nodeState.get(node);
-      nodeState.set(node, { ...finalState!, submitting: false });
+      const finalState = nodeState.get(view.storage);
+      nodeState.set(view.storage, { ...finalState!, submitting: false });
       const changed2 = this.kernel.recompute();
-      changed2.add(node);
+      changed2.add(view.storage);
       this.kernel.notifyChanged(changed2);
     }
   }

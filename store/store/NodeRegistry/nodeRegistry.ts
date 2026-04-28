@@ -5,6 +5,7 @@ import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
 import type { AnyConfigNode, TranslateFn, ListState } from "../types";
 import { isLeafNode, isGroupNode, isListNode } from "./nodeUtils";
+import { type NodeView, type NodeViewKernel, makeIdentityView } from "./nodeView";
 
 /**
  * Реестр узлов конфига.
@@ -98,6 +99,47 @@ export class NodeRegistry {
    * Используется Palistor для регистрации списков в EntityRegistry.rekey() (Phase 2C).
    */
   readonly allListStates: ListState[] = [];
+
+  /**
+   * NodeView per storage node.
+   * - Config-mode: populated lazily via getView (identity views cached in _identityViews).
+   * - Entity-mode: populated by Palistor._setEntitiesRaw per (entityLeaf, templateField) pair.
+   *   Map key = templateField (rules); supports multiple template bindings for one entity leaf.
+   */
+  readonly nodeViews: WeakMap<object, Map<object, NodeView>> = new WeakMap();
+
+  private _kernel?: NodeViewKernel;
+  private readonly _identityViews: WeakMap<object, NodeView> = new WeakMap();
+
+  /** Called by Palistor after construction to wire the kernel reference. */
+  setKernel(kernel: NodeViewKernel): void {
+    this._kernel = kernel;
+  }
+
+  /**
+   * Get NodeView for a node.
+   * - via absent → identity view (storage === rules === node), cached.
+   * - via present → entity view registered by _setEntitiesRaw; throws if not found.
+   */
+  getView(storage: AnyConfigNode, via?: object): NodeView {
+    if (via !== undefined) {
+      const view = this.nodeViews.get(storage as object)?.get(via);
+      if (!view) {
+        throw new Error("[NodeRegistry] NodeView not found for via — register it before calling getView");
+      }
+      return view;
+    }
+
+    let view = this._identityViews.get(storage as object);
+    if (!view) {
+      if (!this._kernel) {
+        throw new Error("[NodeRegistry] getView called before setKernel");
+      }
+      view = makeIdentityView(storage, this._kernel);
+      this._identityViews.set(storage as object, view);
+    }
+    return view;
+  }
 
   // ─── Навигация ───────────────────────────────────────────────────────────
 

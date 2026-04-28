@@ -61,9 +61,8 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
   const listState = kernel.nodes.listStates.get(listNode as unknown as object)!;
   const template = listState.template as AnyConfigNode;
 
-  // Per-list stable proxy caches
+  // Per-list stable proxy cache
   const entityProxyCache = new WeakMap<object, object>();
-  const leafProxyCache = new WeakMap<object, object>();
 
   /** Build EntityProjectionProxy for a given entityId. */
   function buildItemProxy(id: string): object | undefined {
@@ -74,7 +73,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
       template,
       kernel,
       entityProxyCache,
-      leafProxyCache,
     );
   }
 

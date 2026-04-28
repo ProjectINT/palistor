@@ -172,7 +172,6 @@ export function useForm(
       templateNode,
       entityStore,
       new WeakMap(),
-      new WeakMap(),
     );
 
     entityMetaRef.current = { entityId, entityStore, templateNode, entityProxy };

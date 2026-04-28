@@ -128,22 +128,31 @@ new Palistor(options):
 ```
 form.email.value = "X"   (SET trap в buildProxy)
   │
-  ├─── WritePipeline.execute(node, rawValue) → WriteResult { changed: Set<object>, skipped?: boolean }
-  │      ├─ 1.   formatValue()        node.formatter(raw, allValues)
-  │      ├─ 1.5  skip?                Object.is(formatted, current)
-  │      │                            → return { changed: empty, skipped: true }
-  │      ├─ 2.   storeValue()         nodeState.set(node, { ...state, value })
-  │      │                            + updateValuesCacheEntry O(1)
-  │      ├─ 2.5  runSetter()          node.setter(value, allValues, prev) → patch → applyPatch()
+  ├─── WritePipeline.execute(node, rawValue, prev?, opts?) → WriteResult { changed, skipped? }
+  │      │
+  │      │  opts.via присутствует → entity-mode:
+  │      │    view = kernel.nodes.getView(node, opts.via)
+  │      │    allValues = view.parent.getValues()   ← entity-значения (ленивый снимок)
+  │      │  opts.via отсутствует → config-mode:
+  │      │    view = identity (storage = rules = node)
+  │      │    allValues = valuesCache.values
+  │      │
+  │      ├─ 1.   formatValue(raw, view.rules, allValues)   formatter из template (entity) / ноды (config)
+  │      ├─ 1.5  skip?                Object.is(formatted, current) → { changed: empty, skipped: true }
+  │      ├─ 2.   storeValue(view.storage, …)   nodeState + updateValuesCacheEntry O(1)
+  │      │         entity sync: view.storage.value = processed (для walkAndSyncEntityNode)
+  │      ├─ 2.5  setter-ветка:
+  │      │         config-mode → runSetter(node, …) → applyPatch() сиблингов в config
+  │      │         entity-mode → _applyEntitySetterPatch() → storeValue() сиблингов в entity
   │      ├─ 3.   recompute(changedNodes)  таргетированный пересчёт групп
-  │      └─ 4.   mergeChanged()       → возвращает WriteResult { changed }
+  │      └─ 4.   mergeChanged(view.storage, patchedNodes, recomputedNodes)
   │
-  ├─ 5. notifyChanged(result.changed)    ← SET trap, после WritePipeline
+  ├─ 5. notifyChanged(result.changed)    ← SET trap / onValueChange, после WritePipeline
   │      ├─ recomputeDirtyTargeted
   │      ├─ nodeVersions[node]++ для changed-нод
   │      ├─ globalListeners → useSyncExternalStore → getSnapshot()
   │      └─ postNotifyHook → findResolvesToRetrigger → resetResolveState → triggerResolve
-  └─ 6. onChangePipeline.fire()          ← SET trap, fire-and-forget onChange
+  └─ 6. onChangePipeline.fire(…, opts?)  ← fire-and-forget onChange (entity-mode пробрасывает opts)
 ```
 
 ---
@@ -151,17 +160,37 @@ form.email.value = "X"   (SET trap в buildProxy)
 ## Submit Pipeline
 
 ```
-form.submit()                (SubmitPipeline.execute(groupNode))
-  ├─ 1. submitting = true, setGroupRevalidate(true) → recompute → notifyChanged
-  ├─ 2. getSubValues()             извлечь текущие values поддерева
-  ├─ 3. applyLeafBeforeSubmit()    leaf-level beforeSubmit трансформации
-  ├─ 4. group beforeSubmit()       group-level beforeSubmit трансформация
-  ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
-  ├─ 6. onSubmit(values, store) → result
-  ├─ 7. afterSubmit(result, { reset })
-  ├─ 8. persist.clear()
-  └─ finally: submitting = false → recompute → notifyChanged
+form.submit()                (SubmitPipeline.execute(node, entityOpts?))
+  │
+  ├─ view = kernel.nodes.getView(node, entityOpts?.via)
+  │          ↑ config-mode: identity view (storage = rules = node)
+  │          ↑ entity-mode: view из nodeViews[(storage, templateField)]
+  │
+  ├─ 1. submitting = true (view.storage), setGroupRevalidate(true) → recompute → notifyChanged
+  │
+  ├─ Leaf path:
+  │    ├─ 2. value = nodeState.get(view.storage)?.value
+  │    ├─ 3. view.rules.beforeSubmit(value, view.parent.getValues())
+  │    ├─ 5. validate:
+  │    │      entity-mode → computeFieldState(view.rules, value, entityValues, revalidate=true)
+  │    │      config-mode → leafState.isInvalid/errorMessage
+  │    ├─ 6. view.rules.onSubmit(value, store, view.parent.proxy) → result
+  │    └─ 7. view.rules.afterSubmit(result, { reset: view.onReset })
+  │
+  ├─ Group path:
+  │    ├─ 2. groupValue из nodeState/groupSlot → structuredClone
+  │    ├─ 3. applyLeafBeforeSubmit()    leaf-level beforeSubmit трансформации
+  │    ├─ 4. view.rules.beforeSubmit(values) → group-level трансформация
+  │    ├─ 5. collectLeafStates() → есть ошибки? → { success: false, errors }
+  │    ├─ 6. view.rules.onSubmit(values, store, view.parent.proxy) → result
+  │    ├─ 7. view.rules.afterSubmit(result, { reset })
+  │    └─ 8. persist.clear()
+  │
+  └─ finally: submitting = false (view.storage) → recompute → notifyChanged
 ```
+
+**EntityLeafSubmitOptions:** `{ via: AnyConfigNode }` — передаётся из entity leaf proxy (`submit()`).
+`view` подставляет parentProxy, parentValues, onReset автоматически через `getView(node, via)`.
 
 ---
 
@@ -190,19 +219,27 @@ form.reset(values?)          (ResetPipeline.execute(groupNode, values?))
 ## onChange Pipeline
 
 ```
-WritePipeline возвращает результат → SET trap вызывает OnChangePipeline.fire(node, newValue, prev):
+WritePipeline возвращает результат → SET trap вызывает OnChangePipeline.fire(node, newValue, prev, opts?):
   │
-  ├─ findOnChangeAncestors(node, nodeParents)
-  │    обходит родителей вверх — собирает предков у which onChange === Function
+  ├─ Config-mode (opts.via = undefined):
+  │    ├─ findOnChangeAncestors(node, nodeParents)
+  │    │    обходит nodeParents вверх — собирает узлы с onChange === Function
+  │    └─ для каждого ancestor:
+  │         ├─ fieldKey = computeFieldKey(nodePath, ancestorPath)
+  │         │    относительный путь изменённого поля от ancestor (e.g. "address.city")
+  │         └─ Promise.resolve(ancestor.onChange({ fieldKey, newValue, previousValue, allValues }))
+  │              .then(patch) → applyPatch(ancestor, patch) + recomputeAndNotify
+  │              .catch()     → ошибки подавляются (fire-and-forget)
   │
-  └─ для каждого ancestor:
-       ├─ fieldKey = computeFieldKey(nodePath, ancestorPath)
-       │    относительный путь изменённого поля от ancestor (e.g. "address.city")
-       │
-       └─ Promise.resolve(ancestor.onChange({ fieldKey, newValue, previousValue, allValues }))
-            .then(patch) → если объект-патч возвращён:
-            │               applyPatch(ancestor, patch) + recomputeAndNotify
-            .catch()     → ошибки подавляются (fire-and-forget)
+  └─ Entity-mode (opts.via = templateField):
+       ├─ view = kernel.nodes.getView(storage, via)
+       ├─ findOnChangeAncestors(view.rules, nodeParents)  ← обход по template-дереву
+       │    nodePath = nodePaths.get(view.rules)
+       │    allValues = view.parent.getValues()           ← ленивый снимок entity-значений
+       └─ для каждого template-ancestor:
+            Promise.resolve(target.onChange({ fieldKey, newValue, previousValue, allValues }))
+              .then(patch) → _applyEntityOnChangeResult: патч применяется к entity-сиблингам
+                              (storeValue на entityParent[key]) + recomputeAndNotify
 ```
 
 ---
@@ -350,9 +387,14 @@ store/
     types.ts            EntityNode, EntityLeafNode, EntityGroupNode, EntityData
   store/
     NodeRegistry/
-      nodeRegistry.ts   класс NodeRegistry (listStates: WeakMap, allListStates: ListState[])
-      nodeUtils.ts      isLeaf (реэкспорт из traversal), isGroup, isListNode (length 1-2),
-                        NodeUtils class — используется в buildProxy / computeProxyKeys
+      nodeRegistry.ts   класс NodeRegistry: nodeState, nodePaths, nodeParents, proxyCache,
+                        listStates, allListStates, nodeViews, getView(storage, via?), setKernel()
+                        registerDynamicLeaf(), unregisterLeaf(), findByPath(), getGroupPath()
+      nodeView.ts       интерфейс NodeView { storage, rules, parent.{proxy,getValues}, onReset }
+                        + makeIdentityView(node, kernel) — identity-view для config-mode
+                        + NodeViewKernel — минимальный интерфейс kernel (избегает цикл. импортов)
+      index.ts          реэкспорт NodeView, NodeRegistry
+      nodeUtils.ts      isLeaf (реэкспорт из traversal), isGroup, isListNode (length 1-2)
     dirtyTracker.ts           класс DirtyTracker: initialValueMap(getter), capture, merge, collectSnapshot
     groupDepsMap.ts           класс GroupDepsMap: deps (Set<string>), isBuilt, getTrackingWrap(), markBuilt()
     hasComputedProps.ts       проверка: есть ли computed-свойства у группы
@@ -365,8 +407,7 @@ store/
   submitPipeline/
     applyLeafBeforeSubmit.ts  leaf-level beforeSubmit на snapshot
     collectLeafStates.ts      сбор состояний листьев (для проверки ошибок)
-    getSubValues.ts           извлечение values поддерева
-    submitPipeline.ts         класс SubmitPipeline
+    submitPipeline.ts         класс SubmitPipeline; EntityLeafSubmitOptions { via: AnyConfigNode }
     types.ts                  SubmitResult: `{ success: true; result? }` | `{ success: false; errors: {path, message}[] }`
   valuesCache/
     valuesCache.ts            buildValuesCache + updateValuesCacheEntry (O(1))
@@ -709,6 +750,43 @@ EntityNode:
 
 ---
 
+## NodeView — единая точка связи storage/rules/parent
+
+`NodeView` — абстракция, объединяющая три источника знания об узле. Позволяет
+`WritePipeline`, `SubmitPipeline` и `OnChangePipeline` работать одинаково для
+config-mode и entity-mode.
+
+```ts
+interface NodeView {
+  storage: AnyConfigNode;          // узел, в котором хранится value (nodeState-ключ)
+  rules: AnyConfigNode;            // узел с колбэками: formatter, setter, validate,
+                                   //   onChange, beforeSubmit, onSubmit, afterSubmit
+  parent: {
+    proxy: object | undefined;     // proxy родителя (entityProjectionProxy или groupProxy)
+    getValues: () => Record<string, unknown>; // ленивый снимок — вызывается при каждом
+  };                               //   beforeSubmit/onSubmit, никогда не кэшируется заранее
+  onReset: () => void;             // сброс storage к initial value
+}
+```
+
+**Config-mode (identity view):** `storage = rules = node`. Кэшируется в `NodeRegistry._identityViews`.
+Строится через `makeIdentityView(node, kernel)`.
+
+**Entity-mode:** `storage` = entity leaf-нода, `rules` = template field-нода.
+Регистрируется лениво в GET-трапе `buildEntityProjectionProxy` при первом обращении к полю
+(пропускает phantom leaves, которых нет в `nodeState`).
+Хранится в `NodeRegistry.nodeViews: WeakMap<storage, Map<rules, NodeView>>` — поддерживает
+несколько template-binding'ов на один entity leaf.
+
+**API:**
+```ts
+kernel.nodes.getView(node, via?)
+  // via=undefined → identity view (config-mode)
+  // via=templateField → entity view (бросает если не зарегистрирован)
+```
+
+---
+
 ## Списки (ListNode / ListState)
 
 ### Объявление в конфиге
@@ -789,37 +867,64 @@ Proxy открывает ключи из `LIST_SPREAD_KEYS`:
 ### buildEntityProjectionProxy
 
 ```
-buildEntityProjectionProxy(entityNode, templateNode, kernel, entityProxyCache, leafProxyCache)
-  └─ для каждого ключа templateNode → buildEntityLeafProxy(entityNode[key], templateField, …)
+buildEntityProjectionProxy(entityNode, templateNode, kernel, entityProxyCache)
+  └─ для каждого ключа templateNode → kernel.proxyBuilder.build(entityNode[key], { via: templateField, parentEntityProxy })
 ```
 
-`buildEntityLeafProxy` строит leaf proxy, где GET-трапы:
-- `value` → читает `entityLeaf.value` (или из `nodeState`, если leaf зарегистрирован)
-- `label/placeholder/description` → из templateField (строка или функция `(translate, entityValues)` — два аргумента)
-- `isRequired/isReadOnly/isDisabled/isVisible` → bool или функция `(entityValues)`
-- `isInvalid/errorMessage` → вызывает `templateField.validate(value, entityValues, translate)`
-- `dirty` → из `nodeState` (заполняется `recomputeDirtyTargeted`)
-- `onValueChange` → fn, вызывающий `writeEntityLeafValue`
+Листовой proxy строится единым `ProxyBuilder._buildEntityLeafProxy(storage, rules)`, где:
+- `storage` — entity-leaf нода (хранит значение в `nodeState`)
+- `rules` — template-field нода (описывает поведение: `label`, `validate`, `formatter`, `setter`, `onSubmit`, `onChange`, …)
+- `NodeView` — связь `(storage, rules)`, зарегистрированная в `kernel.nodes.nodeViews`, предоставляет `parent.getValues()` (ленивый снимок) и `onReset`
 
-`ownKeys` листового proxy: `value, label, placeholder, description, isRequired, isReadOnly, isDisabled, isVisible, isInvalid, errorMessage, dirty, onValueChange`  
-(≠ FIELD_STATE_PROPS: включает `onValueChange`, не включает `loading`)
+GET-трапы листового proxy (`ProxyBuilder._buildEntityLeafProxy`):
+- `value` → `nodeState.get(storage)?.value ?? storage.value`
+- `label/placeholder/description` → из `rules` (строка или `(translate, entityValues)`)
+- `isRequired/isReadOnly/isDisabled/isVisible` → bool или `(entityValues)` из `rules`
+- `isInvalid/errorMessage` → `rules.validate(value, entityValues, translate)`
+- `dirty` → `nodeState.get(storage)?.dirty`
+- `loading` → `nodeState.get(storage)?.loading`
+- `submitting` → `nodeState.get(storage)?.submitting`
+- `onValueChange` → fn → `writePipeline.execute(storage, v, prev, { via: rules })` + `onChangePipeline.fire(..., { via: rules })`
+- `submit` → fn → `submitPipeline.execute(storage, { via: rules })`
 
-SET trap на `"value"` → `writeEntityLeafValue`:
-1. `formatValue(rawValue, templateField, entityValues)` — formatter из template
+`ownKeys` листового proxy: `value, label, placeholder, description, isRequired, isReadOnly, isDisabled, isVisible, isInvalid, errorMessage, dirty, loading, submitting, onValueChange, submit`
+
+SET trap на `"value"` → `writePipeline.execute(storage, newValue, prev, { via: rules })`:
+1. `formatValue(rawValue, rules, entityValues)` — formatter из template
 2. `Object.is(formatted, current)` → skip если не изменилось
-3. `storeValue(...)` — записывает в `nodeState` + `updateValuesCacheEntry` через nodeSlot
-4. `templateField.setter(value, entityValues, prev)` → applyPatch к sibling-нодам entity
+3. `storeValue(storage, …)` — записывает в `nodeState` + `updateValuesCacheEntry` через nodeSlot
+4. `rules.setter(value, entityValues, prev)` → applyPatch к sibling-нодам entity
 5. `kernel.recompute(changedNodes)` + `kernel.notifyChanged(allChanged)`
 
 **Root entity proxy** (только если `"id" in entityNode`) дополнительно экспортирует через `ownKeys`:
 - `id` → значение из nodeState (строка), не через leaf proxy
-- `loading` / `submitting` → из `_getEntityBindingState(entityId, templateNode)` (внутренний Map)
-- `submit` → `kernel.executeEntityTemplateSubmit(entityId, templateNode, proxy)`
+- `loading` / `submitting` → из `nodeState.get(templateNode)` (групповой статус через `NodeView`)
+- `submit` → `kernel.submitPipeline.execute(templateNode)` (групповой submit entity-as-form)
 
 **Вложенные группы:** если поле templateNode — это group-нода (нет `"value"`), proxy рекурсивно
-строит `buildEntityProjectionProxy(entityField, templateField, …)` вместо `buildEntityLeafProxy`.  
-**Phantom leaves:** если в entityNode поля нет, но в template оно есть — создаётся временный
-`{ value: templateField.value }` и оборачивается в leaf proxy (без кэширования).
+строит `buildEntityProjectionProxy(entityField, templateField, …)`.
+
+**Phantom leaves:** если в entityNode поля нет, но в template оно есть — storage-нода
+материализуется при первом write/submit через `_setEntitiesRaw`. До материализации
+`submit()` и `onValueChange` — no-op.
+
+### Config-mode vs Entity-mode: сравнение
+
+| Свойство/Хук | Config leaf | Entity leaf |
+|---|---|---|
+| `.value` get/set | ✅ | ✅ |
+| `.label`, `.placeholder`, `.description` | ✅ | ✅ из template rules |
+| `.isRequired/isReadOnly/isDisabled/isVisible` | ✅ | ✅ из template rules |
+| `.isInvalid`, `.errorMessage` | ✅ | ✅ |
+| `.dirty` | ✅ | ✅ |
+| `.loading` | ✅ | ✅ |
+| `.submitting` | ✅ | ✅ |
+| `.onValueChange` | ✅ | ✅ → WritePipeline + OnChangePipeline |
+| `.submit()` | ✅ | ✅ → SubmitPipeline через `{ via: templateField }` |
+| `onChange` (template) | ✅ | ✅ → поднимается по template-предкам |
+| `beforeSubmit` (template) | ✅ | ✅ |
+| `afterSubmit` + `reset` | ✅ | ✅ |
+| `setter` (patch сиблингов) | config-сиблинги | entity-сиблинги |
 
 На entity proxy дополнительно доступны `ENTITY_ID` (symbol → entityId) и
 `STORE_REF` (symbol → kernel) — для извлечения в `useForm(entity, templateSelector)`.
