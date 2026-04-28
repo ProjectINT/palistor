@@ -56,7 +56,7 @@ export class GroupDepsMap {
    * Принимает group-scoped values (parent из nodeSlot):
    * - Для листовых узлов: values = scope родительской группы,
    *   currentGroupPath = recipientPath (= путь родительской группы).
-   * - Для групповых узлов (virtual leaves с isVisible и т.п.): values = scope
+   * - Для групповых узлов (с isVisible и т.п.): values = scope
    *   родителя группы (grandparent scope), currentGroupPath = путь родителя.
    *   recipientPath при этом = собственный путь группы.
    *
@@ -67,8 +67,8 @@ export class GroupDepsMap {
     return (node: object, values: Record<string, unknown>): Record<string, unknown> => {
       const recipientPath = getNodeGroupPath(node, this._nodeParents, this._nodePaths);
 
-      // Leaf node (has "value"): currentGroupPath = recipientPath (= parent group path).
-      // Group node (virtual leaf, no "value"): currentGroupPath = parent group's path
+      // Leaf node: currentGroupPath = recipientPath (= parent group path).
+      // Group node (with computed props): currentGroupPath = parent group's path
       // (which is the root of the group-scoped values we receive),
       // recipientPath = group's own path.
       const isLeaf = isLeafNode(node);

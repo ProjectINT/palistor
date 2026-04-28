@@ -10,8 +10,8 @@ import { isLeafNode, isGroupNode, isListNode } from "./nodeUtils";
  * Реестр узлов конфига.
  *
  * Объединяет данные,
- * `Palistor`: nodeState, nodePaths, nodeParents, leafNodes,
- * groupLeafMap, proxyCache.
+ * `Palistor`: nodeState, nodePaths, nodeParents, computeNodes,
+ * groupComputeMap, proxyCache.
  *
  * Выполняет инициализацию (registerNodes + buildNodeMaps + initGroupSubmitting)
  * в конструкторе.
@@ -153,7 +153,7 @@ export class NodeRegistry {
   /**
    * Зарегистрировать листовой узел, созданный в runtime (например, entity leaf при store.set()).
    *
-   * Обновляет все WeakMap-ы реестра и добавляет запись в `leafNodes`,
+   * Обновляет все WeakMap-ы реестра и добавляет запись в `computeNodes`,
    * чтобы `bumpLeafVersions` (NotificationHub) автоматически захватил новый узел.
    *
    * @param node    Объект-узел (`{ value }`)
@@ -184,7 +184,7 @@ export class NodeRegistry {
   /**
    * Снять регистрацию листового узла (например, при удалении entity).
    *
-   * Удаляет запись из `leafNodes` и из `groupLeafMap` родителя.
+   * Удаляет запись из `computeNodes` и из `groupComputeMap` родителя.
    * WeakMap-записи (nodeState, nodePaths, nodeParents) утилизируются GC автоматически.
    *
    * @param node  Листовой объект-узел

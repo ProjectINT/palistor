@@ -519,32 +519,32 @@ Entity nodes структурно идентичны config nodes: `EntityLeafNo
 
 ### Phase 1: `__kind` маркер + глобальная замена (механическая, без изменения поведения)
 
-- [ ] `__kind` в CONFIG_PROPS
-- [ ] `hasChildren()` helper в nodeClassifier
-- [ ] `registerNodes` → навешивать `__kind` на каждый config узел
-- [ ] `isLeafNode()` / `isGroupNode()` runtime-helpers
-- [ ] Entity фабрики (`createEntityNode`, `createGroupNode`, `mergeEntityNode`) → `__kind`
-- [ ] Удалить `isLeaf()` / `isGroup()`, заменить все 28+6 точек на `isLeafNode()` / `isGroupNode()`
+- [x] `__kind` в CONFIG_PROPS
+- [x] `hasChildren()` helper в nodeClassifier
+- [x] `registerNodes` → навешивать `__kind` на каждый config узел
+- [x] `isLeafNode()` / `isGroupNode()` runtime-helpers
+- [x] Entity фабрики (`createEntityNode`, `createGroupNode`, `mergeEntityNode`) → `__kind`
+- [x] Удалить `isLeaf()` / `isGroup()`, заменить все 28+6 точек на `isLeafNode()` / `isGroupNode()`
 
 Суть: после этого коммита `__kind` проставлен на всех узлах, старые функции удалены, все проверки через `isLeafNode`/`isGroupNode`. Поведение идентично — `__kind === "leaf"` эквивалентен `"value" in node` для существующего кода.
 
 ### Phase 2: Group nodeState + устранение virtual leaf
 
-- [ ] Все группы в nodeState при registerNodes (value: undefined → заполнится)
-- [ ] `buildValuesCache` → обновить group.value = groupSlot reference
-- [ ] `leafNodes` → `computeNodes`, `groupLeafMap` → `groupComputeMap`
-- [ ] Единообразное хранение в `groupComputeMap` — всё под родителем
-- [ ] `collectGroupLeafNodes` → `collectGroupComputeNodes`
-- [ ] Удалить термин "virtual leaf", единый путь регистрации групп
+- [x] Все группы в nodeState при registerNodes (value: undefined → заполнится)
+- [x] `buildValuesCache` → обновить group.value = groupSlot reference
+- [x] `leafNodes` → `computeNodes`, `groupLeafMap` → `groupComputeMap`
+- [x] Единообразное хранение в `groupComputeMap` — всё под родителем
+- [x] `collectGroupLeafNodes` → `collectGroupComputeNodes`
+- [x] Удалить термин "virtual leaf", единый путь регистрации групп
 
 Суть: внутренняя реструктуризация. Группы имеют value в nodeState, virtual leaf как концепция убита. Внешний API не меняется.
 
 ### Phase 3: Proxy group.value + submit unification
 
-- [ ] `buildProxy.ts` get trap → group возвращает value из nodeState
-- [ ] `buildProxy.ts` set trap → `group.value = {...}` вызывает setValuesNode
-- [ ] `computeProxyKeys` → ownKeys для групп включает `value`
-- [ ] Submit pipeline → единый вход через `nodeState.get(node).value`, ветвление по `__kind`
+- [x] `buildProxy.ts` get trap → group возвращает value из nodeState
+- [x] `buildProxy.ts` set trap → `group.value = {...}` вызывает setValuesNode
+- [x] `computeProxyKeys` → ownKeys для групп включает `value`
+- [x] Submit pipeline → единый вход через `nodeState.get(node).value`, ветвление по `__kind`
 
 Суть: пользователь получает `group.value` для чтения/записи. Submit использует единый вход.
 
