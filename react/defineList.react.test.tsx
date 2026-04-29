@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import { Palistor } from "../store/store";
 import { defineList } from "../store/defineList";
 import { useForm } from "./useForm";
@@ -140,5 +140,138 @@ describe("defineList + useForm — консоль списка в React", () => 
     expect(screen.getByTestId("count").textContent).toBe("2");
     // После resolve — loading false
     expect(loadingStates[loadingStates.length - 1]).toBe(false);
+  });
+});
+
+// ─── defineList + useForm entity mode: поля списка доступны через другой конфиг ──
+
+describe("defineList + useForm entity mode — поля из резолва списка в другом конфиге", () => {
+  it("после resolve списка все поля entity доступны через другой конфиг (editForm)", async () => {
+    const mockData = [
+      { id: "p1", name: "Alice", age: 30, status: "active" },
+      { id: "p2", name: "Bob", age: 25, status: "inactive" },
+    ];
+
+    const listResolver = vi.fn(async () => mockData);
+
+    const store = new Palistor({
+      config: {
+        // Список объявлен с шаблоном, содержащим все поля
+        people: defineList({
+          template: {
+            id: { value: "" },
+            name: { value: "" },
+            age: { value: 0 },
+            status: { value: "" },
+          },
+          resolve: { resolver: listResolver, onError: vi.fn() },
+        }),
+        // Отдельный конфиг для редактирования одной entity
+        editPersonForm: {
+          id: { value: "" },
+          name: { value: "" },
+          age: { value: 0 },
+          status: { value: "" },
+        },
+      } as any,
+    });
+
+    // Рендерим список — тригерит resolve
+    function PeopleListApp() {
+      const form = useForm(store);
+      const people = (form as any).people;
+      void people.items; // триггер lazy-resolve
+      return (
+        <ul>
+          {people.map((p: any, _i: number, id: string) => (
+            <li key={id} data-testid={`row-${id}`}>
+              {p.name.value}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    render(<PeopleListApp />);
+
+    // Ждём завершения resolver
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(listResolver).toHaveBeenCalledTimes(1);
+
+    // Берём первую entity из списка
+    const aliceProxy = (store.proxy as any).people.items[0];
+
+    // Открываем entity через другой конфиг (editPersonForm)
+    const { result } = renderHook(() =>
+      useForm(aliceProxy, (s: any) => s.editPersonForm),
+    );
+
+    const editForm = result.current as any;
+
+    // Все поля, загруженные резолвером списка, доступны в editPersonForm.
+    // id возвращается напрямую как строка (entity projection proxy особый случай).
+    expect(editForm.id).toBe("p1");
+    expect(editForm.name.value).toBe("Alice");
+    expect(editForm.age.value).toBe(30);
+    expect(editForm.status.value).toBe("active");
+  });
+
+  it("поля второй entity из списка корректно доступны через editForm", async () => {
+    const mockData = [
+      { id: "p1", name: "Alice", age: 30, status: "active" },
+      { id: "p2", name: "Bob", age: 25, status: "inactive" },
+    ];
+
+    const listResolver = vi.fn(async () => mockData);
+
+    const store = new Palistor({
+      config: {
+        people: defineList({
+          template: {
+            id: { value: "" },
+            name: { value: "" },
+            age: { value: 0 },
+            status: { value: "" },
+          },
+          resolve: { resolver: listResolver, onError: vi.fn() },
+        }),
+        editPersonForm: {
+          id: { value: "" },
+          name: { value: "" },
+          age: { value: 0 },
+          status: { value: "" },
+        },
+      } as any,
+    });
+
+    function PeopleListApp() {
+      const form = useForm(store);
+      const people = (form as any).people;
+      void people.items;
+      return <div />;
+    }
+
+    render(<PeopleListApp />);
+
+    await act(async () => {
+      await flushPromises();
+    });
+
+    // Вторая entity
+    const bobProxy = (store.proxy as any).people.items[1];
+
+    const { result } = renderHook(() =>
+      useForm(bobProxy, (s: any) => s.editPersonForm),
+    );
+
+    const editForm = result.current as any;
+
+    expect(editForm.id).toBe("p2");
+    expect(editForm.name.value).toBe("Bob");
+    expect(editForm.age.value).toBe(25);
+    expect(editForm.status.value).toBe("inactive");
   });
 });
