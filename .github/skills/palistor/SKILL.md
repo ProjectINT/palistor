@@ -449,6 +449,7 @@ Plus all child fields as proxy sub-properties.
 | `remove(id)` | `void` | Remove from list (entity stays in registry) |
 | `getById(id)` | `EntityProxy` | Find item by ID |
 | `setItems(ids)` | `void` | Bulk replace list contents |
+| `getValues()` | `Array<Record<string, unknown>>` | Plain values snapshot of all items — use for `console.log`, serialization, or comparison |
 | `[Symbol.iterator]` | | Iterable |
 
 ## Store Public Methods
@@ -637,6 +638,12 @@ form.users.add("u1");                    // add existing entity by ID
 form.users.add({ id: "u2", name: "Bob" }); // upsert entity + add to list
 form.users.remove("u1");                 // remove from list (entity STAYS in registry)
 form.users.setItems(["u1", "u2", "u3"]); // bulk replace
+
+// ─── Plain values snapshot ───────────────────────────────
+// getValues() returns a plain Array<Record<string, unknown>> — safe to log/serialize.
+// Each element mirrors entity field values (same as entity proxy .values).
+console.log(form.users.getValues());
+// → [{ id: "u1", name: "Alice", age: 30 }, { id: "u2", name: "Bob", age: 25 }]
 ```
 
 ### Entity operations on store

@@ -111,4 +111,5 @@ export const LIST_SPREAD_KEYS: string[] = [
   "getById",
   "setItems",
   "map",
+  "getValues",
 ];

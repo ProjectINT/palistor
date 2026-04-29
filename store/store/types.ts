@@ -345,6 +345,7 @@ export interface ListProxyNode<TItem> {
   getById(id: string): TItem | undefined;
   setItems(ids: string[]): void;
   map<R>(fn: (item: TItem, index: number, id: string) => R): R[];
+  getValues(): Array<Record<string, unknown>>;
   [Symbol.iterator](): Iterator<TItem>;
 }
 

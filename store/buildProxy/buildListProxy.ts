@@ -221,6 +221,15 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
           triggerLazyResolveIfNeeded();
           return mapFn;
 
+        case "getValues":
+          return () =>
+            listState.itemIds
+              .map((id) => {
+                const p = buildItemProxy(id) as any;
+                return p?.values as Record<string, unknown> | undefined;
+              })
+              .filter((v): v is Record<string, unknown> => v !== undefined);
+
         default:
           return undefined;
       }
