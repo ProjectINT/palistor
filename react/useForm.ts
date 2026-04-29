@@ -73,6 +73,23 @@ function resolveInput<TConfig extends Record<string, any>>(
   const unwrapped = unwrapTrackingProxy<TConfig>(input);
   if (unwrapped) return unwrapped;
 
+  // Сырой GroupProxyNode из store.proxy.someGroup — НЕ подходит.
+  // Пользователь должен передавать либо ProxyStore (new Palistor()),
+  // либо tracking proxy (из пропса родительского useForm).
+  if (input != null && typeof input === "object" && (input as any)[CONFIG_NODE]) {
+    throw new Error(
+      "useForm: получен сырой proxy-узел стора (store.proxy.someGroup). " +
+      "Это не допустимо.\n\n" +
+      "Правильный способ:\n" +
+      "  1. Получите tracking proxy через useForm(store):\n" +
+      "       const form = useForm(store);\n" +
+      "  2. Передайте поддерево как проп дочернему компоненту:\n" +
+      "       <Child section={form.someGroup} />\n" +
+      "  3. В дочернем компоненте вызовите useForm(props.section).\n\n" +
+      "Нельзя передавать store.proxy или его дочерние узлы напрямую в useForm.",
+    );
+  }
+
   // Иначе это ProxyStore — берём store.proxy как sourceProxy
   return { store: input, sourceProxy: input.proxy };
 }

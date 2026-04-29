@@ -649,6 +649,82 @@ describe("useForm tracking (selective re-render)", () => {
   });
 });
 
+// ─── Антипаттерн: store.proxy напрямую в useForm ─────────────────────────────
+
+describe("useForm: передача store.proxy напрямую вызывает ошибку", () => {
+  /**
+   * store.proxy.usersPage.inviteUser — это сырой GroupProxyNode из внутреннего
+   * прокси стора. Он НЕ является ни ProxyStore (нет .proxy), ни tracking proxy
+   * (нет SOURCE_PROXY символа).
+   *
+   * resolveInput() получает его и делает:
+   *   { store: rawGroupProxy, sourceProxy: rawGroupProxy.proxy }
+   *                                                            ^^ undefined
+   *
+   * Затем createTrackingProxy(undefined, ...) вызывает WeakMap.has(undefined)
+   * → TypeError: Invalid value used as weak map key.
+   *
+   * Правильный способ:
+   *   const form = useForm(store);
+   *   // form.usersPage.inviteUser — это уже tracking proxy, его можно передать пропсом
+   *   // и в дочернем компоненте вызвать useForm(props.inviteUser)
+   */
+  it("выбрасывает ошибку при useForm(store.proxy.someGroup)", () => {
+    const store = new Palistor({
+      config: {
+        usersPage: {
+          inviteUser: {
+            email: { value: "", label: "Email" },
+            role: { value: "viewer", label: "Role" },
+          },
+        },
+      },
+    });
+
+    // store.proxy.usersPage.inviteUser — сырой GroupProxyNode, НЕ tracking proxy
+    expect(() => {
+      renderHook(() => useForm(store.proxy.usersPage.inviteUser));
+    }).toThrow("useForm: получен сырой proxy-узел стора");
+  });
+
+  it("правильный способ: useForm(store) → передать поддерево как проп", () => {
+    const store = new Palistor({
+      config: {
+        usersPage: {
+          inviteUser: {
+            email: { value: "", label: "Email" },
+            role: { value: "viewer", label: "Role" },
+          },
+        },
+      },
+    });
+
+    // Правильно: получаем tracking proxy через useForm(store),
+    // затем передаём form.usersPage.inviteUser как проп дочернему компоненту.
+    function InviteUserForm({ inviteUser }: { inviteUser: any }) {
+      // Здесь inviteUser — tracking proxy (из родительского useForm),
+      // поэтому useForm(inviteUser) работает корректно.
+      const form = useForm(inviteUser);
+      return (
+        <div>
+          <span data-testid="invite-email">{(form as any).email.value}</span>
+          <span data-testid="invite-role">{(form as any).role.value}</span>
+        </div>
+      );
+    }
+
+    function App() {
+      const form = useForm(store);
+      return <InviteUserForm inviteUser={(form as any).usersPage.inviteUser} />;
+    }
+
+    render(<App />);
+
+    expect(screen.getByTestId("invite-email").textContent).toBe("");
+    expect(screen.getByTestId("invite-role").textContent).toBe("viewer");
+  });
+});
+
 // ─── setValues: bulk update ───────────────────────────────────────────────────
 
 describe("setValues", () => {
