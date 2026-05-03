@@ -683,6 +683,10 @@ describe("useForm: передача store.proxy напрямую вызывае�
 
     // store.proxy.usersPage.inviteUser — сырой GroupProxyNode, НЕ tracking proxy
     expect(() => {
+      // @ts-expect-error — TypeScript должен запретить передачу сырого
+      // store.proxy-поддерева в useForm. Если это ts-expect-error «протух» —
+      // значит компиляторный guard сломан, нужно чинить
+      // ForbidRawStoreProxy / RawStoreProxyMarker в палисторе.
       renderHook(() => useForm(store.proxy.usersPage.inviteUser));
     }).toThrow("useForm: получен сырой proxy-узел стора");
   });

@@ -24,12 +24,12 @@ import { isLeafNode, configKeys } from "../traversal";
 
 import type {
   AnyConfigNode,
-  ConfigProxy,
   DeepPartialValues,
   ExtractValues,
   ListState,
   ProxyStore,
   ProxyStoreOptions,
+  RawStoreProxy,
   TranslateFn,
   Unsubscribe,
 } from "./types";
@@ -101,7 +101,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   /** @internal Корневой конфиг, неизменяемый. */
   readonly rootConfig: AnyConfigNode;
-  private readonly _proxy: ConfigProxy<TConfig>;
+  private readonly _proxy: RawStoreProxy<TConfig>;
   private readonly _persist: PersistManager;
 
   /**
@@ -176,7 +176,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     this.onChangePipeline = new OnChangePipeline(this);
     this.proxyBuilder = new ProxyBuilder(this);
 
-    this._proxy = this.proxyBuilder.build(rootConfig) as ConfigProxy<TConfig>;
+    this._proxy = this.proxyBuilder.build(rootConfig) as RawStoreProxy<TConfig>;
 
     // ─── PersistManager ───────────────────────────────────────────────────────
 
@@ -267,7 +267,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   // ─── ProxyStore — публичный API ───────────────────────────────────────────
 
-  get proxy(): ConfigProxy<TConfig> {
+  get proxy(): RawStoreProxy<TConfig> {
     return this._proxy;
   }
 

@@ -50,7 +50,7 @@
  */
 
 import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
-import type { ProxyStore, ConfigProxy, GroupProxyNode } from "../store/store";
+import type { ProxyStore, ConfigProxy, GroupProxyNode, RawStoreProxyMarker } from "../store/store";
 import type { PalistorRef, PalistorList, Palistor, PalistorEntityProxy } from "../store/store/types";
 import {
   createTrackingProxy,
@@ -109,17 +109,39 @@ function resolveInput<TConfig extends Record<string, any>>(
  *                tracking proxy поддерево (из пропса другого useForm)
  * @returns tracking proxy — типизированный по конфигу (или поддереву)
  */
+/**
+ * Тип-«ошибка», который TypeScript показывает в диагностике, если в
+ * `useForm` передали сырой `store.proxy` или его поддерево. Имя интерфейса
+ * специально длинное и описательное — оно появится в тексте ошибки и
+ * подскажет, что делать.
+ *
+ * @see {@link RawStoreProxyMarker}
+ */
+export interface _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first {
+  readonly _palistorError:
+    "useForm received a raw store.proxy subtree. Use: const form = useForm(store); then drill into form.subtree (a tracking proxy). See useForm-raw-proxy-pitfall.md.";
+}
+
+/**
+ * Превращает T в тип-ошибку, если T помечен {@link RawStoreProxyMarker}.
+ * Применяется к параметру subtree-перегрузки `useForm`, чтобы сделать
+ * `useForm(store.proxy.subtree)` ошибкой компиляции.
+ */
+type ForbidRawStoreProxy<T> = T extends RawStoreProxyMarker
+  ? _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first
+  : T;
+
 export function useForm<T extends Record<string, any>>(input: PalistorRef<T>): PalistorEntityProxy<T>;
 export function useForm<T extends Record<string, any>>(input: PalistorList<T>): PalistorList<T>;
 export function useForm<T extends Record<string, any> & { id?: any }>(
   input: Palistor<T>,
 ): PalistorEntityProxy<T>;
 export function useForm<T extends GroupProxyNode>(
-  input: T,
+  input: ForbidRawStoreProxy<T>,
 ): T;
 
 export function useForm<TConfig extends Record<string, any>>(
-  input: ProxyStore<TConfig> | ConfigProxy<TConfig>,
+  input: ProxyStore<TConfig>,
 ): ConfigProxy<TConfig>;
 
 /**

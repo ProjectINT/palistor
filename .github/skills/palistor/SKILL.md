@@ -300,6 +300,36 @@ const store = new Palistor<typeof config>({
 
 ### useForm — connect component to store
 
+> **🚨 CRITICAL PITFALL — never pass `store.proxy.X` to `useForm`.**
+>
+> `store.proxy` is the *raw* internal proxy. It is **typed-branded** with
+> `RawStoreProxyMarker`, so any attempt to call `useForm(store.proxy.something)`
+> is rejected by the TypeScript compiler with a self-describing diagnostic
+> (`_PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first`).
+> At runtime it also throws: `useForm: получен сырой proxy-узел стора …`.
+>
+> ```tsx
+> // ❌ TypeScript error + runtime throw
+> const form = useForm(store.proxy.customerForm);
+>
+> // ✅ Bind once at the root, then drill into the tracking proxy
+> const root = useForm(store);
+> const form = root.customerForm;
+> ```
+>
+> The first argument of `useForm` is **always** one of:
+>   1. The `Palistor` store instance (`useForm(store)`),
+>   2. A **tracking proxy** subtree received as a prop from a parent
+>      component (it was returned by some other `useForm(...)` upstream),
+>   3. An **entity proxy** from `list.items` / `list.getById`
+>      (optionally with a `templateSelector` for separate edit-form templates).
+>
+> Imperative writes outside React (`store.proxy.customerForm.setValues(...)`)
+> are fine — the rule applies only to `useForm` subscriptions.
+>
+> See [useForm-raw-proxy-pitfall.md](useForm-raw-proxy-pitfall.md) for the full
+> root-cause analysis.
+
 ```tsx
 // Root — pass the store
 function OrderForm() {
@@ -308,7 +338,14 @@ function OrderForm() {
 }
 
 // Child — pass a proxy subtree (independent re-renders)
-function PassportSection({ passport }: { passport: typeof form.passport }) {
+// IMPORTANT: `passport` here is a tracking proxy from the parent's `useForm(store)`,
+// NOT `store.proxy.passport`. Type it via `PalistorProxy<...>` (see "TypeScript Types"
+// section) instead of `typeof store.proxy.passport`.
+function Parent() {
+  const form = useForm(store);
+  return <PassportSection passport={form.passport} />;
+}
+function PassportSection({ passport }: { passport: PalistorProxy<{ number: string }> }) {
   const p = useForm(passport);
   if (!p.isVisible) return null;
   return <input value={p.number.value} onChange={e => { p.number.value = e.target.value }} />;
@@ -949,6 +986,7 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | Mistake | Fix |
 |---------|-----|
 | Reading `form.field` without `useForm` | Always wrap in `useForm(store)` or `useForm(subtree)` for reactivity |
+| **Passing `store.proxy.X` to `useForm`** | **Forbidden.** `store.proxy` is `RawStoreProxy` — branded with `RawStoreProxyMarker`, so TypeScript fails the call (`_PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first`) and runtime throws. Use `const form = useForm(store); form.subtree`. |
 | Mutating config after creation | Config is treated as immutable — never mutate |
 | Missing `dependencies` for computed | Use `dependencies: ["fieldName"]` for cross-field computed/visibility |
 | Using `form.email.value` outside render | `store.getValues()` for non-reactive reads |

@@ -60,6 +60,8 @@ export type {
   FieldProxyNode,
   GroupProxyNode,
   ConfigProxy,
+  RawStoreProxy,
+  RawStoreProxyMarker,
   ExtractValues,
   ProxyStoreOptions,
   ProxyStore,

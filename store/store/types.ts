@@ -406,6 +406,62 @@ export type ConfigProxy<TConfig extends Record<string, any>> = GroupProxyNode & 
   [K in keyof TConfig]: ConfigNodeToProxy<TConfig[K]>;
 };
 
+// ─── Raw-store brand ────────────────────────────────────────────────────────
+//
+// Брендируем `store.proxy` (и любое его поддерево) уникальным символом,
+// чтобы TypeScript мог отличать «сырой» store-проxy от tracking-proxy,
+// который возвращает `useForm()`. Бренд распространяется рекурсивно по
+// каждому узлу: группе, листу, списку — поэтому
+// `store.proxy.foo.bar.baz` тоже несёт `RawStoreProxyMarker`.
+//
+// Это нужно для того, чтобы случайный вызов
+//   useForm(store.proxy.someGroup)
+// вызывал ошибку компиляции (см. перегрузки `useForm`).
+
+declare const __rawStoreBrand: unique symbol;
+
+/**
+ * Маркер «сырого» узла из `store.proxy`. Не передавайте такие значения в
+ * `useForm()` — используйте `useForm(store)` и обращайтесь к поддеревьям
+ * через возвращённый tracking-proxy.
+ */
+export interface RawStoreProxyMarker {
+  readonly [__rawStoreBrand]: "Do not pass store.proxy or store.proxy.subtree to useForm. Use: const form = useForm(store); then form.subtree";
+}
+
+/**
+ * Та же рекурсивная конвертация конфига в прокси, что и `ConfigNodeToProxy`,
+ * но на каждом уровне (группа / лист / список) пересекается с
+ * `RawStoreProxyMarker`, чтобы бренд распространялся по всему дереву.
+ */
+type ConfigNodeToProxyRaw<T> =
+  T extends { readonly [__typedListBrand]: infer TEntity extends Record<string, any> }
+    ? ListProxyNode<PalistorRef<TEntity>> & RawStoreProxyMarker
+    : T extends readonly [infer Item, ...any[]]
+      ? ListProxyNode<ConfigNodeToProxyRaw<Item>> & RawStoreProxyMarker
+      : T extends { value: any }
+        ? FieldProxyNode<ExtractNodeValue<T>> & RawStoreProxyMarker
+        : T extends Record<string, any>
+          ? GroupProxyNode & RawStoreProxyMarker & {
+              [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxyRaw<T[K]>;
+            }
+          : never;
+
+/**
+ * Тип значения `store.proxy`. Структурно повторяет `ConfigProxy<TConfig>`,
+ * но на каждом узле дерева добавляет {@link RawStoreProxyMarker} —
+ * это позволяет TypeScript ругаться на `useForm(store.proxy.X)`.
+ *
+ * Передача такого значения (или его поддерева) в `useForm` ведёт к
+ * ошибке вида:
+ *   Argument of type 'X' is not assignable to parameter of type
+ *   '_PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first'.
+ */
+export type RawStoreProxy<TConfig extends Record<string, any>> =
+  GroupProxyNode & RawStoreProxyMarker & {
+    [K in keyof TConfig]: ConfigNodeToProxyRaw<TConfig[K]>;
+  };
+
 /**
  * Прокси для отдельной entity: id отображается как string,
  * остальные поля — аналогично Palistor<T>.
@@ -489,8 +545,13 @@ export interface ProxyStore<TConfig extends Record<string, any>> {
    * Реактивный прокси. Повторяет структуру конфига.
    * GET .value / .isVisible / … → из вычисленного FieldState
    * SET .value = X → formatter → validate → recompute → notify
+   *
+   * Тип помечен {@link RawStoreProxyMarker} — этот узел и все его поддеревья
+   * **нельзя** передавать в `useForm()` (ни на root-, ни на subtree-уровне).
+   * Для подписки в React используйте `useForm(store)` и обращайтесь к
+   * полям через возвращённый tracking-proxy.
    */
-  proxy: ConfigProxy<TConfig>;
+  proxy: RawStoreProxy<TConfig>;
 
   /**
    * Нереактивный контекст — произвольные данные, доступные во всех callback-ах
