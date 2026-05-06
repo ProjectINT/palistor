@@ -121,6 +121,7 @@ export function executeResolve(
 
         // Оборачиваем store.context в tracking proxy для автоматических контекстных зависимостей
         contextTracking = createContextTrackingProxy(store.context);
+
         const storeProxy = new Proxy(store, {
           get(target, key) {
             if (key === "context") return contextTracking!.proxy;

@@ -275,3 +275,148 @@ describe("defineList + useForm entity mode — поля из резолва сп
     expect(editForm.status.value).toBe("inactive");
   });
 });
+
+// ─── store.set() upsert — React видит обновление ─────────────────────────────
+
+describe("store.set() upsert — React получает сигнал и видит обновлённые данные", () => {
+  it("store.set обновляет entity в списке — компонент ре-рендерится с новым значением", () => {
+    const store = new Palistor({
+      config: {
+        users: [
+          { id: { value: "" }, name: { value: "" }, role: { value: "" } },
+        ],
+      } as any,
+    });
+
+    store.set({ id: "u1", name: "Alice", role: "viewer" });
+    store.set({ id: "u2", name: "Bob", role: "viewer" });
+    (store.proxy as any).users.add("u1");
+    (store.proxy as any).users.add("u2");
+
+    const renderCount = vi.fn();
+
+    function UserList() {
+      renderCount();
+      const form = useForm(store);
+      const users = (form as any).users;
+      return (
+        <ul>
+          {users.map((u: any, _i: number, id: string) => (
+            <li key={id} data-testid={`user-${id}`}>
+              {u.name.value} / {u.role.value}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    render(<UserList />);
+    expect(screen.getByTestId("user-u1").textContent).toBe("Alice / viewer");
+    expect(screen.getByTestId("user-u2").textContent).toBe("Bob / viewer");
+
+    const rendersBefore = renderCount.mock.calls.length;
+
+    // Обновляем только u1 — только её поля меняются
+    act(() => {
+      store.set({ id: "u1", name: "Alice Updated", role: "admin" });
+    });
+
+    // Компонент ре-рендерился
+    expect(renderCount.mock.calls.length).toBeGreaterThan(rendersBefore);
+
+    // DOM обновлён для u1
+    expect(screen.getByTestId("user-u1").textContent).toBe("Alice Updated / admin");
+    // u2 не изменился
+    expect(screen.getByTestId("user-u2").textContent).toBe("Bob / viewer");
+  });
+
+  it("store.set обновляет только одно поле entity — компонент, читающий другое поле, не ре-рендерится", () => {
+    const store = new Palistor({
+      config: {
+        users: [
+          { id: { value: "" }, name: { value: "" }, role: { value: "" } },
+        ],
+      } as any,
+    });
+
+    store.set({ id: "u1", name: "Alice", role: "viewer" });
+    (store.proxy as any).users.add("u1");
+
+    const roleRenderCount = vi.fn();
+
+    // Компонент читает ТОЛЬКО role — должен реагировать только на изменение role
+    function RoleDisplay() {
+      roleRenderCount();
+      const form = useForm(store);
+      const users = (form as any).users;
+      return <span data-testid="role">{users.items[0].role.value}</span>;
+    }
+
+    render(<RoleDisplay />);
+    const rendersBefore = roleRenderCount.mock.calls.length;
+
+    // Меняем только name — role не трогаем
+    act(() => {
+      store.set({ id: "u1", name: "Alice Updated" });
+    });
+
+    // role не изменился — компонент не должен ре-рендериться
+    // (tracking proxy записал только чтение role.value)
+    expect(roleRenderCount.mock.calls.length).toBe(rendersBefore);
+    expect(screen.getByTestId("role").textContent).toBe("viewer");
+  });
+
+  it("store.set обновляет несколько entities — компонент видит все обновления за один render", () => {
+    const store = new Palistor({
+      config: {
+        users: [
+          { id: { value: "" }, name: { value: "" } },
+        ],
+      } as any,
+    });
+
+    store.set([
+      { id: "u1", name: "Alice" },
+      { id: "u2", name: "Bob" },
+      { id: "u3", name: "Carol" },
+    ]);
+    (store.proxy as any).users.add("u1");
+    (store.proxy as any).users.add("u2");
+    (store.proxy as any).users.add("u3");
+
+    const renderCount = vi.fn();
+
+    function UserList() {
+      renderCount();
+      const form = useForm(store);
+      const users = (form as any).users;
+      return (
+        <ul>
+          {users.map((u: any, _i: number, id: string) => (
+            <li key={id} data-testid={`user-${id}`}>{u.name.value}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    render(<UserList />);
+    const rendersBefore = renderCount.mock.calls.length;
+
+    // Batch update — все три entity за один store.set
+    act(() => {
+      store.set([
+        { id: "u1", name: "Alice v2" },
+        { id: "u2", name: "Bob v2" },
+        { id: "u3", name: "Carol v2" },
+      ]);
+    });
+
+    // Один batch → один ре-рендер
+    expect(renderCount.mock.calls.length).toBe(rendersBefore + 1);
+
+    // Все обновления видны в DOM
+    expect(screen.getByTestId("user-u1").textContent).toBe("Alice v2");
+    expect(screen.getByTestId("user-u2").textContent).toBe("Bob v2");
+    expect(screen.getByTestId("user-u3").textContent).toBe("Carol v2");
+  });
+});

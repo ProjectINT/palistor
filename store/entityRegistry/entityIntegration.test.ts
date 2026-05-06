@@ -222,3 +222,88 @@ describe("store.delete()", () => {
     expect(store.nodes.computeNodes.length).toBe(leafCountBefore);
   });
 });
+
+// ─── store.set() — обновление entity в списке ─────────────────────────────────
+
+describe("store.set() — обновление entity в списке по id", () => {
+  function makeListStore() {
+    return new Palistor({
+      config: {
+        users: [
+          { id: { value: "" }, name: { value: "" }, role: { value: "" } },
+        ],
+      } as any,
+    });
+  }
+
+  it("store.set обновляет entity, добавленную в список — значение видно через list proxy", () => {
+    const store = makeListStore();
+    store.set({ id: "u1", name: "Alice", role: "viewer" });
+    (store.proxy as any).users.add("u1");
+
+    store.set({ id: "u1", name: "Alice Updated" });
+
+    expect((store.proxy as any).users.items[0].name.value).toBe("Alice Updated");
+    // role не трогали — должен остаться
+    expect((store.proxy as any).users.items[0].role.value).toBe("viewer");
+  });
+
+  it("store.set обновляет entity в списке — getValues() возвращает актуальные данные", () => {
+    const store = makeListStore();
+    store.set({ id: "u1", name: "Alice", role: "viewer" });
+    (store.proxy as any).users.add("u1");
+
+    store.set({ id: "u1", name: "Alice Updated", role: "admin" });
+
+    const values = (store.proxy as any).users.getValues() as Array<Record<string, unknown>>;
+    expect(values).toHaveLength(1);
+    expect(values[0].name).toBe("Alice Updated");
+    expect(values[0].role).toBe("admin");
+  });
+
+  it("несколько entities в списке — store.set обновляет только нужную", () => {
+    const store = makeListStore();
+    store.set({ id: "u1", name: "Alice", role: "viewer" });
+    store.set({ id: "u2", name: "Bob", role: "viewer" });
+    (store.proxy as any).users.add("u1");
+    (store.proxy as any).users.add("u2");
+
+    store.set({ id: "u1", name: "Alice Updated" });
+
+    expect((store.proxy as any).users.items[0].name.value).toBe("Alice Updated");
+    expect((store.proxy as any).users.items[1].name.value).toBe("Bob"); // не изменился
+  });
+
+  it("store.set обновляет entity — подписчик на leaf нужной entity вызывается", () => {
+    const store = makeListStore();
+    store.set({ id: "u1", name: "Alice", role: "viewer" });
+    store.set({ id: "u2", name: "Bob", role: "viewer" });
+    (store.proxy as any).users.add("u1");
+    (store.proxy as any).users.add("u2");
+
+    const u1NameLeaf = store.entityRegistry.get("u1")!.name as object;
+    const u2NameLeaf = store.entityRegistry.get("u2")!.name as object;
+    const listenerU1 = vi.fn();
+    const listenerU2 = vi.fn();
+    store.subscribe(u1NameLeaf, listenerU1);
+    store.subscribe(u2NameLeaf, listenerU2);
+
+    store.set({ id: "u1", name: "Alice Updated" });
+
+    // только u1 обновили — только её подписчик должен вызваться
+    expect(listenerU1).toHaveBeenCalledTimes(1);
+    expect(listenerU2).not.toHaveBeenCalled();
+  });
+
+  it("store.set на entity в списке — merge не удаляет поля, которых не было в patch", () => {
+    const store = makeListStore();
+    store.set({ id: "u1", name: "Alice", role: "admin" });
+    (store.proxy as any).users.add("u1");
+
+    // обновляем только name, role не передаём
+    store.set({ id: "u1", name: "Alice Renamed" });
+
+    expect((store.proxy as any).users.items[0].name.value).toBe("Alice Renamed");
+    expect((store.proxy as any).users.items[0].role.value).toBe("admin"); // сохранён
+  });
+});
