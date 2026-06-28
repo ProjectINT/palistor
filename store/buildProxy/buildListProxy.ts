@@ -109,7 +109,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
       if (!kernel.entityRegistry.has(entityId)) return;
       if (!listState.itemIds.includes(entityId)) {
         listState.itemIds.push(entityId);
-        listState.version++;
         syncListValuesCache(listNode, kernel);
         notifyListChanged();
       }
@@ -121,7 +120,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
       entityId = entityNode.id.value as string;
       if (!listState.itemIds.includes(entityId)) {
         listState.itemIds.push(entityId);
-        listState.version++;
         syncListValuesCache(listNode, kernel);
         notifyListChanged();
       }
@@ -132,7 +130,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
     const idx = listState.itemIds.indexOf(id);
     if (idx === -1) return;
     listState.itemIds.splice(idx, 1);
-    listState.version++;
     syncListValuesCache(listNode, kernel);
     notifyListChanged();
   };
@@ -145,7 +142,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
   const setItemsFn = (ids: string[]): void => {
     listState.itemIds.length = 0;
     for (const id of ids) listState.itemIds.push(id);
-    listState.version++;
     syncListValuesCache(listNode, kernel);
     notifyListChanged();
   };

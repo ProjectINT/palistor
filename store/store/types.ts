@@ -1,4 +1,5 @@
 import type { PersistManager } from "../persist/persistManager";
+import type { EntityNode } from "../entityRegistry/types";
 
 /**
  * Внутренний тип для рекурсивного обхода дерева конфига.
@@ -313,18 +314,26 @@ export interface ListConfig {
 }
 
 /**
- * Внутреннее состояние списка. Хранится в NodeRegistry.listStates,
- * ключ — объект-массив конфига (сам ListNode).
+ * Внутреннее состояние списка — ЕДИНЫЙ кубик «список» (root + per-entity).
+ *
+ * Идентичность узла для tracking/resolve — сам объект `ListState` (ключ в хабе),
+ * а не отдельное поле version. Root-list — вырожденный случай `ownerEntity === null`;
+ * per-entity-list (вариант C) — `ownerEntity` указывает на владельца.
+ *
+ * Root-`ListState` хранится в `NodeRegistry.listStates` (ключ — `listConfigNode`),
+ * per-entity — в `owner.lists` (ключ — тот же `listConfigNode`).
  */
 export interface ListState {
-  /** Шаблон элемента — describes поля для отображения. array[0]. */
+  /** Сам array-узел конфига [template, listConfig?] — ключ во всех реестрах. */
+  listConfigNode: object;
+  /** Шаблон элемента — describes поля для отображения. listConfigNode[0]. */
   template: object;
-  /** Конфигурация списка (resolve и т.д.). array[1] — опционально. */
+  /** Конфигурация списка (resolve и т.д.). listConfigNode[1] — опционально. */
   listConfig?: ListConfig;
+  /** Владелец списка. `null` = root list; иначе — entity-владелец (вариант C). */
+  ownerEntity: EntityNode | null;
   /** ID сущностей, входящих в список (в порядке отображения). */
   itemIds: string[];
-  /** Инкрементируется при add/remove/setItems/resolve — для tracking. */
-  version: number;
   /** Сохраняется при init/resolve — для dirty-tracking по составу. */
   initialItemIds: string[];
 }

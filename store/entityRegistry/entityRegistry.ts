@@ -1,4 +1,5 @@
 import type { EntityNode, EntityGroupNode, EntityData, EntityListState } from "./types";
+import type { ListConfig } from "../store/types";
 import { generateTmpId } from "./generateId";
 import { isLeafNode, isGroupNode } from "../traversal/nodeClassifier";
 
@@ -228,7 +229,15 @@ export class EntityRegistry {
     }
     let state = lists.get(listConfigNode);
     if (!state) {
-      state = { listConfigNode, itemIds: [], initialItemIds: [] };
+      const arr = listConfigNode as unknown[];
+      state = {
+        listConfigNode,
+        template: arr[0] as object,
+        listConfig: arr.length > 1 ? (arr[1] as ListConfig) : undefined,
+        ownerEntity: entity,
+        itemIds: [],
+        initialItemIds: [],
+      };
       lists.set(listConfigNode, state);
     }
     return state;

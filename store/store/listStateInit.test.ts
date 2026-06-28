@@ -47,9 +47,11 @@ describe("registerNodes — создание ListState", () => {
     expect(ls).toBeDefined();
     expect(ls!.itemIds).toEqual([]);
     expect(ls!.initialItemIds).toEqual([]);
-    expect(ls!.version).toBe(0);
     expect(ls!.listConfig).toBeUndefined();
     expect(ls!.template).toBe(usersNode[0]);
+    // Унифицированный ListState: root list — ownerEntity === null, ключ — сам узел.
+    expect(ls!.ownerEntity).toBeNull();
+    expect(ls!.listConfigNode).toBe(usersNode);
   });
 
   it("создаёт ListState для ListNode длины 2 + извлекает listConfig", () => {
@@ -68,7 +70,7 @@ describe("registerNodes — создание ListState", () => {
     expect(ls!.template).toBe(usersNode[0]);
   });
 
-  it("создаёт ListState с пустым itemIds и version=0", () => {
+  it("создаёт ListState с пустым itemIds", () => {
     const config = {
       items: [{ value: { value: "" } }],
     } as unknown as AnyConfigNode;
@@ -80,7 +82,6 @@ describe("registerNodes — создание ListState", () => {
 
     expect(ls!.itemIds).toHaveLength(0);
     expect(ls!.initialItemIds).toHaveLength(0);
-    expect(ls!.version).toBe(0);
   });
 });
 
@@ -205,14 +206,14 @@ describe("типизация ConfigNodeToProxy и ExtractValues", () => {
 
   it("ListState интерфейс корректно типизирован", () => {
     const ls: ListState = {
+      listConfigNode: {},
       template: {},
+      ownerEntity: null,
       itemIds: ["u1", "u2"],
-      version: 1,
       initialItemIds: ["u1"],
       listConfig: { resolve: { resolver: async () => [] } },
     };
     expect(ls.itemIds).toHaveLength(2);
-    expect(ls.version).toBe(1);
     expect(ls.initialItemIds).toHaveLength(1);
   });
 });

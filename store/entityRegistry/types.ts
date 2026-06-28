@@ -1,3 +1,5 @@
+import type { ListState } from "../store/types";
+
 /**
  * Leaf-нода entity: минимальный объект со значением.
  * Совместим с AnyConfigNode leaf (имеет "value").
@@ -26,19 +28,11 @@ export interface EntityGroupNode {
 /**
  * Per-(owner, list) состояние вложенного списка (вариант C, фаза C1).
  *
- * Источник правды для re-render — `getNodeVersion(entityListState)` в хабе
- * (сам объект EntityListState служит ключом узла), а не отдельное поле version.
- * Изоляция между владельцами достигается тем, что для каждой пары
- * (ownerEntity, listConfigNode) создаётся СВОЙ объект EntityListState.
+ * @deprecated Алиас единого {@link ListState}. Введён на время унификации списков
+ * (PLAN_UNIFY_LISTS.md), чтобы не переписывать сразу все импорты; будет удалён в U5.
+ * Per-entity-list — это `ListState` с `ownerEntity !== null`.
  */
-export interface EntityListState {
-  /** Конфиг-узел list (ListNode из template — массив). Дублирует ключ Map — для удобства. */
-  listConfigNode: object;
-  /** ID элементов в порядке отображения. */
-  itemIds: string[];
-  /** Initial-снимок для будущего dirty (C3). В C1 заполняется при resolve. */
-  initialItemIds: string[];
-}
+export type EntityListState = ListState;
 
 /**
  * Корневая нода entity.

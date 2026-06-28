@@ -95,10 +95,11 @@ export function registerNodes<TNode extends AnyConfigNode>(
         const template = child[0] as AnyConfigNode;
         const listConfig = child.length > 1 ? (child[1] as ListConfig) : undefined;
         const listState: ListState = {
+          listConfigNode: child,
           template,
           listConfig,
+          ownerEntity: null,
           itemIds: [],
-          version: 0,
           initialItemIds: [],
         };
         listStates.set(child, listState);

@@ -30,12 +30,18 @@ export const ENTITY_ID: unique symbol = Symbol("entityId");
 export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
 
 /**
- * Бренд-символ per-entity list proxy (вариант C, фаза C1).
- * Возвращает объект `EntityListState` — per-(owner,list) идентичность узла,
- * по которой tracking proxy ведёт ИЗОЛИРОВАННУЮ версию/подписку (через хаб),
- * вместо общего `listConfigNode`, который один на всех владельцев.
+ * Бренд-символ list proxy — возвращает объект `ListState` (единый кубик «список»).
+ * Идентичность узла для tracking/resolve: сам объект `ListState` (ключ в хабе).
+ * Root-list — `ownerEntity === null`; per-entity — изолированный `ListState` на
+ * каждую пару (owner, listConfigNode).
  */
-export const ENTITY_LIST_STATE: unique symbol = Symbol("entityListState");
+export const LIST_STATE: unique symbol = Symbol("listState");
+
+/**
+ * @deprecated Алиас {@link LIST_STATE}. Введён на время унификации списков
+ * (PLAN_UNIFY_LISTS.md); будет удалён в фазе U5.
+ */
+export const ENTITY_LIST_STATE = LIST_STATE;
 
 /**
  * Свойства, относящиеся к состоянию поля. При обращении к ним прокси

@@ -131,16 +131,12 @@ export function executeListResolve(
         // Сохраняем как начальный снимок для dirty-трекинга
         listState.initialItemIds = [...listState.itemIds];
 
-        // Увеличиваем версию → tracking proxy видит изменение → React перерисовывается
-        listState.version++;
-
         // Синхронизируем valuesCache.values[listKey]
         syncListValuesCache(listNode);
       } else if (Array.isArray(result) && result.length === 0) {
         // Пустой результат — очищаем список
         listState.itemIds = [];
         listState.initialItemIds = [];
-        listState.version++;
         syncListValuesCache(listNode);
       }
 
