@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store";
+import { LIST_STATE } from "../constants";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -357,6 +358,30 @@ describe("2C.3: List tracking — versions", () => {
     const vAfter = store.getNodeVersion(listConfigNode);
 
     expect(vAfter).toBeGreaterThan(vBefore);
+  });
+
+  it("root-list трекается по объекту LIST_STATE (версия растёт на нём при add/remove)", () => {
+    const store = new Palistor({
+      config: { users: [userTemplate] } as any,
+    });
+
+    store.set({ id: "u1", name: "Alice", role: "admin" });
+
+    // Root-list proxy теперь экспонирует бренд LIST_STATE → объект ListState.
+    const listProxy = (store.proxy as any).users;
+    const listState = listProxy[LIST_STATE] as object;
+    expect(listState).toBeDefined();
+    expect((listState as any).ownerEntity).toBeNull();
+
+    // Трекинг ведётся по этому объекту: его версия растёт при мутациях.
+    const vBefore = store.getNodeVersion(listState);
+    listProxy.add("u1");
+    const vAfterAdd = store.getNodeVersion(listState);
+    expect(vAfterAdd).toBeGreaterThan(vBefore);
+
+    listProxy.remove("u1");
+    const vAfterRemove = store.getNodeVersion(listState);
+    expect(vAfterRemove).toBeGreaterThan(vAfterAdd);
   });
 
   it("version списка инкрементируется при remove", () => {

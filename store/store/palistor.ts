@@ -755,6 +755,8 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
           listState.itemIds = ids;
           listState.initialItemIds = [...ids];
           this._syncListValuesCache(listConfigNode);
+          // U2: ListState — ключ трекинга; listConfigNode — мост обратной совместимости.
+          changed.add(listState as unknown as object);
           changed.add(listConfigNode);
         }
       }

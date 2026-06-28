@@ -9,14 +9,14 @@
  * Tracking работает на уровне ноды: чтение ЛЮБОГО свойства
  * (value, label, isVisible…) добавляет всю ноду в tracked set.
  *
- * Phase 2C: список прокси — `items`, `map`, `length`, `loading`, `dirty`
- * на ListProxy добавляют ListNode в tracked set. `version++` при add/remove
- * бампает версию ListNode → getSnapshot детектирует изменение → re-render
- * только списка. `map` → entity прокси оборачиваются в tracking proxy для
- * per-leaf отслеживания строк.
+ * Списки: `items`, `map`, `length`, `loading`, `dirty` на list-proxy добавляют
+ * объект `ListState` (бренд LIST_STATE, единый для root и per-entity) в tracked
+ * set. Мутация/resolve бампает версию этого ListState → getSnapshot детектирует
+ * изменение → re-render только списка. `map` → entity-прокси оборачиваются в
+ * tracking proxy для per-leaf отслеживания строк.
  */
 
-import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, ENTITY_LIST_STATE } from "../store/constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, LIST_STATE } from "../store/constants";
 import type { ProxyStore } from "../store/store";
 
 export interface TrackingRefs {
@@ -86,24 +86,25 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       // Прочие символы — пробрасываем как есть
       if (typeof key === "symbol") return (target as any)[key];
 
-      // ── Per-entity list proxy (вариант C) ──────────────────────────────────
-      // Ключ трекинга = объект EntityListState (per-owner), а НЕ общий listConfigNode,
-      // иначе версии разных владельцев одного списка схлопнутся (RFC §2.6).
-      // Должно идти ДО FIELD_STATE_PROPS: `loading` входит в FIELD_STATE_PROPS,
-      // но на entity-list его надо трекать по EntityListState, а не по CONFIG_NODE.
-      const entityListState = (target as any)[ENTITY_LIST_STATE] as object | undefined;
-      if (entityListState) {
+      // ── List proxy (единый кубик: root + per-entity) ───────────────────────
+      // Ключ трекинга = объект ListState, а НЕ общий listConfigNode: иначе версии
+      // разных владельцев одного per-entity-списка схлопнутся (RFC §2.6), а root
+      // и entity потребовали бы две ветки. Должно идти ДО FIELD_STATE_PROPS:
+      // `loading`/`dirty` входят в FIELD_STATE_PROPS, но на списке их надо трекать
+      // по ListState, а не по CONFIG_NODE.
+      const listState = (target as any)[LIST_STATE] as object | undefined;
+      if (listState) {
         if (key === "length" || key === "loading" || key === "dirty") {
-          if (!refs.accessed.has(entityListState)) {
-            refs.accessed.add(entityListState);
-            refs.lastVersions.set(entityListState, store.getNodeVersion(entityListState));
+          if (!refs.accessed.has(listState)) {
+            refs.accessed.add(listState);
+            refs.lastVersions.set(listState, store.getNodeVersion(listState));
           }
           return (target as any)[key];
         }
         if (key === "items") {
-          if (!refs.accessed.has(entityListState)) {
-            refs.accessed.add(entityListState);
-            refs.lastVersions.set(entityListState, store.getNodeVersion(entityListState));
+          if (!refs.accessed.has(listState)) {
+            refs.accessed.add(listState);
+            refs.lastVersions.set(listState, store.getNodeVersion(listState));
           }
           const rawItems = (target as any)["items"] as object[];
           return rawItems.map((item: object) =>
@@ -111,9 +112,9 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
           );
         }
         if (key === "map") {
-          if (!refs.accessed.has(entityListState)) {
-            refs.accessed.add(entityListState);
-            refs.lastVersions.set(entityListState, store.getNodeVersion(entityListState));
+          if (!refs.accessed.has(listState)) {
+            refs.accessed.add(listState);
+            refs.lastVersions.set(listState, store.getNodeVersion(listState));
           }
           const origMap = (target as any)["map"] as (
             fn: (item: object, index: number, id: string) => unknown,
@@ -137,46 +138,6 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
           refs.lastVersions.set(configNode, store.getNodeVersion(configNode));
         }
         return (target as any)[key];
-      }
-
-      // List node tracking: reading items/map/length/dirty on a list proxy
-      // tracks the ListNode so version++ on add/remove/resolve triggers re-render.
-      const configNodeForList = (target as any)[CONFIG_NODE];
-      if (configNodeForList && Array.isArray(configNodeForList)) {
-        if (key === "length" || key === "loading" || key === "dirty") {
-          if (!refs.accessed.has(configNodeForList)) {
-            refs.accessed.add(configNodeForList);
-            refs.lastVersions.set(configNodeForList, store.getNodeVersion(configNodeForList));
-          }
-          return (target as any)[key];
-        }
-
-        if (key === "items") {
-          if (!refs.accessed.has(configNodeForList)) {
-            refs.accessed.add(configNodeForList);
-            refs.lastVersions.set(configNodeForList, store.getNodeVersion(configNodeForList));
-          }
-          // Wrap each entity proxy in a tracking proxy for per-leaf tracking
-          const rawItems = (target as any)["items"] as object[];
-          return rawItems.map((item: object) =>
-            createTrackingProxy(item, refs, store, cache),
-          );
-        }
-
-        if (key === "map") {
-          if (!refs.accessed.has(configNodeForList)) {
-            refs.accessed.add(configNodeForList);
-            refs.lastVersions.set(configNodeForList, store.getNodeVersion(configNodeForList));
-          }
-          const origMap = (target as any)["map"] as (
-            fn: (item: object, index: number, id: string) => unknown,
-          ) => unknown[];
-          // Return a wrapper that wraps each entity proxy argument in createTrackingProxy
-          return (fn: (item: any, index: number, id: string) => unknown) =>
-            origMap((item: object, index: number, id: string) =>
-              fn(createTrackingProxy(item, refs, store, cache), index, id),
-            );
-        }
       }
 
       // Дочерний объект → рекурсивный tracking proxy

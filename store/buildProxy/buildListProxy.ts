@@ -116,8 +116,11 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
       for (const n of changed) recomputed.add(n);
       kernel.notifyChanged(recomputed);
     } else {
-      // Root: полный recompute (valuesCache.users → все computed), бамп config-узла.
+      // Root: полный recompute (valuesCache.users → все computed).
       const recomputed = kernel.recompute();
+      // U2: трекинг root-листа теперь по объекту ListState.
+      recomputed.add(listState as unknown as object);
+      // Мост обратной совместимости: старые тесты читают getNodeVersion(listNode).
       recomputed.add(listConfigNode as object);
       kernel.notifyChanged(recomputed);
     }
@@ -257,9 +260,8 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
     get(_target, key: string | symbol) {
       // Прозрачный config-узел (для отладки/useForm). НЕ ключ трекинга.
       if (key === CONFIG_NODE) return listConfigNode;
-      // Бренд идентичности списка — ключ трекинга. Root подключается в U2
-      // (сейчас root трекается по config-узлу, чтобы не разъехаться с bump-ами).
-      if (key === LIST_STATE && owner) return listState;
+      // Бренд идентичности списка — ключ трекинга (root и per-entity единообразно).
+      if (key === LIST_STATE) return listState;
 
       if (typeof key === "symbol") {
         if (key === Symbol.iterator) {
