@@ -166,7 +166,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       store: this,
       listStates: this.nodes.listStates,
       setEntitiesRaw: (items, listNode) => this._setEntitiesRaw(items, listNode),
-      syncListValuesCache: (listNode) => this._syncListValuesCache(listNode),
+      syncListValuesCache: (listState) => this.syncListValuesCache(listState),
       entityRegistry: this.entityRegistry,
     });
 
@@ -581,69 +581,44 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   /**
-   * Sync valuesCache.values[listKey] from listState.itemIds.
-   * Used by executeListResolve after updating itemIds.
+   * Синхронизировать valuesCache с составом списка — ЕДИНЫЙ метод (root + per-entity).
+   *
+   * Ветвится по `listState.ownerEntity`:
+   *   - `null`  → root: пишем массив POJO-зеркал в `nodeSlot` config-узла
+   *     (`valuesCache.values.users = [{id:"u1",…}, …]` — тот же массив, что читает
+   *     `proxy.users.value`, поэтому React видит обновление);
+   *   - entity  → per-entity (вариант C, C3/C4): материализуем состав в projectionObj
+   *     владельца по пути списка (`["contacts"]` или `["profile","contacts"]`). Это
+   *     включает вложенный список в `store.getValues()` — projectionObj владельца
+   *     входит в массив корневого списка по ссылке, а child-projectionObj-ы
+   *     рекурсивно материализуют свои списки.
+   *
+   * No-op, если слот/путь/projectionObj владельца отсутствуют.
    *
    * @internal
    */
-  _syncListValuesCache(listNode: object): void {
-    // Найти «слот» в valuesCache для этого списка (пара { parent, key }).
-    // parent — родительский POJO-объект в valuesCache.values, key — имя поля.
-    const slot = this.values.nodeSlot.get(listNode);
-    if (!slot) return;
-
-    // listState хранит itemIds — упорядоченный массив entity ID текущего списка.
-    const listState = this.nodes.listStates.get(listNode);
-    if (!listState) return;
-
-    // Перестроить массив: заменить itemIds на соответствующие POJO-зеркала.
-    // Результат: valuesCache.values.users = [{ id: "u1", ... }, { id: "u2", ... }]
-    // Это тот же массив, на который ссылается proxy.users.value — React увидит обновление.
-    slot.parent[slot.key] = listState.itemIds
+  syncListValuesCache(listState: ListState): void {
+    const materialized = listState.itemIds
       .map((id) => this.entityProjectionObjs.get(id))
       .filter((obj): obj is Record<string, unknown> => obj !== undefined);
-  }
 
-  /** @internal Текущий id entity (учитывает rekey через nodeState). */
-  private _entityId(entity: EntityNode): string {
-    const idLeaf = entity.id as object;
-    return (
-      (this.nodes.nodeState.get(idLeaf) as { value: unknown } | undefined)?.value ??
-      entity.id.value
-    ) as string;
-  }
+    if (listState.ownerEntity === null) {
+      // Root: слот в valuesCache (пара { parent, key }) по config-узлу.
+      const slot = this.values.nodeSlot.get(listState.listConfigNode);
+      if (!slot) return;
+      slot.parent[slot.key] = materialized;
+      return;
+    }
 
-  /**
-   * Материализовать состав per-entity списка в projectionObj владельца
-   * (вариант C, C3/C4). Записывает массив projectionObj-ов child-entity в
-   * `ownerProjectionObj`-е по пути списка (`["contacts"]` или, для списка в
-   * nested-группе, `["profile", "contacts"]`).
-   *
-   * Это включает вложенный список в `store.getValues()`: projectionObj владельца
-   * входит в массив корневого списка (`values.users[i]`) по ссылке, а child
-   * projectionObj-ы сами рекурсивно материализуют свои списки.
-   *
-   * No-op, если у владельца нет projectionObj (single-binding entity, не входящая
-   * ни в один корневой список) или listConfigNode не имеет известного пути.
-   *
-   * @internal
-   */
-  _syncEntityListValuesCache(ownerEntity: EntityNode, listConfigNode: object): void {
+    // Per-entity: спускаемся к родительскому POJO по пути и пишем состав.
+    const listConfigNode = listState.listConfigNode;
     const path = this.nodes.listFieldKeys.get(listConfigNode);
     if (!path || path.length === 0) return;
 
-    const ownerId = this._entityId(ownerEntity);
+    const ownerId = this._entityId(listState.ownerEntity);
     const projectionObj = this.entityProjectionObjs.get(ownerId);
     if (!projectionObj) return;
 
-    const els = ownerEntity.lists?.get(listConfigNode);
-    const itemIds = els?.itemIds ?? [];
-    const materialized = itemIds
-      .map((id) => this.entityProjectionObjs.get(id))
-      .filter((obj): obj is Record<string, unknown> => obj !== undefined);
-
-    // Спускаемся к родительскому POJO по пути (создавая промежуточные группы),
-    // затем пишем состав списка под финальным ключом.
     let target = projectionObj;
     for (let i = 0; i < path.length - 1; i++) {
       const k = path[i];
@@ -656,6 +631,16 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     }
     target[path[path.length - 1]] = materialized;
   }
+
+  /** @internal Текущий id entity (учитывает rekey через nodeState). */
+  private _entityId(entity: EntityNode): string {
+    const idLeaf = entity.id as object;
+    return (
+      (this.nodes.nodeState.get(idLeaf) as { value: unknown } | undefined)?.value ??
+      entity.id.value
+    ) as string;
+  }
+
 
   /**
    * Восстановить состав корневых И per-entity списков из снимка значений
@@ -747,14 +732,14 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
         const els = this.entityRegistry.getOrCreateEntityListState(ownerEntity, listConfigNode);
         els.itemIds = ids;
         els.initialItemIds = [...ids];
-        this._syncEntityListValuesCache(ownerEntity, listConfigNode);
+        this.syncListValuesCache(els);
         changed.add(els as unknown as object);
       } else {
         const listState = this.nodes.listStates.get(listConfigNode);
         if (listState) {
           listState.itemIds = ids;
           listState.initialItemIds = [...ids];
-          this._syncListValuesCache(listConfigNode);
+          this.syncListValuesCache(listState);
           // U2: ListState — ключ трекинга; listConfigNode — мост обратной совместимости.
           changed.add(listState as unknown as object);
           changed.add(listConfigNode);

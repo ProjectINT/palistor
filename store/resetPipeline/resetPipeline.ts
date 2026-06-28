@@ -38,8 +38,8 @@ export class ResetPipeline {
     // и бампаем версии их EntityListState-узлов → React перерисует списки.
     // C3: пересинхронизируем projectionObj владельца — getValues() вернёт initial.
     if (groupNode === this.kernel.rootConfig) {
-      for (const { owner, state } of this.kernel.entityRegistry.resetEntityListStates()) {
-        this.kernel._syncEntityListValuesCache(owner, state.listConfigNode);
+      for (const { state } of this.kernel.entityRegistry.resetEntityListStates()) {
+        this.kernel.syncListValuesCache(state);
         changed.add(state as unknown as object);
       }
     }

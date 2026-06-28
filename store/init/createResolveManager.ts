@@ -49,10 +49,10 @@ export interface ResolveManagerDeps {
    */
   setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
   /**
-   * Синхронизирует valuesCache.values[listKey] с текущими listState.itemIds.
+   * Синхронизирует valuesCache с составом списка (единый метод, root + entity).
    * Вызывается из executeListResolve после обновления itemIds.
    */
-  syncListValuesCache: (listNode: object) => void;
+  syncListValuesCache: (listState: ListState) => void;
   /**
    * Экземпляр EntityRegistry — используется в triggerEntityFieldResolve для проверки skipIfResolved.
    */
@@ -390,10 +390,7 @@ export class ResolveManager {
         els.initialItemIds = [...ids];
 
         // C3: материализовать состав в projectionObj владельца (для getValues).
-        (this.resolveDeps.store as any)._syncEntityListValuesCache(
-          ownerEntity,
-          listConfigNode as object,
-        );
+        (this.resolveDeps.store as any).syncListValuesCache(els);
 
         changed.add(entityListState);
         const recomputed = (this.resolveDeps.store as any).recompute(changed) as Set<object>;

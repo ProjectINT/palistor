@@ -97,15 +97,9 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
     ) as string;
   };
 
-  /** Обновить valuesCache для этого списка (диспетчер до U3). */
-  const syncValuesCache = (): void => {
-    if (owner) kernel._syncEntityListValuesCache(owner, listConfigNode as object);
-    else kernel._syncListValuesCache(listConfigNode as object);
-  };
-
   /** Notify observers that the list itself changed + recompute dependents. */
   const notifyListChanged = (): void => {
-    syncValuesCache();
+    kernel.syncListValuesCache(listState);
     if (owner) {
       // Per-entity: изолированная идентичность — сам объект listState; владельца
       // тоже в changed, чтобы `entity.values`/`entity.dirty`-наблюдатели обновились.

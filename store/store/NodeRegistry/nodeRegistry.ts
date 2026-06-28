@@ -18,8 +18,8 @@ import { type NodeView, type NodeViewKernel, makeIdentityView } from "./nodeView
  * - список внутри nested-группы → `["profile", "contacts"]`.
  * Путь сбрасывается на границе каждого списка (`child[0]` открывает новый
  * entity-scope — его item-ы это отдельные entity со своим projectionObj).
- * Это позволяет `_syncEntityListValuesCache` записать состав в правильное
- * вложенное место projectionObj владельца.
+ * Это позволяет `syncListValuesCache` (per-entity ветка) записать состав в
+ * правильное вложенное место projectionObj владельца.
  */
 function collectListFieldKeys(
   node: AnyConfigNode,

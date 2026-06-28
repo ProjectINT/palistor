@@ -22,10 +22,10 @@ export interface ListResolveDeps extends ResolveDeps {
   setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
 
   /**
-   * Синхронизировать valuesCache.values[listKey] с текущими itemIds.
+   * Синхронизировать valuesCache с составом списка (единый метод, root + entity).
    * Вызывается после обновления listState.itemIds.
    */
-  syncListValuesCache: (listNode: object) => void;
+  syncListValuesCache: (listState: ListState) => void;
 }
 
 // ─── Default nodeState for listNode ─────────────────────────────────────────
@@ -134,12 +134,12 @@ export function executeListResolve(
         listState.initialItemIds = [...listState.itemIds];
 
         // Синхронизируем valuesCache.values[listKey]
-        syncListValuesCache(listNode);
+        syncListValuesCache(listState);
       } else if (Array.isArray(result) && result.length === 0) {
         // Пустой результат — очищаем список
         listState.itemIds = [];
         listState.initialItemIds = [];
-        syncListValuesCache(listNode);
+        syncListValuesCache(listState);
       }
 
       // Авто-зависимости: явные deps + values tracking + контекстные зависимости
