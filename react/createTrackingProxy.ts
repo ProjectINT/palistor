@@ -16,7 +16,7 @@
  * per-leaf отслеживания строк.
  */
 
-import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF } from "../store/constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, ENTITY_LIST_STATE } from "../store/constants";
 import type { ProxyStore } from "../store/store";
 
 export interface TrackingRefs {
@@ -85,6 +85,47 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
 
       // Прочие символы — пробрасываем как есть
       if (typeof key === "symbol") return (target as any)[key];
+
+      // ── Per-entity list proxy (вариант C) ──────────────────────────────────
+      // Ключ трекинга = объект EntityListState (per-owner), а НЕ общий listConfigNode,
+      // иначе версии разных владельцев одного списка схлопнутся (RFC §2.6).
+      // Должно идти ДО FIELD_STATE_PROPS: `loading` входит в FIELD_STATE_PROPS,
+      // но на entity-list его надо трекать по EntityListState, а не по CONFIG_NODE.
+      const entityListState = (target as any)[ENTITY_LIST_STATE] as object | undefined;
+      if (entityListState) {
+        if (key === "length" || key === "loading" || key === "dirty") {
+          if (!refs.accessed.has(entityListState)) {
+            refs.accessed.add(entityListState);
+            refs.lastVersions.set(entityListState, store.getNodeVersion(entityListState));
+          }
+          return (target as any)[key];
+        }
+        if (key === "items") {
+          if (!refs.accessed.has(entityListState)) {
+            refs.accessed.add(entityListState);
+            refs.lastVersions.set(entityListState, store.getNodeVersion(entityListState));
+          }
+          const rawItems = (target as any)["items"] as object[];
+          return rawItems.map((item: object) =>
+            createTrackingProxy(item, refs, store, cache),
+          );
+        }
+        if (key === "map") {
+          if (!refs.accessed.has(entityListState)) {
+            refs.accessed.add(entityListState);
+            refs.lastVersions.set(entityListState, store.getNodeVersion(entityListState));
+          }
+          const origMap = (target as any)["map"] as (
+            fn: (item: object, index: number, id: string) => unknown,
+          ) => unknown[];
+          return (fn: (item: any, index: number, id: string) => unknown) =>
+            origMap((item: object, index: number, id: string) =>
+              fn(createTrackingProxy(item, refs, store, cache), index, id),
+            );
+        }
+        // add/remove/setItems/getById — пробрасываем без трекинга.
+        return (target as any)[key];
+      }
 
       // Чтение состояния поля → трекинг ноды
       // submitting — реактивный флаг группы, тоже требует трекинга

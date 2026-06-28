@@ -3,15 +3,29 @@ import type { AnyConfigNode } from "../store/types";
 import type { EntityNode, EntityLeafNode, EntityGroupNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
 import type { NodeView } from "../store/NodeRegistry/nodeView";
-import { isLeafNode } from "../traversal";
+import { isLeafNode, isGroupNode } from "../traversal";
+import { buildEntityListProxy } from "./buildEntityListProxy";
+
+/** Поэлементное сравнение двух массивов строк (для dirty по составу списка). */
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
  * Build a flat values object from an entity node for use in computed
  * template rules (formatter, validate, isRequired, etc.).
+ *
+ * Exported for per-entity list resolve (variant C): the child-list resolver
+ * receives the owner's flat snapshot built here (see triggerEntityListResolve).
+ * NB: `lists`/`owner` on EntityNode are non-enumerable → excluded automatically.
  */
-function buildEntityValues(
+export function buildEntityValues(
   entityNode: EntityNode | EntityGroupNode,
   nodeState: WeakMap<object, { value: unknown }>,
 ): Record<string, unknown> {
@@ -28,6 +42,111 @@ function buildEntityValues(
     }
   }
   return values;
+}
+
+/**
+ * Build a flat values object for an entity INCLUDING its per-entity nested lists
+ * (variant C, phase C3). Scalars/groups come from {@link buildEntityValues};
+ * for every list field in the template, the child entities' deep values are
+ * appended under the list's field key. Recurses into nested-of-nested lists.
+ *
+ * Used by the entity projection proxy's `values` getter and the per-entity list
+ * proxy's `getValues()`. NB: plain {@link buildEntityValues} stays list-free —
+ * it feeds resolvers/validators that must see scalar values only.
+ */
+export function buildEntityValuesWithLists(
+  entityNode: EntityNode | EntityGroupNode,
+  templateNode: AnyConfigNode,
+  kernel: Palistor<any>,
+): Record<string, unknown> {
+  const nodeState = kernel.nodes.nodeState as WeakMap<object, { value: unknown }>;
+  const values = buildEntityValues(entityNode, nodeState);
+
+  const lists = (entityNode as EntityNode).lists;
+  if (!lists) return values;
+
+  // Walk the template (incl. nested groups) and materialize every per-entity
+  // list into its matching value subtree. `lists` is keyed by listConfigNode
+  // and stored flat on the entity, so a list nested inside a group is looked up
+  // the same way — only the value subtree we write into differs (C4).
+  materializeListsInto(values, templateNode, lists, kernel);
+
+  return values;
+}
+
+/**
+ * Recursively materialize per-entity lists from `lists` into `valuesSubtree`,
+ * walking `templateSubtree` in parallel. List fields become arrays of child
+ * deep-values; nested groups recurse into the corresponding value subtree.
+ */
+function materializeListsInto(
+  valuesSubtree: Record<string, unknown>,
+  templateSubtree: AnyConfigNode,
+  lists: NonNullable<EntityNode["lists"]>,
+  kernel: Palistor<any>,
+): void {
+  for (const key of Object.keys(templateSubtree)) {
+    if (CONFIG_PROPS.has(key)) continue;
+    const templateField = (templateSubtree as Record<string, unknown>)[key];
+
+    if (Array.isArray(templateField)) {
+      // Включаем list-поле только если у entity есть его состояние (список
+      // загружался/менялся). Untouched-список ключ не добавляет — симметрично
+      // с материализацией в projectionObj (store.getValues()).
+      const els = lists.get(templateField as unknown as object);
+      if (!els) continue;
+
+      const childTemplate = (templateField as unknown[])[0] as AnyConfigNode;
+      valuesSubtree[key] = els.itemIds
+        .map((id) => {
+          const child = kernel.entityRegistry.get(id);
+          return child ? buildEntityValuesWithLists(child, childTemplate, kernel) : undefined;
+        })
+        .filter((v): v is Record<string, unknown> => v !== undefined);
+      continue;
+    }
+
+    if (templateField && typeof templateField === "object" && isGroupNode(templateField as object)) {
+      const sub = valuesSubtree[key];
+      if (sub && typeof sub === "object" && !Array.isArray(sub)) {
+        materializeListsInto(sub as Record<string, unknown>, templateField as AnyConfigNode, lists, kernel);
+      }
+    }
+  }
+}
+
+/**
+ * Whether an entity is dirty (variant C, phase C3): any of its leaf fields
+ * differs from its captured initial value, OR any per-entity list's composition
+ * differs from its initial snapshot.
+ */
+export function isEntityDirty(
+  entityNode: EntityNode | EntityGroupNode,
+  kernel: Palistor<any>,
+): boolean {
+  const nodeState = kernel.nodes.nodeState;
+
+  const anyLeafDirty = (node: Record<string, unknown>): boolean => {
+    for (const key of Object.keys(node)) {
+      const field = node[key];
+      if (!field || typeof field !== "object") continue;
+      if (isLeafNode(field as object)) {
+        if ((nodeState.get(field as object) as { dirty?: boolean } | undefined)?.dirty) return true;
+      } else if (anyLeafDirty(field as Record<string, unknown>)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  if (anyLeafDirty(entityNode as Record<string, unknown>)) return true;
+
+  const lists = (entityNode as EntityNode).lists;
+  if (lists) {
+    for (const els of lists.values()) {
+      if (!arraysEqual(els.itemIds, els.initialItemIds)) return true;
+    }
+  }
+  return false;
 }
 
 // ─── Entity leaf proxy ───────────────────────────────────────────────────────
@@ -51,12 +170,18 @@ function buildEntityValues(
  * @param templateNode     Template config node (the `array[0]` of a ListNode)
  * @param kernel           Palistor instance
  * @param entityProxyCache Per-list cache (keyed by entityNode) for stable references
+ * @param ownerEntityNode  Real owner entity for per-entity lists (C4). Threaded
+ *   through nested-group recursion so a list declared inside a structural group
+ *   is owned by the nearest ancestor entity (the one with an `id`), not by the
+ *   group node — which `entityNode`/`rootEntityNode` reset to on recursion.
+ *   Omitted on the top-level call → defaults to `entityNode` itself.
  */
 export function buildEntityProjectionProxy(
   entityNode: EntityNode | EntityGroupNode,
   templateNode: AnyConfigNode,
   kernel: Palistor<any>,
   entityProxyCache?: WeakMap<object, object>,
+  ownerEntityNode?: EntityNode,
 ): object {
   const cacheKey = entityNode as object;
   const cached = entityProxyCache?.get(cacheKey);
@@ -67,6 +192,11 @@ export function buildEntityProjectionProxy(
   // The top-level entityNode for building entity values in leaf proxies.
   // For nested groups, we still need the root entity node context.
   const rootEntityNode = entityNode as EntityNode;
+
+  // Owner entity for per-entity nested lists. On the top-level call it's the
+  // entity itself; preserved across nested-group recursion so list ownership
+  // stays anchored to the real entity (C4 blocker fix).
+  const listOwnerEntity = ownerEntityNode ?? (entityNode as EntityNode);
 
   // Stable submit function reference (created lazily)
   let submitFnRef: (() => Promise<unknown>) | null = null;
@@ -139,20 +269,31 @@ export function buildEntityProjectionProxy(
           return submitFnRef;
         }
         if (key === "values") {
-          return buildEntityValues(
-            rootEntityNode,
-            nodeState as WeakMap<object, { value: unknown }>,
-          );
+          return buildEntityValuesWithLists(rootEntityNode, templateNode, kernel);
+        }
+        if (key === "dirty") {
+          return isEntityDirty(rootEntityNode, kernel);
         }
       }
       // ─────────────────────────────────────────────────────────────────────
 
       const templateField = templateNode[key as string];
-      if (
-        !templateField ||
-        typeof templateField !== "object" ||
-        Array.isArray(templateField)
-      ) {
+
+      // Per-entity nested list (variant C): a list declared inside an entity
+      // template. Build an isolated per-(owner,list) proxy. `listOwnerEntity` is
+      // the owning EntityNode — for a list directly under the root template it's
+      // the entity itself; for a list inside a nested group it's the threaded
+      // ancestor entity (C4), not the structural group node.
+      if (Array.isArray(templateField)) {
+        if (!("id" in listOwnerEntity)) return undefined;
+        return buildEntityListProxy(
+          listOwnerEntity,
+          templateField as unknown as AnyConfigNode,
+          kernel,
+        );
+      }
+
+      if (!templateField || typeof templateField !== "object") {
         return undefined;
       }
 
@@ -198,12 +339,14 @@ export function buildEntityProjectionProxy(
             { via: templateField as AnyConfigNode },
           );
         }
-        // Nested group — recurse
+        // Nested group — recurse. Thread the real owner entity so a list
+        // declared inside this group is owned by the entity, not the group (C4).
         return buildEntityProjectionProxy(
           entityField as EntityGroupNode,
           templateField as AnyConfigNode,
           kernel,
           undefined,
+          listOwnerEntity,
         );
       }
 
@@ -225,7 +368,7 @@ export function buildEntityProjectionProxy(
       const hasId = "id" in entityNode;
       if (hasId) {
         const keysWithoutId = templateKeys.filter((k) => k !== "id");
-        return ["id", ...keysWithoutId, "loading", "submitting", "submit", "values"];
+        return ["id", ...keysWithoutId, "loading", "submitting", "submit", "values", "dirty"];
       }
       return templateKeys;
     },
@@ -233,7 +376,7 @@ export function buildEntityProjectionProxy(
     getOwnPropertyDescriptor(_target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
       const hasId = "id" in entityNode;
-      const extraKeys = hasId ? ["loading", "submitting", "submit", "values"] : [];
+      const extraKeys = hasId ? ["loading", "submitting", "submit", "values", "dirty"] : [];
       const keysWithoutId = hasId ? templateKeys.filter((k) => k !== "id") : templateKeys;
       const keys = hasId ? ["id", ...keysWithoutId, ...extraKeys] : keysWithoutId;
       if (!keys.includes(key as string)) return undefined;
