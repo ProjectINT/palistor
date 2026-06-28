@@ -75,6 +75,49 @@ describe("2C.1: List resolver", () => {
     expect((store.proxy as any).users.length).toBe(2);
   });
 
+  it("root list loading берётся из resolve-state (единый источник, U5)", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const resolver = vi.fn(async () => {
+      await gate;
+      return [{ id: "u1", name: "Alice", role: "admin" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        users: [userTemplate, { resolve: { resolver, onError: vi.fn() } }],
+      } as any,
+    });
+
+    const listProxy = (store.proxy as any).users;
+    const listState = listProxy[LIST_STATE] as object;
+    const rm = store.resolveManager as any;
+
+    // До доступа: resolve idle → loading false. loading === (status === "pending").
+    expect(rm.getListResolveState(listState).status).toBe("idle");
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+
+    // Доступ к items → lazy resolve (deferred queueMicrotask) → resolver висит на gate.
+    void listProxy.items;
+    await flushPromises();
+
+    // Pending: loading === true, и это РОВНО статус resolve-state (не nodeState).
+    expect(rm.getListResolveState(listState).status).toBe("pending");
+    expect(listProxy.loading).toBe(true);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+
+    release();
+    await flushPromises();
+
+    // Resolved: loading false, источник тот же.
+    expect(rm.getListResolveState(listState).status).toBe("resolved");
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+  });
+
   it("resolver загружает список → proxy items отображает entities", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },

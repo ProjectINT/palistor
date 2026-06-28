@@ -411,6 +411,50 @@ export class ResolveManager {
     })();
   }
 
+  /** Текущий id владельца (учитывает rekey через nodeState). */
+  private _listOwnerId(ownerEntity: EntityNode): string {
+    const idLeaf = ownerEntity.id as object;
+    const ns = this.resolveDeps.nodeState as WeakMap<object, { value: unknown }>;
+    return ((ns.get(idLeaf)?.value) ?? ownerEntity.id.value) as string;
+  }
+
+  /**
+   * Единая точка чтения resolve-state списка (root + per-entity).
+   *
+   * Дает builder-у/loading один источник, не зная, где физически лежит состояние:
+   *   - root  → `this.states` (ключ — listConfigNode);
+   *   - entity→ `this.entityStates` (ключ — (ownerId, listConfigNode)).
+   *
+   * Физическое слияние двух хранилищ не делается намеренно: root-list states
+   * сцеплены с общим `this.states` (deps-retrigger/reset), и их вынос дороже
+   * и рискованнее, чем выигрыш. Унификация здесь — на уровне доступа.
+   */
+  getListResolveState(listState: ListState): ResolveState | undefined {
+    if (listState.ownerEntity === null) {
+      return this.states.get(listState.listConfigNode);
+    }
+    const ownerId = this._listOwnerId(listState.ownerEntity);
+    return this.entityStates.get(ownerId, listState.listConfigNode);
+  }
+
+  /**
+   * Единая точка запуска resolve списка (root + per-entity).
+   * Диспетчеризует по `ownerEntity` на существующие тела
+   * ({@link triggerResolve} → executeListResolve / {@link triggerEntityListResolve}).
+   */
+  triggerListResolve(listState: ListState): void {
+    if (listState.ownerEntity === null) {
+      this.triggerResolve(listState.listConfigNode as AnyConfigNode);
+      return;
+    }
+    const ownerId = this._listOwnerId(listState.ownerEntity);
+    this.triggerEntityListResolve(
+      ownerId,
+      listState.listConfigNode as AnyConfigNode,
+      listState.ownerEntity,
+    );
+  }
+
   /**
    * Очистить все per-entity resolve states для удалённой entity.
    * Вызывается из Palistor.delete(entityId) — фаза 4.

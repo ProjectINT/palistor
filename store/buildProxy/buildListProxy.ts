@@ -120,26 +120,15 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
     }
   };
 
-  /** Trigger lazy list resolve on first access (диспетчер до U5). */
+  /** Trigger lazy list resolve on first access (root + per-entity, единый путь). */
   const triggerLazyResolveIfNeeded = (): void => {
     if (!listConfig?.resolve) return;
-    if (owner) {
-      const ownerId = getOwnerId();
-      const st = kernel.resolveManager.entityStates.get(ownerId, listConfigNode as object);
-      if (!st || st.status === "idle") {
-        // Defer: GET-трап во время React-рендера; синхронный resolve→notify
-        // дал бы "Cannot update a component while rendering another".
-        queueMicrotask(() =>
-          kernel.resolveManager.triggerEntityListResolve(ownerId, listConfigNode, owner),
-        );
-      }
-    } else {
-      const resolveState = kernel.resolveManager.states.get(listConfigNode as object);
-      if (resolveState?.status === "idle") {
-        queueMicrotask(() =>
-          kernel.resolveManager.triggerResolve(listConfigNode as AnyConfigNode),
-        );
-      }
+    const st = kernel.resolveManager.getListResolveState(listState);
+    // Root: state существует (idle из initResolveStates). Entity: может отсутствовать.
+    if (!st || st.status === "idle") {
+      // Defer: GET-трап во время React-рендера; синхронный resolve→notify
+      // дал бы "Cannot update a component while rendering another".
+      queueMicrotask(() => kernel.resolveManager.triggerListResolve(listState));
     }
   };
 
@@ -281,17 +270,9 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
           return listState.itemIds.length;
 
         case "loading":
-          if (owner) {
-            return (
-              kernel.resolveManager.entityStates.get(getOwnerId(), listConfigNode as object)
-                ?.status === "pending"
-            );
-          }
-          // Root: loading из nodeState (выставляется resolver-ом).
+          // Единый источник для root и per-entity: статус resolve-state.
           return (
-            (kernel.nodes.nodeState.get(listConfigNode as object) as
-              | { loading?: boolean }
-              | undefined)?.loading ?? false
+            kernel.resolveManager.getListResolveState(listState)?.status === "pending"
           );
 
         case "dirty":
