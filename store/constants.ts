@@ -38,12 +38,6 @@ export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
 export const LIST_STATE: unique symbol = Symbol("listState");
 
 /**
- * @deprecated Алиас {@link LIST_STATE}. Введён на время унификации списков
- * (PLAN_UNIFY_LISTS.md); будет удалён в фазе U5.
- */
-export const ENTITY_LIST_STATE = LIST_STATE;
-
-/**
  * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
  * возвращает значение из FieldState (вычисленное), а не из конфига.
  */

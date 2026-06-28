@@ -1,5 +1,5 @@
-import type { EntityNode, EntityGroupNode, EntityData, EntityListState } from "./types";
-import type { ListConfig } from "../store/types";
+import type { EntityNode, EntityGroupNode, EntityData } from "./types";
+import type { ListConfig, ListState } from "../store/types";
 import { generateTmpId } from "./generateId";
 import { isLeafNode, isGroupNode } from "../traversal/nodeClassifier";
 
@@ -216,10 +216,10 @@ export class EntityRegistry {
    * `entity.lists` создаётся при первом обращении как **non-enumerable** поле,
    * чтобы не протекать в плоские values через `Object.keys`.
    */
-  getOrCreateEntityListState(entity: EntityNode, listConfigNode: object): EntityListState {
+  getOrCreateEntityListState(entity: EntityNode, listConfigNode: object): ListState {
     let lists = entity.lists;
     if (!lists) {
-      lists = new Map<object, EntityListState>();
+      lists = new Map<object, ListState>();
       Object.defineProperty(entity, "lists", {
         value: lists,
         enumerable: false,
@@ -283,8 +283,8 @@ export class EntityRegistry {
    * (resetPipeline) бампнул версии узлов в хабе → React перерисует списки —
    * и пересинхронизировал projectionObj владельца для getValues (C3).
    */
-  resetEntityListStates(): Array<{ owner: EntityNode; state: EntityListState }> {
-    const affected: Array<{ owner: EntityNode; state: EntityListState }> = [];
+  resetEntityListStates(): Array<{ owner: EntityNode; state: ListState }> {
+    const affected: Array<{ owner: EntityNode; state: ListState }> = [];
     for (const entity of this.entities.values()) {
       const lists = entity.lists;
       if (!lists) continue;

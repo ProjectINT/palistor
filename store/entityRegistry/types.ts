@@ -20,19 +20,11 @@ export interface EntityGroupNode {
   [key: string]:
     | EntityLeafNode
     | EntityGroupNode
-    | Map<object, EntityListState>
+    | Map<object, ListState>
     | { ownerId: string; ownerListNode: object }
     | undefined;
 }
 
-/**
- * Per-(owner, list) состояние вложенного списка (вариант C, фаза C1).
- *
- * @deprecated Алиас единого {@link ListState}. Введён на время унификации списков
- * (PLAN_UNIFY_LISTS.md), чтобы не переписывать сразу все импорты; будет удалён в U5.
- * Per-entity-list — это `ListState` с `ownerEntity !== null`.
- */
-export type EntityListState = ListState;
 
 /**
  * Корневая нода entity.
@@ -45,8 +37,8 @@ export type EntityListState = ListState;
  */
 export interface EntityNode extends EntityGroupNode {
   id: EntityLeafNode;
-  /** Map<listConfigNode, EntityListState>. Лениво создаётся. NON-ENUMERABLE. */
-  lists?: Map<object, EntityListState>;
+  /** Map<listConfigNode, ListState> (per-entity, ownerEntity!==null). Лениво. NON-ENUMERABLE. */
+  lists?: Map<object, ListState>;
   /** Owner-ссылка для child-entity (проставляется при заливке resolver-результата). NON-ENUMERABLE. */
   owner?: { ownerId: string; ownerListNode: object };
 }
