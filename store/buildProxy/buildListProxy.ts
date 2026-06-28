@@ -1,8 +1,12 @@
-import { CONFIG_NODE, LIST_SPREAD_KEYS } from "../constants";
-import type { AnyConfigNode } from "../store/types";
-import type { EntityData } from "../entityRegistry/types";
+import { CONFIG_NODE, LIST_STATE, LIST_SPREAD_KEYS } from "../constants";
+import type { AnyConfigNode, ListState } from "../store/types";
+import type { EntityData, EntityLeafNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
-import { buildEntityProjectionProxy } from "./buildEntityProjectionProxy";
+import { generateTmpId } from "../entityRegistry";
+import {
+  buildEntityProjectionProxy,
+  buildEntityValuesWithLists,
+} from "./buildEntityProjectionProxy";
 
 // ─── arraysEqual helper ──────────────────────────────────────────────────────
 
@@ -14,113 +18,175 @@ function arraysEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 /**
- * Update `valuesCache.values[listKey]` after any list mutation (add/remove/setItems).
- *
- * Uses the nodeSlot registered for the listNode in buildValuesCache.
- * The array contains plain entity projection POJOs (shared references),
- * so computed expressions like `values.users.length > 0` work correctly.
+ * Ключи per-entity list proxy (вариант C). Тот же набор членов, что
+ * {@link LIST_SPREAD_KEYS}, но в историческом порядке per-entity-листа —
+ * сохраняем его, пока root и entity не выровнены по ключам.
  */
-function syncListValuesCache(
-  listNode: unknown[],
-  kernel: Palistor<any>,
-): void {
-  const slot = kernel.values.nodeSlot.get(listNode as unknown as object);
-  if (!slot) return;
-
-  const listState = kernel.nodes.listStates.get(listNode as unknown as object);
-  if (!listState) return;
-
-  slot.parent[slot.key] = listState.itemIds
-    .map((id) => kernel.entityProjectionObjs.get(id))
-    .filter((obj): obj is Record<string, unknown> => obj !== undefined);
-}
+const ENTITY_LIST_SPREAD_KEYS: string[] = [
+  "items",
+  "length",
+  "loading",
+  "dirty",
+  "map",
+  "getById",
+  "add",
+  "remove",
+  "setItems",
+  "getValues",
+];
 
 // ─── buildListProxy ──────────────────────────────────────────────────────────
 
 /**
- * Build a ListProxyNode for an array-type ListNode in the config.
+ * Build a ListProxyNode for a list — ЕДИНЫЙ builder (root + per-entity).
+ *
+ * Список идентифицируется объектом {@link ListState}. `listState.ownerEntity`
+ * различает два случая:
+ *   - `null`  → root-list (состояние в `kernel.nodes.listStates`);
+ *   - entity  → per-entity nested list (вариант C; состояние в `owner.lists`).
+ *
+ * Скелет, мутации, proxy и кэш — общие. Точки, где root и entity ещё расходятся
+ * (sync valuesCache, resolve/loading, семантика add/setItems), временно
+ * диспетчеризуются по `owner`; их слияние — фазы U3 (sync) и U5 (resolve).
  *
  * The proxy exposes:
  *   items       — ReadonlyArray<EntityProjectionProxy>, one per itemId
  *   length      — number of items
- *   loading     — async resolver in progress (Phase 2C)
+ *   loading     — async resolver in progress
+ *   dirty       — itemIds differ from the initial snapshot
  *   add(id)     — add existing entity by ID
  *   add(values) — upsert entity + add to list
  *   remove(id)  — remove entity from list (entity stays in registry)
  *   getById(id) — find proxy by ID
  *   setItems(ids) — bulk-replace itemIds
  *   map(fn)     — map for React rendering
+ *   getValues() — plain values snapshot of all items
  *   [Symbol.iterator] — iteration
  *
- * Entity proxies are cached per list instance (stable references for React).
+ * Entity proxies are cached per list instance (stable references for React);
+ * the list proxy itself is cached per `ListState` in `kernel.nodes.listProxyCache`.
  */
-export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): object {
-  const listState = kernel.nodes.listStates.get(listNode as unknown as object)!;
-  const template = listState.template as AnyConfigNode;
+export function buildListProxy(listState: ListState, kernel: Palistor<any>): object {
+  // Стабильный кэш proxy на каждый ListState (root и per-entity — единый кэш).
+  const cached = kernel.nodes.listProxyCache.get(listState as object);
+  if (cached) return cached;
 
-  // Per-list stable proxy cache
+  const listConfigNode = listState.listConfigNode as AnyConfigNode;
+  const template = listState.template as AnyConfigNode;
+  const listConfig = listState.listConfig;
+  /** Владелец списка: `null` = root, EntityNode = per-entity. */
+  const owner = listState.ownerEntity;
+
+  // Per-list стабильный кэш entity-проекций (стабильные ссылки для React).
   const entityProxyCache = new WeakMap<object, object>();
 
   /** Build EntityProjectionProxy for a given entityId. */
   function buildItemProxy(id: string): object | undefined {
     const entityNode = kernel.entityRegistry.get(id);
     if (!entityNode) return undefined;
-    return buildEntityProjectionProxy(
-      entityNode,
-      template,
-      kernel,
-      entityProxyCache,
-    );
+    return buildEntityProjectionProxy(entityNode, template, kernel, entityProxyCache);
   }
 
-  /** Notify observers that the list itself has changed + recompute dependents. */
-  function notifyListChanged(): void {
-    const listNodeObj = listNode as unknown as object;
-    // Full recompute propagates valuesCache.users changes to all computed
-    // expressions (e.g. isVisible: (values) => values.users.length > 0).
-    const recomputed = kernel.recompute();
-    recomputed.add(listNodeObj);
-    kernel.notifyChanged(recomputed);
-  }
+  /** Текущий id владельца (учитывает rekey через nodeState). Только для per-entity. */
+  const getOwnerId = (): string => {
+    const idLeaf = owner!.id as object;
+    return (
+      (kernel.nodes.nodeState.get(idLeaf) as { value: unknown } | undefined)?.value ??
+      (owner!.id as EntityLeafNode).value
+    ) as string;
+  };
 
-  /** Trigger lazy list resolve on first access (if resolve config exists and status is idle). */
-  function triggerLazyResolveIfNeeded(): void {
-    const listConfig = listState.listConfig;
-    if (!listConfig?.resolve) return;
-    const listNodeObj = listNode as unknown as object;
-    const resolveState = kernel.resolveManager.states.get(listNodeObj);
-    if (resolveState?.status === "idle") {
-      // Defer: this runs inside a proxy GET trap (during React render).
-      // Synchronous triggerResolve → recomputeAndNotify → notifyGlobals
-      // would cause "Cannot update a component while rendering another".
-      queueMicrotask(() => kernel.resolveManager.triggerResolve(listNodeObj as AnyConfigNode));
+  /** Обновить valuesCache для этого списка (диспетчер до U3). */
+  const syncValuesCache = (): void => {
+    if (owner) kernel._syncEntityListValuesCache(owner, listConfigNode as object);
+    else kernel._syncListValuesCache(listConfigNode as object);
+  };
+
+  /** Notify observers that the list itself changed + recompute dependents. */
+  const notifyListChanged = (): void => {
+    syncValuesCache();
+    if (owner) {
+      // Per-entity: изолированная идентичность — сам объект listState; владельца
+      // тоже в changed, чтобы `entity.values`/`entity.dirty`-наблюдатели обновились.
+      const changed = new Set<object>();
+      changed.add(listState as unknown as object);
+      changed.add(owner as unknown as object);
+      const recomputed = kernel.recompute(changed);
+      for (const n of changed) recomputed.add(n);
+      kernel.notifyChanged(recomputed);
+    } else {
+      // Root: полный recompute (valuesCache.users → все computed), бамп config-узла.
+      const recomputed = kernel.recompute();
+      recomputed.add(listConfigNode as object);
+      kernel.notifyChanged(recomputed);
     }
-  }
+  };
 
-  // Stable method references (avoid recreation on every GET)
-  const addFn = (idOrValues: string | Record<string, unknown>): void => {
-    let entityId: string;
-
-    if (typeof idOrValues === "string") {
-      entityId = idOrValues;
-      if (!kernel.entityRegistry.has(entityId)) return;
-      if (!listState.itemIds.includes(entityId)) {
-        listState.itemIds.push(entityId);
-        syncListValuesCache(listNode, kernel);
-        notifyListChanged();
+  /** Trigger lazy list resolve on first access (диспетчер до U5). */
+  const triggerLazyResolveIfNeeded = (): void => {
+    if (!listConfig?.resolve) return;
+    if (owner) {
+      const ownerId = getOwnerId();
+      const st = kernel.resolveManager.entityStates.get(ownerId, listConfigNode as object);
+      if (!st || st.status === "idle") {
+        // Defer: GET-трап во время React-рендера; синхронный resolve→notify
+        // дал бы "Cannot update a component while rendering another".
+        queueMicrotask(() =>
+          kernel.resolveManager.triggerEntityListResolve(ownerId, listConfigNode, owner),
+        );
       }
     } else {
-      // upsert entity into store (creates entityProjectionObj + registers leaves)
-      kernel.set(idOrValues as EntityData);
-      // retrieve id after upsert
-      const entityNode = kernel.entityRegistry.upsert(idOrValues as EntityData);
-      entityId = entityNode.id.value as string;
+      const resolveState = kernel.resolveManager.states.get(listConfigNode as object);
+      if (resolveState?.status === "idle") {
+        queueMicrotask(() =>
+          kernel.resolveManager.triggerResolve(listConfigNode as AnyConfigNode),
+        );
+      }
+    }
+  };
+
+  // ─── Mutations ───────────────────────────────────────────────────────────────
+
+  const addFn = (idOrValues: string | Record<string, unknown>): void => {
+    if (owner) {
+      const ownerId = getOwnerId();
+      let entityId: string;
+      if (typeof idOrValues === "string") {
+        entityId = idOrValues;
+        if (!kernel.entityRegistry.has(entityId)) {
+          throw new Error(
+            `[palistor] per-entity list add("${entityId}"): entity not found in registry.`,
+          );
+        }
+      } else {
+        const rawId = (idOrValues as { id?: unknown }).id;
+        entityId =
+          typeof rawId === "string" && rawId.trim() !== "" ? rawId : generateTmpId();
+        // set() регистрирует leaf-ноды + projectionObj (с собственным recompute/notify).
+        kernel.set({ ...(idOrValues as Record<string, unknown>), id: entityId });
+      }
+      const childNode = kernel.entityRegistry.get(entityId);
+      if (childNode) {
+        kernel.entityRegistry.setEntityOwner(childNode, ownerId, listConfigNode as object);
+      }
       if (!listState.itemIds.includes(entityId)) {
         listState.itemIds.push(entityId);
-        syncListValuesCache(listNode, kernel);
+      }
+      notifyListChanged();
+    } else {
+      let entityId: string;
+      if (typeof idOrValues === "string") {
+        entityId = idOrValues;
+        if (!kernel.entityRegistry.has(entityId)) return;
+      } else {
+        // upsert entity into store (creates entityProjectionObj + registers leaves)
+        kernel.set(idOrValues as EntityData);
+        const entityNode = kernel.entityRegistry.upsert(idOrValues as EntityData);
+        entityId = entityNode.id.value as string;
+      }
+      if (!listState.itemIds.includes(entityId)) {
+        listState.itemIds.push(entityId);
         notifyListChanged();
       }
     }
@@ -130,7 +196,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
     const idx = listState.itemIds.indexOf(id);
     if (idx === -1) return;
     listState.itemIds.splice(idx, 1);
-    syncListValuesCache(listNode, kernel);
     notifyListChanged();
   };
 
@@ -140,10 +205,28 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
   };
 
   const setItemsFn = (ids: string[]): void => {
-    listState.itemIds.length = 0;
-    for (const id of ids) listState.itemIds.push(id);
-    syncListValuesCache(listNode, kernel);
-    notifyListChanged();
+    if (owner) {
+      const ownerId = getOwnerId();
+      for (const id of ids) {
+        if (!kernel.entityRegistry.has(id)) {
+          throw new Error(
+            `[palistor] per-entity list setItems: entity "${id}" not found in registry.`,
+          );
+        }
+      }
+      listState.itemIds = [...ids];
+      for (const id of ids) {
+        const childNode = kernel.entityRegistry.get(id);
+        if (childNode) {
+          kernel.entityRegistry.setEntityOwner(childNode, ownerId, listConfigNode as object);
+        }
+      }
+      notifyListChanged();
+    } else {
+      listState.itemIds.length = 0;
+      for (const id of ids) listState.itemIds.push(id);
+      notifyListChanged();
+    }
   };
 
   const mapFn = <R>(
@@ -158,19 +241,32 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
       .filter((item): item is R => item !== undefined);
   };
 
-  // ─── Proxy object ──────────────────────────────────────────────────────
+  const getValuesFn = (): Array<Record<string, unknown>> =>
+    listState.itemIds
+      .map((id) => {
+        const child = kernel.entityRegistry.get(id);
+        return child ? buildEntityValuesWithLists(child, template, kernel) : undefined;
+      })
+      .filter((v): v is Record<string, unknown> => v !== undefined);
 
-  const proxy = new Proxy(listNode as unknown as Record<string, unknown>, {
+  // ─── Proxy object ──────────────────────────────────────────────────────────
+
+  const spreadKeys = owner ? ENTITY_LIST_SPREAD_KEYS : LIST_SPREAD_KEYS;
+
+  const proxy = new Proxy(listConfigNode as unknown as Record<string, unknown>, {
     get(_target, key: string | symbol) {
-      // Transparent for tracking proxy (exposes the raw listNode as config node)
-      if (key === CONFIG_NODE) return listNode;
+      // Прозрачный config-узел (для отладки/useForm). НЕ ключ трекинга.
+      if (key === CONFIG_NODE) return listConfigNode;
+      // Бренд идентичности списка — ключ трекинга. Root подключается в U2
+      // (сейчас root трекается по config-узлу, чтобы не разъехаться с bump-ами).
+      if (key === LIST_STATE && owner) return listState;
 
       if (typeof key === "symbol") {
         if (key === Symbol.iterator) {
           return function* () {
             for (const id of listState.itemIds) {
-              const proxy = buildItemProxy(id);
-              if (proxy) yield proxy;
+              const itemProxy = buildItemProxy(id);
+              if (itemProxy) yield itemProxy;
             }
           };
         }
@@ -189,10 +285,15 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
           return listState.itemIds.length;
 
         case "loading":
-          // Loading state comes from nodeState (set by resolver in Phase 2C).
-          // Falls back to false when no resolver is active.
+          if (owner) {
+            return (
+              kernel.resolveManager.entityStates.get(getOwnerId(), listConfigNode as object)
+                ?.status === "pending"
+            );
+          }
+          // Root: loading из nodeState (выставляется resolver-ом).
           return (
-            (kernel.nodes.nodeState.get(listNode as unknown as object) as
+            (kernel.nodes.nodeState.get(listConfigNode as object) as
               | { loading?: boolean }
               | undefined)?.loading ?? false
           );
@@ -218,13 +319,7 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
           return mapFn;
 
         case "getValues":
-          return () =>
-            listState.itemIds
-              .map((id) => {
-                const p = buildItemProxy(id) as any;
-                return p?.values as Record<string, unknown> | undefined;
-              })
-              .filter((v): v is Record<string, unknown> => v !== undefined);
+          return getValuesFn;
 
         default:
           return undefined;
@@ -237,12 +332,12 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
     },
 
     ownKeys() {
-      return LIST_SPREAD_KEYS;
+      return spreadKeys;
     },
 
     getOwnPropertyDescriptor(_target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
-      if (!LIST_SPREAD_KEYS.includes(key as string)) return undefined;
+      if (!spreadKeys.includes(key as string)) return undefined;
       // Array targets have a non-configurable `length` property.
       // The proxy invariant requires that we mirror this exactly.
       if (key === "length") {
@@ -252,5 +347,6 @@ export function buildListProxy(listNode: unknown[], kernel: Palistor<any>): obje
     },
   });
 
+  kernel.nodes.listProxyCache.set(listState as object, proxy);
   return proxy;
 }

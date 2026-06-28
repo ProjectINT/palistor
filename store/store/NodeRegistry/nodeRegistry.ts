@@ -145,11 +145,12 @@ export class NodeRegistry {
   readonly allListStates: ListState[] = [];
 
   /**
-   * Кэш per-entity list proxy (вариант C, фаза C1).
-   * Структура: ownerEntity → Map<listConfigNode, ListProxyNode>.
+   * Единый кэш list proxy (root + per-entity) — ключ: объект `ListState`.
    * Гарантирует стабильные ссылки на list-proxy для React (как proxyCache для групп).
+   * Каждой паре (owner, listConfigNode) и каждому root-списку соответствует свой
+   * `ListState`, поэтому ключевание по нему даёт корректную изоляцию.
    */
-  readonly entityListProxyCache: WeakMap<object, Map<object, object>> = new WeakMap();
+  readonly listProxyCache: WeakMap<object, object> = new WeakMap();
 
   /**
    * Обратный индекс `listConfigNode → fieldPath` (вариант C, C3/C4).

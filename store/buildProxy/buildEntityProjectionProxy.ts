@@ -4,7 +4,7 @@ import type { EntityNode, EntityLeafNode, EntityGroupNode } from "../entityRegis
 import type { Palistor } from "../store/palistor";
 import type { NodeView } from "../store/NodeRegistry/nodeView";
 import { isLeafNode, isGroupNode } from "../traversal";
-import { buildEntityListProxy } from "./buildEntityListProxy";
+import { buildListProxy } from "./buildListProxy";
 
 /** Поэлементное сравнение двух массивов строк (для dirty по составу списка). */
 function arraysEqual(a: string[], b: string[]): boolean {
@@ -286,11 +286,11 @@ export function buildEntityProjectionProxy(
       // ancestor entity (C4), not the structural group node.
       if (Array.isArray(templateField)) {
         if (!("id" in listOwnerEntity)) return undefined;
-        return buildEntityListProxy(
+        const listState = kernel.entityRegistry.getOrCreateEntityListState(
           listOwnerEntity,
-          templateField as unknown as AnyConfigNode,
-          kernel,
+          templateField as unknown as object,
         );
+        return buildListProxy(listState, kernel);
       }
 
       if (!templateField || typeof templateField !== "object") {

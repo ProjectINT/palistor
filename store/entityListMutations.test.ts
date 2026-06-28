@@ -16,7 +16,18 @@
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "./store";
 import { defineList } from "./defineList";
-import { buildEntityListProxy } from "./buildProxy/buildEntityListProxy";
+import { buildListProxy } from "./buildProxy/buildListProxy";
+
+/**
+ * Шим под прежнюю сигнатуру теста: единый buildListProxy принимает ListState.
+ * Per-entity ListState достаём из реестра по паре (owner, listNode).
+ */
+function buildEntityListProxy(owner: any, listNode: any, store: any) {
+  return buildListProxy(
+    store.entityRegistry.getOrCreateEntityListState(owner, listNode),
+    store,
+  );
+}
 
 function flush() {
   return new Promise<void>((r) => setTimeout(r, 0));
