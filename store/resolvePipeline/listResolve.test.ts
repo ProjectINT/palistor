@@ -11,6 +11,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store";
+import { defineList } from "../defineList";
 import { LIST_STATE } from "../constants";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -116,6 +117,71 @@ describe("2C.1: List resolver", () => {
     expect(rm.getListResolveState(listState).status).toBe("resolved");
     expect(listProxy.loading).toBe(false);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+  });
+
+  it("per-entity list loading берётся из resolve-state (единый источник, U5)", async () => {
+    // Симметрия к root-тесту выше: per-entity ветка (ownerEntity !== null) должна
+    // читать loading из ТОГО ЖЕ getListResolveState(listState), а lazy-доступ к .items
+    // должен идти через единый вход triggerListResolve(listState) → triggerEntityListResolve.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const resolver = vi.fn(async () => {
+      await gate;
+      return [{ id: "c1", phone: "+1" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        users: defineList({
+          template: {
+            id: { value: "" },
+            name: { value: "" },
+            // Вложенный per-entity список внутри entity-шаблона. Каст к any —
+            // известная дыра в типах TemplateConfig на nested-списках (тот же
+            // паттерн в react/entity-list-nested.test.tsx); поведение верное.
+            contacts: defineList({
+              template: { id: { value: "" }, phone: { value: "" } },
+              resolve: { resolver, onError: vi.fn() },
+            }) as any,
+          },
+        }),
+      } as any,
+    });
+
+    store.set({ id: "u1", name: "Alice" });
+    (store.proxy as any).users.add("u1");
+
+    // Per-entity list proxy владельца u1 (ownerEntity !== null).
+    const listProxy = (store.proxy as any).users.items[0].contacts;
+    const listState = listProxy[LIST_STATE] as { ownerEntity: unknown };
+    const rm = store.resolveManager as any;
+    expect(listState.ownerEntity).not.toBeNull(); // именно per-entity ветка
+
+    // До доступа: resolve-state ещё не создан → loading false.
+    // loading === (getListResolveState(...)?.status === "pending").
+    expect(rm.getListResolveState(listState)?.status).toBeUndefined();
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState)?.status === "pending");
+
+    // Доступ к items → lazy resolve (deferred) → resolver висит на gate.
+    void listProxy.items;
+    await flushPromises();
+
+    // Pending: loading === true, ровно статус resolve-state (не nodeState/entityStates напрямую).
+    expect(rm.getListResolveState(listState).status).toBe("pending");
+    expect(listProxy.loading).toBe(true);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+
+    release();
+    await flushPromises();
+
+    // Resolved: loading false, источник тот же; состав списка залит.
+    expect(rm.getListResolveState(listState).status).toBe("resolved");
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+    expect(listProxy.length).toBe(1);
   });
 
   it("resolver загружает список → proxy items отображает entities", async () => {
