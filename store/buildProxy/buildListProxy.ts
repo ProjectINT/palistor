@@ -1,4 +1,5 @@
 import { CONFIG_NODE, LIST_STATE, LIST_SPREAD_KEYS } from "../constants";
+import type { MappableKey } from "../constants";
 import type { AnyConfigNode, ListState } from "../store/types";
 import type { EntityData, EntityLeafNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
@@ -67,7 +68,7 @@ const ENTITY_LIST_SPREAD_KEYS: string[] = [
  * Entity proxies are cached per list instance (stable references for React);
  * the list proxy itself is cached per `ListState` in `kernel.nodes.listProxyCache`.
  */
-export function buildListProxy(listState: ListState, kernel: Palistor<any>): object {
+export function buildListProxy(listState: ListState, kernel: Palistor<any, any>): object {
   // Стабильный кэш proxy на каждый ListState (root и per-entity — единый кэш).
   const cached = kernel.nodes.listProxyCache.get(listState as object);
   if (cached) return cached;
@@ -134,7 +135,10 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
 
   // ─── Mutations ───────────────────────────────────────────────────────────────
 
-  const addFn = (idOrValues: string | Record<string, unknown>): void => {
+  // Overloads: add(id) → void; add(values) → created entity proxy (TItem).
+  // The proxy is returned only for the values form (matches ListProxyNode.add).
+  const addFn = (idOrValues: string | Record<string, unknown>): object | undefined => {
+    const fromValues = typeof idOrValues !== "string";
     if (owner) {
       const ownerId = getOwnerId();
       let entityId: string;
@@ -160,11 +164,12 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
         listState.itemIds.push(entityId);
       }
       notifyListChanged();
+      return fromValues ? buildItemProxy(entityId) : undefined;
     } else {
       let entityId: string;
       if (typeof idOrValues === "string") {
         entityId = idOrValues;
-        if (!kernel.entityRegistry.has(entityId)) return;
+        if (!kernel.entityRegistry.has(entityId)) return undefined;
       } else {
         // upsert entity into store (creates entityProjectionObj + registers leaves)
         kernel.set(idOrValues as EntityData);
@@ -175,6 +180,7 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
         listState.itemIds.push(entityId);
         notifyListChanged();
       }
+      return fromValues ? buildItemProxy(entityId) : undefined;
     }
   };
 
@@ -237,7 +243,11 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
 
   // ─── Proxy object ──────────────────────────────────────────────────────────
 
-  const spreadKeys = owner ? ENTITY_LIST_SPREAD_KEYS : LIST_SPREAD_KEYS;
+  // internal → external проекция ключей spread (mappable: loading, dirty).
+  const fwd = kernel.fieldMapping;
+  const spreadKeys = (owner ? ENTITY_LIST_SPREAD_KEYS : LIST_SPREAD_KEYS).map(
+    (k) => fwd[k as MappableKey] ?? k,
+  );
 
   const proxy = new Proxy(listConfigNode as unknown as Record<string, unknown>, {
     get(_target, key: string | symbol) {
@@ -258,7 +268,10 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any>): obj
         return undefined;
       }
 
-      switch (key) {
+      // Обратный маппинг на входе: external → internal (влияет на loading/dirty).
+      const ikey = kernel.externalToInternal[key] ?? key;
+
+      switch (ikey) {
         case "items":
           triggerLazyResolveIfNeeded();
           return listState.itemIds

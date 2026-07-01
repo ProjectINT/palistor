@@ -31,7 +31,7 @@ export interface WriteOptions {
  * хранилище и recompute работают по entityLeaf (view.storage).
  */
 export class WritePipeline {
-  constructor(private readonly kernel: Palistor<any>) {}
+  constructor(private readonly kernel: Palistor<any, any>) {}
 
   execute(
     node: AnyConfigNode,

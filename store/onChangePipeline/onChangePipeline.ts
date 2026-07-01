@@ -27,7 +27,7 @@ export interface OnChangeOptions {
  * allValues — entity-значения из view.parent.getValues().
  */
 export class OnChangePipeline {
-  constructor(private readonly kernel: Palistor<any>) {}
+  constructor(private readonly kernel: Palistor<any, any>) {}
 
   fire(node: AnyConfigNode, newValue: unknown, previousValue: unknown, opts?: OnChangeOptions): void {
     const { nodePaths, nodeParents } = this.kernel.nodes;

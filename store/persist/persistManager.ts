@@ -54,7 +54,7 @@ function filterValues(
  * Получает доступ ко всем данным формы через `kernel` (Palistor instance).
  */
 export class PersistManager {
-  private readonly kernel: Palistor<any>;
+  private readonly kernel: Palistor<any, any>;
 
   // ─── Внутреннее состояние ─────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ export class PersistManager {
   /** Флаг, предотвращающий сохранение во время гидратации. */
   private isHydrating = false;
 
-  constructor(kernel: Palistor<any>) {
+  constructor(kernel: Palistor<any, any>) {
     this.kernel = kernel;
   }
 

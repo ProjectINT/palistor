@@ -86,6 +86,11 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       // Прочие символы — пробрасываем как есть
       if (typeof key === "symbol") return (target as any)[key];
 
+      // Обратный маппинг на входе: external → internal. Проверки состояния
+      // (list-ключи, FIELD_STATE_PROPS) — по `ikey`; читаем и навигируем по
+      // оригинальному external-`key` (source-proxy переведёт его обратно).
+      const ikey = (store.externalToInternal[key as string] ?? key) as string;
+
       // ── List proxy (единый кубик: root + per-entity) ───────────────────────
       // Ключ трекинга = объект ListState, а НЕ общий listConfigNode: иначе версии
       // разных владельцев одного per-entity-списка схлопнутся (RFC §2.6), а root
@@ -94,29 +99,29 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       // по ListState, а не по CONFIG_NODE.
       const listState = (target as any)[LIST_STATE] as object | undefined;
       if (listState) {
-        if (key === "length" || key === "loading" || key === "dirty") {
+        if (ikey === "length" || ikey === "loading" || ikey === "dirty") {
           if (!refs.accessed.has(listState)) {
             refs.accessed.add(listState);
             refs.lastVersions.set(listState, store.getNodeVersion(listState));
           }
           return (target as any)[key];
         }
-        if (key === "items") {
+        if (ikey === "items") {
           if (!refs.accessed.has(listState)) {
             refs.accessed.add(listState);
             refs.lastVersions.set(listState, store.getNodeVersion(listState));
           }
-          const rawItems = (target as any)["items"] as object[];
+          const rawItems = (target as any)[key] as object[];
           return rawItems.map((item: object) =>
             createTrackingProxy(item, refs, store, cache),
           );
         }
-        if (key === "map") {
+        if (ikey === "map") {
           if (!refs.accessed.has(listState)) {
             refs.accessed.add(listState);
             refs.lastVersions.set(listState, store.getNodeVersion(listState));
           }
-          const origMap = (target as any)["map"] as (
+          const origMap = (target as any)[key] as (
             fn: (item: object, index: number, id: string) => unknown,
           ) => unknown[];
           return (fn: (item: any, index: number, id: string) => unknown) =>
@@ -130,7 +135,7 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
 
       // Чтение состояния поля → трекинг ноды
       // submitting — реактивный флаг группы, тоже требует трекинга
-      if (FIELD_STATE_PROPS.has(key) || key === "submitting") {
+      if (FIELD_STATE_PROPS.has(ikey) || ikey === "submitting") {
         const configNode = (target as any)[CONFIG_NODE] as object | undefined;
         if (configNode && !refs.accessed.has(configNode)) {
           refs.accessed.add(configNode);

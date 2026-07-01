@@ -1,6 +1,6 @@
 ---
 name: palistor
-description: "Build forms with the Palistor reactive form state manager. Use when: creating form configs, writing React components with useForm, adding validation/formatters/setters, working with lists/entities, configuring resolve/persist/submit pipelines, debugging form state."
+description: "Build forms with the Palistor reactive form state manager. Use when: creating form configs, writing React components with useForm, adding validation/formatters/setters, working with lists/entities, configuring resolve/persist/submit pipelines, remapping field prop names to UI-library conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
 ---
 
 # Palistor — Reactive Form State Manager
@@ -12,6 +12,7 @@ description: "Build forms with the Palistor reactive form state manager. Use whe
 - Adding validation, formatters, setters, computed visibility/required
 - Working with entity lists (add/remove/edit items)
 - Configuring async resolve, persist, submit/reset pipelines
+- Remapping field prop names for a UI library (`fieldMapping` — e.g. `isRequired → required`)
 - Debugging re-render or dirty tracking issues
 
 ## Architecture Overview
@@ -34,24 +35,23 @@ Everything is exported from the root `@projectint/palistor` entry point. Deep im
 ```ts
 // Root import (preferred) — covers all public API
 import {
-  Palistor, useForm, usePersist, useTranslator, useNotifier, useStoreContext, defineList,
+  Palistor, useForm, usePersist, useTranslator, useNotifier, useStoreContext,
+  defineList, defineFieldMapping,
   localStorageDriver, sessionStorageDriver,
 } from "@projectint/palistor";
 
 import type {
-  FormConfig, TranslateFn, MaybeComputed, DeepPartialValues,
+  FormConfig, TranslateFn, MaybeComputed, MaybeTranslatable, DeepPartialValues,
   ConfigNode, FieldProxyNode, GroupProxyNode, ConfigProxy,
   ExtractValues, ProxyStoreOptions, ProxyStore, Unsubscribe,
   PalistorProxy, PalistorRef, PalistorList, InferEntity,
   TypedListNode, ListResolver, TemplateConfig,
+  FieldMapping, ApplyFieldMapping,
   PersistDriver, PersistOptions, PersistManager,
   Resolve, NotifyFn, ResolveErrorContext,
 } from "@projectint/palistor";
 
 ```
-
-> **Note:** `MaybeTranslatable` is not re-exported from the root. Import directly if needed:
-> `import type { MaybeTranslatable } from "@projectint/palistor/store/store";`
 
 ## TypeScript Types
 
@@ -125,6 +125,8 @@ const users = defineList<User>({
 | `InferEntity<T>` | Extract entity type from `PalistorRef<TEntity>` |
 | `TemplateConfig<TEntity>` | Typed template — keys of entity mapped to `ConfigNode<TEntity[K]>` |
 | `ListResolver<TEntity>` | Typed resolver — `(values) => Promise<TEntity[]>` |
+| `FieldMapping` | Rename map `internal → external` for the `fieldMapping` option (keys = mappable field props, values = your names) |
+| `ApplyFieldMapping<T, M>` | Applies a mapping to a proxy-node type (renames keys) — for manual prop typing |
 
 ## Config Declaration
 
@@ -255,6 +257,8 @@ passport: {
     optimisticResolver: (values) => ({ number: "Loading..." }),
     onError: (error, { notify }) => notify("Failed to load passport"),  // required
     deps: ["userId"],           // explicit deps (merged with auto-deps after first run)
+    contextDeps: ["accountId"], // wait until store.context.accountId != null before running
+                                // (prevents "flash of error" when context is set asynchronously)
     options: {
       lazy: true,               // default; false = eager on init
       suspense: false,          // throw Promise for React <Suspense>
@@ -290,11 +294,19 @@ users: [
 ## Creating a Store
 
 ```ts
-const store = new Palistor<typeof config>({
+// Prefer bare `new Palistor({ config })` — TConfig is inferred from `config`.
+const store = new Palistor({
   config: myFormConfig,
   initialValues: { email: "user@example.com" }, // partial, deep-merged
+  fieldMapping,                                 // optional — see "Field Name Mapping"
 });
 ```
+
+> **⚠️ Do NOT write `new Palistor<typeof config>({ ... })` when using `fieldMapping`.**
+> Supplying the first type argument explicitly turns OFF inference of the second
+> (`TMapping`) type parameter, so it falls back to `{}` and the renamed prop names
+> lose their types (runtime still works). Let both infer with `new Palistor({ ... })`,
+> or specify both: `new Palistor<typeof config, typeof fieldMapping>({ ... })`.
 
 ## React Hooks
 
@@ -456,16 +468,25 @@ Accessing `form.email` returns a `FieldProxyNode`:
 
 **Spread-safe:** `{...form.email}` yields only these properties (config internals hidden).
 
+> **Renamable:** every property name above (plus `onValueChange`) can be projected
+> to a different name via the store's `fieldMapping` option — e.g. `isRequired → required`.
+> See [Field Name Mapping (fieldMapping)](#field-name-mapping-fieldmapping).
+
 ## Group Proxy API
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `isInvalid` | `boolean` | Any child invalid |
+| `isVisible` | `boolean` | Computed from config |
+| `isRequired` | `boolean \| undefined` | Computed from config (if set) |
+| `isReadOnly` | `boolean \| undefined` | Computed from config (if set) |
+| `isDisabled` | `boolean \| undefined` | Computed from config (if set) |
+| `isInvalid` | `boolean \| undefined` | Any child invalid |
+| `errorMessage` | `string \| undefined` | Group-level validation error (if set) |
 | `dirty` | `boolean` | Any child changed |
 | `submitting` | `boolean` | Submit in progress |
 | `loading` | `boolean` | Resolver running |
 | `revalidate` | `boolean` | Show errors after failed submit |
-| `isVisible` | `boolean` | Computed from config |
+| `values` | `Record<string, unknown>` | Live nested values of the subtree (not a clone) |
 | `submit()` | `Promise<SubmitResult>` | Run submit pipeline for this group |
 | `reset(values?)` | `void` | Reset to initial (or provided) values |
 | `setValues(patch)` | `void` | Bulk update with single recompute |
@@ -488,6 +509,95 @@ Plus all child fields as proxy sub-properties.
 | `setItems(ids)` | `void` | Bulk replace list contents |
 | `getValues()` | `Array<Record<string, unknown>>` | Plain values snapshot of all items — use for `console.log`, serialization, or comparison |
 | `[Symbol.iterator]` | | Iterable |
+
+## Field Name Mapping (fieldMapping)
+
+Palistor's built-in prop names (`isRequired`, `isInvalid`, `errorMessage`, …) don't
+match what UI libraries expect (`required`, `error`/`status`, `helperText`, …).
+`fieldMapping` renames how internal props are exposed **through the proxy** (GET +
+spread/`ownKeys` + tracking) so you can spread a field straight into a component.
+Internal state, compute, and pipelines are untouched — it's a pure projection at
+the proxy boundary.
+
+```tsx
+const store = new Palistor({
+  config: orderConfig,
+  fieldMapping: {
+    isRequired:   "required",
+    isDisabled:   "disabled",
+    isReadOnly:   "readOnly",
+    isInvalid:    "error",
+    errorMessage: "helperText",
+    description:  "helpText",
+    // unlisted keys keep their names: value, label, placeholder, dirty, loading, onValueChange
+  },
+});
+
+// Spread directly — no per-field adapter
+<Input {...form.email} />
+// form.email.required   === true
+// form.email.helperText === "Email is required"
+// form.email.value      === ""      (unmapped → unchanged)
+```
+
+### Declaring the map (keep literal types!)
+
+The map's **values must stay literal types** (`"required"`, not `string`) for the
+renamed names to be typed on `store.proxy` / `useForm(store)`. Three correct ways —
+and one that silently loses types:
+
+```ts
+// ✅ 1. Inline — the store's `const` type param captures literals automatically
+new Palistor({ config, fieldMapping: { isRequired: "required" } });
+
+// ✅ 2. Reusable via defineFieldMapping() — validates the map AND keeps literals (preferred)
+const fieldMapping = defineFieldMapping({ isRequired: "required", isInvalid: "error" });
+new Palistor({ config, fieldMapping });
+
+// ✅ 3. Reusable via `as const`
+const fieldMapping = { isRequired: "required" } as const;
+
+// ❌ WRONG — `satisfies`/annotation widen values to `string`; renamed names are NOT typed
+//    (runtime still works, but `store.proxy.email.required` won't typecheck)
+const bad1 = { isRequired: "required" } satisfies FieldMapping;
+const bad2: FieldMapping = { isRequired: "required" };
+```
+
+### Mappable keys
+
+Only these internal names may appear as **keys** of the map (values are your chosen
+external names, any string):
+
+`value` · `label` · `placeholder` · `description` · `isRequired` · `isReadOnly` ·
+`isDisabled` · `isVisible` · `isInvalid` · `errorMessage` · `dirty` · `loading` · `onValueChange`
+
+- Group nodes project their `value`/`dirty`/`loading` (and `isRequired`/`isInvalid`/… on GET); `submit`/`reset`/`values` are never renamed.
+- List nodes project `loading`/`dirty`; `items`/`add`/`map`/… are never renamed.
+- `componentProps` keys are never renamed.
+
+### Typing behavior
+
+- Renaming is applied to the type of `store.proxy` and `useForm(store)` — `form.email.required` is `boolean`, and the old name (`form.email.isRequired`) is **removed from the type** (though it still resolves at runtime — reading the internal name is safe by design).
+- Runtime renaming applies everywhere (leaf, group, list, and entity proxies). Static types for the renamed names cover the primary `store.proxy` / `useForm(store)` tree.
+- No `fieldMapping` → zero overhead, types and behavior identical to before.
+- Type a mapped **subtree** prop with the 2-arg `PalistorProxy<T, typeof fieldMapping>` (renames recursively); type a **single field** prop with `ApplyFieldMapping<FieldProxyNode<T>, typeof fieldMapping>`.
+
+### Scope: 1:1 rename only
+
+`fieldMapping` is a **bijection of names** — it does not transform values. Cases it
+does NOT cover (use a thin per-component adapter over the already-renamed spread):
+
+| Case | Example | Why |
+|------|---------|-----|
+| Value transform | Ant `isInvalid:true → status:'error'` | changes the value/type, not just the name |
+| Many-to-one | MUI `helperText = isInvalid ? errorMessage : description` | two internal sources → one name |
+| Extra props | derive `aria-invalid` from `isInvalid` | creates new keys, not a rename |
+
+```tsx
+// Escape hatch for a value transform, on top of the renamed spread:
+const status = form.email.error ? "error" : undefined;
+<Input {...form.email} status={status} />
+```
 
 ## Store Public Methods
 
@@ -919,6 +1029,7 @@ Root entity proxy (from `useForm(entity, template)`):
 | `submitting` | `boolean` | Entity submit pipeline running |
 | `submit()` | `Promise<SubmitResult>` | Run template's onSubmit for this entity |
 | `values` | `Record<string, unknown>` | Current entity values as plain object |
+| `dirty` | `boolean` | Any entity field (or per-entity nested list) differs from initial |
 
 Entity leaf proxy (from `form.fieldName`):
 
@@ -994,7 +1105,7 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | Expecting `store.delete(id)` to remove from lists | `delete` removes from registry; use `list.remove(id)` for list, then `store.delete(id)` if you also want to clear registry |
 | Array config with >2 elements | List node is `[template]` or `[template, listConfig]` — max 2 elements |
 | Ignoring `add(values)` return | `add(values)` returns the created `TItem` proxy — use it |
-| Omitting `resolve.onError` | `onError` is **required** on resolve config — always provide it |
+| Omitting `resolve.onError` | Required (type-enforced) on **group/field** resolve; optional on **list** resolve config but still recommended — always handle errors |
 | `useForm(store, (s) => s.subForm)` — passing store as first arg with selector | Not valid. Use `useForm(store)` then access `.subForm` from the returned proxy. Two-arg form is entity-only: `useForm(entityProxy, selector)` where `entityProxy` comes from `list.items`/`list.getById` |
 | Using `list.items[0]` as React key | Use the `id` argument from `list.map((item, i, id) => ...)` — entity proxy references may change |
 | Reading entity fields outside `useForm` | Always wrap entity proxy in `useForm(entity)` or `useForm(entity, template)` for reactivity |
@@ -1002,6 +1113,10 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | Using `resolve` on template field and expecting form-level deps | Template field resolvers receive **entity values** (not full form values). `deps: ["fieldName"]` matches entity field names, not top-level form keys |
 | Confusing `store.invalidate` with `store.delete` | `invalidate` only clears resolve cache (next mount re-runs resolve). `delete` removes entity entirely |
 | Not providing `id` field in template | Every list template MUST have `id: { value: "" }` — it's the entity key |
+| `fieldMapping` renamed names not typed | You used `: FieldMapping` or `satisfies FieldMapping` (both widen values to `string`). Use `defineFieldMapping({...})`, `as const`, or an inline literal |
+| `new Palistor<typeof config>({..., fieldMapping})` loses mapping types | An explicit first type arg disables `TMapping` inference (falls back to `{}`). Use bare `new Palistor({...})` or specify both type args |
+| Expecting `fieldMapping` to transform values (Ant `status`, MUI `helperText`) | It only renames 1:1. Use a per-component adapter over the renamed spread (see Field Name Mapping → Scope) |
+| Mapping two internal keys to the same external name | Not allowed — `fieldMapping` must be a bijection (one internal ↔ one external) |
 
 ## Pipelines Reference
 

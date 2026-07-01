@@ -1,4 +1,5 @@
 import { CONFIG_NODE, ENTITY_ID } from "../constants";
+import type { MappableKey } from "../constants";
 import { type AnyConfigNode } from "../store/types";
 import type { Palistor } from "../store/palistor";
 import type { FieldState } from "../compute/index";
@@ -43,7 +44,7 @@ export class ProxyBuilder {
   /** Compound cache for entity-leaf mode: (storage, via) → proxy. */
   private readonly _entityLeafProxyCache = new WeakMap<object, Map<object, object>>();
 
-  constructor(private readonly kernel: Palistor<any>) {}
+  constructor(private readonly kernel: Palistor<any, any>) {}
 
   build(node: AnyConfigNode, opts?: { via?: AnyConfigNode; parentEntityProxy?: object }): any {
     const via = opts?.via;
@@ -83,8 +84,13 @@ export class ProxyBuilder {
         // Любой символ кроме CONFIG_NODE не имеет смысла
         if (typeof key === "symbol") return undefined;
 
+        // Обратный маппинг на входе: external → internal одной строкой.
+        // Дальше вся dispatch-логика работает по internal-ключу `ikey`;
+        // оригинальный `key` нужен только для навигации к дочерним узлам.
+        const ikey = kernel.externalToInternal[key] ?? key;
+
         // onValueChange — стабильный functional setter для React
-        if (key === "onValueChange") {
+        if (ikey === "onValueChange") {
           return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
         }
 
@@ -94,17 +100,17 @@ export class ProxyBuilder {
         // ── Групповой узел: методы и состояние ───────────────────────────
         if (isGroup) {
           const handlers = {
-            "submitting": () => currentNode?.[key as keyof FieldState] ?? false,
-            "dirty": () => currentNode?.[key as keyof FieldState] ?? false,
-            "revalidate": () => currentNode?.[key as keyof FieldState] ?? false,
-            "loading": () => currentNode?.[key as keyof FieldState] ?? false,
+            "submitting": () => currentNode?.["submitting" as keyof FieldState] ?? false,
+            "dirty": () => currentNode?.["dirty" as keyof FieldState] ?? false,
+            "revalidate": () => currentNode?.["revalidate" as keyof FieldState] ?? false,
+            "loading": () => currentNode?.["loading" as keyof FieldState] ?? false,
             "values": () => kernel.values.groupSlot.get(node),
             "submit": () => getCached(caches.submit, node, () => () => kernel.submitPipeline.execute(node)),
             "reset": () => getCached(caches.reset, node, () => (vals?: Record<string, unknown>) => kernel.resetPipeline.execute(node, vals)),
             "setValues": () => getCached(caches.setValues, node, () => (patch: Record<string, unknown>) => kernel.setValuesNode(node, patch)),
           }
 
-          if (key in handlers) return handlers[key as keyof typeof handlers]();
+          if (ikey in handlers) return handlers[ikey as keyof typeof handlers]();
           handleLazyResolve(node,
             kernel.resolveManager.triggerResolve,
             kernel.resolveManager.getResolveState,
@@ -113,11 +119,11 @@ export class ProxyBuilder {
 
         // ── Вычисленное состояние поля ───────────────────────────────────
         const translatableHandler = () => {
-          const configValue = node[key];
+          const configValue = node[ikey];
           if (typeof configValue === "function") {
             return configValue(kernel.services.translate, kernel.values.values);
           }
-          return currentNode ? currentNode[key as keyof FieldState] : configValue;
+          return currentNode ? currentNode[ikey as keyof FieldState] : configValue;
         };
 
         const fieldStateHandlers: Record<string, (() => unknown) | unknown> = {
@@ -136,17 +142,17 @@ export class ProxyBuilder {
           "submitting":   currentNode?.submitting ?? false,
         };
 
-        if (key === "submit") {
+        if (ikey === "submit") {
           return getCached(caches.submit, node, () => () => kernel.submitPipeline.execute(node));
         }
 
-        if (key in fieldStateHandlers) {
-          const field = fieldStateHandlers[key];
+        if (ikey in fieldStateHandlers) {
+          const field = fieldStateHandlers[ikey];
           if (typeof field === "function") return field();
           return field;
         }
 
-        // Дочерний узел → рекурсивный прокси
+        // Дочерний узел → рекурсивный прокси (по ОРИГИНАЛЬНОМУ key)
         const child = node[key];
 
         if (child && typeof child === "object") return builder.build(child as AnyConfigNode);
@@ -155,7 +161,8 @@ export class ProxyBuilder {
       },
 
       set(_target, key: string | symbol, newValue: unknown) {
-        if (key !== "value") return false;
+        const ikey = kernel.externalToInternal[key as string] ?? key;
+        if (ikey !== "value") return false;
 
         // Group write: delegate to setValuesNode, bypass writePipeline
         // (Object.is() comparison on objects would always be false in writePipeline)
@@ -198,7 +205,7 @@ export class ProxyBuilder {
        * которые не должны утекать как пропсы в UI-компоненты.
        */
       ownKeys() {
-        return computeProxyKeys(node);
+        return computeProxyKeys(node, kernel.fieldMapping);
       },
 
       /**
@@ -207,7 +214,7 @@ export class ProxyBuilder {
        */
       getOwnPropertyDescriptor(_target, key: string | symbol) {
         if (typeof key === "symbol") return undefined;
-        const keys = computeProxyKeys(node);
+        const keys = computeProxyKeys(node, kernel.fieldMapping);
         if (!keys.includes(key)) return undefined;
         return { configurable: true, enumerable: true, writable: true, value: proxyNode[key] };
       },
@@ -247,6 +254,9 @@ export class ProxyBuilder {
 
         if (typeof key === "symbol") return undefined;
 
+        // Обратный маппинг на входе: external → internal. Дальше switch по `ikey`.
+        const ikey = kernel.externalToInternal[key] ?? key;
+
         // Entity values from view (registered lazily in buildEntityProjectionProxy GET trap).
         const view = kernel.nodes.nodeViews.get(storage as object)?.get(rules as object);
         const allValues: Record<string, unknown> = view ? view.parent.getValues() : {};
@@ -257,7 +267,7 @@ export class ProxyBuilder {
 
         // ─── Lazy entity field resolve ──────────────────────────────────────
         // Trigger per-leaf template resolve on first access to value/loading.
-        if ((key === "value" || key === "loading") && rules.resolve) {
+        if ((ikey === "value" || ikey === "loading") && rules.resolve) {
           // For phantom leaves the NodeView may not be registered yet; fall back
           // to the entity projection proxy passed at construction time.
           const entityProxy = view?.parent?.proxy ?? parentEntityProxy;
@@ -274,7 +284,7 @@ export class ProxyBuilder {
           }
         }
 
-        switch (key) {
+        switch (ikey) {
           case "value":
             return currentState?.value ?? storage.value;
 
@@ -382,7 +392,8 @@ export class ProxyBuilder {
       },
 
       set(_target, key: string | symbol, newValue: unknown) {
-        if (key !== "value") return false;
+        const ikey = kernel.externalToInternal[key as string] ?? key;
+        if (ikey !== "value") return false;
         if (!nodeState.has(storage as object)) return true; // phantom: no-op
         const prev = (nodeState.get(storage as object) as { value: unknown } | undefined)?.value;
         const result = kernel.writePipeline.execute(storage, newValue, prev, { via: rules });
@@ -394,6 +405,7 @@ export class ProxyBuilder {
       },
 
       ownKeys() {
+        const fwd = kernel.fieldMapping;
         return [
           "value",
           "label",
@@ -410,7 +422,7 @@ export class ProxyBuilder {
           "submitting",
           "submit",
           "onValueChange",
-        ];
+        ].map((k) => fwd[k as MappableKey] ?? k);
       },
 
       getOwnPropertyDescriptor(_target, key: string | symbol) {
