@@ -10,6 +10,9 @@ export { PaymentForm } from "./payment-form";
 // Hooks Demo
 export { HooksDemo } from "./hooks-demo";
 
+// Field Mapping Demo
+export { FieldMappingDemo } from "./field-mapping";
+
 // Debug Panel
 export { DebugPanel } from "./debug-panel";
 

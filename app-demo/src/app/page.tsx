@@ -14,6 +14,7 @@ import { DebugPanel } from "@/modules/debug-panel";
 import { StatePreview } from "@/modules/state-preview/StatePreview";
 import { ListsDemo } from "@/modules/lists-demo";
 import { AsyncDemo } from "@/modules/async-demo";
+import { FieldMappingDemo } from "@/modules/field-mapping";
 
 // ============================================================================
 // Demo Page
@@ -50,6 +51,7 @@ export default function DemoPage() {
             {activeTab === "lists" && <ListsDemo />}
             {activeTab === "async" && <AsyncDemo />}
             {activeTab === "hooks" && <HooksDemo />}
+            {activeTab === "mapping" && <FieldMappingDemo />}
             {activeTab === "debug" && <DebugPanel />}
           </div>
 

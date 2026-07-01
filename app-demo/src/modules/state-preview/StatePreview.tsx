@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 
 import { usePaymentForm, paymentStore } from "@/config/appConfig";
 import { useCatalogForm, catalogStore } from "@/config/catalog/catalogConfig";
+import { useMappingForm, mappingStore } from "@/config/fieldMapping";
 import type { TabType } from "@/modules/header";
 
 interface StatePreviewProps {
@@ -14,12 +15,20 @@ export function StatePreview({ activeTab }: StatePreviewProps) {
   const t = useTranslations();
 
   const isCatalogTab = activeTab === "lists" || activeTab === "async";
+  const isMappingTab = activeTab === "mapping";
 
-  // Subscribe to the relevant store
+  // Subscribe to the relevant stores
   usePaymentForm();
   useCatalogForm();
+  useMappingForm();
 
-  const values = isCatalogTab ? catalogStore.getValues() : paymentStore.getValues();
+  const values = isMappingTab
+    ? mappingStore.getValues()
+    : isCatalogTab
+      ? catalogStore.getValues()
+      : paymentStore.getValues();
+
+  const storeName = isMappingTab ? "mappingStore" : isCatalogTab ? "catalogStore" : "paymentStore";
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6 sticky top-8">
@@ -27,7 +36,7 @@ export function StatePreview({ activeTab }: StatePreviewProps) {
         {t("debug.valuesTitle")}
       </h2>
       <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-4">
-        {isCatalogTab ? "catalogStore" : "paymentStore"}
+        {storeName}
       </p>
 
       <div className="space-y-4">
