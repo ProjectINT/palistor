@@ -34,6 +34,16 @@ export class ResetPipeline {
 
     const changed = applyPatch(groupNode, nodeState, patch, new Set(), valuesCache);
 
+    // C2: при полном сбросе восстанавливаем состав per-entity списков к initial
+    // и бампаем версии их EntityListState-узлов → React перерисует списки.
+    // C3: пересинхронизируем projectionObj владельца — getValues() вернёт initial.
+    if (groupNode === this.kernel.rootConfig) {
+      for (const { state } of this.kernel.entityRegistry.resetEntityListStates()) {
+        this.kernel.syncListValuesCache(state);
+        changed.add(state as unknown as object);
+      }
+    }
+
     if (values !== undefined && initialValueMap) {
       captureInitialValues(groupNode, nodeState, initialValueMap);
     }

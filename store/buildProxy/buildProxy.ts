@@ -66,10 +66,10 @@ export class ProxyBuilder {
     if (proxyCache.has(node)) return proxyCache.get(node);
 
     // ── ListNode branch ─────────────────────────────────────────────────────
+    // Root-list: идентифицируется своим ListState (ownerEntity === null).
+    // Proxy кэшируется внутри buildListProxy по ListState, а не в proxyCache.
     if (isListNode(node)) {
-      const listProxy = buildListProxy(node as unknown as unknown[], this.kernel);
-      proxyCache.set(node, listProxy);
-      return listProxy;
+      return buildListProxy(this.kernel.nodes.listStates.get(node)!, this.kernel);
     }
 
     const builder = this;

@@ -19,8 +19,10 @@ import { ServiceRegistry } from "./serviceRegistry";
 import { DirtyTracker } from "./dirtyTracker";
 import { GroupDepsMap } from "./groupDepsMap";
 import { EntityRegistry } from "../entityRegistry";
+import { generateTmpId } from "../entityRegistry";
 import type { EntityData } from "../entityRegistry";
-import { isLeafNode, configKeys } from "../traversal";
+import type { EntityNode } from "../entityRegistry/types";
+import { isLeafNode, isListNode, isGroupNode, configKeys } from "../traversal";
 
 import type {
   AnyConfigNode,
@@ -164,7 +166,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
       store: this,
       listStates: this.nodes.listStates,
       setEntitiesRaw: (items, listNode) => this._setEntitiesRaw(items, listNode),
-      syncListValuesCache: (listNode) => this._syncListValuesCache(listNode),
+      syncListValuesCache: (listState) => this.syncListValuesCache(listState),
       entityRegistry: this.entityRegistry,
     });
 
@@ -404,6 +406,15 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     const entityNode = this.entityRegistry.get(id);
     if (!entityNode) return;
 
+    // C2: каскадное удаление child-entity, принадлежащих этой entity.
+    // Снимаем копию множества — childrenByOwner мутируется при рекурсивном delete.
+    const childIds = this.entityRegistry.getChildrenByOwner(id);
+    if (childIds && childIds.size > 0) {
+      for (const childId of [...childIds]) {
+        this.delete(childId);
+      }
+    }
+
     // Собрать все leaf-ноды entity
     const deletedLeaves = new Set<object>();
     this.collectEntityLeaves(entityNode, deletedLeaves);
@@ -570,27 +581,189 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
   }
 
   /**
-   * Sync valuesCache.values[listKey] from listState.itemIds.
-   * Used by executeListResolve after updating itemIds.
+   * Синхронизировать valuesCache с составом списка — ЕДИНЫЙ метод (root + per-entity).
+   *
+   * Ветвится по `listState.ownerEntity`:
+   *   - `null`  → root: пишем массив POJO-зеркал в `nodeSlot` config-узла
+   *     (`valuesCache.values.users = [{id:"u1",…}, …]` — тот же массив, что читает
+   *     `proxy.users.value`, поэтому React видит обновление);
+   *   - entity  → per-entity (вариант C, C3/C4): материализуем состав в projectionObj
+   *     владельца по пути списка (`["contacts"]` или `["profile","contacts"]`). Это
+   *     включает вложенный список в `store.getValues()` — projectionObj владельца
+   *     входит в массив корневого списка по ссылке, а child-projectionObj-ы
+   *     рекурсивно материализуют свои списки.
+   *
+   * No-op, если слот/путь/projectionObj владельца отсутствуют.
    *
    * @internal
    */
-  _syncListValuesCache(listNode: object): void {
-    // Найти «слот» в valuesCache для этого списка (пара { parent, key }).
-    // parent — родительский POJO-объект в valuesCache.values, key — имя поля.
-    const slot = this.values.nodeSlot.get(listNode);
-    if (!slot) return;
-
-    // listState хранит itemIds — упорядоченный массив entity ID текущего списка.
-    const listState = this.nodes.listStates.get(listNode);
-    if (!listState) return;
-
-    // Перестроить массив: заменить itemIds на соответствующие POJO-зеркала.
-    // Результат: valuesCache.values.users = [{ id: "u1", ... }, { id: "u2", ... }]
-    // Это тот же массив, на который ссылается proxy.users.value — React увидит обновление.
-    slot.parent[slot.key] = listState.itemIds
+  syncListValuesCache(listState: ListState): void {
+    const materialized = listState.itemIds
       .map((id) => this.entityProjectionObjs.get(id))
       .filter((obj): obj is Record<string, unknown> => obj !== undefined);
+
+    if (listState.ownerEntity === null) {
+      // Root: слот в valuesCache (пара { parent, key }) по config-узлу.
+      const slot = this.values.nodeSlot.get(listState.listConfigNode);
+      if (!slot) return;
+      slot.parent[slot.key] = materialized;
+      return;
+    }
+
+    // Per-entity: спускаемся к родительскому POJO по пути и пишем состав.
+    const listConfigNode = listState.listConfigNode;
+    const path = this.nodes.listFieldKeys.get(listConfigNode);
+    if (!path || path.length === 0) return;
+
+    const ownerId = this._entityId(listState.ownerEntity);
+    const projectionObj = this.entityProjectionObjs.get(ownerId);
+    if (!projectionObj) return;
+
+    let target = projectionObj;
+    for (let i = 0; i < path.length - 1; i++) {
+      const k = path[i];
+      let next = target[k];
+      if (!next || typeof next !== "object" || Array.isArray(next)) {
+        next = {};
+        target[k] = next;
+      }
+      target = next as Record<string, unknown>;
+    }
+    target[path[path.length - 1]] = materialized;
+  }
+
+  /** @internal Текущий id entity (учитывает rekey через nodeState). */
+  private _entityId(entity: EntityNode): string {
+    const idLeaf = entity.id as object;
+    return (
+      (this.nodes.nodeState.get(idLeaf) as { value: unknown } | undefined)?.value ??
+      entity.id.value
+    ) as string;
+  }
+
+
+  /**
+   * Восстановить состав корневых И per-entity списков из снимка значений
+   * (вариант C, C3 — persist hydrate).
+   *
+   * `applyPatch` пропускает list-узлы, поэтому состав списков восстанавливается
+   * отдельным проходом: для каждого list-поля создаём child-entity, проставляем
+   * owner-ссылку (для вложенных), заполняем `itemIds`/`initialItemIds` и
+   * синхронизируем valuesCache. Рекурсивно обрабатывает nested-of-nested.
+   *
+   * Возвращает множество изменённых узлов для последующего notify.
+   *
+   * @internal
+   */
+  restoreLists(values: Record<string, unknown>): Set<object> {
+    const changed = new Set<object>();
+    this._restoreListsRec(this.rootConfig, values, null, changed);
+    return changed;
+  }
+
+  private _restoreListsRec(
+    configNode: AnyConfigNode,
+    valueObj: Record<string, unknown> | undefined,
+    ownerEntity: EntityNode | null,
+    changed: Set<object>,
+  ): void {
+    for (const key of configKeys(configNode as Record<string, unknown>)) {
+      const child = (configNode as Record<string, unknown>)[key];
+      if (!child || typeof child !== "object") continue;
+
+      // Вложенная группа (не список): рекурсия, чтобы достать списки внутри неё.
+      if (!Array.isArray(child)) {
+        if (isGroupNode(child as object)) {
+          const nested = valueObj?.[key];
+          if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+            this._restoreListsRec(
+              child as AnyConfigNode,
+              nested as Record<string, unknown>,
+              ownerEntity,
+              changed,
+            );
+          }
+        }
+        continue;
+      }
+
+      if (!isListNode(child as object)) continue;
+
+      const arr = valueObj?.[key];
+      if (!Array.isArray(arr)) continue;
+
+      const listConfigNode = child as object;
+      const template = (child as unknown[])[0] as AnyConfigNode;
+      const ids: string[] = [];
+
+      for (const itemObj of arr) {
+        if (!itemObj || typeof itemObj !== "object") continue;
+        const rawId = (itemObj as { id?: unknown }).id;
+        const id =
+          typeof rawId === "string" && rawId.trim() !== "" ? rawId : generateTmpId();
+        const flat = this._stripListFields(
+          { ...(itemObj as Record<string, unknown>), id },
+          template,
+        );
+        const leafChanged = this._setEntitiesRaw([flat]);
+        for (const n of leafChanged) changed.add(n);
+        ids.push(id);
+
+        const childEntity = this.entityRegistry.get(id);
+        if (childEntity) {
+          if (ownerEntity) {
+            this.entityRegistry.setEntityOwner(
+              childEntity,
+              this._entityId(ownerEntity),
+              listConfigNode,
+            );
+          }
+          // Рекурсия во вложенные списки этого item.
+          this._restoreListsRec(
+            template,
+            itemObj as Record<string, unknown>,
+            childEntity,
+            changed,
+          );
+        }
+      }
+
+      if (ownerEntity) {
+        const els = this.entityRegistry.getOrCreateEntityListState(ownerEntity, listConfigNode);
+        els.itemIds = ids;
+        els.initialItemIds = [...ids];
+        this.syncListValuesCache(els);
+        changed.add(els as unknown as object);
+      } else {
+        const listState = this.nodes.listStates.get(listConfigNode);
+        if (listState) {
+          listState.itemIds = ids;
+          listState.initialItemIds = [...ids];
+          this.syncListValuesCache(listState);
+          // U2: ListState — ключ трекинга; listConfigNode — мост обратной совместимости.
+          changed.add(listState as unknown as object);
+          changed.add(listConfigNode);
+        }
+      }
+    }
+  }
+
+  /**
+   * Вернуть поверхностную копию объекта данных entity без list-полей
+   * (их состав восстанавливается отдельно через EntityListState). Иначе
+   * `createEntityNode` затянул бы массив как обычный leaf-value.
+   */
+  private _stripListFields(
+    itemObj: Record<string, unknown>,
+    template: AnyConfigNode,
+  ): EntityData {
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(itemObj)) {
+      const tField = (template as Record<string, unknown> | undefined)?.[key];
+      if (Array.isArray(tField)) continue; // list-поле — пропускаем
+      result[key] = itemObj[key];
+    }
+    return result as EntityData;
   }
 
   /**

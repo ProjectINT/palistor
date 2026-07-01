@@ -3,9 +3,49 @@ import { registerNodes, type GroupComputeMap, type ComputeEntry, type InitialSli
 import { buildNodeMaps } from "../nodeMap";
 import { initGroupSubmitting } from "../../init/initGroupSubmitting";
 import { getNodeGroupPath } from "../../groupDeps/getNodeGroupPath";
+import { CONFIG_PROPS } from "../../constants";
 import type { AnyConfigNode, TranslateFn, ListState } from "../types";
 import { isLeafNode, isGroupNode, isListNode } from "./nodeUtils";
 import { type NodeView, type NodeViewKernel, makeIdentityView } from "./nodeView";
+
+/**
+ * Рекурсивно собрать обратный индекс `listConfigNode → fieldPath` для ВСЕХ
+ * списков конфига, включая вложенные в template списка (per-entity lists, C3)
+ * и вложенные в nested-группы (C4).
+ *
+ * Путь хранится массивом ключей **относительно ближайшего entity-scope**:
+ * - список прямо под template → `["contacts"]`;
+ * - список внутри nested-группы → `["profile", "contacts"]`.
+ * Путь сбрасывается на границе каждого списка (`child[0]` открывает новый
+ * entity-scope — его item-ы это отдельные entity со своим projectionObj).
+ * Это позволяет `syncListValuesCache` (per-entity ветка) записать состав в
+ * правильное вложенное место projectionObj владельца.
+ */
+function collectListFieldKeys(
+  node: AnyConfigNode,
+  map: WeakMap<object, string[]>,
+  prefix: string[] = [],
+): void {
+  for (const key of Object.keys(node)) {
+    if (CONFIG_PROPS.has(key)) continue;
+    const child = (node as Record<string, unknown>)[key];
+    if (!child || typeof child !== "object") continue;
+
+    if (Array.isArray(child)) {
+      map.set(child, [...prefix, key]);
+      const template = child[0];
+      if (template && typeof template === "object") {
+        // Новый entity-scope — путь сбрасывается.
+        collectListFieldKeys(template as AnyConfigNode, map, []);
+      }
+      continue;
+    }
+
+    if (isGroupNode(child as object)) {
+      collectListFieldKeys(child as AnyConfigNode, map, [...prefix, key]);
+    }
+  }
+}
 
 /**
  * Реестр узлов конфига.
@@ -45,6 +85,10 @@ export class NodeRegistry {
 
     // Фаза 3: строим маппинги путей и родителей
     buildNodeMaps(rootConfig, this.nodePaths, this.nodeParents);
+
+    // Фаза 4 (вариант C, C3): обратный индекс listConfigNode → fieldKey,
+    // нужен для материализации per-entity списков в projectionObj (getValues).
+    collectListFieldKeys(rootConfig, this.listFieldKeys);
   }
 
   // ─── Данные ──────────────────────────────────────────────────────────────
@@ -99,6 +143,23 @@ export class NodeRegistry {
    * Используется Palistor для регистрации списков в EntityRegistry.rekey() (Phase 2C).
    */
   readonly allListStates: ListState[] = [];
+
+  /**
+   * Единый кэш list proxy (root + per-entity) — ключ: объект `ListState`.
+   * Гарантирует стабильные ссылки на list-proxy для React (как proxyCache для групп).
+   * Каждой паре (owner, listConfigNode) и каждому root-списку соответствует свой
+   * `ListState`, поэтому ключевание по нему даёт корректную изоляцию.
+   */
+  readonly listProxyCache: WeakMap<object, object> = new WeakMap();
+
+  /**
+   * Обратный индекс `listConfigNode → fieldPath` (вариант C, C3/C4).
+   * Путь — массив ключей относительно entity-scope владельца
+   * (`["contacts"]` или `["profile", "contacts"]` для списка в nested-группе).
+   * Используется для записи состава per-entity списка в нужное вложенное место
+   * projectionObj владельца — чтобы `store.getValues()` включал вложенные списки.
+   */
+  readonly listFieldKeys: WeakMap<object, string[]> = new WeakMap();
 
   /**
    * NodeView per storage node.

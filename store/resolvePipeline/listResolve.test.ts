@@ -11,6 +11,8 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store";
+import { defineList } from "../defineList";
+import { LIST_STATE } from "../constants";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +74,114 @@ describe("2C.1: List resolver", () => {
     await flushPromises();
 
     expect((store.proxy as any).users.length).toBe(2);
+  });
+
+  it("root list loading берётся из resolve-state (единый источник, U5)", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const resolver = vi.fn(async () => {
+      await gate;
+      return [{ id: "u1", name: "Alice", role: "admin" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        users: [userTemplate, { resolve: { resolver, onError: vi.fn() } }],
+      } as any,
+    });
+
+    const listProxy = (store.proxy as any).users;
+    const listState = listProxy[LIST_STATE] as object;
+    const rm = store.resolveManager as any;
+
+    // До доступа: resolve idle → loading false. loading === (status === "pending").
+    expect(rm.getListResolveState(listState).status).toBe("idle");
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+
+    // Доступ к items → lazy resolve (deferred queueMicrotask) → resolver висит на gate.
+    void listProxy.items;
+    await flushPromises();
+
+    // Pending: loading === true, и это РОВНО статус resolve-state (не nodeState).
+    expect(rm.getListResolveState(listState).status).toBe("pending");
+    expect(listProxy.loading).toBe(true);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+
+    release();
+    await flushPromises();
+
+    // Resolved: loading false, источник тот же.
+    expect(rm.getListResolveState(listState).status).toBe("resolved");
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+  });
+
+  it("per-entity list loading берётся из resolve-state (единый источник, U5)", async () => {
+    // Симметрия к root-тесту выше: per-entity ветка (ownerEntity !== null) должна
+    // читать loading из ТОГО ЖЕ getListResolveState(listState), а lazy-доступ к .items
+    // должен идти через единый вход triggerListResolve(listState) → triggerEntityListResolve.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const resolver = vi.fn(async () => {
+      await gate;
+      return [{ id: "c1", phone: "+1" }];
+    });
+
+    const store = new Palistor({
+      config: {
+        users: defineList({
+          template: {
+            id: { value: "" },
+            name: { value: "" },
+            // Вложенный per-entity список внутри entity-шаблона. Каст к any —
+            // известная дыра в типах TemplateConfig на nested-списках (тот же
+            // паттерн в react/entity-list-nested.test.tsx); поведение верное.
+            contacts: defineList({
+              template: { id: { value: "" }, phone: { value: "" } },
+              resolve: { resolver, onError: vi.fn() },
+            }) as any,
+          },
+        }),
+      } as any,
+    });
+
+    store.set({ id: "u1", name: "Alice" });
+    (store.proxy as any).users.add("u1");
+
+    // Per-entity list proxy владельца u1 (ownerEntity !== null).
+    const listProxy = (store.proxy as any).users.items[0].contacts;
+    const listState = listProxy[LIST_STATE] as { ownerEntity: unknown };
+    const rm = store.resolveManager as any;
+    expect(listState.ownerEntity).not.toBeNull(); // именно per-entity ветка
+
+    // До доступа: resolve-state ещё не создан → loading false.
+    // loading === (getListResolveState(...)?.status === "pending").
+    expect(rm.getListResolveState(listState)?.status).toBeUndefined();
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState)?.status === "pending");
+
+    // Доступ к items → lazy resolve (deferred) → resolver висит на gate.
+    void listProxy.items;
+    await flushPromises();
+
+    // Pending: loading === true, ровно статус resolve-state (не nodeState/entityStates напрямую).
+    expect(rm.getListResolveState(listState).status).toBe("pending");
+    expect(listProxy.loading).toBe(true);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+
+    release();
+    await flushPromises();
+
+    // Resolved: loading false, источник тот же; состав списка залит.
+    expect(rm.getListResolveState(listState).status).toBe("resolved");
+    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
+    expect(listProxy.length).toBe(1);
   });
 
   it("resolver загружает список → proxy items отображает entities", async () => {
@@ -357,6 +467,30 @@ describe("2C.3: List tracking — versions", () => {
     const vAfter = store.getNodeVersion(listConfigNode);
 
     expect(vAfter).toBeGreaterThan(vBefore);
+  });
+
+  it("root-list трекается по объекту LIST_STATE (версия растёт на нём при add/remove)", () => {
+    const store = new Palistor({
+      config: { users: [userTemplate] } as any,
+    });
+
+    store.set({ id: "u1", name: "Alice", role: "admin" });
+
+    // Root-list proxy теперь экспонирует бренд LIST_STATE → объект ListState.
+    const listProxy = (store.proxy as any).users;
+    const listState = listProxy[LIST_STATE] as object;
+    expect(listState).toBeDefined();
+    expect((listState as any).ownerEntity).toBeNull();
+
+    // Трекинг ведётся по этому объекту: его версия растёт при мутациях.
+    const vBefore = store.getNodeVersion(listState);
+    listProxy.add("u1");
+    const vAfterAdd = store.getNodeVersion(listState);
+    expect(vAfterAdd).toBeGreaterThan(vBefore);
+
+    listProxy.remove("u1");
+    const vAfterRemove = store.getNodeVersion(listState);
+    expect(vAfterRemove).toBeGreaterThan(vAfterAdd);
   });
 
   it("version списка инкрементируется при remove", () => {

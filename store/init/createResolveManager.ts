@@ -4,6 +4,9 @@ import type { FieldState } from "../compute/index";
 import type { ValuesCache } from "../valuesCache/valuesCache";
 import type { EntityData } from "../entityRegistry";
 import type { EntityRegistry } from "../entityRegistry";
+import type { EntityNode } from "../entityRegistry/types";
+import { generateTmpId } from "../entityRegistry";
+import { buildEntityValues } from "../buildProxy/buildEntityProjectionProxy";
 import {
   type Resolve,
   type NotifyFn,
@@ -46,10 +49,10 @@ export interface ResolveManagerDeps {
    */
   setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
   /**
-   * Синхронизирует valuesCache.values[listKey] с текущими listState.itemIds.
+   * Синхронизирует valuesCache с составом списка (единый метод, root + entity).
    * Вызывается из executeListResolve после обновления itemIds.
    */
-  syncListValuesCache: (listNode: object) => void;
+  syncListValuesCache: (listState: ListState) => void;
   /**
    * Экземпляр EntityRegistry — используется в triggerEntityFieldResolve для проверки skipIfResolved.
    */
@@ -302,6 +305,154 @@ export class ResolveManager {
         this.resolveDeps.notifyChanged(new Set<object>([entityNodeObj]));
       }
     })();
+  }
+
+  /**
+   * Запустить resolve для per-entity вложенного списка (вариант C, фаза C1).
+   *
+   * Состояние resolve хранится в общем `entityStates`, ключ — (ownerId, listConfigNode).
+   * Состав списка — в `EntityListState` (на `ownerEntity.lists`), идентичность
+   * которого служит ключом изолированной версии в хабе.
+   *
+   * - Проверяет `listConfigNode[1].resolve.resolver`.
+   * - Дедупликация: пропускает, если уже `pending`/`resolved`.
+   * - `pending` → resolver(parentValues, store) → upsert children с owner-ссылкой →
+   *   обновление `EntityListState.itemIds` → notify (bump версии entityListState).
+   * - При ошибке: onError → status `error`.
+   */
+  triggerEntityListResolve(
+    ownerId: string,
+    listConfigNode: AnyConfigNode,
+    ownerEntity: EntityNode,
+  ): void {
+    const listConfig = Array.isArray(listConfigNode)
+      ? (listConfigNode[1] as { resolve?: { resolver?: (...a: unknown[]) => unknown; onError?: (...a: unknown[]) => void; deps?: string[] } } | undefined)
+      : undefined;
+    const resolve = listConfig?.resolve;
+    if (!resolve || typeof resolve.resolver !== "function") return;
+
+    const entityListState = this.entityRegistry.getOrCreateEntityListState(
+      ownerEntity,
+      listConfigNode as object,
+    ) as unknown as object;
+
+    const state = this.entityStates.getOrCreate(
+      ownerId,
+      listConfigNode as object,
+      new Set(resolve.deps ?? []),
+    );
+    // Дедупликация: уже выполняется или завершён (C1 — без deps-driven re-resolve).
+    if (state.status === "pending" || state.status === "resolved") return;
+
+    state.status = "pending";
+    this.resolveDeps.notifyChanged(new Set<object>([entityListState]));
+
+    void (async () => {
+      try {
+        // Q4: resolver получает плоский snapshot ВЛАДЕЛЬЦА (не projection-proxy).
+        const parentValues = buildEntityValues(
+          ownerEntity,
+          this.resolveDeps.nodeState as WeakMap<object, { value: unknown }>,
+        );
+        const result = await resolve.resolver!(parentValues, this.resolveDeps.store);
+        state.status = "resolved";
+
+        const items = Array.isArray(result) ? (result as EntityData[]) : [];
+        const changed = new Set<object>();
+
+        // Предварительно фиксируем id (стабильно для items без id), затем заливаем.
+        const ids: string[] = [];
+        const itemsWithIds: EntityData[] = items.map((item) => {
+          const rawId = item.id;
+          const id =
+            typeof rawId === "string" && rawId.trim() !== "" ? rawId : generateTmpId();
+          ids.push(id);
+          return { ...item, id };
+        });
+
+        if (itemsWithIds.length > 0) {
+          const entityChanged = this.listResolveDeps.setEntitiesRaw(itemsWithIds);
+          for (const n of entityChanged) changed.add(n);
+          // Проставить owner-ссылку каждому child + проиндексировать.
+          for (const id of ids) {
+            const childNode = this.entityRegistry.get(id);
+            if (childNode) {
+              this.entityRegistry.setEntityOwner(childNode, ownerId, listConfigNode as object);
+            }
+          }
+        }
+
+        const els = this.entityRegistry.getOrCreateEntityListState(
+          ownerEntity,
+          listConfigNode as object,
+        );
+        els.itemIds = ids;
+        els.initialItemIds = [...ids];
+
+        // C3: материализовать состав в projectionObj владельца (для getValues).
+        (this.resolveDeps.store as any).syncListValuesCache(els);
+
+        changed.add(entityListState);
+        const recomputed = (this.resolveDeps.store as any).recompute(changed) as Set<object>;
+        for (const n of changed) recomputed.add(n);
+        this.resolveDeps.notifyChanged(recomputed);
+      } catch (err) {
+        state.status = "error";
+        try {
+          (resolve.onError as ((e: unknown, ctx: { notify: NotifyFn }) => void) | undefined)?.(
+            err,
+            { notify: this.resolveDeps.notify },
+          );
+        } catch {
+          // подавляем ошибки в onError
+        }
+        this.resolveDeps.notifyChanged(new Set<object>([entityListState]));
+      }
+    })();
+  }
+
+  /** Текущий id владельца (учитывает rekey через nodeState). */
+  private _listOwnerId(ownerEntity: EntityNode): string {
+    const idLeaf = ownerEntity.id as object;
+    const ns = this.resolveDeps.nodeState as WeakMap<object, { value: unknown }>;
+    return ((ns.get(idLeaf)?.value) ?? ownerEntity.id.value) as string;
+  }
+
+  /**
+   * Единая точка чтения resolve-state списка (root + per-entity).
+   *
+   * Дает builder-у/loading один источник, не зная, где физически лежит состояние:
+   *   - root  → `this.states` (ключ — listConfigNode);
+   *   - entity→ `this.entityStates` (ключ — (ownerId, listConfigNode)).
+   *
+   * Физическое слияние двух хранилищ не делается намеренно: root-list states
+   * сцеплены с общим `this.states` (deps-retrigger/reset), и их вынос дороже
+   * и рискованнее, чем выигрыш. Унификация здесь — на уровне доступа.
+   */
+  getListResolveState(listState: ListState): ResolveState | undefined {
+    if (listState.ownerEntity === null) {
+      return this.states.get(listState.listConfigNode);
+    }
+    const ownerId = this._listOwnerId(listState.ownerEntity);
+    return this.entityStates.get(ownerId, listState.listConfigNode);
+  }
+
+  /**
+   * Единая точка запуска resolve списка (root + per-entity).
+   * Диспетчеризует по `ownerEntity` на существующие тела
+   * ({@link triggerResolve} → executeListResolve / {@link triggerEntityListResolve}).
+   */
+  triggerListResolve(listState: ListState): void {
+    if (listState.ownerEntity === null) {
+      this.triggerResolve(listState.listConfigNode as AnyConfigNode);
+      return;
+    }
+    const ownerId = this._listOwnerId(listState.ownerEntity);
+    this.triggerEntityListResolve(
+      ownerId,
+      listState.listConfigNode as AnyConfigNode,
+      listState.ownerEntity,
+    );
   }
 
   /**

@@ -931,6 +931,125 @@ SET trap на `"value"` → `writePipeline.execute(storage, newValue, prev, { vi
 
 ---
 
+## Per-entity nested lists (вариант C, фазы C1–C4)
+
+Список, объявленный **внутри template entity** (`editUser.contacts = defineList(...)`),
+получает **отдельный** состав для **каждого** владельца. То есть `form.contacts`
+у Alice и у Bob — это два независимых списка с независимым resolve, состоянием и
+tracking-версией. Это решает проблему общего `ListState` (один `itemIds` на всех
+владельцев) — см. RFC §2.1.
+
+### Хранение состояния
+
+- **`EntityListState`** (`{ listConfigNode, itemIds, initialItemIds }`) — per-(owner, list).
+  Живёт в `EntityNode.lists: Map<listConfigNode, EntityListState>` (**non-enumerable** поле,
+  присваивается через `Object.defineProperty`, чтобы не протекать в плоские values).
+  Создаётся лениво через `entityRegistry.getOrCreateEntityListState(owner, listConfigNode)`.
+- **`EntityNode.owner`** (`{ ownerId, ownerListNode }`, **non-enumerable**) — обратная ссылка
+  на владельца, проставляется при заливке результатов resolver-а. Индексируется в
+  `entityRegistry.childrenByOwner: Map<ownerId, Set<childId>>` (фундамент каскадного удаления C2).
+- **Resolve-state** переиспользует общий `ResolveManager.entityStates`, ключ `(ownerId, listConfigNode)` —
+  тот же двухуровневый Map, что и template-binding/field-resolve. Отдельный sub-registry не заводится.
+
+### Поток
+
+1. `buildEntityProjectionProxy`: ветка `Array.isArray(templateField)` → `buildEntityListProxy(owner, listConfigNode, kernel)`
+   (вместо прежнего `return undefined`).
+2. `buildEntityListProxy` — структурно как `buildListProxy`, но читает `EntityListState`, а **не**
+   общий `listStates.get(listConfigNode)`. При первом доступе к `items`/`length`/`map` лениво
+   триггерит resolve через `queueMicrotask` (синхронный resolve→notify внутри GET-трапа во время
+   рендера дал бы «Cannot update a component while rendering another»).
+3. `ResolveManager.triggerEntityListResolve(ownerId, listConfigNode, owner)`:
+   resolver получает **flat snapshot владельца** (`buildEntityValues(owner, nodeState)`, `parentValues.id === ownerId`),
+   результат → `setEntitiesRaw` + проставление `owner`-ссылки каждому child → заполнение `itemIds` → notify.
+
+### Tracking-изоляция
+
+Ключ трекинга — **сам объект `EntityListState`** (per-owner, уникален), а не общий `listConfigNode`.
+`buildEntityListProxy` экспонирует его через бренд-символ **`ENTITY_LIST_STATE`**; `createTrackingProxy`
+имеет отдельную ветку (до `FIELD_STATE_PROPS`, т.к. `loading` входит в них) и трекает версию именно
+этого объекта через существующий хаб (`getNodeVersion(entityListState)` / `notifyChanged([entityListState])`).
+Отдельный публичный `getEntityListVersion` не нужен.
+
+### Мутации + ownership (фаза C2)
+
+`buildEntityListProxy` теперь публикует мутации, изменяющие состав именно этого
+`EntityListState` (не общего shared `ListState`):
+
+- **`add(values)`** — upsert child-entity (id генерируется, если отсутствует) + push в `itemIds`.
+- **`add(id)`** — добавить существующую entity (ошибка, если не найдена в registry).
+- **`remove(id)`** — убрать из `itemIds`. Entity **остаётся** в registry (может переиспользоваться);
+  каскад — только на `delete(ownerId)`.
+- **`setItems(ids)`** — заменить состав (все id обязаны существовать).
+
+Каждая мутация проставляет child-у `owner = { ownerId, ownerListNode }` и индексирует его в
+`childrenByOwner`, после чего бампает версию **своего** `EntityListState` через
+`notifyChanged([entityListState])` + полный `recompute` (изоляция per-owner сохраняется).
+
+**Ownership-модель «один владелец на child».** `setEntityOwner` при переадресации (child уже
+принадлежал другому владельцу) снимает устаревшее членство из `childrenByOwner` старого владельца —
+так каскадное удаление прежнего владельца не затрагивает уже переадресованного child-а.
+
+**Каскадное удаление.** `Palistor.delete(ownerId)` рекурсивно удаляет всех child-entity из
+`childrenByOwner.get(ownerId)` (полная очистка leaf-нод + resolve-состояний на каждом уровне),
+затем удаляет владельца; `EntityRegistry.delete` чистит `childrenByOwner` и `EntityNode.lists`.
+
+**Reset.** `store.reset()` (полный, `groupNode === rootConfig`) восстанавливает `itemIds = initialItemIds`
+для всех `EntityListState` через `entityRegistry.resetEntityListStates()` и бампает их версии.
+
+### getValues + dirty + persist (фаза C3)
+
+**Материализация в `getValues()`.** Состав per-entity списка записывается в projectionObj
+владельца по его **пути**: `ownerProjectionObj[…path] = itemIds.map(childProjectionObj)`.
+Так как projectionObj владельца входит в массив корневого списка (`values.users[i]`) по ссылке,
+а child projectionObj-ы сами рекурсивно материализуют свои списки, `store.getValues()` отдаёт
+полностью вложенную структуру (включая nested-of-nested). Реверс-индекс `listConfigNode → fieldPath`
+живёт в `NodeRegistry.listFieldKeys` (строится один раз обходом конфига). Путь — массив ключей
+относительно entity-scope владельца: `["contacts"]` для списка прямо под template, либо
+`["profile", "contacts"]` для списка в **nested-группе** (C4); `_syncEntityListValuesCache`
+спускается по пути, создавая промежуточные POJO. Синхронизация вызывается при resolve, мутациях
+и reset.
+
+> ⚠️ Список попадает в `store.getValues()` только если владелец **материализован** — то есть входит
+> в какой-то корневой список (его projectionObj лежит в valuesCache). Single-binding entity
+> (`useForm(user, s => s.editUser)`, не добавленная ни в один корневой список) в form-level getValues
+> не входит — это согласуется с поведением для скалярных entity-полей.
+
+**`entityProxy.values` / `list.getValues()`.** Считают значения «вживую» через
+`buildEntityValuesWithLists(entityNode, template, kernel)` — рекурсивно обходят template (включая
+nested-группы) и дописывают список-поля из `EntityListState.itemIds` в соответствующее вложенное
+место value-дерева. Базовый `buildEntityValues` остаётся **без** списков: он питает
+резолверы/валидаторы, которые должны видеть только скалярный snapshot владельца.
+
+**Dirty.** `list.dirty` — по составу (`itemIds ≠ initialItemIds`). `entityProxy.dirty`
+(`isEntityDirty`) агрегирует dirty leaf-полей владельца **и** composition-dirty всех его per-entity
+списков. Трекинг `dirty` на entity-list proxy ведётся по объекту `EntityListState` (как items/length).
+
+**Persist.** Сериализация — автоматически через `getValues()` (вложенная структура уже там).
+Гидратация: `applyPatch` пропускает list-узлы, поэтому состав восстанавливается отдельным проходом
+`Palistor.restoreLists(values)` — рекурсивно создаёт child-entity (`_setEntitiesRaw`), проставляет
+owner-ссылки, заполняет `itemIds`/`initialItemIds` корневых и per-entity списков, синхронизирует
+valuesCache. Старые snapshot-ы без вложенных списков грузятся без ошибки (нет данных → no-op).
+
+### Nested-of-nested (фаза C4)
+
+Поддержаны обе оси вложенности:
+
+1. **Entity → entity → entity** (`users → contacts → emails`) — работает рекурсивно: каждый child
+   сам является корнем своей projection-proxy, поэтому его список-поля строятся теми же хелперами
+   C1–C3. Каскадное удаление (`delete(ownerId)`) идёт вглубь через `childrenByOwner`, не задевая
+   соседние поддеревья; tracking-версии и мутации изолированы per-(owner, list) на каждом уровне.
+
+2. **List внутри nested-группы** (`profile.contacts`) — закрытый блокер C4. Раньше
+   `buildEntityProjectionProxy` сбрасывал владельца при рекурсии в структурную группу, и список
+   получал группу вместо entity (→ `undefined`). Теперь настоящий owner-entity протаскивается
+   отдельным параметром `ownerEntityNode` через рекурсию `buildEntityProjectionProxy` →
+   `buildEntityListProxy`: список объявлен в группе, но владелец — ближайшая entity с `id` (корень).
+   Состав материализуется в `getValues()` по вложенному пути (см. `listFieldKeys` выше), а каскадное
+   удаление и owner-индекс работают как для списков верхнего уровня.
+
+---
+
 ## store.set() / store.delete() / store.rekey() / store.invalidate()
 
 Публичные методы `Palistor` для управления entity-данными.

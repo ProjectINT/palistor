@@ -30,6 +30,14 @@ export const ENTITY_ID: unique symbol = Symbol("entityId");
 export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
 
 /**
+ * Бренд-символ list proxy — возвращает объект `ListState` (единый кубик «список»).
+ * Идентичность узла для tracking/resolve: сам объект `ListState` (ключ в хабе).
+ * Root-list — `ownerEntity === null`; per-entity — изолированный `ListState` на
+ * каждую пару (owner, listConfigNode).
+ */
+export const LIST_STATE: unique symbol = Symbol("listState");
+
+/**
  * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
  * возвращает значение из FieldState (вычисленное), а не из конфига.
  */

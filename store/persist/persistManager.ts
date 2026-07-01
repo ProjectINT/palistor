@@ -147,12 +147,18 @@ export class PersistManager {
       }
 
       // Применяем как патч — applyPatch рекурсивно обходит дерево конфига
+      // (скалярные/групповые поля; list-узлы он пропускает).
       const patchedNodes = applyPatch(
         this.kernel.rootConfig,
         this.kernel.nodes.nodeState,
         values,
         new Set(),
       );
+
+      // C3: восстанавливаем состав корневых и per-entity списков из снимка.
+      // Для конфигов без списков — no-op (graceful для старых снимков).
+      const listChanged = this.kernel.restoreLists(values);
+      for (const n of listChanged) patchedNodes.add(n);
 
       // Пересчитываем, объединяем и уведомляем подписчиков
       recomputeAndNotify(

@@ -22,10 +22,10 @@ export interface ListResolveDeps extends ResolveDeps {
   setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
 
   /**
-   * Синхронизировать valuesCache.values[listKey] с текущими itemIds.
+   * Синхронизировать valuesCache с составом списка (единый метод, root + entity).
    * Вызывается после обновления listState.itemIds.
    */
-  syncListValuesCache: (listNode: object) => void;
+  syncListValuesCache: (listState: ListState) => void;
 }
 
 // ─── Default nodeState for listNode ─────────────────────────────────────────
@@ -85,8 +85,9 @@ export function executeListResolve(
   const nodeSt = nodeState.get(listNode);
   nodeState.set(listNode, { ...(nodeSt ?? DEFAULT_LIST_STATE), loading: true });
 
-  // Уведомляем об изменении loading: true
-  const loadingChanged = new Set<object>([listNode]);
+  // Уведомляем об изменении loading: true.
+  // U2: бампаем и сам ListState (новый ключ трекинга), и listNode (мост для тестов).
+  const loadingChanged = new Set<object>([listNode, listState as object]);
   recomputeAndNotify(loadingChanged, recompute, notifyChanged);
 
   const promise = (async (): Promise<unknown> => {
@@ -115,7 +116,8 @@ export function executeListResolve(
       if (state.status !== "pending") return result;
 
       // ── Success path ────────────────────────────────────────────────────
-      const changed = new Set<object>([listNode]);
+      // U2: ListState — ключ трекинга; listNode — мост обратной совместимости.
+      const changed = new Set<object>([listNode, listState as object]);
 
       if (Array.isArray(result) && result.length > 0) {
         // Upsert всех сущностей (регистрирует листья, возвращает изменённые узлы)
@@ -131,17 +133,13 @@ export function executeListResolve(
         // Сохраняем как начальный снимок для dirty-трекинга
         listState.initialItemIds = [...listState.itemIds];
 
-        // Увеличиваем версию → tracking proxy видит изменение → React перерисовывается
-        listState.version++;
-
         // Синхронизируем valuesCache.values[listKey]
-        syncListValuesCache(listNode);
+        syncListValuesCache(listState);
       } else if (Array.isArray(result) && result.length === 0) {
         // Пустой результат — очищаем список
         listState.itemIds = [];
         listState.initialItemIds = [];
-        listState.version++;
-        syncListValuesCache(listNode);
+        syncListValuesCache(listState);
       }
 
       // Авто-зависимости: явные deps + values tracking + контекстные зависимости
@@ -200,7 +198,7 @@ export function executeListResolve(
         // onError не должен бросать исключения
       }
 
-      recomputeAndNotify(new Set([listNode]), recompute, notifyChanged);
+      recomputeAndNotify(new Set([listNode, listState as object]), recompute, notifyChanged);
 
       // Если зависимость изменилась пока были в pending — перезапускаем немедленно
       if (state.pendingRetrigger) {
