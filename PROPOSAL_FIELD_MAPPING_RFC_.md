@@ -48,23 +48,32 @@ UI-библиотеки ожидают **другие** имена:
 
 При смене версии Palistor или UI-фреймворка — адаптеры нужно переписывать.
 
+> **Важно про границы (см. §7).** Бóльшая часть строк таблицы — это чистое
+> *переименование* (`isRequired → required`). Но две ячейки — это не
+> переименование, а **трансформация значения**: Ant `isInvalid → status:'error'`
+> (boolean → строка-энум) и MUI `helperText`, который берётся из `errorMessage`
+> **или** `description` (many-to-one). Этот RFC решает переименование 1:1 — оно
+> покрывает ~90 % ячеек; трансформации явно вынесены в §7.
+
 ---
 
 ## Суть решения
 
-Добавить необязательный маппер `fieldMapping` в опции `Palistor`. Маппер определяет, под какими именами свойства будут видны через proxy (GET + ownKeys/spread). Внутренний `FieldState` и вся логика compute остаются без изменений.
+Добавить необязательный маппер `fieldMapping` в опции `Palistor`. Маппер задаёт,
+под какими именами внутренние свойства видны через proxy (GET + ownKeys/spread +
+tracking). Внутренний `FieldState`, compute, pipelines — **без изменений**.
 
 ```ts
 const store = new Palistor({
   config: orderConfig,
   fieldMapping: {
-    isRequired: 'required',
-    isDisabled: 'disabled',
-    isReadOnly: 'readOnly',
-    isInvalid:  'error',
+    isRequired:   'required',
+    isDisabled:   'disabled',
+    isReadOnly:   'readOnly',
+    isInvalid:    'error',
     errorMessage: 'helperText',
-    description: 'helpText',
-    // не указанные ключи — остаются как есть (value, label, placeholder, dirty, loading)
+    description:  'helpText',
+    // не указанные ключи остаются как есть: value, label, placeholder, dirty, loading, onValueChange
   },
 });
 ```
@@ -74,391 +83,285 @@ const store = new Palistor({
 ```tsx
 // Spread напрямую — без адаптеров
 <Input {...form.email} />
-// form.email.required     === true
-// form.email.helperText   === "Email is required"
-// form.email.error        === true
-// form.email.value        === ""
-// form.email.label        === "Email"
+// form.email.required   === true
+// form.email.helperText === "Email is required"
+// form.email.error      === true
+// form.email.value      === ""
+// form.email.label      === "Email"
 ```
+
+---
+
+## Ключевая идея: обратный маппинг на границе proxy
+
+**Маппинг — это биекция `internal ⇄ external`.** Значит переводить нужно ровно в
+двух точках, а не переписывать все обработчики:
+
+1. **Вход (GET/SET/tracking):** приходящий *external*-ключ переводим в *internal*
+   **одной строкой** в начале trap-а. Дальше вся существующая логика работает по
+   internal-именам без изменений.
+2. **Выход (ownKeys/spread):** список internal-ключей проецируем в external
+   **одной операцией** `keys.map(k => fwd[k] ?? k)`.
+
+```
+Пользователь → [external] → reverse ↓  Proxy internal-логика  ↑ forward → [external] → spread
+                 GET/SET/track  (без изменений)   ownKeys
+```
+
+Это принципиально дешевле подхода «переписать каждый объект-обработчик под
+external-ключи»: тот требует трогать 4 dispatch-таблицы и параметризовать
+`translatableHandler`; обратный маппинг добавляет **по одной строке на trap**.
+
+### Почему обратный маппинг ещё и безопаснее
+
+При «object-dispatch с external-ключами» чтение *старого* internal-имени
+(`form.email.isRequired` при активном маппинге) провалится в ветку «дочерний
+узел» и вернёт **сырое значение из конфига** — а оно может быть функцией
+(`isRequired: (values) => …`). Это footgun. При обратном маппинге internal-имя
+по-прежнему резолвится штатным обработчиком (возвращает вычисленный boolean), а
+из `spread`/`ownKeys` исчезает. То есть обратный маппинг строго безопаснее.
 
 ---
 
 ## Дизайн
 
-### 1. Новый тип `FieldMapping`
+### 0. Единый источник имён ключей (убираем тройное дублирование)
+
+Сейчас список полей продублирован: `FIELD_STATE_PROPS` (Set) и
+`SPREADABLE_FIELD_STATE_PROPS` (derived). Тип `FieldMapping` в прежнем RFC
+перечислял те же имена ещё трижды. Заводим один canonical tuple и выводим из него
+и Set, и тип:
+
+```ts
+// store/constants.ts
+
+/** Единственный источник имён полей состояния. */
+export const FIELD_STATE_KEYS = [
+  "value", "label", "placeholder", "description",
+  "isRequired", "isReadOnly", "isDisabled", "isVisible",
+  "isInvalid", "errorMessage", "dirty", "loading",
+] as const;
+
+export const FIELD_STATE_PROPS = new Set<string>(FIELD_STATE_KEYS);
+
+/** Ключи, которые можно переименовывать: поля состояния + функциональный сеттер. */
+export const MAPPABLE_KEYS = [...FIELD_STATE_KEYS, "onValueChange"] as const;
+export type MappableKey = (typeof MAPPABLE_KEYS)[number];
+```
 
 ```ts
 // store/store/types.ts
 
 /**
- * Карта переименования: internal name → external name.
- * Ключи — имена из FIELD_STATE_PROPS. Значения — имена, под которыми
- * свойство будет доступно через proxy.
- *
- * Не указанные ключи сохраняют оригинальное имя.
+ * Карта переименования internal → external.
+ * Sparse: указываем только те ключи, которые переименовываем;
+ * остальные остаются с оригинальными именами.
  */
-export type FieldMapping = Partial<Record<
-  | 'value'
-  | 'label'
-  | 'placeholder'
-  | 'description'
-  | 'isRequired'
-  | 'isReadOnly'
-  | 'isDisabled'
-  | 'isVisible'
-  | 'isInvalid'
-  | 'errorMessage'
-  | 'dirty'
-  | 'loading'
-  | 'onValueChange',
-  string
->>;
+export type FieldMapping = Partial<Record<MappableKey, string>>;
 ```
-### Концепт маппинга
 
-1. Мы создаем дефолтный маппер:
+> `ResolvedFieldMapping`, `defaultFieldMapping`, `resolveFieldMapping()` из
+> прежнего RFC **не нужны**: identity-поведение даёт `fwd[k] ?? k` в каждой точке.
+> Нет полного identity-объекта — нет и шага резолва.
+
+### 1. Kernel хранит две проекции карты
 
 ```ts
-const defaultFieldMapping: FieldMapping = {
-  value: 'value',
-  label: 'label',
-  placeholder: 'placeholder',
-  description: 'description',
-  isRequired: 'isRequired',
-  isReadOnly: 'isReadOnly',
-  isDisabled: 'isDisabled',
-  isVisible: 'isVisible',
-  isInvalid: 'isInvalid',
-  errorMessage: 'errorMessage',
-  dirty: 'dirty',
-  loading: 'loading',
-  onValueChange: 'onValueChange',
-};
+// store/store/palistor.ts — в конструкторе
 
-const fieldMapping = { ...defaultFieldMapping, ...options.fieldMapping };
+/** internal → external (sparse). Для ownKeys/spread. @internal */
+readonly fieldMapping: FieldMapping;
+/** external → internal (sparse, обратная). Для GET/SET/tracking. @internal */
+readonly externalToInternal: Record<string, string>;
 
-```
-
-Дальше где бы мне обращаться к полю, я буду использовать `fieldMapping`:
-
-```ts
-const externalKey = fieldMapping[key as keyof FieldMapping];
-```
-Т.е. доступ к полю получается всегда программный. Таким образом если в инициализацию добавлен маппер,
-то через proxy мы будем видеть уже переименованные ключи. Если маппера нет — всё работает как сейчас, с дефолтными именами.
-
----
-
-## Анализ: что меняется, что нет
-
-### Граница маппинга
-
-Маппинг работает **только на proxy-выходе** — слой, через который пользователь обращается к полям.
-Всё, что внутри (FieldState, compute, dirty tracking, nodeState, registerNodes) — без изменений.
-
-```
-Пользователь → [external names] → Proxy слой → [internal names] → FieldState / compute / nodeState
-                                   ↑ маппинг здесь
-```
-
-### Файлы, которые МЕНЯЮТСЯ
-
-| # | Файл | Что делать |
-|---|---|---|
-| 1 | `store/store/types.ts` | Добавить `FieldMapping`, `ResolvedFieldMapping` типы. Добавить `fieldMapping?` в `ProxyStoreOptions` |
-| 2 | `store/constants.ts` | Добавить `defaultFieldMapping` объект (identity mapping). Добавить функцию `resolveFieldMapping(options?)` |
-| 3 | `store/store/palistor.ts` | В конструкторе: `this.fieldMapping = resolveFieldMapping(options.fieldMapping)`. Хранить `externalFieldProps: Set<string>` (для tracking proxy) |
-| 4 | `store/buildProxy/buildProxy.ts` | GET trap: `fieldStateHandlers` с external ключами. SET trap: проверять `m.value`. `onValueChange`: проверять `m.onValueChange` |
-| 5 | `store/buildProxy/computeProxyKeys.ts` | Leaf: возвращать mapped `SPREADABLE_FIELD_STATE_PROPS`. Принимать `fieldMapping` параметром |
-| 6 | `store/buildProxy/buildEntityProjectionProxy.ts` | Entity leaf: switch → object dispatch с external ключами. SET trap: `m.value`. ownKeys: mapped имена |
-| 7 | `react/createTrackingProxy.ts` | `FIELD_STATE_PROPS.has(key)` → `store.externalFieldProps.has(key)`. List tracking: `m.loading`, `m.dirty` |
-| 8 | `index.ts` | Экспортировать `FieldMapping` тип |
-
-### Файлы, которые НЕ МЕНЯЮТСЯ
-
-| Файл | Почему |
-|---|---|
-| `compute/types.ts` (FieldState) | Internal интерфейс, proxy читает из него по internal именам |
-| `compute/computeFieldState.ts` | Вычисляет internal FieldState из конфига |
-| `compute/fieldStateChanged.ts` | Shallow-compare двух internal FieldState |
-| `init/initGroupSubmitting.ts` | Пишет internal FieldState в nodeState |
-| `store/registerNodes.ts` | Регистрирует ноды, пишет internal FieldState |
-| `writePipeline/*` | Работает с nodeState/values по internal именам |
-| `dirtyTracking/*` | Читает internal `dirty` из FieldState |
-| `resetPipeline/*` | Работает с internal state |
-| `submitPipeline/*` | Работает с internal state |
-| `onChangePipeline/*` | Работает с internal state |
-| `resolvePipeline/*` | Работает с internal state |
-| `valuesCache/*` | Работает с `value` напрямую из nodeState |
-
----
-
-## Детальный план изменений по файлам
-
-### 1. `store/store/types.ts` — типы
-
-```ts
-export type FieldMapping = Partial<Record<
-  | 'value' | 'label' | 'placeholder' | 'description'
-  | 'isRequired' | 'isReadOnly' | 'isDisabled' | 'isVisible'
-  | 'isInvalid' | 'errorMessage'
-  | 'dirty' | 'loading' | 'onValueChange',
-  string
->>;
-
-/** Полностью резолвленный маппинг — все ключи заполнены. */
-export type ResolvedFieldMapping = Required<Record<
-  | 'value' | 'label' | 'placeholder' | 'description'
-  | 'isRequired' | 'isReadOnly' | 'isDisabled' | 'isVisible'
-  | 'isInvalid' | 'errorMessage'
-  | 'dirty' | 'loading' | 'onValueChange',
-  string
->>;
-
-// В ProxyStoreOptions:
-export interface ProxyStoreOptions<TConfig> {
-  config: TConfig;
-  // ... существующие поля ...
-  fieldMapping?: FieldMapping;
-}
-```
-
-### 2. `store/constants.ts` — defaultFieldMapping
-
-```ts
-export const defaultFieldMapping: ResolvedFieldMapping = {
-  value: 'value',
-  label: 'label',
-  placeholder: 'placeholder',
-  description: 'description',
-  isRequired: 'isRequired',
-  isReadOnly: 'isReadOnly',
-  isDisabled: 'isDisabled',
-  isVisible: 'isVisible',
-  isInvalid: 'isInvalid',
-  errorMessage: 'errorMessage',
-  dirty: 'dirty',
-  loading: 'loading',
-  onValueChange: 'onValueChange',
-};
-
-export function resolveFieldMapping(custom?: FieldMapping): ResolvedFieldMapping {
-  if (!custom) return defaultFieldMapping;
-  return { ...defaultFieldMapping, ...custom };
-}
-```
-
-### 3. `store/store/palistor.ts` — хранение
-
-```ts
-class Palistor<TConfig> {
-  readonly fieldMapping: ResolvedFieldMapping;
-  readonly externalFieldProps: Set<string>;  // для createTrackingProxy
-
-  constructor(options) {
-    this.fieldMapping = resolveFieldMapping(options.fieldMapping);
-    // Set из всех external имён (кроме onValueChange — он не в FIELD_STATE_PROPS)
-    this.externalFieldProps = new Set(
-      Object.entries(this.fieldMapping)
-        .filter(([k]) => k !== 'onValueChange')
-        .map(([, v]) => v)
-    );
-    // ...
+constructor(options: ProxyStoreOptions<TConfig>) {
+  // ...
+  const fwd = options.fieldMapping ?? {};
+  this.fieldMapping = fwd;
+  this.externalToInternal = {};
+  for (const internal in fwd) {
+    this.externalToInternal[fwd[internal as MappableKey]!] = internal;
   }
 }
 ```
 
-### 4. `store/buildProxy/buildProxy.ts` — GET/SET trap
+Когда `fieldMapping` не передан, обе карты пусты → `?? k` возвращает ключ как есть
+→ **поведение и производительность без изменений** (нулевой оверхед по умолчанию).
 
-**GET trap — `fieldStateHandlers` с external ключами:**
+### 2. Паттерн в каждом GET-trap: одна строка перевода
+
+Во всех proxy-строителях в начале GET (после обработки символов) добавляем:
+
+```ts
+const ikey = kernel.externalToInternal[key as string] ?? key;
+// дальше вся существующая dispatch-логика — по `ikey` вместо `key`.
+// `key` оставляем только для символов и навигации к дочерним узлам.
+```
+
+Пример для `buildProxy.ts` (главный leaf/group proxy) — меняется только вход,
+таблицы `fieldStateHandlers` / group-`handlers` остаются с internal-ключами:
 
 ```ts
 get(_target, key: string | symbol) {
-  // ... символы ...
-  const m = kernel.fieldMapping;
+  if (key === CONFIG_NODE) return node;
+  if (typeof key === "symbol") return undefined;
 
-  // onValueChange — через маппинг
-  if (key === m.onValueChange) {
-    return getCached(caches.onValueChange, node, () => (v: unknown) => {
-      proxyNode[m.value] = v;  // SET через external имя value
-    });
-  }
+  const ikey = kernel.externalToInternal[key] ?? key;   // ← единственное добавление
 
-  // ... группа: submitting/submit/reset — без маппинга (group-only) ...
-  // ... НО dirty и loading в группе тоже маппятся:
-  if (isGroupNode) {
-    const groupHandlers: Record<string, () => unknown> = {
-      "submitting": () => currentNode?.submitting ?? false,
-      [m.dirty]:    () => currentNode?.dirty ?? false,
-      "revalidate": () => currentNode?.revalidate ?? false,
-      [m.loading]:  () => currentNode?.loading ?? false,
-      "submit":     () => getCached(...),
-      "reset":      () => getCached(...),
-      "setValues":  () => getCached(...),
-    };
-    if (key in groupHandlers) return groupHandlers[key]();
-    // ...handleLazyResolve...
-  }
+  if (ikey === "onValueChange") { /* как сейчас, но проверяем ikey */ }
 
-  // ── Вычисленное состояние поля ─────────────────────────────────
-  // ВАЖНО: translatableHandler параметризован internal-ключом,
-  // потому что node[externalKey] === undefined для remapped ключей
-  const mkTranslatable = (internalKey: string) => () => {
-    const configValue = node[internalKey];
-    if (typeof configValue === "function") {
-      return configValue(kernel.services.translate, kernel.values.values);
-    }
-    return currentNode ? currentNode[internalKey as keyof FieldState] : configValue;
-  };
+  // group handlers: `if (ikey in handlers) return handlers[ikey]()`
+  // fieldStateHandlers: `if (ikey in fieldStateHandlers) …`
+  //   translatableHandler читает node[ikey], currentNode[ikey] — тоже по ikey
 
-  const fieldStateHandlers: Record<string, (() => unknown) | unknown> = {
-    [m.value]:        currentNode ? currentNode.value        : node.value,
-    [m.label]:        mkTranslatable("label"),
-    [m.placeholder]:  mkTranslatable("placeholder"),
-    [m.description]:  mkTranslatable("description"),
-    [m.isRequired]:   currentNode ? currentNode.isRequired   : node.isRequired,
-    [m.isReadOnly]:   currentNode ? currentNode.isReadOnly   : node.isReadOnly,
-    [m.isDisabled]:   currentNode ? currentNode.isDisabled   : node.isDisabled,
-    [m.isVisible]:    currentNode ? currentNode.isVisible    : node.isVisible,
-    [m.isInvalid]:    currentNode ? currentNode.isInvalid    : node.isInvalid,
-    [m.errorMessage]: currentNode ? currentNode.errorMessage : node.errorMessage,
-    [m.dirty]:        currentNode?.dirty,
-    [m.loading]:      currentNode?.loading,
-  };
-
-  if (key in fieldStateHandlers) {
-    const field = fieldStateHandlers[key];
-    if (typeof field === "function") return field();
-    return field;
-  }
-
-  // Дочерний узел → рекурсивный прокси
-  // ...
+  const child = node[key];   // навигация к дочернему узлу — по ОРИГИНАЛЬНОМУ key
+  if (child && typeof child === "object") return builder.build(child);
+  return child;
 }
 ```
 
-**SET trap:**
+`SET`-trap: перевести и сверять с internal-`"value"`:
 
 ```ts
-set(_target, key: string | symbol, newValue: unknown) {
-  if (key !== kernel.fieldMapping.value) return false;
+set(_target, key, newValue) {
+  const ikey = kernel.externalToInternal[key as string] ?? key;
+  if (ikey !== "value") return false;
   // ... остальное без изменений ...
 }
 ```
 
-### 5. `store/buildProxy/computeProxyKeys.ts` — ownKeys
+### 3. Паттерн на выходе: `ownKeys` проецирует internal → external
+
+Единообразно для листа, группы и списка — одна и та же операция `map`:
 
 ```ts
-export function computeProxyKeys(node: unknown, m: ResolvedFieldMapping): string[] {
-  if (nodeUtils.isListNode(node)) return LIST_SPREAD_KEYS;
+// store/buildProxy/computeProxyKeys.ts
+export function computeProxyKeys(node: unknown, fwd: FieldMapping): string[] {
+  const map = (keys: string[]) => keys.map(k => fwd[k as MappableKey] ?? k);
+
+  if (nodeUtils.isListNode(node)) return map(LIST_SPREAD_KEYS);
 
   const configNode = node as AnyConfigNode;
-  if (nodeUtils.isLeaf(configNode)) {
-    // Маппированный SPREADABLE: все кроме dirty и loading, плюс onValueChange
-    return [
-      m.value, m.label, m.placeholder, m.description,
-      m.isRequired, m.isReadOnly, m.isDisabled, m.isVisible,
-      m.isInvalid, m.errorMessage,
-      m.onValueChange,
-      ...Object.keys((configNode.componentProps as Record<string, unknown>) ?? {}),
-    ];
-  }
-
-  return GROUP_SPREAD_KEYS;  // group keys не маппятся (Phase 1)
+  return isLeafNode(configNode)
+    ? map([
+        ...SPREADABLE_FIELD_STATE_PROPS,
+        ...Object.keys((configNode.componentProps as Record<string, unknown>) ?? {}),
+      ])
+    : map(GROUP_SPREAD_KEYS);
 }
 ```
 
-### 6. `store/buildProxy/buildEntityProjectionProxy.ts` — entity leaf proxy
+`fwd[k] ?? k` сам разбирается, что переименовывать: `value`/`dirty`/`loading` в
+`GROUP_SPREAD_KEYS` и `loading`/`dirty` в `LIST_SPREAD_KEYS` спроецируются;
+`submit`/`reset`/`items`/`map` — нет (их в карте не бывает). `componentProps`
+никогда не в карте → остаются как есть.
 
-**switch → object dispatch:**
-
-```ts
-const m = kernel.fieldMapping;
-
-const handlers: Record<string, () => unknown> = {
-  [m.value]: () =>
-    (nodeState.get(entityLeaf as object) as any)?.value ?? entityLeaf.value,
-
-  [m.label]: () => {
-    const v = templateField.label;
-    return typeof v === "function" ? v(translate, entityValues) : v;
-  },
-  [m.placeholder]: () => { /* аналогично */ },
-  [m.description]: () => { /* аналогично */ },
-  [m.isRequired]: () => { /* аналогично */ },
-  [m.isReadOnly]: () => { /* аналогично */ },
-  [m.isDisabled]: () => { /* аналогично */ },
-  [m.isVisible]:  () => { /* аналогично */ },
-  [m.errorMessage]: () => { /* validate logic */ },
-  [m.isInvalid]:    () => { /* validate logic */ },
-  [m.dirty]: () =>
-    (nodeState.get(entityLeaf as object) as any)?.dirty ?? false,
-  [m.onValueChange]: () =>
-    (v: unknown) => writeEntityLeafValue(...),
-};
-
-if (key in handlers) return handlers[key]();
-return undefined;
-```
-
-**SET trap:**
-```ts
-set(_target, key, newValue) {
-  if (key !== kernel.fieldMapping.value) return false;
-  // ...
-}
-```
-
-**ownKeys:**
-```ts
-ownKeys() {
-  const m = kernel.fieldMapping;
-  return [
-    m.value, m.label, m.placeholder, m.description,
-    m.isRequired, m.isReadOnly, m.isDisabled, m.isVisible,
-    m.isInvalid, m.errorMessage, m.dirty, m.onValueChange,
-  ];
-}
-```
-
-### 7. `react/createTrackingProxy.ts` — tracking
+### 4. Tracking: перевести перед проверкой `FIELD_STATE_PROPS`
 
 ```ts
-// store.externalFieldProps — Set<string> из Palistor
-// store.fieldMapping — ResolvedFieldMapping из Palistor
+// react/createTrackingProxy.ts — GET
+const ikey = store.externalToInternal[key as string] ?? key;
 
-// Было:
-if (FIELD_STATE_PROPS.has(key) || key === "submitting") { ... }
+// list-ветка:
+if (ikey === "length" || ikey === "loading" || ikey === "dirty") { …track…; return target[key]; }
 
-// Стало:
-if (store.externalFieldProps.has(key) || key === "submitting") { ... }
-
-// List tracking:
-// Было:
-if (key === "length" || key === "loading" || key === "dirty") { ... }
-
-// Стало:
-const m = store.fieldMapping;
-if (key === "length" || key === m.loading || key === m.dirty) { ... }
+// field-ветка:
+if (FIELD_STATE_PROPS.has(ikey) || ikey === "submitting") { …track…; return target[key]; }
 ```
 
-### 8. `index.ts` — экспорт
+Возвращаем `target[key]` по **оригинальному** external-ключу — source-proxy сам
+переведёт его обратно. Отдельный `externalFieldProps: Set` из прежнего RFC не
+нужен: обратная карта + существующий `FIELD_STATE_PROPS` покрывают всё.
 
-```ts
-export type { FieldMapping, ResolvedFieldMapping } from "./store/store/types";
+---
+
+## Изменения по файлам
+
+| # | Файл | Что делать |
+|---|---|---|
+| 1 | `store/constants.ts` | `FIELD_STATE_KEYS` (canonical tuple) → вывести из него `FIELD_STATE_PROPS`; добавить `MAPPABLE_KEYS`, `MappableKey` |
+| 2 | `store/store/types.ts` | Добавить `FieldMapping`; добавить `fieldMapping?` в `ProxyStoreOptions`; добавить `@internal externalToInternal` в `ProxyStore` |
+| 3 | `store/store/palistor.ts` | Построить `fieldMapping` (sparse fwd) и `externalToInternal` (reverse) в конструкторе |
+| 4 | `store/buildProxy/buildProxy.ts` | **Два** trap-а: главный proxy и `_buildEntityLeafProxy`. В каждом: `ikey` в GET, перевод в SET, `ownKeys` через `.map`. Главный GET/SET уже использует `computeProxyKeys(node, kernel.fieldMapping)` |
+| 5 | `store/buildProxy/computeProxyKeys.ts` | Принять `fwd: FieldMapping`, обернуть возврат в `map(keys)` |
+| 6 | `store/buildProxy/buildEntityProjectionProxy.ts` | GET: `ikey` (влияет на `loading`/`dirty`); `ownKeys`/`getOwnPropertyDescriptor` через `.map` |
+| 7 | `store/buildProxy/buildListProxy.ts` | GET: `ikey` в `switch` (влияет на `loading`/`dirty`); `spreadKeys` через `.map` |
+| 8 | `react/createTrackingProxy.ts` | Перевести `key → ikey` перед list- и field-проверками |
+| 9 | `index.ts` | Экспортировать тип `FieldMapping` |
+
+> **Правка к прежнему RFC:** entity-leaf proxy больше не в
+> `buildEntityProjectionProxy.ts` — он переехал в `ProxyBuilder._buildEntityLeafProxy`
+> внутри `buildProxy.ts`. Плюс `buildListProxy.ts` тоже отдаёт mappable-ключи
+> (`loading`, `dirty`) и раньше в списке файлов отсутствовал.
+
+### Файлы, которые НЕ меняются
+
+`compute/*` (FieldState, computeFieldState, fieldStateChanged), `init/*`,
+`registerNodes`, `writePipeline/*`, `dirtyTracking/*`, `resetPipeline/*`,
+`submitPipeline/*`, `onChangePipeline/*`, `resolvePipeline/*`, `valuesCache/*` —
+вся internal-логика оперирует internal-именами, маппинг её не касается.
+
+---
+
+## Граница маппинга
+
+Маппинг живёт **только на границе proxy** (GET/SET/ownKeys) и в tracking-proxy.
+Всё внутри — по internal-именам.
+
 ```
+Пользователь → [external] → Proxy-граница → [internal] → FieldState / compute / nodeState
+                             ↑ маппинг здесь (reverse на входе, forward на выходе)
+```
+
+---
+
+## 7. Область применения и escape hatch
+
+Этот RFC решает **переименование 1:1**. Оно покрывает Chakra, HTML-native, и
+бóльшую часть Ant/MUI. Осознанно **вне** охвата (и почему):
+
+| Кейс | Пример | Почему не решается переименованием |
+|---|---|---|
+| **Трансформация значения** | Ant `isInvalid: true → status: 'error'` | Меняется не имя, а тип/значение (boolean → энум). Не биекция имён. |
+| **Many-to-one** | MUI `helperText = isInvalid ? errorMessage : description` | Два internal-источника в один external-ключ; для чтения неоднозначно, для SET необратимо. |
+| **One-to-many / доп. пропсы** | добавить `aria-invalid` из `isInvalid` | Порождение новых ключей — не переименование. |
+
+**Ограничение-инвариант:** `fieldMapping` — биекция. External-имя не должно
+совпадать с именем соседнего дочернего поля и не должно указывать на два разных
+internal-ключа (many-to-one запрещён). При желании — провалидировать в
+конструкторе (dev-warning на дубликаты значений).
+
+**Escape hatch сегодня:** трансформации закрываются тонким per-компонентным
+адаптером поверх уже-переименованного spread, например:
+
+```tsx
+// Ant status из уже-переименованного error
+const antStatus = form.email.error ? 'error' : undefined;
+<Input {...form.email} status={antStatus} />
+```
+
+**Путь к полной универсальности (Phase 2, необязательно).** Поскольку перевод уже
+централизован в двух точках границы, значение карты можно расширить со `string`
+(переименование) до `string | { name: string; transform?: (v) => unknown }` — и
+применять `transform` **только на выходе** (GET/spread), оставляя SET за
+переименовываемыми (1:1) ключами. Это включит Ant `status` и MUI `helperText` без
+переписывания обработчиков — ровно потому, что архитектура «reverse-на-входе /
+forward-на-выходе» уже изолировала границу. Явно вне охвата Phase 1.
 
 ---
 
 ## Порядок реализации
 
-1. **Типы** → `types.ts`: `FieldMapping`, `ResolvedFieldMapping`, расширить `ProxyStoreOptions`
-2. **Constants** → `constants.ts`: `defaultFieldMapping`, `resolveFieldMapping()`
-3. **Kernel** → `palistor.ts`: хранить `fieldMapping` + `externalFieldProps`
-4. **buildProxy** → GET/SET trap с маппингом, `translatableHandler` параметризован
-5. **computeProxyKeys** → принять `fieldMapping`, вернуть external имена
-6. **buildEntityProjectionProxy** → switch → object dispatch, ownKeys, SET trap
-7. **createTrackingProxy** → `externalFieldProps.has(key)`, list tracking
-8. **index.ts** → экспорт типов
-9. **Тесты** → proxy GET/SET/spread/tracking с кастомным маппингом
-
+1. **Constants** → `FIELD_STATE_KEYS`, `MAPPABLE_KEYS`, `MappableKey`; `FIELD_STATE_PROPS` из tuple.
+2. **Типы** → `FieldMapping`; `fieldMapping?` в `ProxyStoreOptions`; `@internal externalToInternal` в `ProxyStore`.
+3. **Kernel** → построить `fieldMapping` + `externalToInternal`.
+4. **computeProxyKeys** → принять `fwd`, обернуть в `map`.
+5. **buildProxy** → `ikey` в двух GET/SET; `ownKeys` через `computeProxyKeys(node, fwd)` и `.map` (для leaf-proxy).
+6. **buildEntityProjectionProxy** → `ikey` в GET; `.map` в ownKeys.
+7. **buildListProxy** → `ikey` в switch; `.map` в spreadKeys.
+8. **createTrackingProxy** → `ikey` перед list/field проверками.
+9. **index.ts** → экспорт `FieldMapping`.
+10. **Тесты** → GET/SET/spread/tracking с кастомным маппингом; проверить, что при
+    пустом `fieldMapping` поведение идентично текущему (snapshot старых тестов);
+    проверить, что internal-имена по-прежнему читаются напрямую, а из spread видны
+    только external.
