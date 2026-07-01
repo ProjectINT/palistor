@@ -30,7 +30,7 @@ React Component  →  Tracking Proxy (layer 2)  →  Store Proxy (layer 1)  → 
 
 ## Imports
 
-Everything is exported from the root `@projectint/palistor` entry point. Deep imports are available but optional.
+Everything is exported from the root `palistor` entry point. Deep imports are available but optional.
 
 ```ts
 // Root import (preferred) — covers all public API
@@ -38,7 +38,7 @@ import {
   Palistor, useForm, usePersist, useTranslator, useNotifier, useStoreContext,
   defineList, defineFieldMapping,
   localStorageDriver, sessionStorageDriver,
-} from "@projectint/palistor";
+} from "palistor";
 
 import type {
   FormConfig, TranslateFn, MaybeComputed, MaybeTranslatable, DeepPartialValues,
@@ -49,7 +49,7 @@ import type {
   FieldMapping, ApplyFieldMapping,
   PersistDriver, PersistOptions, PersistManager,
   Resolve, NotifyFn, ResolveErrorContext,
-} from "@projectint/palistor";
+} from "palistor";
 
 ```
 
@@ -75,7 +75,7 @@ Combine with `DeepPartialValues<FormValues>` for `initialValues` or patch object
 `PalistorProxy<T>` maps a plain values interface to the proxy tree:
 
 ```ts
-import type { PalistorProxy } from "@projectint/palistor";
+import type { PalistorProxy } from "palistor";
 
 interface UserData { name: string; email: string; address: { city: string } }
 type Props = { user: PalistorProxy<UserData> };
@@ -89,7 +89,7 @@ For lists: `interface FormData { users: Array<{ name: string }> }` → `form.use
 ### Entity refs in props
 
 ```ts
-import type { PalistorRef, InferEntity } from "@projectint/palistor";
+import type { PalistorRef, InferEntity } from "palistor";
 
 function UserRow({ user }: { user: PalistorRef<{ name: string; email: string }> }) {
   const u = useForm(user, (s) => s.userTemplate);
@@ -694,8 +694,8 @@ const config = {
 ### Declaring a list — defineList (preferred, fully typed)
 
 ```ts
-import { defineList } from "@projectint/palistor";
-import type { ListResolver, TemplateConfig } from "@projectint/palistor";
+import { defineList } from "palistor";
+import type { ListResolver, TemplateConfig } from "palistor";
 
 interface User {
   id: string;

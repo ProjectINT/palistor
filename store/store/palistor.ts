@@ -23,6 +23,7 @@ import { generateTmpId } from "../entityRegistry";
 import type { EntityData } from "../entityRegistry";
 import type { EntityNode } from "../entityRegistry/types";
 import { isLeafNode, isListNode, isGroupNode, configKeys } from "../traversal";
+import { normalizeConfig } from "../normalizeConfig";
 
 import type {
   AnyConfigNode,
@@ -135,8 +136,6 @@ export class Palistor<
 
   constructor(options: ProxyStoreOptions<TConfig, TMapping>) {
     const { config, initialValues = {} } = options;
-    const rootConfig = config as AnyConfigNode;
-    this.rootConfig = rootConfig;
 
     // ─── Field mapping (две проекции карты) ──────────────────────────────────
     // fwd: internal → external (для ownKeys/spread).
@@ -150,6 +149,14 @@ export class Palistor<
       const external = fwd[internal as MappableKey];
       if (external !== undefined) this.externalToInternal[external] = internal;
     }
+
+    // ─── Нормализация конфига (external → internal) ───────────────────────────
+    // Конфиг пишется в ПУБЛИЧНЫХ (замапленных) именах. Один проход приводит его
+    // к internal-именам ДО init/compute/traversal — всё ядро ниже работает с
+    // internal-именами без изменений. Пустая карта → возвращается исходный
+    // config без копий (нулевой оверхед).
+    const rootConfig = normalizeConfig(config, this.externalToInternal, fwd) as AnyConfigNode;
+    this.rootConfig = rootConfig;
 
     // ─── Сервисы ────────────────────────────────────────────────────────────
 

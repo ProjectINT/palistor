@@ -92,6 +92,46 @@ const store = new Palistor({
 
 ---
 
+## Поправка: единый публичный словарь (config тоже в external-именах)
+
+> Исходная версия RFC переводила имена **только на выходе** (proxy), а конфиг
+> продолжал писаться в internal-именах (`isRequired`, `description`). Это давало
+> рассогласование: автор пишет `isRequired`, читает `required`. Причём написать
+> `required` в конфиге «по интуиции» — молчаливый footgun: ключ игнорировался
+> ingest-слоем (`computeFieldState`/`registerNodes` читают жёстко зашитые
+> internal-имена), и поле молча теряло обязательность.
+
+**Решение:** `fieldMapping` задаёт **единый публичный словарь имён поля**. Конфиг
+пишется в тех же (external) именах, что и читается; internal-имена становятся
+приватной деталью реализации.
+
+```ts
+new Palistor({
+  fieldMapping: { isRequired: "required", description: "helpText", … },
+  config: {
+    email: { value: "", required: true, helpText: "We never share it" },
+    //                    ^^^^^^^^        ^^^^^^^^ — не isRequired / description
+  },
+});
+```
+
+Механизм — **нормализация один раз на границе конструктора** (`normalizeConfig`,
+external → internal), ДО init/compute/traversal. Всё ядро (compute, pipelines,
+обходы по `CONFIG_PROPS` / `"value" in node`) продолжает работать с internal-именами
+без изменений — инвариант «внутренности не трогаем» сохранён, перевод просто
+собран в одной точке входа, а не размазан по каждому чтению и классификатору.
+
+Нормализуются только ключи из `MAPPABLE_CONFIG_KEYS` (пересечение mappable-ключей и
+входных ключей конфига): `value, label, placeholder, description, isRequired,
+isReadOnly, isDisabled, isVisible`. Вычисляемые ключи (`isInvalid`, `errorMessage`,
+`dirty`, `loading`) в конфиге не пишутся — их перевод только на выходе.
+
+**Strict:** при активном маппинге internal-имя ремапленного config-ключа в конфиге
+(`isRequired` при `isRequired→required`) — ошибка; попытка записать вычисляемый
+ключ (`error`, `helperText`) в конфиг — тоже ошибка.
+
+---
+
 ## Ключевая идея: обратный маппинг на границе proxy
 
 **Маппинг — это биекция `internal ⇄ external`.** Значит переводить нужно ровно в

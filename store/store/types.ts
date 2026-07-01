@@ -1,6 +1,6 @@
 import type { PersistManager } from "../persist/persistManager";
 import type { EntityNode } from "../entityRegistry/types";
-import type { MappableKey } from "../constants";
+import type { MappableKey, MappableConfigKey } from "../constants";
 
 /**
  * Внутренний тип для рекурсивного обхода дерева конфига.
@@ -496,11 +496,11 @@ export type PalistorEntityProxy<T extends { id?: any }> = GroupProxyNode & {
  *
  * **Важно:** из пакета этот тип экспортируется под именем `PalistorProxy`,
  * так как имя `Palistor` занято одноимённым классом.
- * Используйте `import type { PalistorProxy } from "@projectint/palistor"`.
+ * Используйте `import type { PalistorProxy } from "palistor"`.
  *
  * @example
  * ```ts
- * import type { PalistorProxy } from "@projectint/palistor";
+ * import type { PalistorProxy } from "palistor";
  *
  * interface CompanyFormData {
  *   name: string;
@@ -576,13 +576,82 @@ export type ApplyFieldMapping<T, M extends FieldMapping> =
         [K in keyof T as K extends keyof M ? (M[K] extends string ? M[K] : K) : K]: T[K];
       };
 
+// ─── Валидатор external-config (compile-time strict, без хелпера) ─────────────
+
+declare const CONFIG_KEY_ERROR: unique symbol;
+/** Брендированный тип-ошибка: делает свойство неприсваиваемым и выносит текст
+ *  подсказки в сообщение компилятора. */
+export type ConfigKeyError<Msg extends string> = { readonly [CONFIG_KEY_ERROR]: Msg };
+
+/** Internal-имена config-ключей, которые карта `M` активно переименовывает. */
+type RemappedInternalConfigKey<M extends FieldMapping> = keyof M & MappableConfigKey;
+
+/**
+ * Проверяет дерево конфига `T` против карты `M`: любой узел, содержащий
+ * INTERNAL-имя ремапленного config-ключа (`isRequired` при `isRequired→required`),
+ * получает на этом ключе {@link ConfigKeyError} → присваивание падает с читаемым
+ * текстом. Пустая карта → `unknown` (пересечение-identity, нулевой оверхед).
+ *
+ * Пересекается с `TConfig` в опции `config`, поэтому валидные ключи сохраняют
+ * исходный тип (`T[K] & unknown`), а ошибочные становятся неприсваиваемыми.
+ */
+export type ValidateExternalConfig<T, M extends FieldMapping> =
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  keyof M extends never
+    ? unknown
+    : T extends object
+      ? {
+          [K in keyof T]: K extends RemappedInternalConfigKey<M>
+            ? ConfigKeyError<`palistor: write "${M[K] & string}" instead of internal "${K & string}" — fieldMapping is active`>
+            : ValidateExternalConfig<T[K], M>;
+        }
+      : unknown;
+
+/**
+ * Тип узла конфига в ЕДИНОМ публичном словаре карты `M` (external-имена).
+ * Опционально: аннотируйте узел/константу конфига этим типом, чтобы получить
+ * автокомплит external-имён (`required`, `helpText`, …). Для строгости аннотация
+ * не обязательна — валидатор в `config` уже ловит internal-имена.
+ */
+export type ExternalConfigNode<
+  M extends FieldMapping,
+  TValue = unknown,
+  TValues = Record<string, unknown>,
+> = ApplyFieldMapping<ConfigNode<TValue, TValues>, M>;
+
+/**
+ * Тип конфига формы в external-именах карты `M` (аналог {@link FormConfig}, но с
+ * переименованными состояниями поля). Для ОПЦИОНАЛЬНОЙ аннотации ради автокомплита
+ * external-имён.
+ *
+ * ⚠️ Компромисс: это `Record<string, …>` (как {@link FormConfig}), поэтому
+ * аннотация расширяет тип литерала и `ExtractValues`/типизация `initialValues`
+ * теряют точность. Рекомендуемый путь — **не аннотировать**: валидатор в опции
+ * `config` (см. {@link ValidateExternalConfig}) и так ловит internal-имена, а
+ * точный вывод значений полей из литерала сохраняется. Аннотацию используйте
+ * только там, где точный `ExtractValues` не нужен.
+ */
+export type ExternalConfig<
+  M extends FieldMapping,
+  TValues = Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+> = Record<string, ExternalConfigNode<M, any, TValues>>;
+
 export interface ProxyStoreOptions<
   TConfig extends Record<string, any>,
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   TMapping extends FieldMapping = {},
 > {
-  /** Декларативное описание структуры и полей формы. Остаётся неизменяемым. */
-  config: TConfig;
+  /**
+   * Декларативное описание структуры и полей формы. Остаётся неизменяемым.
+   *
+   * При активном `fieldMapping` конфиг пишется в ЕДИНОМ публичном словаре карты
+   * (external-имена: `required`, `helpText`, …). Пересечение с
+   * {@link ValidateExternalConfig} ловит internal-имена (`isRequired`, …) как
+   * ошибку типа с подсказкой. `NoInfer` не даёт `TMapping` «протечь» из конфига —
+   * карта выводится только из `fieldMapping`.
+   */
+  config: TConfig & ValidateExternalConfig<TConfig, NoInfer<TMapping>>;
   /**
    * Стартовые значения, которые перекрывают значения по умолчанию из конфига.
    * Структура совпадает со структурой конфига, но все поля опциональны.

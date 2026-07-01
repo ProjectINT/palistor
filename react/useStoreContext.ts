@@ -10,7 +10,7 @@
  *
  * @example
  * ```tsx
- * import { useStoreContext } from '@projectint/palistor';
+ * import { useStoreContext } from 'palistor';
  * import { paymentStore } from './config/appConfig';
  *
  * function Layout({ children }: { children: React.ReactNode }) {

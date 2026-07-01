@@ -16,14 +16,27 @@ import type { FieldMapping } from "./store/types";
  * > не сработает. Для inline-литерала прямо в `new Palistor({ fieldMapping })`
  * > хелпер не нужен — `const`-параметр класса сам захватывает литералы.
  *
+ * `fieldMapping` задаёт ЕДИНЫЙ публичный словарь имён поля: конфиг пишется в тех
+ * же (external) именах, что и читается. Нормализатор в конструкторе Palistor
+ * приводит их к internal перед compute (см. `normalizeConfig`), поэтому ядро не
+ * меняется. Написать internal-имя ремапленного ключа в конфиге — ошибка (strict).
+ *
  * @example
  * const fieldMapping = defineFieldMapping({
  *   isRequired:   "required",
  *   isInvalid:    "error",
  *   errorMessage: "helperText",
+ *   description:  "helpText",
  * });
- * const store = new Palistor({ config, fieldMapping });
- * store.proxy.email.required;   // boolean — типизировано
+ * const store = new Palistor({
+ *   config: {
+ *     // external-имена, не isRequired/description:
+ *     email: { value: "", required: true, helpText: "We never share it" },
+ *   },
+ *   fieldMapping,
+ * });
+ * store.proxy.email.required;    // boolean — типизировано
+ * store.proxy.email.helperText;  // string  — ошибка валидации после submit
  */
 export function defineFieldMapping<const M extends FieldMapping>(mapping: M): M {
   return mapping;

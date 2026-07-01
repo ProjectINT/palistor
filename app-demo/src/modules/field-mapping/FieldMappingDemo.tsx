@@ -31,25 +31,26 @@ export function FieldMappingDemo() {
           Field Mapping
         </h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Переименование свойств поля под конвенцию UI-кита — прямо на границе proxy.
-          Здесь поля спредятся в «нативный» компонент без единого адаптера.
+          Единый публичный словарь имён поля: конфиг <b>пишется</b> в тех же именах,
+          что и <b>читаются</b>. Поля спредятся в «нативный» компонент без адаптеров.
         </p>
       </div>
 
-      {/* Как настроен store */}
+      {/* Как настроен store — конфиг и чтение в ОДНОМ словаре */}
       <div className="rounded-lg bg-zinc-900 dark:bg-black p-4 overflow-auto">
         <pre className="text-xs leading-relaxed text-zinc-300">
-{`new Palistor({
-  config,
-  fieldMapping: {
-    isRequired:   "required",
-    isDisabled:   "disabled",
-    isReadOnly:   "readOnly",
-    isInvalid:    "error",
-    errorMessage: "helperText",
-    description:  "helpText",
-  },
-});`}
+{`fieldMapping: { isRequired: "required", isReadOnly: "readOnly",
+                errorMessage: "helperText", description: "helpText", … }
+
+// конфиг — в ЕДИНОМ словаре карты (external-имена):
+config: {
+  email: { value: "", label: "Email",
+           required: true,            // ← не isRequired
+           helpText: "We never share it" },  // ← не description
+}
+// чтение — те же имена:
+form.email.required   // true
+form.email.helperText // ошибка валидации`}
         </pre>
       </div>
 

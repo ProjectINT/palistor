@@ -48,13 +48,21 @@ export type MappingValues = {
   nickname: string;
 };
 
+// Конфиг пишется в ЕДИНОМ публичном словаре карты `uiFieldMapping` (external-имена):
+// `required` / `readOnly` / `helpText` вместо internal `isRequired` / `isReadOnly` /
+// `description`. Именно это и есть суть исправления: автор и потребитель поля
+// говорят на одном словаре. Нормализатор в конструкторе Palistor приведёт эти
+// имена к internal перед compute — прозрачно для автора.
+// Конфиг НЕ аннотируем типом: валидатор в конструкторе Palistor и так ловит
+// internal-имена (`isRequired`) при активном fieldMapping как ошибку типа, а
+// точный вывод значений полей (для initialValues) сохраняется из литерала.
 export const mappingConfig = {
   email: {
     value: "",
     label: "Email",
     placeholder: "you@example.com",
-    isRequired: true,
-    description: "We never share your email",
+    required: true,
+    helpText: "We never share your email",
     validate: (v: string) =>
       !v ? "Email is required" : !v.includes("@") ? "Invalid email address" : undefined,
   },
@@ -62,16 +70,16 @@ export const mappingConfig = {
     value: "",
     label: "Password",
     placeholder: "••••••••",
-    isRequired: true,
-    description: "At least 8 characters",
+    required: true,
+    helpText: "At least 8 characters",
     validate: (v: string) =>
       !v ? "Password is required" : v.length < 8 ? "Too short — min 8 characters" : undefined,
   },
   nickname: {
     value: "guest_42",
     label: "Nickname",
-    description: "Assigned by the server — read-only",
-    isReadOnly: true,
+    helpText: "Assigned by the server — read-only",
+    readOnly: true,
   },
 };
 
