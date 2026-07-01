@@ -21,7 +21,7 @@
 Wraps a group config, attaching a key and marking it as a flow step. Internally mixes in flow-specific fields (e.g. `status`).
 
 ```ts
-import { defineStep } from "@projectint/palistor";
+import { defineStep } from "palistor";
 
 const welcome = defineStep("welcome", {
   name: { value: "", isRequired: true },
@@ -36,7 +36,7 @@ const welcome = defineStep("welcome", {
 Wraps an ordered array of steps into a flow node. The flow node is a group in the Palistor config tree — it participates in `getValues`, `persist`, `dirty` like any other group.
 
 ```ts
-import { defineFlow, defineStep } from "@projectint/palistor";
+import { defineFlow, defineStep } from "palistor";
 
 const onboarding = defineFlow({
   steps: [

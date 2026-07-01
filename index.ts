@@ -54,12 +54,19 @@ export type {
   TranslateFn,
   FormConfig,
   MaybeComputed,
+  MaybeTranslatable,
   DeepPartialValues,
   FieldTypeMeta,
   ConfigNode,
   FieldProxyNode,
   GroupProxyNode,
   ConfigProxy,
+  FieldMapping,
+  ApplyFieldMapping,
+  ValidateExternalConfig,
+  ConfigKeyError,
+  ExternalConfig,
+  ExternalConfigNode,
   RawStoreProxy,
   RawStoreProxyMarker,
   ExtractValues,
@@ -98,3 +105,9 @@ export { useStoreContext } from "./react/useStoreContext";
 // ============================================================================
 
 export { defineList } from "./store/defineList";
+
+// ============================================================================
+// defineFieldMapping — typed fieldMapping helper (сохраняет литералы)
+// ============================================================================
+
+export { defineFieldMapping } from "./store/defineFieldMapping";

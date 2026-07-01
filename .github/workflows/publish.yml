@@ -1,11 +1,34 @@
-name: Publish to GitHub Packages
+name: Publish
 
 on:
   release:
     types: [published]
 
 jobs:
-  publish:
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # для npm provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-github:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,6 +46,8 @@ jobs:
       - run: npm run build
 
       - run: npm test
+
+      - run: npm pkg set name=@projectint/palistor # scoped-имя только в CI-раннере
 
       - run: npm publish
         env:

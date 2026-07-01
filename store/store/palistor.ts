@@ -23,11 +23,13 @@ import { generateTmpId } from "../entityRegistry";
 import type { EntityData } from "../entityRegistry";
 import type { EntityNode } from "../entityRegistry/types";
 import { isLeafNode, isListNode, isGroupNode, configKeys } from "../traversal";
+import { normalizeConfig } from "../normalizeConfig";
 
 import type {
   AnyConfigNode,
   DeepPartialValues,
   ExtractValues,
+  FieldMapping,
   ListState,
   ProxyStore,
   ProxyStoreOptions,
@@ -35,6 +37,7 @@ import type {
   TranslateFn,
   Unsubscribe,
 } from "./types";
+import type { MappableKey } from "../constants";
 import type { FieldState } from "../compute/index";
 
 // ─── Palistor ─────────────────────────────────────────────────────────────────
@@ -48,7 +51,11 @@ import type { FieldState } from "../compute/index";
  * store.proxy.email.value = "test@example.com";
  * store.submit();
  */
-export class Palistor<TConfig extends Record<string, any>> implements ProxyStore<TConfig> {
+export class Palistor<
+  TConfig extends Record<string, any>,
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  const TMapping extends FieldMapping = {},
+> implements ProxyStore<TConfig, TMapping> {
   // ─── @internal подсистемы ─────────────────────────────────────────────────
 
   /** @internal Реестр узлов: nodeState, nodePaths, nodeParents, computeNodes, groupComputeMap, proxyCache. */
@@ -103,7 +110,20 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   /** @internal Корневой конфиг, неизменяемый. */
   readonly rootConfig: AnyConfigNode;
-  private readonly _proxy: RawStoreProxy<TConfig>;
+
+  /**
+   * @internal Карта переименования internal → external (sparse).
+   * Для проекции ключей на выходе proxy (ownKeys/spread).
+   */
+  readonly fieldMapping: FieldMapping;
+
+  /**
+   * @internal Обратная карта external → internal (sparse).
+   * Для перевода приходящего ключа на входе proxy (GET/SET/tracking).
+   */
+  readonly externalToInternal: Record<string, string>;
+
+  private readonly _proxy: RawStoreProxy<TConfig, TMapping>;
   private readonly _persist: PersistManager;
 
   /**
@@ -114,10 +134,30 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   // ─── Конструктор ──────────────────────────────────────────────────────────
 
-  constructor(options: ProxyStoreOptions<TConfig>) {
+  constructor(options: ProxyStoreOptions<TConfig, TMapping>) {
     const { config, initialValues = {} } = options;
-    const rootConfig = config as AnyConfigNode;
+
+    // ─── Field mapping (две проекции карты) ──────────────────────────────────
+    // fwd: internal → external (для ownKeys/spread).
+    // externalToInternal: external → internal (для GET/SET/tracking).
+    // Обе пусты, когда fieldMapping не передан → `?? key` возвращает ключ как есть
+    // → нулевой оверхед по умолчанию.
+    const fwd: FieldMapping = options.fieldMapping ?? {};
+    this.fieldMapping = fwd;
+    this.externalToInternal = {};
+    for (const internal in fwd) {
+      const external = fwd[internal as MappableKey];
+      if (external !== undefined) this.externalToInternal[external] = internal;
+    }
+
+    // ─── Нормализация конфига (external → internal) ───────────────────────────
+    // Конфиг пишется в ПУБЛИЧНЫХ (замапленных) именах. Один проход приводит его
+    // к internal-именам ДО init/compute/traversal — всё ядро ниже работает с
+    // internal-именами без изменений. Пустая карта → возвращается исходный
+    // config без копий (нулевой оверхед).
+    const rootConfig = normalizeConfig(config, this.externalToInternal, fwd) as AnyConfigNode;
     this.rootConfig = rootConfig;
+
     // ─── Сервисы ────────────────────────────────────────────────────────────
 
     this.services = new ServiceRegistry();
@@ -178,7 +218,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
     this.onChangePipeline = new OnChangePipeline(this);
     this.proxyBuilder = new ProxyBuilder(this);
 
-    this._proxy = this.proxyBuilder.build(rootConfig) as RawStoreProxy<TConfig>;
+    this._proxy = this.proxyBuilder.build(rootConfig) as RawStoreProxy<TConfig, TMapping>;
 
     // ─── PersistManager ───────────────────────────────────────────────────────
 
@@ -269,7 +309,7 @@ export class Palistor<TConfig extends Record<string, any>> implements ProxyStore
 
   // ─── ProxyStore — публичный API ───────────────────────────────────────────
 
-  get proxy(): RawStoreProxy<TConfig> {
+  get proxy(): RawStoreProxy<TConfig, TMapping> {
     return this._proxy;
   }
 

@@ -51,7 +51,7 @@
 
 import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
 import type { ProxyStore, ConfigProxy, GroupProxyNode, RawStoreProxyMarker } from "../store/store";
-import type { PalistorRef, PalistorList, Palistor, PalistorEntityProxy } from "../store/store/types";
+import type { PalistorRef, PalistorList, Palistor, PalistorEntityProxy, FieldMapping } from "../store/store/types";
 import {
   createTrackingProxy,
   unwrapTrackingProxy,
@@ -140,9 +140,12 @@ export function useForm<T extends GroupProxyNode>(
   input: ForbidRawStoreProxy<T>,
 ): T;
 
-export function useForm<TConfig extends Record<string, any>>(
-  input: ProxyStore<TConfig>,
-): ConfigProxy<TConfig>;
+export function useForm<
+  TConfig extends Record<string, any>,
+  TMapping extends FieldMapping = {},
+>(
+  input: ProxyStore<TConfig, TMapping>,
+): ConfigProxy<TConfig, TMapping>;
 
 /**
  * Перегрузка: привязка entity к template для отображения/редактирования.

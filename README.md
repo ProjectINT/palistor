@@ -8,34 +8,30 @@ Palistor — библиотека управления состоянием фо
 
 ## Установка
 
-Пакет публикуется в **GitHub Packages** (`@projectint`).
-
-### 1. Настройте `.npmrc`
-
-В корне проекта (или в `~/.npmrc`) добавьте:
-
-```
-@projectint:registry=https://npm.pkg.github.com
-```
-
-> Для приватных пакетов также потребуется токен:
-> ```
-> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT
-> ```
-
-### 2. Установите пакет
+Пакет публикуется в **публичный npm-реестр** под именем `palistor`.
 
 ```bash
-npm install @projectint/palistor
+npm install palistor
 # или
-yarn add @projectint/palistor
+yarn add palistor
 # или
-pnpm add @projectint/palistor
+pnpm add palistor
 ```
 
 **Peer-зависимости:** `react ^19`
 
-### 3. Импорт
+> **Альтернатива — GitHub Packages.** Тот же пакет доступен под scoped-именем
+> `@projectint/palistor`. Для установки добавьте в `.npmrc`:
+> ```
+> @projectint:registry=https://npm.pkg.github.com
+> ```
+> и (для приватного доступа) токен:
+> ```
+> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_PAT
+> ```
+> затем `npm install @projectint/palistor`. Каноническим считается имя `palistor`.
+
+### Импорт
 
 Все публичные symbol'ы доступны из корневого модуля:
 
@@ -49,7 +45,7 @@ import {
   defineList,
   localStorageDriver,
   sessionStorageDriver,
-} from "@projectint/palistor";
+} from "palistor";
 ```
 
 ---
@@ -93,7 +89,7 @@ import {
 ### 1. Создайте store
 
 ```typescript
-import { createProxyStore } from "@projectint/palistor";
+import { createProxyStore } from "palistor";
 
 export const paymentStore = createProxyStore({
   config: {
@@ -126,7 +122,7 @@ export const paymentStore = createProxyStore({
 ### 2. Используйте в компоненте
 
 ```tsx
-import { useForm } from "@projectint/palistor";
+import { useForm } from "palistor";
 
 function PaymentForm() {
   const form = useForm(paymentStore);
@@ -240,7 +236,7 @@ form.email.value = "user@example.com"
 ### `createProxyStore(options)`
 
 ```typescript
-import { createProxyStore } from "@projectint/palistor";
+import { createProxyStore } from "palistor";
 
 const store = createProxyStore({
   config: { /* дерево ConfigNode */ },
@@ -272,7 +268,7 @@ const store = createProxyStore({
 ### `useForm(source)`
 
 ```typescript
-import { useForm } from "@projectint/palistor";
+import { useForm } from "palistor";
 
 const form = useForm(store);           // tracking поверх корневого proxy
 const section = useForm(form.address); // свой tracking для поддерева
@@ -427,7 +423,7 @@ const initial: DeepPartialValues<FormValues> = { address: { city: "Москва"
 `Palistor<T>` маппит интерфейс значений на прокси-дерево. Используйте его для типизации пропсов дочерних компонентов:
 
 ```typescript
-import type { Palistor } from "@projectint/palistor";
+import type { Palistor } from "palistor";
 
 interface UserData { name: string; email: string; address: { city: string } }
 
@@ -453,7 +449,7 @@ interface FormData { users: Array<{ name: string; email: string }> }
 При передаче entity-прокси через пропсы используйте `PalistorRef<TEntity>`:
 
 ```typescript
-import type { PalistorRef, InferEntity } from "@projectint/palistor";
+import type { PalistorRef, InferEntity } from "palistor";
 
 function UserRow({ user }: { user: PalistorRef<{ name: string; email: string }> }) {
   const u = useForm(user, (s) => s.userTemplate);
@@ -472,7 +468,7 @@ type UserEntity = InferEntity<PalistorRef<{ name: string; email: string }>>;
 Предпочитайте `defineList<TEntity>()` вместо сырого массива. Он проверяет, что ключи `template` соответствуют entity, а `resolver` возвращает `Promise<TEntity[]>`:
 
 ```typescript
-import { defineList } from "@projectint/palistor";
+import { defineList } from "palistor";
 
 interface User { id: string; name: string; email: string }
 
@@ -512,8 +508,8 @@ const config = { filter: { value: "" }, users };
 ### Полный паттерн типизации
 
 ```typescript
-import { Palistor, defineList } from "@projectint/palistor";
-import type { ExtractValues, PalistorRef, DeepPartialValues } from "@projectint/palistor";
+import { Palistor, defineList } from "palistor";
+import type { ExtractValues, PalistorRef, DeepPartialValues } from "palistor";
 
 // 1. Вывести тип значений из конфига
 const config = {

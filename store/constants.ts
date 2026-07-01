@@ -38,10 +38,10 @@ export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
 export const LIST_STATE: unique symbol = Symbol("listState");
 
 /**
- * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
- * возвращает значение из FieldState (вычисленное), а не из конфига.
+ * Единственный источник имён полей состояния (canonical tuple).
+ * Из него выводятся {@link FIELD_STATE_PROPS} (Set) и {@link MAPPABLE_KEYS}.
  */
-export const FIELD_STATE_PROPS = new Set<string>([
+export const FIELD_STATE_KEYS = [
   "value",
   "label",
   "placeholder",
@@ -54,7 +54,49 @@ export const FIELD_STATE_PROPS = new Set<string>([
   "errorMessage",
   "dirty",
   "loading",
-]);
+] as const;
+
+/**
+ * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
+ * возвращает значение из FieldState (вычисленное), а не из конфига.
+ */
+export const FIELD_STATE_PROPS = new Set<string>(FIELD_STATE_KEYS);
+
+/**
+ * Ключи, которые можно переименовывать через `fieldMapping`:
+ * поля состояния + функциональный сеттер `onValueChange`.
+ */
+export const MAPPABLE_KEYS = [...FIELD_STATE_KEYS, "onValueChange"] as const;
+
+/** Имя internal-ключа, допустимое как источник переименования в `fieldMapping`. */
+export type MappableKey = (typeof MAPPABLE_KEYS)[number];
+
+/**
+ * Подмножество mappable-ключей, которые являются ВХОДНЫМИ ключами конфига —
+ * т.е. их пишет автор в конфиге узла. Только эти ключи нормализуются
+ * external→internal при активном `fieldMapping` (см. {@link normalizeConfig}).
+ *
+ * Остальные mappable-ключи (`isInvalid`, `errorMessage`, `dirty`, `loading`,
+ * `onValueChange`) — вычисляемые/выходные: в конфиге не пишутся, поэтому на
+ * входе их нормализовать нечего (перевод для них происходит только на выходе
+ * proxy). Попытка написать такой ключ в конфиге — ошибка (strict).
+ */
+export const MAPPABLE_CONFIG_KEYS_TUPLE = [
+  "value",
+  "label",
+  "placeholder",
+  "description",
+  "isRequired",
+  "isReadOnly",
+  "isDisabled",
+  "isVisible",
+] as const;
+
+export const MAPPABLE_CONFIG_KEYS = new Set<string>(MAPPABLE_CONFIG_KEYS_TUPLE);
+
+/** Тип-версия {@link MAPPABLE_CONFIG_KEYS} — internal-имена config-ключей,
+ *  которые можно переименовывать через `fieldMapping` (для валидатора типов). */
+export type MappableConfigKey = (typeof MAPPABLE_CONFIG_KEYS_TUPLE)[number];
 
 /**
  * Полный набор «служебных» ключей узла конфига.

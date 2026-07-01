@@ -1,4 +1,5 @@
 import { CONFIG_NODE, CONFIG_PROPS, ENTITY_ID, ENTITY_ID_LEAF, STORE_REF } from "../constants";
+import type { MappableKey } from "../constants";
 import type { AnyConfigNode } from "../store/types";
 import type { EntityNode, EntityLeafNode, EntityGroupNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
@@ -57,7 +58,7 @@ export function buildEntityValues(
 export function buildEntityValuesWithLists(
   entityNode: EntityNode | EntityGroupNode,
   templateNode: AnyConfigNode,
-  kernel: Palistor<any>,
+  kernel: Palistor<any, any>,
 ): Record<string, unknown> {
   const nodeState = kernel.nodes.nodeState as WeakMap<object, { value: unknown }>;
   const values = buildEntityValues(entityNode, nodeState);
@@ -83,7 +84,7 @@ function materializeListsInto(
   valuesSubtree: Record<string, unknown>,
   templateSubtree: AnyConfigNode,
   lists: NonNullable<EntityNode["lists"]>,
-  kernel: Palistor<any>,
+  kernel: Palistor<any, any>,
 ): void {
   for (const key of Object.keys(templateSubtree)) {
     if (CONFIG_PROPS.has(key)) continue;
@@ -122,7 +123,7 @@ function materializeListsInto(
  */
 export function isEntityDirty(
   entityNode: EntityNode | EntityGroupNode,
-  kernel: Palistor<any>,
+  kernel: Palistor<any, any>,
 ): boolean {
   const nodeState = kernel.nodes.nodeState;
 
@@ -179,7 +180,7 @@ export function isEntityDirty(
 export function buildEntityProjectionProxy(
   entityNode: EntityNode | EntityGroupNode,
   templateNode: AnyConfigNode,
-  kernel: Palistor<any>,
+  kernel: Palistor<any, any>,
   entityProxyCache?: WeakMap<object, object>,
   ownerEntityNode?: EntityNode,
 ): object {
@@ -239,6 +240,10 @@ export function buildEntityProjectionProxy(
 
       if (typeof key === "symbol") return undefined;
 
+      // Обратный маппинг на входе: external → internal. Влияет на `loading`/`dirty`
+      // (mappable-ключи). Навигация к template-полям остаётся по оригинальному `key`.
+      const ikey = kernel.externalToInternal[key] ?? key;
+
       // id is always exposed directly as value (not as a leaf proxy)
       if (key === "id" && "id" in entityNode) {
         const idLeaf = (entityNode as EntityNode).id;
@@ -251,15 +256,15 @@ export function buildEntityProjectionProxy(
       // ─── loading / submitting / submit ────────────────────────────────────
       // Only exposed on root entity proxy (the one that has an "id" field).
       if ("id" in entityNode) {
-        if (key === "loading") {
+        if (ikey === "loading") {
           const eid = getEntityId();
           return kernel.resolveManager.entityStates.get(eid, templateNode as object)?.status === "pending";
         }
-        if (key === "submitting") {
+        if (ikey === "submitting") {
           const eid = getEntityId();
           return kernel.resolveManager.entityStates.get(eid, templateNode as object)?.submitting === true;
         }
-        if (key === "submit") {
+        if (ikey === "submit") {
           if (!submitFnRef) {
             submitFnRef = () => {
               const eid = getEntityId();
@@ -268,10 +273,10 @@ export function buildEntityProjectionProxy(
           }
           return submitFnRef;
         }
-        if (key === "values") {
+        if (ikey === "values") {
           return buildEntityValuesWithLists(rootEntityNode, templateNode, kernel);
         }
-        if (key === "dirty") {
+        if (ikey === "dirty") {
           return isEntityDirty(rootEntityNode, kernel);
         }
       }
@@ -365,20 +370,25 @@ export function buildEntityProjectionProxy(
     },
 
     ownKeys() {
+      const fwd = kernel.fieldMapping;
+      const map = (keys: string[]) => keys.map((k) => fwd[k as MappableKey] ?? k);
       const hasId = "id" in entityNode;
       if (hasId) {
         const keysWithoutId = templateKeys.filter((k) => k !== "id");
-        return ["id", ...keysWithoutId, "loading", "submitting", "submit", "values", "dirty"];
+        return map(["id", ...keysWithoutId, "loading", "submitting", "submit", "values", "dirty"]);
       }
-      return templateKeys;
+      return map(templateKeys);
     },
 
     getOwnPropertyDescriptor(_target, key: string | symbol) {
       if (typeof key === "symbol") return undefined;
+      const fwd = kernel.fieldMapping;
       const hasId = "id" in entityNode;
       const extraKeys = hasId ? ["loading", "submitting", "submit", "values", "dirty"] : [];
       const keysWithoutId = hasId ? templateKeys.filter((k) => k !== "id") : templateKeys;
-      const keys = hasId ? ["id", ...keysWithoutId, ...extraKeys] : keysWithoutId;
+      const keys = (hasId ? ["id", ...keysWithoutId, ...extraKeys] : keysWithoutId).map(
+        (k) => fwd[k as MappableKey] ?? k,
+      );
       if (!keys.includes(key as string)) return undefined;
       return { configurable: true, enumerable: true, writable: false };
     },

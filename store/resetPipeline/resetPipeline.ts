@@ -17,7 +17,7 @@ import { buildResetPatch } from "./buildResetPatch";
  * - полный пересчёт вычисляемых свойств + уведомление подписчиков
  */
 export class ResetPipeline {
-  constructor(private readonly kernel: Palistor<any>) {}
+  constructor(private readonly kernel: Palistor<any, any>) {}
 
   execute(groupNode: AnyConfigNode, values?: Record<string, unknown>): void {
     const nodeState = this.kernel.nodes.nodeState;

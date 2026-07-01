@@ -35,7 +35,7 @@ export interface EntityLeafSubmitOptions {
  *   9. submitting = false → recompute → notify
  */
 export class SubmitPipeline {
-  constructor(private readonly kernel: Palistor<any>) {}
+  constructor(private readonly kernel: Palistor<any, any>) {}
 
   async execute(node: AnyConfigNode, entityOpts?: EntityLeafSubmitOptions): Promise<SubmitResult> {
     const view = this.kernel.nodes.getView(node, entityOpts?.via);
