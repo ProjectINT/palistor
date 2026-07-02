@@ -7,6 +7,7 @@ import { CONFIG_PROPS } from "../../constants";
 import type { AnyConfigNode, TranslateFn, ListState } from "../types";
 import { isLeafNode, isGroupNode, isListNode } from "./nodeUtils";
 import { type NodeView, type NodeViewKernel, makeIdentityView } from "./nodeView";
+import { collectFlowStates, type FlowState } from "../../flow/flowState";
 
 /**
  * Рекурсивно собрать обратный индекс `listConfigNode → fieldPath` для ВСЕХ
@@ -89,6 +90,11 @@ export class NodeRegistry {
     // Фаза 4 (вариант C, C3): обратный индекс listConfigNode → fieldKey,
     // нужен для материализации per-entity списков в projectionObj (getValues).
     collectListFieldKeys(rootConfig, this.listFieldKeys);
+
+    // Фаза 5 (defineFlow): регистрация FlowState для узлов с маркером
+    // __flowSteps. Выполняется после buildNodeMaps — путям flow-нод уже
+    // назначены значения (нужны для persist-снимка и reset-скоупа).
+    collectFlowStates(rootConfig, this);
   }
 
   // ─── Данные ──────────────────────────────────────────────────────────────
@@ -160,6 +166,21 @@ export class NodeRegistry {
    * projectionObj владельца — чтобы `store.getValues()` включал вложенные списки.
    */
   readonly listFieldKeys: WeakMap<object, string[]> = new WeakMap();
+
+  /**
+   * FlowState для каждого flow-узла (defineFlow) в конфиге.
+   * Ключ — сам config-узел флоу. Заполняется в collectFlowStates.
+   */
+  readonly flowStates: WeakMap<object, FlowState> = new WeakMap();
+
+  /** Все FlowState в порядке регистрации (persist, reset, init lifecycle). */
+  readonly allFlowStates: FlowState[] = [];
+
+  /**
+   * Обратный индекс: config-узел шага → FlowState владеющего флоу.
+   * Используется group-proxy для вычисления step.status / step.isInvalid.
+   */
+  readonly stepToFlow: WeakMap<object, FlowState> = new WeakMap();
 
   /**
    * NodeView per storage node.

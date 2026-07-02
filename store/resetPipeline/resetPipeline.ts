@@ -4,6 +4,7 @@ import { applyPatch } from "../applyPatch/applyPatch";
 import { setGroupRevalidate, captureInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../compute/recompute";
 import { buildResetPatch } from "./buildResetPatch";
+import { resetFlowNavForSubtree } from "../flow/flowNavigation";
 
 /**
  * ResetPipeline — сброс значений группового узла.
@@ -56,5 +57,10 @@ export class ResetPipeline {
       () => this.kernel.recompute(),
       (c) => this.kernel.notifyChanged(c),
     );
+
+    // Flow: сброс навигации флоу внутри поддерева сброса — первый шаг снова
+    // активен, resolve-состояния шагов idle, entry lifecycle первого шага
+    // выполняется заново (Resolved Decision 16).
+    resetFlowNavForSubtree(this.kernel, groupNode);
   }
 }

@@ -6,6 +6,7 @@ import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
 import type { SubmitResult } from "./types";
 import { isLeafNode } from "../traversal";
 import { computeFieldState } from "../compute";
+import { filterHiddenFlowStepErrors } from "../flow/flowNavigation";
 
 export type { SubmitResult };
 
@@ -109,13 +110,16 @@ export class SubmitPipeline {
           }
         }
       } else {
-        const errors: Array<{ path: string; message: string }> = [];
+        let errors: Array<{ path: string; message: string }> = [];
         const leaves = collectLeafStates(view.storage, nodeState);
         for (const { path, state } of leaves) {
           if (state.isInvalid && state.errorMessage) {
             errors.push({ path, message: state.errorMessage });
           }
         }
+        // Flow: листья под СКРЫТЫМИ шагами не блокируют submit — иначе
+        // невзятая ветка с isRequired-полями сделала бы финализацию невозможной.
+        errors = filterHiddenFlowStepErrors(this.kernel, errors, view.storage);
         if (errors.length > 0) return { success: false, errors };
       }
 

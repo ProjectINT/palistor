@@ -65,26 +65,31 @@ export class GroupDepsMap {
    */
   getTrackingWrap(): TrackingWrap {
     return (node: object, values: Record<string, unknown>): Record<string, unknown> => {
-      const recipientPath = getNodeGroupPath(node, this._nodeParents, this._nodePaths);
-
-      // Leaf node: currentGroupPath = recipientPath (= parent group path).
-      // Group node (with computed props): currentGroupPath = parent group's path
-      // (which is the root of the group-scoped values we receive),
-      // recipientPath = group's own path.
       const isLeaf = isLeafNode(node);
-      const currentGroupPath: string = isLeaf
-        ? recipientPath
+
+      // Путь группы, ПОД которой эта compute-запись лежит в groupComputeMap —
+      // именно её пересчитывает recomputeTargeted, поэтому реципиентом кросс-
+      // групповой зависимости должна быть она:
+      // - лист хранится под родительской группой → getNodeGroupPath(leaf) = её путь;
+      // - групповой узел (isVisible и т.п.) тоже хранится под РОДИТЕЛЬСКОЙ группой,
+      //   поэтому берём путь родителя, а не собственный путь узла. Иначе зависимость
+      //   пишется на own-path группы, а recompute этой группы трогает только её
+      //   ДЕТЕЙ — но не её собственный isVisible-энтри (он под родителем), и
+      //   кросс-групповое isVisible соседа не пересчитывается.
+      // `values` здесь — scope этой же родительской группы, поэтому currentGroupPath
+      // (корень вложенности) совпадает с ownerGroupPath.
+      const ownerGroupPath: string = isLeaf
+        ? getNodeGroupPath(node, this._nodeParents, this._nodePaths)
         : (() => {
             const parent = this._nodeParents.get(node);
             return parent ? (this._nodePaths.get(parent) ?? "") : "";
           })();
 
-      const cacheKey = `${currentGroupPath}\0${recipientPath}`;
-      const cached = this._proxyCache.get(cacheKey);
+      const cached = this._proxyCache.get(ownerGroupPath);
       if (cached) return cached;
 
-      const proxy = createTrackingValues(values, recipientPath, this._deps, currentGroupPath);
-      this._proxyCache.set(cacheKey, proxy);
+      const proxy = createTrackingValues(values, ownerGroupPath, this._deps, ownerGroupPath);
+      this._proxyCache.set(ownerGroupPath, proxy);
       return proxy;
     };
   }

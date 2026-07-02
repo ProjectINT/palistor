@@ -15,6 +15,7 @@ import { StatePreview } from "@/modules/state-preview/StatePreview";
 import { ListsDemo } from "@/modules/lists-demo";
 import { AsyncDemo } from "@/modules/async-demo";
 import { FieldMappingDemo } from "@/modules/field-mapping";
+import { FlowDemo } from "@/modules/flow-demo";
 
 // ============================================================================
 // Demo Page
@@ -48,6 +49,7 @@ export default function DemoPage() {
           {/* Main Content */}
           <div className="lg:col-span-2">
             {activeTab === "form" && <PaymentForm />}
+            {activeTab === "flow" && <FlowDemo />}
             {activeTab === "lists" && <ListsDemo />}
             {activeTab === "async" && <AsyncDemo />}
             {activeTab === "hooks" && <HooksDemo />}

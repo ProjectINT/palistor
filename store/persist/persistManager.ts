@@ -14,6 +14,20 @@ import type { PersistDriver, PersistOptions } from "./types";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify } from "../compute/recompute";
 import type { Palistor } from "../store/palistor";
+import {
+  restoreFlowNav,
+  runFlowEntryLifecycle,
+  serializeFlowNav,
+  type FlowNavSnapshot,
+} from "../flow/flowNavigation";
+
+/**
+ * Зарезервированный ключ persist-снимка для навигации флоу (defineFlow):
+ * `{ [flowPath]: { currentStepKey, visitStack, visitedKeys } }`.
+ * Значения полей шагов хранятся как обычные значения; статусы шагов
+ * не сохраняются — выводятся из навигации при гидратации.
+ */
+const FLOWS_PERSIST_KEY = "__flows";
 
 // ─── Фильтрация полей ────────────────────────────────────────────────────────
 
@@ -98,8 +112,13 @@ export class PersistManager {
     const allValues = this.kernel.getValues() as Record<string, unknown>;
     const filtered = filterValues(allValues, this.pickFields, this.omitFields);
 
+    // Flow: навигация сохраняется отдельным зарезервированным ключом,
+    // не подпадающим под pick/omit (он не является полем формы).
+    const flowNav = serializeFlowNav(this.kernel);
+    const payload = flowNav ? { ...filtered, [FLOWS_PERSIST_KEY]: flowNav } : filtered;
+
     try {
-      const serialized = this.serialize(filtered);
+      const serialized = this.serialize(payload);
       await Promise.resolve(this.currentDriver.setItem(this.currentKey, serialized));
     } catch {
       // Ошибки сериализации/записи — молчим (production-safe)
@@ -146,6 +165,14 @@ export class PersistManager {
         return;
       }
 
+      // Flow: извлекаем снимок навигации до применения патча значений.
+      const flowSnapshots = (values as Record<string, unknown>)[FLOWS_PERSIST_KEY] as
+        | Record<string, FlowNavSnapshot>
+        | undefined;
+      if (flowSnapshots !== undefined) {
+        delete (values as Record<string, unknown>)[FLOWS_PERSIST_KEY];
+      }
+
       // Применяем как патч — applyPatch рекурсивно обходит дерево конфига
       // (скалярные/групповые поля; list-узлы он пропускает).
       const patchedNodes = applyPatch(
@@ -160,12 +187,27 @@ export class PersistManager {
       const listChanged = this.kernel.restoreLists(values);
       for (const n of listChanged) patchedNodes.add(n);
 
+      // Flow: восстанавливаем навигацию (активный шаг, стек, visited).
+      // Статусы шагов пересчитываются из навигационного состояния.
+      let enteredFlows: ReturnType<typeof restoreFlowNav>["entered"] = [];
+      if (flowSnapshots && typeof flowSnapshots === "object") {
+        const { changed: flowChanged, entered } = restoreFlowNav(this.kernel, flowSnapshots);
+        for (const n of flowChanged) patchedNodes.add(n);
+        enteredFlows = entered;
+      }
+
       // Пересчитываем, объединяем и уведомляем подписчиков
       recomputeAndNotify(
         patchedNodes,
         () => this.kernel.recompute(),
         (c) => this.kernel.notifyChanged(c),
       );
+
+      // Flow: если активный шаг изменился при гидратации — восстановленный шаг
+      // «входится» заново: onEnter → resolve → onReady.
+      for (const flowState of enteredFlows) {
+        runFlowEntryLifecycle(this.kernel, flowState);
+      }
     } catch {
       // Ошибки десериализации — молчим
     } finally {

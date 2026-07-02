@@ -51,6 +51,9 @@ export { localStorageDriver, sessionStorageDriver } from "./store/persist/driver
 // ============================================================================
 
 export type {
+  FlowProxyNode,
+  FlowStepProxy,
+  FlowStepsProxy,
   TranslateFn,
   FormConfig,
   MaybeComputed,
@@ -105,6 +108,21 @@ export { useStoreContext } from "./react/useStoreContext";
 // ============================================================================
 
 export { defineList } from "./store/defineList";
+
+// ============================================================================
+// defineFlow / defineStep — step-based flow primitive
+// ============================================================================
+
+export { defineFlow, defineStep } from "./store/flow/defineFlow";
+export type {
+  AnyFlowStep,
+  DefineFlowOptions,
+  FlowError,
+  FlowNode,
+  FlowStep,
+  FlowValues,
+  StepStatus,
+} from "./store/flow/defineFlow";
 
 // ============================================================================
 // defineFieldMapping — typed fieldMapping helper (сохраняет литералы)

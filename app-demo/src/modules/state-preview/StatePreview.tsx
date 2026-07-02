@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { usePaymentForm, paymentStore } from "@/config/appConfig";
 import { useCatalogForm, catalogStore } from "@/config/catalog/catalogConfig";
 import { useMappingForm, mappingStore } from "@/config/fieldMapping";
+import { useFlowForm, flowStore } from "@/config/flow";
 import type { TabType } from "@/modules/header";
 
 interface StatePreviewProps {
@@ -16,19 +17,29 @@ export function StatePreview({ activeTab }: StatePreviewProps) {
 
   const isCatalogTab = activeTab === "lists" || activeTab === "async";
   const isMappingTab = activeTab === "mapping";
+  const isFlowTab = activeTab === "flow";
 
   // Subscribe to the relevant stores
   usePaymentForm();
   useCatalogForm();
   useMappingForm();
+  useFlowForm();
 
-  const values = isMappingTab
-    ? mappingStore.getValues()
-    : isCatalogTab
-      ? catalogStore.getValues()
-      : paymentStore.getValues();
+  const values = isFlowTab
+    ? flowStore.getValues()
+    : isMappingTab
+      ? mappingStore.getValues()
+      : isCatalogTab
+        ? catalogStore.getValues()
+        : paymentStore.getValues();
 
-  const storeName = isMappingTab ? "mappingStore" : isCatalogTab ? "catalogStore" : "paymentStore";
+  const storeName = isFlowTab
+    ? "flowStore"
+    : isMappingTab
+      ? "mappingStore"
+      : isCatalogTab
+        ? "catalogStore"
+        : "paymentStore";
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6 sticky top-8">
