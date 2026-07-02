@@ -13,6 +13,9 @@ export { HooksDemo } from "./hooks-demo";
 // Field Mapping Demo
 export { FieldMappingDemo } from "./field-mapping";
 
+// Flow Demo (defineFlow — step-based wizard)
+export { FlowDemo } from "./flow-demo";
+
 // Debug Panel
 export { DebugPanel } from "./debug-panel";
 

@@ -4,6 +4,7 @@
     "subtitle": "Form testing stand",
     "tabs": {
       "payment": "Payment Form",
+      "flow": "Flow Wizard",
       "lists": "Lists & Entities",
       "async": "Async Resolvers",
       "user": "User Profile",
