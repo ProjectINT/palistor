@@ -24,6 +24,7 @@ import type { EntityData } from "../entityRegistry";
 import type { EntityNode } from "../entityRegistry/types";
 import { isLeafNode, isListNode, isGroupNode, configKeys } from "../traversal";
 import { normalizeConfig } from "../normalizeConfig";
+import { initFlows } from "../flow/flowNavigation";
 
 import type {
   AnyConfigNode,
@@ -234,6 +235,13 @@ export class Palistor<
     if (options.context) {
       this._context = options.context;
     }
+
+    // ─── Flow: entry lifecycle первого шага ──────────────────────────────────
+    // Первый шаг каждого флоу «входится» при создании store:
+    // onEnter → resolve (eager) → onReady. До launchEager — чтобы флоу сам
+    // триггерил idle-resolve шага и корректно прикреплял onReady.
+
+    initFlows(this);
 
     // ─── Launch eager resolvers ──────────────────────────────────────────────
 

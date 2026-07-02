@@ -1,6 +1,14 @@
 import type { PersistManager } from "../persist/persistManager";
 import type { EntityNode } from "../entityRegistry/types";
 import type { MappableKey, MappableConfigKey } from "../constants";
+import type {
+  AnyFlowStep,
+  FlowError,
+  FlowStep,
+  FlowValues,
+  InferFlowSteps,
+  StepStatus,
+} from "../flow/defineFlow";
 
 /**
  * Внутренний тип для рекурсивного обхода дерева конфига.
@@ -388,25 +396,77 @@ export type TemplateConfig<TEntity extends Record<string, any>> = {
 /** Извлечь entity type из PalistorRef. */
 export type InferEntity<T> = T extends PalistorRef<infer E> ? E : never;
 
+// ─── Flow proxy типы (defineFlow) ────────────────────────────────────────────
+
+/**
+ * Прокси одного шага флоу: обычный group-proxy конфига шага, обогащённый
+ * вычисляемым `status` (см. {@link StepStatus}).
+ */
+export type FlowStepProxy<C, M extends FieldMapping = {}> =
+  ConfigNodeToProxy<C, M> & { readonly status: StepStatus };
+
+/**
+ * Прокси коллекции шагов (flow.steps): доступ по индексу (кортеж), по ключу
+ * и живая ссылка `.current` на прокси активного шага.
+ */
+export type FlowStepsProxy<S extends readonly AnyFlowStep[], M extends FieldMapping = {}> =
+  { readonly [I in keyof S]: S[I] extends FlowStep<any, infer C> ? FlowStepProxy<C, M> : never } &
+  { readonly [Step in S[number] as Step["key"]]: FlowStepProxy<Step["config"], M> } & {
+    /** Прокси активного шага — перезаписывается при каждой навигации. */
+    readonly current: FlowStepProxy<S[number]["config"], M>;
+  };
+
+/**
+ * Прокси flow-ноды (defineFlow): group-proxy + навигационное состояние и методы.
+ */
+export type FlowProxyNode<S extends readonly AnyFlowStep[], M extends FieldMapping = {}> =
+  Omit<ApplyFieldMapping<GroupProxyNode, M>, "values"> & {
+    /** Ключ активного шага (реактивный). */
+    readonly currentStepKey: S[number]["key"];
+    /** Индекс активного шага (реактивный). */
+    readonly currentStepIndex: number;
+    /** true, если стек посещений непуст (надёжный гард для кнопки Back). */
+    readonly canGoBack: boolean;
+    /** Путь посещений: [...visitStack, currentStepKey] (реактивный). */
+    readonly history: readonly string[];
+    /** Ошибки последнего validate()/финализации (реактивные). */
+    readonly errors: ReadonlyArray<FlowError>;
+    /** Коллекция шагов: steps[0], steps.key, steps.current, steps.length. */
+    readonly steps: FlowStepsProxy<S, M>;
+    /** Аккумулированные значения всех шагов — живая ссылка (как у группы). */
+    readonly values: FlowValues<S>;
+    /** Перейти к следующему ВИДИМОМУ шагу; если впереди нет — финализация через submit(). */
+    nextStep(): void;
+    /** Вернуться по стеку посещений. No-op при пустом стеке. */
+    back(): void;
+    /** Прыжок к шагу по ключу или индексу. Throw при неизвестном ключе/индексе. */
+    goTo(keyOrIndex: S[number]["key"] | number): void;
+    /** Валидация посещённых шагов → ошибки в flow.errors. Пустой массив = валидно. */
+    validate(): FlowError[];
+  };
+
 /**
  * Рекурсивно конвертирует узел конфига в его прокси-тип:
+ * - FlowNode (defineFlow)                       → `FlowProxyNode<S>`
  * - TypedListNode (defineList<TEntity>)         → `ListProxyNode<PalistorRef<TEntity>>`
  * - ListNode (массив `[template, listConfig?]`) → `ListProxyNode<...>`
  * - Листовой узел (есть `value`)               → `FieldProxyNode<TValue>`
  * - Групповой узел                             → `GroupProxyNode & { дочерние поля… }`
  */
 type ConfigNodeToProxy<T, M extends FieldMapping = {}> =
-  T extends { readonly [__typedListBrand]: infer TEntity extends Record<string, any> }
-    ? ApplyFieldMapping<ListProxyNode<PalistorRef<TEntity>>, M>
-    : T extends readonly [infer Item, ...any[]]
-      ? ApplyFieldMapping<ListProxyNode<ConfigNodeToProxy<Item, M>>, M>
-      : T extends { value: any }
-        ? ApplyFieldMapping<FieldProxyNode<ExtractNodeValue<T>>, M>
-        : T extends Record<string, any>
-          ? ApplyFieldMapping<GroupProxyNode, M> & {
-              [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K], M>;
-            }
-          : never;
+  [InferFlowSteps<T>] extends [never]
+    ? T extends { readonly [__typedListBrand]: infer TEntity extends Record<string, any> }
+      ? ApplyFieldMapping<ListProxyNode<PalistorRef<TEntity>>, M>
+      : T extends readonly [infer Item, ...any[]]
+        ? ApplyFieldMapping<ListProxyNode<ConfigNodeToProxy<Item, M>>, M>
+        : T extends { value: any }
+          ? ApplyFieldMapping<FieldProxyNode<ExtractNodeValue<T>>, M>
+          : T extends Record<string, any>
+            ? ApplyFieldMapping<GroupProxyNode, M> & {
+                [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxy<T[K], M>;
+              }
+            : never
+    : FlowProxyNode<InferFlowSteps<T>, M>;
 
 /**
  * Полный прокси для конфига формы: каждый ключ маппируется в прокси-узел.
@@ -449,17 +509,19 @@ export interface RawStoreProxyMarker {
  * `RawStoreProxyMarker`, чтобы бренд распространялся по всему дереву.
  */
 type ConfigNodeToProxyRaw<T, M extends FieldMapping = {}> =
-  T extends { readonly [__typedListBrand]: infer TEntity extends Record<string, any> }
-    ? ApplyFieldMapping<ListProxyNode<PalistorRef<TEntity>>, M> & RawStoreProxyMarker
-    : T extends readonly [infer Item, ...any[]]
-      ? ApplyFieldMapping<ListProxyNode<ConfigNodeToProxyRaw<Item, M>>, M> & RawStoreProxyMarker
-      : T extends { value: any }
-        ? ApplyFieldMapping<FieldProxyNode<ExtractNodeValue<T>>, M> & RawStoreProxyMarker
-        : T extends Record<string, any>
-          ? ApplyFieldMapping<GroupProxyNode, M> & RawStoreProxyMarker & {
-              [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxyRaw<T[K], M>;
-            }
-          : never;
+  [InferFlowSteps<T>] extends [never]
+    ? T extends { readonly [__typedListBrand]: infer TEntity extends Record<string, any> }
+      ? ApplyFieldMapping<ListProxyNode<PalistorRef<TEntity>>, M> & RawStoreProxyMarker
+      : T extends readonly [infer Item, ...any[]]
+        ? ApplyFieldMapping<ListProxyNode<ConfigNodeToProxyRaw<Item, M>>, M> & RawStoreProxyMarker
+        : T extends { value: any }
+          ? ApplyFieldMapping<FieldProxyNode<ExtractNodeValue<T>>, M> & RawStoreProxyMarker
+          : T extends Record<string, any>
+            ? ApplyFieldMapping<GroupProxyNode, M> & RawStoreProxyMarker & {
+                [K in keyof T as K extends ConfigSkipKeys ? never : K]: ConfigNodeToProxyRaw<T[K], M>;
+              }
+            : never
+    : FlowProxyNode<InferFlowSteps<T>, M> & RawStoreProxyMarker;
 
 /**
  * Тип значения `store.proxy`. Структурно повторяет `ConfigProxy<TConfig>`,
@@ -529,13 +591,15 @@ export type Palistor<T extends Record<string, any> = {}, M extends FieldMapping 
  * Служебные ключи (validate, formatter, …) — пропускаются.
  */
 export type ExtractValues<T> = {
-  [K in keyof T as K extends ConfigSkipKeys ? never : K]: T[K] extends readonly [infer Item, ...any[]]
-    ? Array<ExtractValues<Item>>
-    : T[K] extends { value: any }
-      ? ExtractNodeValue<T[K]>
-      : T[K] extends Record<string, any>
-        ? ExtractValues<T[K]>
-        : never;
+  [K in keyof T as K extends ConfigSkipKeys ? never : K]: [InferFlowSteps<T[K]>] extends [never]
+    ? T[K] extends readonly [infer Item, ...any[]]
+      ? Array<ExtractValues<Item>>
+      : T[K] extends { value: any }
+        ? ExtractNodeValue<T[K]>
+        : T[K] extends Record<string, any>
+          ? ExtractValues<T[K]>
+          : never
+    : FlowValues<InferFlowSteps<T[K]>>;
 };
 
 // ─── Интерфейсы Store ────────────────────────────────────────────────────────

@@ -38,6 +38,22 @@ export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
 export const LIST_STATE: unique symbol = Symbol("listState");
 
 /**
+ * Бренд-символ flow proxy — возвращает объект `FlowState` (навигационное
+ * состояние флоу). Экспонируется тремя прокси: flow-нодой, steps-прокси и
+ * каждой step-нодой (для последних возвращается FlowState владеющего флоу).
+ * Идентичность для tracking: сам объект `FlowState` (ключ в хабе) — навигация
+ * бампает его версию.
+ */
+export const FLOW_STATE: unique symbol = Symbol("flowState");
+
+/**
+ * Имя маркер-ключа flow-ноды: упорядоченный массив ключей шагов.
+ * Проставляется defineFlow; входит в CONFIG_PROPS, поэтому все обходы
+ * дерева (traversal, registerNodes, buildValuesCache, …) его пропускают.
+ */
+export const FLOW_STEPS_PROP = "__flowSteps";
+
+/**
  * Единственный источник имён полей состояния (canonical tuple).
  * Из него выводятся {@link FIELD_STATE_PROPS} (Set) и {@link MAPPABLE_KEYS}.
  */
@@ -116,11 +132,16 @@ export const CONFIG_PROPS = new Set<string>([
   "afterSubmit",
   "reset",
   "onChange",
+  // Flow step lifecycle props (defineStep)
+  "onEnter",
+  "onReady",
   // Resolve props
   "resolve",
   "deps",
   // Node kind marker — set by registerNodes/entity factories, invisible to user code
   "__kind",
+  // Flow marker — ordered step keys, set by defineFlow
+  FLOW_STEPS_PROP,
 ]);
 
 export const SPREADABLE_FIELD_STATE_PROPS = [
@@ -145,6 +166,23 @@ export const GROUP_SPREAD_KEYS: string[] = [
   "values",
   "submit",
   "reset",
+];
+
+/**
+ * Дополнительные ключи spread для flow-ноды (defineFlow) — добавляются
+ * к GROUP_SPREAD_KEYS в computeProxyKeys, когда узел помечен FLOW_STEPS_PROP.
+ */
+export const FLOW_SPREAD_KEYS: string[] = [
+  "currentStepKey",
+  "currentStepIndex",
+  "canGoBack",
+  "history",
+  "errors",
+  "steps",
+  "nextStep",
+  "back",
+  "goTo",
+  "validate",
 ];
 
 /**

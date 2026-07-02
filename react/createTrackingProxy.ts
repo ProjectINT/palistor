@@ -16,8 +16,25 @@
  * tracking proxy для per-leaf отслеживания строк.
  */
 
-import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, LIST_STATE } from "../store/constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, LIST_STATE, FLOW_STATE } from "../store/constants";
 import type { ProxyStore } from "../store/store";
+
+/**
+ * Ключи flow-/step-proxy, реактивные через версию объекта FlowState
+ * (навигация бампает её). Проверка бренда FLOW_STATE выполняется только
+ * при совпадении ключа — нулевой оверхед для не-flow узлов на прочих ключах.
+ */
+const FLOW_TRACKED_KEYS = new Set<string>([
+  "currentStepKey",
+  "currentStepIndex",
+  "canGoBack",
+  "history",
+  "errors",
+  "status",
+  "steps",
+  "current",
+  "loading",
+]);
 
 export interface TrackingRefs {
   /** Набор config-нод, прочитанных компонентом. Только растёт (accumulate). */
@@ -131,6 +148,42 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
         }
         // add/remove/setItems/getById — пробрасываем без трекинга.
         return (target as any)[key];
+      }
+
+      // ── Flow proxy / step proxy (defineFlow) ────────────────────────────────
+      // Навигационное состояние трекается по объекту FlowState (бренд FLOW_STATE
+      // экспонируют flow-нода, steps-proxy и step-ноды). Идёт ДО FIELD_STATE_PROPS:
+      // `loading` входит в них, но на флоу он композитный (any step loading) и
+      // требует подписки на step-ноды, а не только на CONFIG_NODE флоу.
+      if (FLOW_TRACKED_KEYS.has(ikey)) {
+        const flowState = (target as any)[FLOW_STATE] as
+          | { stepNodes?: object[] }
+          | undefined;
+        if (flowState) {
+          // "steps" — чистая навигация к коллекции (перечитывается при любом
+          // re-render); сам доступ не зависит от текущего шага — не трекаем.
+          if (ikey !== "steps" && !refs.accessed.has(flowState)) {
+            refs.accessed.add(flowState);
+            refs.lastVersions.set(flowState, store.getNodeVersion(flowState));
+          }
+          // Композитный loading: резолв шага бампает версию step-ноды.
+          if (ikey === "loading" && Array.isArray(flowState.stepNodes)) {
+            for (const stepNode of flowState.stepNodes) {
+              if (!refs.accessed.has(stepNode)) {
+                refs.accessed.add(stepNode);
+                refs.lastVersions.set(stepNode, store.getNodeVersion(stepNode));
+              }
+            }
+          }
+          const result = (target as any)[key];
+          // Объекты (steps-proxy, step-proxy, а также случайные дочерние узлы,
+          // совпавшие по имени) — оборачиваем рекурсивно, как обычную навигацию.
+          if (result && typeof result === "object") {
+            refs.hasNavigated = true;
+            return createTrackingProxy(result, refs, store, cache);
+          }
+          return result;
+        }
       }
 
       // Чтение состояния поля → трекинг ноды

@@ -1,4 +1,4 @@
-import { CONFIG_NODE, ENTITY_ID } from "../constants";
+import { CONFIG_NODE, ENTITY_ID, FLOW_STATE } from "../constants";
 import type { MappableKey } from "../constants";
 import { type AnyConfigNode } from "../store/types";
 import type { Palistor } from "../store/palistor";
@@ -10,6 +10,14 @@ import { initProxyCaches } from "./initProxyCaches";
 import { buildListProxy } from "./buildListProxy";
 import { isListNode } from "../store/NodeRegistry/nodeUtils";
 import { isGroupNode } from "../traversal";
+import { buildFlowStepsProxy } from "../flow/buildFlowStepsProxy";
+import { getFlowApi } from "../flow/flowApi";
+import {
+  flowIsInvalid,
+  flowLoading,
+  getStepStatus,
+  stepIsInvalid,
+} from "../flow/flowNavigation";
 
 /** Возвращает закэшированное значение, создавая при первом обращении. */
 function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V): V {
@@ -81,7 +89,13 @@ export class ProxyBuilder {
       get(_target, key: string | symbol) {
         if (key === CONFIG_NODE) return node;
 
-        // Любой символ кроме CONFIG_NODE не имеет смысла
+        // Бренд флоу: FlowState своего флоу (flow-нода) либо владеющего
+        // флоу (step-нода) — для tracking proxy (status, currentStepKey, …).
+        if (key === FLOW_STATE) {
+          return kernel.nodes.flowStates.get(node) ?? kernel.nodes.stepToFlow.get(node);
+        }
+
+        // Любой символ кроме CONFIG_NODE/FLOW_STATE не имеет смысла
         if (typeof key === "symbol") return undefined;
 
         // Обратный маппинг на входе: external → internal одной строкой.
@@ -99,6 +113,49 @@ export class ProxyBuilder {
 
         // ── Групповой узел: методы и состояние ───────────────────────────
         if (isGroup) {
+          // ── Flow-нода (defineFlow): навигация + производное состояние ──
+          // Проверяется ДО group-handlers: submit/loading/isInvalid у флоу
+          // переопределены (errors в flow.errors, композитный loading,
+          // агрегатная валидность посещённых шагов).
+          const flowState = kernel.nodes.flowStates.get(node);
+          if (flowState) {
+            switch (ikey) {
+              case "currentStepKey":
+                return flowState.stepKeys[flowState.currentIndex];
+              case "currentStepIndex":
+                return flowState.currentIndex;
+              case "canGoBack":
+                return flowState.visitStack.length > 0;
+              case "history":
+                return [...flowState.visitStack, flowState.stepKeys[flowState.currentIndex]];
+              case "errors":
+                return flowState.errors;
+              case "steps":
+                return buildFlowStepsProxy(flowState, kernel);
+              case "nextStep":
+                return getFlowApi(kernel, flowState).nextStep;
+              case "back":
+                return getFlowApi(kernel, flowState).back;
+              case "goTo":
+                return getFlowApi(kernel, flowState).goTo;
+              case "validate":
+                return getFlowApi(kernel, flowState).validate;
+              case "submit":
+                return getFlowApi(kernel, flowState).submit;
+              case "loading":
+                return flowLoading(kernel, flowState);
+              case "isInvalid":
+                return flowIsInvalid(kernel, flowState);
+            }
+          }
+
+          // ── Step-нода: вычисляемый статус + агрегатная валидность ──────
+          const owningFlow = kernel.nodes.stepToFlow.get(node);
+          if (owningFlow) {
+            if (ikey === "status") return getStepStatus(owningFlow, node);
+            if (ikey === "isInvalid") return stepIsInvalid(kernel, node);
+          }
+
           const handlers = {
             "submitting": () => currentNode?.["submitting" as keyof FieldState] ?? false,
             "dirty": () => currentNode?.["dirty" as keyof FieldState] ?? false,

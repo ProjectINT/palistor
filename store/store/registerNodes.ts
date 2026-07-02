@@ -68,6 +68,26 @@ function getOrCreateComputeList(map: GroupComputeMap, group: object): ComputeEnt
   return list;
 }
 
+/**
+ * resolveFlag с защитой от исключений на этапе init: computed-флаги
+ * (isVisible и т.п.) могут читать значения соседних групп, которых в
+ * initialSlice ещё нет (`values.goalSelection.goal`). На init берётся
+ * default — первый полный recompute() в конструкторе пересчитает флаг
+ * уже по полному valuesCache.
+ */
+function safeResolveFlag(
+  configValue: MaybeFlag,
+  sliceValues: Record<string, unknown>,
+  defaultValue: boolean,
+  translate: TranslateFn,
+): boolean {
+  try {
+    return resolveFlag(configValue, sliceValues, defaultValue, translate);
+  } catch {
+    return defaultValue;
+  }
+}
+
 export function registerNodes<TNode extends AnyConfigNode>(
   node: TNode,
   initialSlice: InitialSlice<TNode> | undefined,
@@ -124,10 +144,10 @@ export function registerNodes<TNode extends AnyConfigNode>(
       const initialValue = rawSlice?.[key] ?? configValue ?? "";
       nodeState.set(child, {
         value: initialValue,
-        isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true, translate),
-        isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false, translate),
-        isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false, translate),
-        isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false, translate),
+        isVisible:  safeResolveFlag(child.isVisible  as MaybeFlag, sliceValues, true, translate),
+        isRequired: safeResolveFlag(child.isRequired as MaybeFlag, sliceValues, false, translate),
+        isDisabled: safeResolveFlag(child.isDisabled as MaybeFlag, sliceValues, false, translate),
+        isReadOnly: safeResolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false, translate),
         dirty: false,
         revalidate: false,
       });
@@ -139,10 +159,10 @@ export function registerNodes<TNode extends AnyConfigNode>(
       const sliceValues = (initialSlice as Record<string, unknown> | undefined ?? {}) as Record<string, unknown>;
       nodeState.set(child, {
         value: undefined,
-        isVisible:  resolveFlag(child.isVisible  as MaybeFlag, sliceValues, true, translate),
-        isRequired: resolveFlag(child.isRequired as MaybeFlag, sliceValues, false, translate),
-        isDisabled: resolveFlag(child.isDisabled as MaybeFlag, sliceValues, false, translate),
-        isReadOnly: resolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false, translate),
+        isVisible:  safeResolveFlag(child.isVisible  as MaybeFlag, sliceValues, true, translate),
+        isRequired: safeResolveFlag(child.isRequired as MaybeFlag, sliceValues, false, translate),
+        isDisabled: safeResolveFlag(child.isDisabled as MaybeFlag, sliceValues, false, translate),
+        isReadOnly: safeResolveFlag(child.isReadOnly as MaybeFlag, sliceValues, false, translate),
         dirty: false,
         revalidate: false,
       });

@@ -1,5 +1,11 @@
 import type { MappableKey } from "../constants";
-import { GROUP_SPREAD_KEYS, LIST_SPREAD_KEYS, SPREADABLE_FIELD_STATE_PROPS } from "../constants";
+import {
+  FLOW_SPREAD_KEYS,
+  FLOW_STEPS_PROP,
+  GROUP_SPREAD_KEYS,
+  LIST_SPREAD_KEYS,
+  SPREADABLE_FIELD_STATE_PROPS,
+} from "../constants";
 import type { AnyConfigNode, FieldMapping } from "../store/types";
 import { isLeafNode } from "../traversal";
 import { isListNode } from "../store/NodeRegistry/nodeUtils";
@@ -22,10 +28,17 @@ export function computeProxyKeys(node: unknown, fwd: FieldMapping = {}): string[
   if (isListNode(node)) return map(LIST_SPREAD_KEYS);
 
   const configNode = node as AnyConfigNode;
-  return isLeafNode(configNode)
-    ? map([
-        ...SPREADABLE_FIELD_STATE_PROPS,
-        ...Object.keys((configNode.componentProps as Record<string, unknown>) ?? {}),
-      ])
-    : map(GROUP_SPREAD_KEYS);
+  if (isLeafNode(configNode)) {
+    return map([
+      ...SPREADABLE_FIELD_STATE_PROPS,
+      ...Object.keys((configNode.componentProps as Record<string, unknown>) ?? {}),
+    ]);
+  }
+
+  // Flow-нода (defineFlow): группа + навигационные ключи флоу.
+  if (Array.isArray((configNode as Record<string, unknown>)[FLOW_STEPS_PROP])) {
+    return map([...GROUP_SPREAD_KEYS, ...FLOW_SPREAD_KEYS]);
+  }
+
+  return map(GROUP_SPREAD_KEYS);
 }

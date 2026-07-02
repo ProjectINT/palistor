@@ -25,6 +25,13 @@ const nested = {
   },
 } as unknown as AnyConfigNode;
 
+// Две sibling-группы: `b` (групповой узел) читает лист другой группы `a`.
+// Это настоящая кросс-групповая зависимость для group-node isVisible.
+const siblingGroups = {
+  a: { kind: { value: "" } },
+  b: { x: { value: "" } },
+} as unknown as AnyConfigNode;
+
 // ─── Тесты ───────────────────────────────────────────────────────────────────
 
 describe("GroupDepsMap", () => {
@@ -61,20 +68,40 @@ describe("GroupDepsMap", () => {
   });
 
   describe("getTrackingWrap — захват кросс-групповых зависимостей", () => {
-    it("записывает зависимость при чтении значения другой группы", () => {
+    it("записывает зависимость при чтении листа ДРУГОЙ sibling-группы", () => {
+      const { nodePaths, nodeParents } = buildMaps(siblingGroups);
+      const gdm = new GroupDepsMap(siblingGroups, nodePaths, nodeParents);
+      const wrap = gdm.getTrackingWrap();
+
+      // Групповой узел `b` (isVisible) получает scope родителя (root). Его compute-
+      // запись лежит под РОДИТЕЛЕМ (root), поэтому реципиент зависимости = "" (root),
+      // а не собственный путь "b". Чтение values.a.kind → донор "a" ≠ реципиент ""
+      // → записывается пара "a" → "".
+      const b = (siblingGroups as any).b;
+      const rootValues = { a: { kind: "" }, b: { x: "" } };
+      const tracked = wrap(b, rootValues as any);
+
+      void (tracked as any).a.kind;
+      expect(gdm.deps.has(pairKey("a", ""))).toBe(true);
+      // Зависимость НЕ пишется на own-path группы — иначе recompute "b" трогает
+      // только детей b, но не её собственный isVisible-энтри (он под root).
+      expect(gdm.deps.has(pairKey("a", "b"))).toBe(false);
+    });
+
+    it("чтение листа той же (родительской) группы не создаёт кросс-групповую пару", () => {
       const { nodePaths, nodeParents } = buildMaps(nested);
       const gdm = new GroupDepsMap(nested, nodePaths, nodeParents);
       const wrap = gdm.getTrackingWrap();
 
-      // В новом дизайне cross-group deps отслеживаются через virtual leaves (group nodes):
-      // passport (group node with isVisible) получает scope родителя (root),
-      // который содержит paymentType. Чтение paymentType ≠ recipientPath "passport" → dep "" → "passport".
+      // passport (групповой узел) читает root-level sibling paymentType. Обе записи —
+      // под root, поэтому это self-зависимость root ("" → ""), уже покрытая
+      // конструктором; отдельная кросс-групповая пара не нужна.
       const passport = (nested as any).passport;
       const rootValues = { paymentType: "card", passport: { number: "" } };
       const tracked = wrap(passport, rootValues as any);
 
       void (tracked as any).paymentType;
-      expect(gdm.deps.has(pairKey("", "passport"))).toBe(true);
+      expect(gdm.deps.has(pairKey("", "passport"))).toBe(false);
     });
 
     it("мемоизирует proxy по recipientPath: повторный вызов для того же узла возвращает тот же объект", () => {
