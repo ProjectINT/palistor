@@ -1,6 +1,6 @@
 ---
 name: palistor
-description: "Build forms with the Palistor reactive form state manager. Use when: creating form configs, writing React components with useForm, adding validation/formatters/setters, working with lists/entities, configuring resolve/persist/submit pipelines, remapping field prop names to UI-library conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
+description: "Build forms with the Palistor reactive form state manager. Use when: creating form configs, writing React components with useForm, adding validation/formatters/setters, working with lists/entities, building multi-step wizards/flows (defineFlow/defineStep), configuring resolve/persist/submit pipelines, remapping field prop names to UI-library conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
 ---
 
 # Palistor — Reactive Form State Manager
@@ -11,6 +11,7 @@ description: "Build forms with the Palistor reactive form state manager. Use whe
 - Writing React components that read/write form state via `useForm`
 - Adding validation, formatters, setters, computed visibility/required
 - Working with entity lists (add/remove/edit items)
+- Building multi-step wizards/flows with `defineFlow` / `defineStep` (linear or branching)
 - Configuring async resolve, persist, submit/reset pipelines
 - Remapping field prop names for a UI library (`fieldMapping` — e.g. `isRequired → required`)
 - Debugging re-render or dirty tracking issues
@@ -36,7 +37,7 @@ Everything is exported from the root `palistor` entry point. Deep imports are av
 // Root import (preferred) — covers all public API
 import {
   Palistor, useForm, usePersist, useTranslator, useNotifier, useStoreContext,
-  defineList, defineFieldMapping,
+  defineList, defineFieldMapping, defineFlow, defineStep,
   localStorageDriver, sessionStorageDriver,
 } from "palistor";
 
@@ -49,6 +50,10 @@ import type {
   FieldMapping, ApplyFieldMapping,
   PersistDriver, PersistOptions, PersistManager,
   Resolve, NotifyFn, ResolveErrorContext,
+  // Flows (defineFlow / defineStep)
+  FlowProxyNode, FlowStepsProxy, FlowStepProxy,
+  FlowNode, FlowStep, AnyFlowStep, FlowValues, FlowError,
+  StepStatus, DefineFlowOptions,
 } from "palistor";
 
 ```
@@ -127,6 +132,15 @@ const users = defineList<User>({
 | `ListResolver<TEntity>` | Typed resolver — `(values) => Promise<TEntity[]>` |
 | `FieldMapping` | Rename map `internal → external` for the `fieldMapping` option (keys = mappable field props, values = your names) |
 | `ApplyFieldMapping<T, M>` | Applies a mapping to a proxy-node type (renames keys) — for manual prop typing |
+| `FlowNode<S>` | Config-node type returned by `defineFlow` (branded group carrying the step tuple) |
+| `FlowStep<K, C>` | One step (`defineStep` result) — `{ key: K; config: C }` |
+| `FlowProxyNode<S, M>` | Proxy of a flow node (`useForm(store).myFlow`) — nav state + methods + `steps` + `values` |
+| `FlowStepsProxy<S, M>` | The `flow.steps` collection — index/key access + `.current` + `.length` |
+| `FlowStepProxy<C, M>` | One step's proxy — group proxy of the step config + computed `status` |
+| `FlowValues<S>` | Accumulated flow values `{ [stepKey]: stepValues }` — type of `flow.values` |
+| `StepStatus` | `"active" \| "completed" \| null` — a step's computed status |
+| `FlowError` | `{ path: string; message: string }` — a flow validation error |
+| `DefineFlowOptions<S>` | Options object for `defineFlow` (`steps`, `onSubmit`, `beforeSubmit`, `afterSubmit`) |
 
 ## Config Declaration
 
@@ -291,6 +305,26 @@ users: [
 ]
 ```
 
+### Flow Node
+
+A fourth node kind: a **flow** (multi-step wizard) built with `defineFlow` / `defineStep`.
+It is a group node under the hood (each step is a child group), with reactive navigation
+state and methods layered on top. See [Flows — Multi-Step Wizards](#flows--multi-step-wizards-defineflow--definestep).
+
+```ts
+import { defineFlow, defineStep } from "palistor";
+
+const config = {
+  onboarding: defineFlow({
+    steps: [
+      defineStep("account", { email: { value: "", isRequired: true } }),
+      defineStep("summary", {}),
+    ],
+    onSubmit: async (allValues, store) => api.finish(allValues),
+  }),
+};
+```
+
 ## Creating a Store
 
 ```ts
@@ -339,8 +373,11 @@ const store = new Palistor({
 > Imperative writes outside React (`store.proxy.customerForm.setValues(...)`)
 > are fine — the rule applies only to `useForm` subscriptions.
 >
-> See [useForm-raw-proxy-pitfall.md](useForm-raw-proxy-pitfall.md) for the full
-> root-cause analysis.
+> Root cause: `store.proxy` is the *raw* store proxy (read/write directly,
+> no React subscription). `useForm` must wrap it in a tracking proxy that
+> records field reads for `useSyncExternalStore`; handing it an
+> already-raw subtree would subscribe to nothing and never re-render — so
+> the type brand + runtime guard reject it.
 
 ```tsx
 // Root — pass the store
@@ -1092,6 +1129,240 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 - `markResolved(entityId, templateNode)` after resolve — cached for next mount
 - `isResolved(entityId, templateNode)` checked before triggering resolve
 
+## Flows — Multi-Step Wizards (defineFlow / defineStep)
+
+A **flow** is a step-based wizard primitive. `defineFlow` assembles an ordered array
+of `defineStep(...)` results into an ordinary **group node** — each step is a child
+group under its own key. It participates in `getValues()` / persist / dirty like any
+group; the store additionally tracks per-flow **navigation state** (current step,
+visit stack, statuses) and exposes it through a **flow proxy**.
+
+```
+defineFlow({ steps: [...] })  →  FlowNode  →  flow proxy (nav state + steps + values + methods)
+       defineStep("k", {...})  →  step group node  →  step proxy (group proxy + `status`)
+```
+
+- A flow node **is a group** — everything you know about groups (fields, `isVisible`, `validate`, `resolve`, `onSubmit`, spread, `reset`, `setValues`) applies to it and to each step.
+- Navigation state (current step, history, statuses) is **not** a form value — it never appears in `getValues()` / submit payload. Only the step field values do.
+- Statuses are **derived** from navigation (`currentIndex` + `visited`), never stored.
+
+### defineStep — one step
+
+A step config is a **plain group node** (no top-level `value`) plus two optional
+flow-lifecycle callbacks, `onEnter` / `onReady`.
+
+```ts
+defineStep("account", {
+  fullName: { value: "", isRequired: true, validate: (v) => v.trim().length < 2 ? "Too short" : undefined },
+  email:    { value: "", isRequired: true, validate: (v) => !v.includes("@") ? "Invalid" : undefined },
+
+  // Optional: only shown for certain earlier answers (branching — see below)
+  isVisible: (values) => values.plan.plan === "enterprise",
+
+  // Flow-lifecycle callbacks (fire-and-forget, receive FLOW-scoped values + store):
+  onEnter: (flowValues, store) => { analytics.track("step_enter", "account"); },
+  onReady: (flowValues, store) => { /* runs after onEnter, and after the step's resolve (if any) settles */ },
+
+  // Standard group submit hook — 3rd arg is the FLOW proxy (see "Step-driven navigation")
+  onSubmit: (stepValues, store, { nextStep }) => { nextStep(); },
+})
+```
+
+- `"status"` is a **reserved** config key on a step (the proxy exposes it as a computed property) — using it throws.
+- `onEnter`/`onReady` receive **flow-scoped values** (`{ [stepKey]: stepValues }` for all steps), not just this step's values. Both are fire-and-forget (errors swallowed).
+- Entry lifecycle order: **`onEnter` → (step `resolve`, triggered eagerly on entry) → `onReady`**. If the step has no `resolve`, `onReady` fires immediately after `onEnter`. A cached (already-resolved) step does **not** re-run `onReady`.
+
+### defineFlow — assemble the flow
+
+```ts
+const onboarding = defineFlow({
+  steps: [
+    defineStep("account", { /* … */ }),
+    defineStep("plan",    { plan: { value: "" as PlanId | "", isRequired: true } }),
+    defineStep("company", { /* isVisible → enterprise only */ }),
+    defineStep("summary", {}),   // empty read-only step is fine
+  ],
+  // Flow-level finalization — runs via the standard submit pipeline over ALL steps
+  // (only VISIBLE steps are validated). Called by flow.submit() and by nextStep()
+  // when there is no visible step ahead.
+  onSubmit:     async (allValues, store) => api.completeOnboarding(allValues),
+  beforeSubmit: (allValues) => allValues,          // optional value transform
+  afterSubmit:  (result, { reset }) => { reset(); }, // optional post-processing
+});
+
+// A flow node is just a config value — nest it anywhere in a config:
+const config = { onboarding };
+const store = new Palistor({ config });
+```
+
+- `steps` order defines `nextStep()` order.
+- Step **keys are reserved** against the group/flow proxy API (`submit`, `reset`, `values`, `current`, `length`, `nextStep`, …) — a colliding or duplicate key throws at `defineFlow`.
+- Types are inferred: `useForm(store).onboarding` is a `FlowProxyNode<S>` with `currentStepKey` narrowed to the step-key union, `flow.values` typed as `FlowValues<S>`, and `flow.steps.account.fullName` fully typed.
+
+### Flow Proxy API (`useForm(store).onboarding`)
+
+The flow proxy is a **group proxy** plus navigation. All properties are reactive.
+
+| Property / Method | Type | Description |
+|-------------------|------|-------------|
+| `currentStepKey` | `S[number]["key"]` | Active step's key |
+| `currentStepIndex` | `number` | Active step's index (array order) |
+| `canGoBack` | `boolean` | `true` if the visit stack is non-empty — guard for a Back button |
+| `history` | `readonly string[]` | `[...visitStack, currentStepKey]` — the visited path |
+| `errors` | `ReadonlyArray<FlowError>` | Errors from the last `validate()` / finalize |
+| `steps` | `FlowStepsProxy` | Step collection — index/key/`.current`/`.length` (see below) |
+| `values` | `FlowValues<S>` | Live accumulated values of **all** steps, keyed by step key |
+| `loading` | `boolean` | Composite — `true` if any step is resolving |
+| `isInvalid` | `boolean` | Aggregate — any error among **visited, visible** steps |
+| `dirty` / `submitting` | `boolean` | Group semantics (any child changed / submit in progress) |
+| `nextStep()` | `void` | Advance to next **visible** step; if none ahead → finalize via `submit()` |
+| `back()` | `void` | Pop the visit stack. No-op if empty (guard with `canGoBack`) |
+| `goTo(keyOrIndex)` | `void` | Jump to a step by key or index. **Throws** on unknown key/index |
+| `validate()` | `FlowError[]` | Validate visited visible steps → writes `flow.errors`, returns them |
+| `submit()` | `Promise<SubmitResult>` | Finalize — group submit pipeline over the flow (hidden-step leaves filtered out) |
+| `reset(values?)` | `void` | Group reset — **also resets navigation** to the first step |
+| `setValues(patch)` | `void` | Bulk update across steps |
+
+### Steps Proxy API (`flow.steps`)
+
+| Access | Result |
+|--------|--------|
+| `flow.steps[0]` | Step proxy by index (array order) |
+| `flow.steps.account` | Step proxy by key |
+| `flow.steps.current` | Live proxy of the **active** step (re-points on navigation) |
+| `flow.steps.length` | Number of steps |
+| `[...flow.steps]` | Iterable of step proxies |
+
+### Step Proxy API (`flow.steps.account`)
+
+A step proxy is the step's **group proxy** plus:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status` | `StepStatus` | `"active"` (current) · `"completed"` (was active, then left) · `null` (never visited) |
+| `isInvalid` | `boolean` | Live aggregate validity of the step subtree (visible leaves only) |
+| `[field]` | `FieldProxyNode` | Each step field — spread straight into inputs (`{...step.fullName}`) |
+| `submit()` | `Promise<SubmitResult>` | Group submit for this step (runs its `onSubmit`) |
+| `values`, `dirty`, `reset`, `setValues` | | Standard group proxy members |
+
+### Navigation semantics
+
+```ts
+flow.nextStep();       // → next VISIBLE step (skips hidden ones). None ahead? → flow.submit()
+flow.back();           // → pop visit stack (no-op if canGoBack === false)
+flow.goTo("plan");     // → jump by key (throws if key unknown)
+flow.goTo(2);          // → jump by index (throws if out of range)
+```
+
+- `nextStep()` skips steps whose `isVisible` is `false` — this is how **branching** works.
+- On entering a step: previous step's `status` → `"completed"`, new step's → `"active"`, and its entry lifecycle (`onEnter → resolve → onReady`) runs.
+- `back()` walks the visit stack (lossy — a branch you backed out of drops from `visited`).
+
+### Branching via `isVisible`
+
+Give a step an `isVisible: (values) => …` predicate reading the **flow-scoped values**.
+`nextStep()` skips hidden steps; their values stay in `flow.values` but are **excluded
+from validation** on finalize (a not-taken branch can't block `submit()`).
+
+```ts
+defineStep("company", {
+  companyName: { value: "", isRequired: true },
+  isVisible: (values) => values.plan.plan === "enterprise", // only Enterprise sees this step
+})
+// Free/Pro path: account → plan → summary (company skipped by nextStep and by submit validation)
+```
+
+### Validation & finalization
+
+- **`flow.validate()`** — collects errors from **visited + visible** steps into `flow.errors` and returns them (empty = valid). Live per-step check: `flow.steps.plan.isInvalid`.
+- **`flow.submit()`** — runs the standard group submit pipeline over the flow node: `submitting → beforeSubmit → validate → onSubmit → afterSubmit`. Leaves under **hidden** steps are filtered out of validation. On validation failure, `onSubmit` is **not** called and errors land in `flow.errors`; on success `flow.errors` clears.
+- `nextStep()` at the last visible step **calls `flow.submit()` for you** — if it fails validation, the step does not change and `flow.errors` is populated.
+
+### Step-driven navigation (from a step's `onSubmit`)
+
+A step is a group, so calling `flow.steps.current.submit()` runs **that step's**
+`onSubmit`. Its **3rd argument is the parent proxy = the flow proxy**, so you can
+destructure navigation methods and drive the wizard from inside the step:
+
+```ts
+defineStep("account", {
+  /* fields… */
+  onSubmit: (stepValues, store, { nextStep }) => { nextStep(); },
+})
+```
+
+```tsx
+// Container's "Next" button submits the current step (validates it, then it advances):
+<Button onClick={() => flow.steps.current.submit()}>Next</Button>
+```
+
+This gives you **per-step validation on Next**: `step.submit()` validates the step's
+fields first; `nextStep()` only fires if the step is valid.
+
+### Persist & reset
+
+- **Persist**: `usePersist` automatically serializes each flow's navigation
+  (`currentStepKey`, `visitStack`, `visitedKeys`) alongside field values. On hydration
+  the flow is restored to its saved step; unknown step keys (config changed) are
+  dropped, statuses are re-derived. No extra config needed.
+- **Reset**: `form.reset()` (root) or a group `reset()` covering the flow resets its
+  navigation — back to the first step, stack/visited cleared, step `resolve` states
+  reset to idle, and the first step's entry lifecycle re-runs.
+
+### React patterns
+
+```tsx
+// config/flow.ts
+export const flowStore = new Palistor({ config: { onboarding } });
+export const useFlowForm = () => useForm(flowStore);
+
+// Wizard container — owns navigation
+function OnboardingWizard() {
+  const flow = useForm(flowStore).onboarding;
+  const key = flow.currentStepKey; // reactive
+
+  return (
+    <>
+      {/* Render only the active step (or use flow.steps.current) */}
+      {key === "account" && <AccountStep step={flow.steps.account} />}
+      {key === "plan"    && <PlanStep    step={flow.steps.plan} />}
+      {key === "company" && <CompanyStep step={flow.steps.company} />}
+      {key === "summary" && <SummaryStep flow={flow} />}
+
+      <button disabled={!flow.canGoBack} onClick={() => flow.back()}>Back</button>
+      <button onClick={() => flow.steps.current.submit()}>
+        {key === "summary" ? "Finish" : "Next"}
+      </button>
+
+      {flow.errors.map((e) => <p key={e.path}>{e.message}</p>)}
+    </>
+  );
+}
+
+// A step component — spread step fields directly into inputs
+function AccountStep({ step }: { step: FlowStepProxy<{ fullName: string; email: string }> }) {
+  return (
+    <>
+      <Input {...step.fullName} />
+      <Input {...step.email} />
+    </>
+  );
+}
+
+// A step-indicator reads each step's derived status reactively
+function StepIndicator({ flow }: { flow: FlowProxyNode<Steps> }) {
+  return STEP_META.map((m) => {
+    const status = flow.steps[m.key].status; // "active" | "completed" | null
+    return <li key={m.key} data-status={status ?? "pending"}>{m.label}</li>;
+  });
+}
+```
+
+> Type a step passed as a prop with `FlowStepProxy<StepValues>`; type a whole flow
+> prop with `FlowProxyNode<Steps>`. As with any subtree, `flow` and `step` here are
+> **tracking proxies** obtained from `useForm(store)` upstream — never
+> `store.proxy.onboarding` (see the `useForm` raw-proxy pitfall).
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -1117,6 +1388,13 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | `new Palistor<typeof config>({..., fieldMapping})` loses mapping types | An explicit first type arg disables `TMapping` inference (falls back to `{}`). Use bare `new Palistor({...})` or specify both type args |
 | Expecting `fieldMapping` to transform values (Ant `status`, MUI `helperText`) | It only renames 1:1. Use a per-component adapter over the renamed spread (see Field Name Mapping → Scope) |
 | Mapping two internal keys to the same external name | Not allowed — `fieldMapping` must be a bijection (one internal ↔ one external) |
+| Passing a raw group object as a flow step | Each `steps` entry MUST be a `defineStep(key, config)` result — a bare group throws at `defineFlow` |
+| Giving a step a top-level `value` or a `status` field | A step is a **group** — a `value` key makes it a leaf (throws); `status` is reserved for the computed step property (throws) |
+| Expecting `nextStep()` to visit a hidden step | `nextStep()` skips steps whose `isVisible` is `false` — that's the branching mechanism. Their values stay in `flow.values` but are excluded from finalize validation |
+| Reading `flow.currentStepKey` etc. outside `useForm` | Flow nav state is reactive — read it through `useForm(store).flow`, not `store.proxy.flow` |
+| Expecting a step's `onSubmit` 3rd arg to be its own group | It's the **parent = flow proxy** — that's why `{ nextStep }` destructuring drives navigation |
+| Calling `flow.back()` without checking `canGoBack` | `back()` is a no-op on an empty stack; disable the Back button with `!flow.canGoBack` |
+| Nav state showing up in `getValues()` / submit payload | It never does — only step **field values** are form state; navigation is separate (and persisted separately) |
 
 ## Pipelines Reference
 
@@ -1133,6 +1411,9 @@ Entity "u1" ←─ bind ──→ users list template (UserRow)
 | **Entity Field Resolve (lazy)** | GET on `field.value`/`field.loading` | queueMicrotask → check skipIfResolved → loading=true → resolver(entityValues, store) → write value → loading=false → notify |
 | **Leaf Submit** | `proxy.field.submit()` | submitting=true → revalidate → validate → `beforeSubmit(value, parentValues)` → `onSubmit(value, store, parent)` → `afterSubmit` → submitting=false |
 | **onChange** | After write pipeline | fire own + ancestors' `onChange` handlers (leaf first, async) → apply returned patches to parent group |
+| **Flow Navigation** | `flow.nextStep()` / `back()` / `goTo()` | pick target (next visible / stack pop / key\|index) → set current → prev status="completed", next="active" → notify → step entry lifecycle. `nextStep()` with no visible step ahead → `flow.submit()` |
+| **Step Entry Lifecycle** | Entering a step (nav, init, reset, hydrate) | `onEnter(flowValues, store)` → step `resolve` (eager, if any) → `onReady(flowValues, store)` (skipped if step already cached) |
+| **Flow Submit** | `flow.submit()` / `nextStep()` at end | group submit pipeline over flow node → validate (hidden-step leaves filtered) → `beforeSubmit` → `onSubmit(flowValues, store)` → `afterSubmit`; errors → `flow.errors` |
 
 ## Re-render Optimization
 
