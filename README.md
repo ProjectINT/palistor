@@ -33,7 +33,7 @@ function Form() {
 
 ## The idea — three layers, not one store
 
-Most React screens tangle three unrelated concerns inside components: how the screen **behaves** (validation, conditional fields, cross-field rules), where its **data** comes from (loading, caching, mutation) and how it **looks** (JSX). As the screen grows, the three braid together until every change touches everything.
+Most React screens tangle three unrelated concerns inside components: how the screen **behaves** (validation, conditional fields, cross-field rules), where its **data** comes from (loading, caching, mutation) and how it **looks** (JSX). As the screen grows, the three braid together until every change touches everything. On top of that, the tangle of dependencies, useEffects, custom hooks and contexts keeps growing — and the screen ends up monolithic, unpredictable and hard to test.
 
 Palistor pulls them apart:
 
