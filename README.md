@@ -1,6 +1,6 @@
 # Palistor
 
-> Reactive form state manager for React with granular re-renders
+> A declarative framework for data-driven React interfaces — behavior, data and view as three separate layers
 
 **English** | [Русский](./README.ru.md)
 
@@ -8,7 +8,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![react](https://img.shields.io/badge/react-%5E19-61dafb.svg)](https://react.dev)
 
-Palistor is a form state management library built on a two-layer proxy architecture: a framework-agnostic core plus a React binding with per-field subscription tracking. A component re-renders **only** when a field it actually read during render changes.
+**Palistor is a declarative framework for stateful, data-driven React interfaces.** It treats a screen as three independent layers — **configuration** (how it behaves), **data** (where its values come from) and **view** (how it renders) — and keeps them from leaking into each other. A two-layer proxy is the seam that binds them: reads become fine-grained subscriptions, writes run the behavior you declared. A component re-renders **only** for the exact fields it read.
 
 ```tsx
 const store = new Palistor({
@@ -28,6 +28,41 @@ function Form() {
   );
 }
 ```
+
+---
+
+## The idea — three layers, not one store
+
+Most React screens tangle three unrelated concerns inside components: how the screen **behaves** (validation, conditional fields, cross-field rules), where its **data** comes from (loading, caching, mutation) and how it **looks** (JSX). As the screen grows, the three braid together until every change touches everything.
+
+Palistor pulls them apart:
+
+```
+┌── Configuration — behavior ──────────────┐   declarative · framework-agnostic
+│  fields · validation · visibility ·      │   isVisible / isRequired / validate
+│  cross-field rules · dependencies ·      │   formatter / setter / onSubmit
+│  lifecycle                               │   fully testable without React
+└─────────────────────┬────────────────────┘
+                      │   proxy — the seam:
+                      │   read  → subscribe to a field
+                      │   write → run the declared pipeline
+┌── Data — values & entities ──────────────┐   normalized entity registry
+│  values cache · normalized registry ·    │   resolvers with auto-tracked deps
+│  async resolvers                         │   retry · optimistic · Suspense
+└─────────────────────┬────────────────────┘
+                      │
+┌── View — rendering ──────────────────────┐   useForm(store) → tracking proxy
+│  read state · assign values · no logic   │   granular, per-field re-renders
+└──────────────────────────────────────────┘
+```
+
+- **Configuration — behavior.** One declarative tree describes fields, validation, visibility, cross-field rules, dependencies and lifecycle (`onSubmit`, `resolve`). Pure and framework-agnostic — fully testable without React.
+- **Data — values & entities.** Values flow through a normalized entity registry and async resolvers with automatically tracked dependencies, retry, optimistic updates and Suspense.
+- **View — rendering.** Components only read reactive state and assign values. They carry no logic and re-render only for the fields they actually read.
+
+The proxy is the seam between the layers: a **read** (`form.email.value`) subscribes the component to that field; a **write** (`form.email.value = x`) runs the pipeline you declared in the config — formatter → setter → recompute → notify. Nothing is wired by hand.
+
+The payoff is that complexity grows **per layer**, not per component. A form, a wizard, a data table and an admin panel are the same three layers at different scale — which is why async loading, normalized lists, multi-step flows, persistence and i18n are part of the framework, not add-ons you bolt on later.
 
 ---
 

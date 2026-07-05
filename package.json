@@ -1,7 +1,7 @@
 {
   "name": "palistor",
-  "version": "0.0.26",
-  "description": "Reactive form state manager for React with granular re-renders",
+  "version": "0.0.27",
+  "description": "Declarative framework for data-driven React UIs — splits behavior, data and view into three layers; forms, wizards, async lists, granular per-field re-renders",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
