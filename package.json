@@ -1,6 +1,6 @@
 {
   "name": "palistor",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Reactive form state manager for React with granular re-renders",
   "main": "dist/index.js",
   "module": "dist/index.js",
