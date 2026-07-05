@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store";
 
-// ─── Тестовый конфиг ─────────────────────────────────────────────────────────
+// ─── Test config ─────────────────────────────────────────────────────────────
 
 const makeConfig = () => ({
   email: {

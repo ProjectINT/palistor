@@ -11,41 +11,41 @@ import type {
 } from "../flow/defineFlow";
 
 /**
- * Внутренний тип для рекурсивного обхода дерева конфига.
- * Используется в registerNodes, buildProxy, applyPatch, recomputeAll и др.
+ * Internal type for recursively walking the config tree.
+ * Used by registerNodes, buildProxy, applyPatch, recomputeAll, etc.
  */
 export interface AnyConfigNode {
   [key: string]: AnyConfigNode | unknown;
 }
 
 /**
- * Функция перевода (next-intl, i18next, …).
- * label/placeholder/description в конфиге могут быть функцией от TranslateFn.
- * Принимает любое количество аргументов — совместима с next-intl `t`, i18next `t` и др.
+ * Translation function (next-intl, i18next, …).
+ * label/placeholder/description in the config may be functions of TranslateFn.
+ * Accepts any number of arguments — compatible with next-intl `t`, i18next `t`, etc.
  */
 export type TranslateFn = (...args: any[]) => string;
 
 /**
- * Тип конфигурации формы: объект, где каждый ключ — узел конфига с типами TValues.
+ * Form config type: an object where every key is a config node typed over TValues.
  */
 export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
 import type { NotifyFn, Resolve } from "../resolvePipeline";
 import type { SubmitResult } from "../submitPipeline/submitPipeline";
 
-// ─── Утилитарные типы ────────────────────────────────────────────────────────
+// ─── Utility types ───────────────────────────────────────────────────────────
 
-/** Функция отписки от подписки. */
+/** Unsubscribe function returned by subscriptions. */
 export type Unsubscribe = () => void;
 
 /**
- * Значение либо функция, вычисляемая из текущих значений формы.
- * Большинство свойств конфига (isVisible, isRequired, label, …) могут быть
- * либо статическим значением, либо функцией от всего дерева значений.
+ * A value, or a function computing it from the current form values.
+ * Most config properties (isVisible, isRequired, label, …) can be either a
+ * static value or a function of the whole values tree.
  *
  * @example
- * // статическое
+ * // static
  * isVisible: true
- * // вычисляемое
+ * // computed
  * isVisible: (values) => values.paymentType === "bank"
  */
 export type MaybeComputed<TResult, TValues = Record<string, unknown>> =
@@ -53,18 +53,18 @@ export type MaybeComputed<TResult, TValues = Record<string, unknown>> =
   | ((values: TValues) => TResult);
 
 /**
- * Используется для label / placeholder / description, которые могут быть:
- *   - статической строкой
- *   - `(t: TranslateFn, values: TValues) => string` — перевод + вычисление
+ * Used for label / placeholder / description, which can be:
+ *   - a static string
+ *   - `(t: TranslateFn, values: TValues) => string` — translation + computation
  */
 export type MaybeTranslatable<TResult, TValues = Record<string, unknown>> =
   | TResult
   | ((t: TranslateFn, values: TValues) => TResult);
 
 /**
- * Глубокая опциональная версия значений.
- * Рекурсирует только в «плоские» объекты; массивы, Date, Map, Set и т.д.
- * остаются как есть.
+ * Deeply optional version of the values.
+ * Recurses only into "plain" objects; arrays, Date, Map, Set, etc.
+ * are left as-is.
  */
 export type DeepPartialValues<T> = {
   [K in keyof T]?: T[K] extends readonly unknown[]
@@ -81,9 +81,9 @@ export type DeepPartialValues<T> = {
 };
 
 /**
- * Расширяет тип значения, чтобы допустить типичные «входные» типы форматтеров.
- * Числовые поля принимают string (Input возвращает строку), булевы — string/number.
- * Остальные типы остаются как есть.
+ * Widens a value type to accept typical formatter "input" types.
+ * Number fields accept string (an Input yields strings), booleans accept
+ * string/number. Other types are left as-is.
  */
 type ProxyValueType<T> = T extends number
   ? T | string
@@ -91,10 +91,10 @@ type ProxyValueType<T> = T extends number
     ? T | string | number
     : T;
 
-// ─── Типы конфига ────────────────────────────────────────────────────────────
+// ─── Config types ────────────────────────────────────────────────────────────
 
 /**
- * Метаданные типа поля (для будущей валидации по типам / кодогенерации).
+ * Field type metadata (for future type-based validation / codegen).
  */
 export interface FieldTypeMeta {
   readonly dataType: "String" | "Number" | "Boolean" | "Date" | "Array" | "Object";
@@ -104,69 +104,69 @@ export interface FieldTypeMeta {
 export type { Setter } from "../writePipeline/writePipeline";
 
 /**
- * Универсальный узел конфига — описывает и поле, и группу.
+ * Universal config node — describes both a field and a group.
  *
- * Поведение узла определяется наличием свойств:
- *   - Есть `value` → листовой узел (поле формы)
- *   - Нет `value`  → групповой узел (контейнер для дочерних)
+ * The node's behavior is determined by which properties are present:
+ *   - Has `value` → leaf node (form field)
+ *   - No `value`  → group node (container for children)
  *
- * Все свойства кроме `value` — опциональны.
- * Любое computed-свойство может быть константой или функцией от `TValues`.
+ * All properties except `value` are optional.
+ * Any computed property can be a constant or a function of `TValues`.
  *
- * @template TValue  — тип значения поля (актуально для листовых узлов)
- * @template TValues — форма дерева всех значений (по умолчанию Record<string,any>)
+ * @template TValue  — the field's value type (relevant for leaf nodes)
+ * @template TValues — shape of the whole values tree (defaults to Record<string,any>)
  */
 export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>> {
-  // ─── Поле (если есть value — узел считается листовым) ──────────────────
+  // ─── Field (a node with `value` is considered a leaf) ──────────────────
   value?: MaybeComputed<TValue, TValues>;
   label?: MaybeTranslatable<string, TValues>;
   placeholder?: MaybeTranslatable<string, TValues>;
   description?: MaybeTranslatable<string, TValues>;
   /**
-   * Возвращает строку с ошибкой или falsy-значение если поле валидно.
-   * `false` допускается для удобства паттерна `!v && "required"`.
+   * Returns an error string, or a falsy value when the field is valid.
+   * `false` is allowed for the convenience of the `!v && "required"` pattern.
    */
   validate?: (value: TValue, values: TValues, t: TranslateFn) => string | undefined | false;
-  /** Преобразует входное значение перед сохранением (например, обрезает пробелы) */
+  /** Transforms the input value before storing it (e.g. trims whitespace). */
   formatter?: (value: string | boolean, values: TValues) => string | number | boolean;
-  /** Сайд-эффект записи: возвращает патч других полей */
+  /** Write side-effect: returns a patch for other fields. */
   setter?: (value: TValue, values: TValues, previousValue: TValue | undefined) => DeepPartialValues<TValues>;
-  /** Дополнительные пропсы для UI-компонента */
+  /** Extra props for the UI component. */
   componentProps?: Readonly<Record<string, unknown>>;
-  /** Список имён полей, при изменении которых пересчитывается состояние этого поля */
+  /** Field names whose changes trigger a recompute of this field's state. */
   dependencies?: readonly string[];
-  /** Метаданные типа поля */
+  /** Field type metadata. */
   types?: FieldTypeMeta;
 
-  // ─── Общие флаги (и поле, и группа) ───────────────────────────────────
+  // ─── Shared flags (field and group) ────────────────────────────────────
   isRequired?: MaybeComputed<boolean, TValues>;
   isReadOnly?: MaybeComputed<boolean, TValues>;
   isDisabled?: MaybeComputed<boolean, TValues>;
   isVisible?: MaybeComputed<boolean, TValues>;
 
-  // ─── Lifecycle (любой узел) ────────────────────────────────────────────
+  // ─── Lifecycle (any node) ──────────────────────────────────────────────
   /**
-   * Трансформирует значение перед submit (не мутирует store).
-   * На листовом узле: `(value, values) → value`
-   * На групповом узле: `(values) → values`
+   * Transforms the value before submit (does not mutate the store).
+   * On a leaf node:  `(value, values) → value`
+   * On a group node: `(values) → values`
    */
   beforeSubmit?: ((value: TValue, values: TValues) => TValue) | ((values: TValues) => TValues);
-  /** Callback отправки формы. Вызывается после валидации в submit pipeline. */
+  /** Form submit callback. Invoked after validation in the submit pipeline. */
   onSubmit?: (
     value: TValue | TValues,
     store: ProxyStore<any>,
     parent?: any,
   ) => Promise<unknown> | unknown;
-  /** Пост-обработка после успешного onSubmit. */
+  /** Post-processing after a successful onSubmit. */
   afterSubmit?: (
     result: unknown,
     actions: { reset: () => void },
   ) => void | Promise<void>;
-  /** Трансформер для reset: принимает defaults, возвращает окончательные значения. */
+  /** Reset transformer: receives defaults, returns the final values. */
   reset?: (defaults: TValues) => TValues;
   /**
-   * Вызывается после изменения любого поля в группе (fire-and-forget).
-   * Может вернуть патч для мержа обратно в store.
+   * Called after any field in the group changes (fire-and-forget).
+   * May return a patch to merge back into the store.
    */
   onChange?: (info: {
     fieldKey: string;
@@ -183,11 +183,10 @@ export interface ConfigNode<TValue = unknown, TValues = Record<string, unknown>>
   resolve?: Resolve<TValue>;
 }
 
-// ─── Proxy-типы ──────────────────────────────────────────────────────────────
+// ─── Proxy types ─────────────────────────────────────────────────────────────
 
 /**
- * Ключи конфига, которые не являются дочерними полями (скрываются при маппинге
- * группового узла).
+ * Config keys that are not child fields (hidden when mapping over a group node).
  */
 type ConfigSkipKeys =
   | "value"
@@ -215,11 +214,11 @@ type ConfigSkipKeys =
   | "deps"
 
 /**
- * Форма доступного через прокси листового поля.
- * Все функции (isVisible, validate, …) уже вычислены.
+ * Shape of a leaf field as seen through the proxy.
+ * All functions (isVisible, validate, …) are already evaluated.
  */
 export interface FieldProxyNode<TValue = unknown> {
-  /** Чтение возвращает типизированное значение, запись принимает расширенный тип (string для number-полей и т.д.) */
+  /** Reads return the typed value; writes accept a widened type (string for number fields, etc.). */
   get value(): TValue;
   set value(v: ProxyValueType<TValue>);
   readonly label: string | undefined;
@@ -229,24 +228,23 @@ export interface FieldProxyNode<TValue = unknown> {
   readonly isReadOnly: boolean;
   readonly isDisabled: boolean;
   readonly isVisible: boolean;
-  /** true если поле имеет ошибку валидации */
+  /** true when the field has a validation error. */
   readonly isInvalid: boolean | undefined;
   readonly errorMessage: string | undefined;
-  /** true если текущее значение отличается от initial */
+  /** true when the current value differs from the initial one. */
   readonly dirty: boolean;
-  /* 
-    Можно использовать функцию, а можно явно писать (s = v), функция
-    предполагается как дефолтный способ, прямая запись как способ для
-    особенных случаев.
+  /*
+    You can use this callback or assign directly (field.value = v). The
+    callback is the default way; direct assignment is for special cases.
   */
   readonly onValueChange: (v: ProxyValueType<TValue>) => void;
-  /** true пока выполняется submit pipeline (аналогично GroupProxyNode). */
+  /** true while the submit pipeline is running (same as GroupProxyNode). */
   readonly submitting: boolean;
   /** Submit pipeline: submitting → beforeSubmit → validate → onSubmit → afterSubmit. */
   submit(): Promise<SubmitResult>;
 }
 
-/** Извлекает тип значения из узла конфига. */
+/** Extracts the value type from a config node. */
 type ExtractNodeValue<T> = T extends { value: (...args: any[]) => infer R }
   ? R
   : T extends { value: infer V }
@@ -254,8 +252,8 @@ type ExtractNodeValue<T> = T extends { value: (...args: any[]) => infer R }
     : never;
 
 /**
- * Вычисленные флаги группового узла (присутствуют, если заданы в конфиге;
- * могут быть boolean-константой или функцией — в прокси уже разрешены).
+ * Computed flags of a group node (present when set in the config;
+ * may be a boolean constant or a function — already resolved in the proxy).
  */
 export interface GroupProxyNode {
   readonly isVisible: boolean;
@@ -264,37 +262,37 @@ export interface GroupProxyNode {
   readonly isDisabled: boolean | undefined;
   readonly isInvalid: boolean | undefined;
   readonly errorMessage: string | undefined;
-  /** true пока выполняется submit pipeline. */
+  /** true while the submit pipeline is running. */
   readonly submitting: boolean;
   /** true while async resolver is loading (only for nodes with resolve). */
   readonly loading: boolean;
-  /** true если хотя бы одно поле в группе отличается от initial. */
+  /** true when at least one field in the group differs from its initial value. */
   readonly dirty: boolean;
   /**
-   * true после первого неудачного submit — ошибки показываются в реальном времени.
-   * false до первого submit — ошибки скрыты.
+   * true after the first failed submit — errors are shown in real time.
+   * false before the first submit — errors are hidden.
    */
   readonly revalidate: boolean;
-  /** Текущие значения всех листовых полей поддерева в виде вложенного объекта. Живая ссылка (не клон). */
+  /** Current values of all leaf fields in the subtree as a nested object. Live reference (not a clone). */
   readonly values: Record<string, unknown>;
   /** Submit pipeline: submitting → beforeSubmit → validate → onSubmit → afterSubmit. */
   submit(): Promise<SubmitResult>;
-  /** Reset поддерево к defaults из конфига (или к переданным значениям). */
+  /** Resets the subtree to config defaults (or to the provided values). */
   reset(values?: Record<string, unknown>): void;
   /**
-   * Bulk-обновление значений: применяет патч к поддереву за один recompute + notify.
-   * Без setters (чтобы избежать рекурсии) и без форматтеров.
-   * Используется для подлива серверных данных или bulk-изменений из React.
+   * Bulk value update: applies a patch to the subtree in a single recompute + notify.
+   * Skips setters (to avoid recursion) and formatters.
+   * Used for feeding in server data or bulk changes from React.
    */
   setValues(patch: Record<string, unknown>): void;
 }
 
-// ─── Типы списков ────────────────────────────────────────────────────────────
+// ─── List types ──────────────────────────────────────────────────────────────
 
 /**
- * Конфигурация resolver-а для ListNode (аналог Resolve для группы, но возвращает
- * массив entity-данных). Минимальный интерфейс без импорта Resolve из resolvePipeline
- * (избегает циклических зависимостей).
+ * Resolver configuration for a ListNode (like Resolve for a group, but returns
+ * an array of entity records). Minimal interface that avoids importing Resolve
+ * from resolvePipeline (prevents circular dependencies).
  */
 export interface ListResolveConfig {
   /** Async data loader — returns array of entity records. */
@@ -315,47 +313,47 @@ export interface ListResolveConfig {
 }
 
 /**
- * Конфигурация уровня списка (второй элемент ListNode-массива).
- * Resolver и прочие опции уровня списка добавляются здесь.
+ * List-level configuration (second element of a ListNode array).
+ * The resolver and other list-level options go here.
  */
 export interface ListConfig {
   resolve?: ListResolveConfig;
 }
 
 /**
- * Внутреннее состояние списка — ЕДИНЫЙ кубик «список» (root + per-entity).
+ * Internal list state — the SINGLE "list" building block (root + per-entity).
  *
- * Идентичность узла для tracking/resolve — сам объект `ListState` (ключ в хабе),
- * а не отдельное поле version. Root-list — вырожденный случай `ownerEntity === null`;
- * per-entity-list (вариант C) — `ownerEntity` указывает на владельца.
+ * Node identity for tracking/resolve is the `ListState` object itself (hub
+ * key), not a separate version field. A root list is the degenerate case
+ * `ownerEntity === null`; a per-entity list points to its owner.
  *
- * Root-`ListState` хранится в `NodeRegistry.listStates` (ключ — `listConfigNode`),
- * per-entity — в `owner.lists` (ключ — тот же `listConfigNode`).
+ * Root `ListState` lives in `NodeRegistry.listStates` (keyed by `listConfigNode`),
+ * per-entity ones live in `owner.lists` (same `listConfigNode` key).
  */
 export interface ListState {
-  /** Сам array-узел конфига [template, listConfig?] — ключ во всех реестрах. */
+  /** The array config node [template, listConfig?] — key in all registries. */
   listConfigNode: object;
-  /** Шаблон элемента — describes поля для отображения. listConfigNode[0]. */
+  /** Item template — describes the fields to render. listConfigNode[0]. */
   template: object;
-  /** Конфигурация списка (resolve и т.д.). listConfigNode[1] — опционально. */
+  /** List configuration (resolve etc.). listConfigNode[1] — optional. */
   listConfig?: ListConfig;
-  /** Владелец списка. `null` = root list; иначе — entity-владелец (вариант C). */
+  /** List owner. `null` = root list; otherwise the owning entity. */
   ownerEntity: EntityNode | null;
-  /** ID сущностей, входящих в список (в порядке отображения). */
+  /** IDs of the entities in the list (in display order). */
   itemIds: string[];
-  /** Сохраняется при init/resolve — для dirty-tracking по составу. */
+  /** Captured at init/resolve — used for membership dirty-tracking. */
   initialItemIds: string[];
 }
 
 /**
- * Прокси-интерфейс для списка (ListNode в конфиге).
- * TItem — тип одного элемента (EntityProjectionProxy в Phase 2B).
+ * Proxy interface for a list (ListNode in the config).
+ * TItem — type of a single item (EntityProjectionProxy).
  */
 export interface ListProxyNode<TItem> {
   readonly items: ReadonlyArray<TItem>;
   readonly length: number;
   readonly loading: boolean;
-  /** true если состав списка изменился с момента init/последнего resolve. */
+  /** true when list membership changed since init/last resolve. */
   readonly dirty: boolean;
   add(id: string): void;
   add(values: Record<string, unknown>): TItem;
@@ -372,86 +370,86 @@ export interface ListProxyNode<TItem> {
 declare const __palistorRefBrand: unique symbol;
 declare const __typedListBrand: unique symbol;
 
-/** Opaque-ссылка на entity proxy. Передаётся как prop, разворачивается через useForm(). */
+/** Opaque reference to an entity proxy. Passed as a prop, unwrapped via useForm(). */
 export type PalistorRef<T extends Record<string, any>> = {
   readonly [__palistorRefBrand]: T;
 } & object;
 
-/** Типизированный список entity. */
+/** Typed entity list. */
 export type PalistorList<T extends Record<string, any>> = ListProxyNode<PalistorRef<T>>;
 
-/** Маркерный тип для typed list node в конфиге. */
+/** Marker type for a typed list node in the config. */
 export type TypedListNode<TEntity extends Record<string, any>> =
   readonly [any, any?] & { readonly [__typedListBrand]: TEntity };
 
-/** Typed resolver для списка. */
+/** Typed list resolver. */
 export type ListResolver<TEntity extends Record<string, any>> =
   (values: any, store: ProxyStore<any>) => Promise<TEntity[]>;
 
-/** Typed template: каждый ключ Entity → ConfigNode с нужным типом value. */
+/** Typed template: each Entity key → ConfigNode with the matching value type. */
 export type TemplateConfig<TEntity extends Record<string, any>> = {
   [K in keyof TEntity]: ConfigNode<TEntity[K], TEntity>;
 };
 
-/** Извлечь entity type из PalistorRef. */
+/** Extract the entity type from a PalistorRef. */
 export type InferEntity<T> = T extends PalistorRef<infer E> ? E : never;
 
-// ─── Flow proxy типы (defineFlow) ────────────────────────────────────────────
+// ─── Flow proxy types (defineFlow) ───────────────────────────────────────────
 
 /**
- * Прокси одного шага флоу: обычный group-proxy конфига шага, обогащённый
- * вычисляемым `status` (см. {@link StepStatus}).
+ * Proxy of a single flow step: the step config's regular group proxy,
+ * enriched with the computed `status` (see {@link StepStatus}).
  */
 export type FlowStepProxy<C, M extends FieldMapping = {}> =
   ConfigNodeToProxy<C, M> & { readonly status: StepStatus };
 
 /**
- * Прокси коллекции шагов (flow.steps): доступ по индексу (кортеж), по ключу
- * и живая ссылка `.current` на прокси активного шага.
+ * Proxy of the step collection (flow.steps): access by index (tuple), by key,
+ * plus a live `.current` reference to the active step's proxy.
  */
 export type FlowStepsProxy<S extends readonly AnyFlowStep[], M extends FieldMapping = {}> =
   { readonly [I in keyof S]: S[I] extends FlowStep<any, infer C> ? FlowStepProxy<C, M> : never } &
   { readonly [Step in S[number] as Step["key"]]: FlowStepProxy<Step["config"], M> } & {
-    /** Прокси активного шага — перезаписывается при каждой навигации. */
+    /** Proxy of the active step — replaced on every navigation. */
     readonly current: FlowStepProxy<S[number]["config"], M>;
   };
 
 /**
- * Прокси flow-ноды (defineFlow): group-proxy + навигационное состояние и методы.
+ * Proxy of a flow node (defineFlow): group proxy + navigation state and methods.
  */
 export type FlowProxyNode<S extends readonly AnyFlowStep[], M extends FieldMapping = {}> =
   Omit<ApplyFieldMapping<GroupProxyNode, M>, "values"> & {
-    /** Ключ активного шага (реактивный). */
+    /** Key of the active step (reactive). */
     readonly currentStepKey: S[number]["key"];
-    /** Индекс активного шага (реактивный). */
+    /** Index of the active step (reactive). */
     readonly currentStepIndex: number;
-    /** true, если стек посещений непуст (надёжный гард для кнопки Back). */
+    /** true when the visit stack is non-empty (reliable guard for a Back button). */
     readonly canGoBack: boolean;
-    /** Путь посещений: [...visitStack, currentStepKey] (реактивный). */
+    /** Visit path: [...visitStack, currentStepKey] (reactive). */
     readonly history: readonly string[];
-    /** Ошибки последнего validate()/финализации (реактивные). */
+    /** Errors from the last validate()/finalization (reactive). */
     readonly errors: ReadonlyArray<FlowError>;
-    /** Коллекция шагов: steps[0], steps.key, steps.current, steps.length. */
+    /** Step collection: steps[0], steps.key, steps.current, steps.length. */
     readonly steps: FlowStepsProxy<S, M>;
-    /** Аккумулированные значения всех шагов — живая ссылка (как у группы). */
+    /** Accumulated values of all steps — live reference (like a group's). */
     readonly values: FlowValues<S>;
-    /** Перейти к следующему ВИДИМОМУ шагу; если впереди нет — финализация через submit(). */
+    /** Advance to the next VISIBLE step; if none remain — finalize via submit(). */
     nextStep(): void;
-    /** Вернуться по стеку посещений. No-op при пустом стеке. */
+    /** Go back along the visit stack. No-op when the stack is empty. */
     back(): void;
-    /** Прыжок к шагу по ключу или индексу. Throw при неизвестном ключе/индексе. */
+    /** Jump to a step by key or index. Throws on an unknown key/index. */
     goTo(keyOrIndex: S[number]["key"] | number): void;
-    /** Валидация посещённых шагов → ошибки в flow.errors. Пустой массив = валидно. */
+    /** Validate visited steps → errors land in flow.errors. Empty array = valid. */
     validate(): FlowError[];
   };
 
 /**
- * Рекурсивно конвертирует узел конфига в его прокси-тип:
+ * Recursively converts a config node into its proxy type:
  * - FlowNode (defineFlow)                       → `FlowProxyNode<S>`
  * - TypedListNode (defineList<TEntity>)         → `ListProxyNode<PalistorRef<TEntity>>`
- * - ListNode (массив `[template, listConfig?]`) → `ListProxyNode<...>`
- * - Листовой узел (есть `value`)               → `FieldProxyNode<TValue>`
- * - Групповой узел                             → `GroupProxyNode & { дочерние поля… }`
+ * - ListNode (array `[template, listConfig?]`)  → `ListProxyNode<...>`
+ * - Leaf node (has `value`)                     → `FieldProxyNode<TValue>`
+ * - Group node                                  → `GroupProxyNode & { child fields… }`
  */
 type ConfigNodeToProxy<T, M extends FieldMapping = {}> =
   [InferFlowSteps<T>] extends [never]
@@ -469,11 +467,11 @@ type ConfigNodeToProxy<T, M extends FieldMapping = {}> =
     : FlowProxyNode<InferFlowSteps<T>, M>;
 
 /**
- * Полный прокси для конфига формы: каждый ключ маппируется в прокси-узел.
- * Корневой прокси также включает GroupProxyNode (submit, reset, setValues, dirty, …).
+ * Full proxy for a form config: every key maps to a proxy node.
+ * The root proxy also includes GroupProxyNode (submit, reset, setValues, dirty, …).
  *
- * `M` — карта переименования полей (см. {@link FieldMapping}). По умолчанию `{}`
- * (identity: имена свойств не меняются).
+ * `M` is the field rename map (see {@link FieldMapping}). Defaults to `{}`
+ * (identity: property names are unchanged).
  */
 export type ConfigProxy<TConfig extends Record<string, any>, M extends FieldMapping = {}> =
   ApplyFieldMapping<GroupProxyNode, M> & {
@@ -482,31 +480,31 @@ export type ConfigProxy<TConfig extends Record<string, any>, M extends FieldMapp
 
 // ─── Raw-store brand ────────────────────────────────────────────────────────
 //
-// Брендируем `store.proxy` (и любое его поддерево) уникальным символом,
-// чтобы TypeScript мог отличать «сырой» store-проxy от tracking-proxy,
-// который возвращает `useForm()`. Бренд распространяется рекурсивно по
-// каждому узлу: группе, листу, списку — поэтому
-// `store.proxy.foo.bar.baz` тоже несёт `RawStoreProxyMarker`.
+// `store.proxy` (and every subtree of it) is branded with a unique symbol so
+// TypeScript can tell the "raw" store proxy apart from the tracking proxy
+// returned by `useForm()`. The brand propagates recursively through every
+// node — group, leaf, list — so `store.proxy.foo.bar.baz` also carries
+// `RawStoreProxyMarker`.
 //
-// Это нужно для того, чтобы случайный вызов
+// This makes an accidental call like
 //   useForm(store.proxy.someGroup)
-// вызывал ошибку компиляции (см. перегрузки `useForm`).
+// a compile-time error (see the `useForm` overloads).
 
 declare const __rawStoreBrand: unique symbol;
 
 /**
- * Маркер «сырого» узла из `store.proxy`. Не передавайте такие значения в
- * `useForm()` — используйте `useForm(store)` и обращайтесь к поддеревьям
- * через возвращённый tracking-proxy.
+ * Marker of a "raw" node from `store.proxy`. Do not pass such values to
+ * `useForm()` — call `useForm(store)` and access subtrees through the
+ * returned tracking proxy.
  */
 export interface RawStoreProxyMarker {
   readonly [__rawStoreBrand]: "Do not pass store.proxy or store.proxy.subtree to useForm. Use: const form = useForm(store); then form.subtree";
 }
 
 /**
- * Та же рекурсивная конвертация конфига в прокси, что и `ConfigNodeToProxy`,
- * но на каждом уровне (группа / лист / список) пересекается с
- * `RawStoreProxyMarker`, чтобы бренд распространялся по всему дереву.
+ * Same recursive config→proxy conversion as `ConfigNodeToProxy`, but every
+ * level (group / leaf / list) is intersected with `RawStoreProxyMarker` so
+ * the brand propagates through the whole tree.
  */
 type ConfigNodeToProxyRaw<T, M extends FieldMapping = {}> =
   [InferFlowSteps<T>] extends [never]
@@ -524,12 +522,11 @@ type ConfigNodeToProxyRaw<T, M extends FieldMapping = {}> =
     : FlowProxyNode<InferFlowSteps<T>, M> & RawStoreProxyMarker;
 
 /**
- * Тип значения `store.proxy`. Структурно повторяет `ConfigProxy<TConfig>`,
- * но на каждом узле дерева добавляет {@link RawStoreProxyMarker} —
- * это позволяет TypeScript ругаться на `useForm(store.proxy.X)`.
+ * Type of `store.proxy`. Structurally identical to `ConfigProxy<TConfig>`,
+ * but every node of the tree carries {@link RawStoreProxyMarker} — which
+ * lets TypeScript reject `useForm(store.proxy.X)`.
  *
- * Передача такого значения (или его поддерева) в `useForm` ведёт к
- * ошибке вида:
+ * Passing such a value (or its subtree) into `useForm` produces an error like:
  *   Argument of type 'X' is not assignable to parameter of type
  *   '_PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first'.
  */
@@ -539,8 +536,8 @@ export type RawStoreProxy<TConfig extends Record<string, any>, M extends FieldMa
   };
 
 /**
- * Прокси для отдельной entity: id отображается как string,
- * остальные поля — аналогично Palistor<T>.
+ * Proxy for a single entity: id is exposed as string,
+ * remaining fields follow the Palistor<T> rules.
  */
 export type PalistorEntityProxy<T extends { id?: any }> = GroupProxyNode & {
   readonly id: string;
@@ -551,14 +548,14 @@ export type PalistorEntityProxy<T extends { id?: any }> = GroupProxyNode & {
 };
 
 /**
- * Маппит интерфейс значений формы на прокси-типы.
- * В отличие от ConfigProxy (работает с конфиг-нодами), Palistor
- * принимает простой интерфейс значений — удобно для типизации пропсов
- * дочерних компонентов, получающих поддерево из useForm.
+ * Maps a form-values interface onto proxy types.
+ * Unlike ConfigProxy (which works with config nodes), Palistor takes a plain
+ * values interface — convenient for typing props of child components that
+ * receive a subtree from useForm.
  *
- * **Важно:** из пакета этот тип экспортируется под именем `PalistorProxy`,
- * так как имя `Palistor` занято одноимённым классом.
- * Используйте `import type { PalistorProxy } from "palistor"`.
+ * **Note:** the package exports this type as `PalistorProxy`, because the
+ * name `Palistor` is taken by the class of the same name.
+ * Use `import type { PalistorProxy } from "palistor"`.
  *
  * @example
  * ```ts
@@ -585,10 +582,10 @@ export type Palistor<T extends Record<string, any> = {}, M extends FieldMapping 
   };
 
 /**
- * Рекурсивно извлекает типы значений из конфига формы.
- * Листовые узлы (содержащие `value`) → тип значения.
- * Групповые узлы → вложенный объект с теми же правилами.
- * Служебные ключи (validate, formatter, …) — пропускаются.
+ * Recursively extracts value types from a form config.
+ * Leaf nodes (containing `value`) → the value type.
+ * Group nodes → a nested object with the same rules.
+ * Service keys (validate, formatter, …) are skipped.
  */
 export type ExtractValues<T> = {
   [K in keyof T as K extends ConfigSkipKeys ? never : K]: [InferFlowSteps<T[K]>] extends [never]
@@ -602,18 +599,18 @@ export type ExtractValues<T> = {
     : FlowValues<InferFlowSteps<T[K]>>;
 };
 
-// ─── Интерфейсы Store ────────────────────────────────────────────────────────
+// ─── Store interfaces ────────────────────────────────────────────────────────
 
 /**
- * Карта переименования internal → external для проекции полей через proxy.
+ * internal → external rename map for projecting field names through the proxy.
  *
- * Sparse: указываем только те ключи, которые переименовываем; остальные
- * остаются с оригинальными именами. Применяется на границе proxy
- * (GET/SET/ownKeys/spread) и в tracking-proxy; internal-логика (FieldState,
- * compute, pipelines) остаётся неизменной.
+ * Sparse: list only the keys you rename; the rest keep their original names.
+ * Applied at the proxy boundary (GET/SET/ownKeys/spread) and in the tracking
+ * proxy; internal logic (FieldState, compute, pipelines) is unchanged.
  *
- * **Инвариант:** карта — биекция. External-имя не должно совпадать с именем
- * соседнего дочернего поля и не должно указывать на два разных internal-ключа.
+ * **Invariant:** the map is a bijection. An external name must not collide
+ * with a sibling child-field name and must not point at two different
+ * internal keys.
  *
  * @example
  * fieldMapping: {
@@ -625,12 +622,13 @@ export type ExtractValues<T> = {
 export type FieldMapping = Partial<Record<MappableKey, string>>;
 
 /**
- * Применяет карту переименования `M` (internal → external) к типу прокси-узла `T`:
- * каждый ключ `K`, присутствующий в `M`, переименовывается в `M[K]`; остальные
- * остаются как есть. Модификаторы (`readonly`, геттер/сеттер `value`) сохраняются.
+ * Applies the rename map `M` (internal → external) to a proxy node type `T`:
+ * every key `K` present in `M` is renamed to `M[K]`; the rest are unchanged.
+ * Modifiers (`readonly`, the `value` getter/setter) are preserved.
  *
- * Пустая карта (`{}`) → identity: возвращается исходный `T` без перестроения,
- * поэтому поведение по умолчанию строго совпадает с прежним (нулевой оверхед).
+ * An empty map (`{}`) → identity: the original `T` is returned without
+ * remapping, so the default behavior matches the pre-mapping one exactly
+ * (zero overhead).
  */
 export type ApplyFieldMapping<T, M extends FieldMapping> =
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -640,24 +638,24 @@ export type ApplyFieldMapping<T, M extends FieldMapping> =
         [K in keyof T as K extends keyof M ? (M[K] extends string ? M[K] : K) : K]: T[K];
       };
 
-// ─── Валидатор external-config (compile-time strict, без хелпера) ─────────────
+// ─── External-config validator (compile-time strict, no helper) ──────────────
 
 declare const CONFIG_KEY_ERROR: unique symbol;
-/** Брендированный тип-ошибка: делает свойство неприсваиваемым и выносит текст
- *  подсказки в сообщение компилятора. */
+/** Branded error type: makes the property unassignable and surfaces the hint
+ *  text in the compiler message. */
 export type ConfigKeyError<Msg extends string> = { readonly [CONFIG_KEY_ERROR]: Msg };
 
-/** Internal-имена config-ключей, которые карта `M` активно переименовывает. */
+/** Internal config key names actively renamed by the map `M`. */
 type RemappedInternalConfigKey<M extends FieldMapping> = keyof M & MappableConfigKey;
 
 /**
- * Проверяет дерево конфига `T` против карты `M`: любой узел, содержащий
- * INTERNAL-имя ремапленного config-ключа (`isRequired` при `isRequired→required`),
- * получает на этом ключе {@link ConfigKeyError} → присваивание падает с читаемым
- * текстом. Пустая карта → `unknown` (пересечение-identity, нулевой оверхед).
+ * Checks the config tree `T` against the map `M`: any node containing the
+ * INTERNAL name of a remapped config key (`isRequired` when `isRequired→required`)
+ * gets a {@link ConfigKeyError} on that key → the assignment fails with a
+ * readable message. Empty map → `unknown` (intersection identity, zero overhead).
  *
- * Пересекается с `TConfig` в опции `config`, поэтому валидные ключи сохраняют
- * исходный тип (`T[K] & unknown`), а ошибочные становятся неприсваиваемыми.
+ * Intersected with `TConfig` in the `config` option, so valid keys keep their
+ * original type (`T[K] & unknown`) while offending ones become unassignable.
  */
 export type ValidateExternalConfig<T, M extends FieldMapping> =
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -672,10 +670,11 @@ export type ValidateExternalConfig<T, M extends FieldMapping> =
       : unknown;
 
 /**
- * Тип узла конфига в ЕДИНОМ публичном словаре карты `M` (external-имена).
- * Опционально: аннотируйте узел/константу конфига этим типом, чтобы получить
- * автокомплит external-имён (`required`, `helpText`, …). Для строгости аннотация
- * не обязательна — валидатор в `config` уже ловит internal-имена.
+ * Config node type in the SINGLE public vocabulary of the map `M` (external
+ * names). Optional: annotate a config node/constant with this type to get
+ * autocomplete for external names (`required`, `helpText`, …). Strictness
+ * does not require the annotation — the validator on `config` already
+ * catches internal names.
  */
 export type ExternalConfigNode<
   M extends FieldMapping,
@@ -684,16 +683,17 @@ export type ExternalConfigNode<
 > = ApplyFieldMapping<ConfigNode<TValue, TValues>, M>;
 
 /**
- * Тип конфига формы в external-именах карты `M` (аналог {@link FormConfig}, но с
- * переименованными состояниями поля). Для ОПЦИОНАЛЬНОЙ аннотации ради автокомплита
- * external-имён.
+ * Form config type in the external names of the map `M` (like {@link FormConfig},
+ * but with renamed field-state keys). For OPTIONAL annotation, purely for
+ * external-name autocomplete.
  *
- * ⚠️ Компромисс: это `Record<string, …>` (как {@link FormConfig}), поэтому
- * аннотация расширяет тип литерала и `ExtractValues`/типизация `initialValues`
- * теряют точность. Рекомендуемый путь — **не аннотировать**: валидатор в опции
- * `config` (см. {@link ValidateExternalConfig}) и так ловит internal-имена, а
- * точный вывод значений полей из литерала сохраняется. Аннотацию используйте
- * только там, где точный `ExtractValues` не нужен.
+ * ⚠️ Trade-off: this is a `Record<string, …>` (like {@link FormConfig}), so
+ * the annotation widens the literal type and `ExtractValues`/`initialValues`
+ * typing lose precision. The recommended path is to **not annotate**: the
+ * validator on the `config` option (see {@link ValidateExternalConfig})
+ * already catches internal names, while precise value inference from the
+ * literal is preserved. Use the annotation only where precise `ExtractValues`
+ * is not needed.
  */
 export type ExternalConfig<
   M extends FieldMapping,
@@ -707,33 +707,34 @@ export interface ProxyStoreOptions<
   TMapping extends FieldMapping = {},
 > {
   /**
-   * Декларативное описание структуры и полей формы. Остаётся неизменяемым.
+   * Declarative description of the form structure and fields. Never mutated.
    *
-   * При активном `fieldMapping` конфиг пишется в ЕДИНОМ публичном словаре карты
-   * (external-имена: `required`, `helpText`, …). Пересечение с
-   * {@link ValidateExternalConfig} ловит internal-имена (`isRequired`, …) как
-   * ошибку типа с подсказкой. `NoInfer` не даёт `TMapping` «протечь» из конфига —
-   * карта выводится только из `fieldMapping`.
+   * When `fieldMapping` is active, the config is written in the map's SINGLE
+   * public vocabulary (external names: `required`, `helpText`, …). The
+   * intersection with {@link ValidateExternalConfig} catches internal names
+   * (`isRequired`, …) as a type error with a hint. `NoInfer` prevents
+   * `TMapping` from leaking out of the config — the map is inferred from
+   * `fieldMapping` only.
    */
   config: TConfig & ValidateExternalConfig<TConfig, NoInfer<TMapping>>;
   /**
-   * Стартовые значения, которые перекрывают значения по умолчанию из конфига.
-   * Структура совпадает со структурой конфига, но все поля опциональны.
+   * Initial values that override the defaults from the config.
+   * Mirrors the config structure, but all fields are optional.
    */
   initialValues?: DeepPartialValues<ExtractValues<TConfig>>;
   /**
-   * Начальный контекст. Если передан, eager resolvers увидят его при первом запуске.
-   * Аналогично вызову `setContext()` до `launchEager()`.
+   * Initial context. When provided, eager resolvers see it on their first run.
+   * Equivalent to calling `setContext()` before `launchEager()`.
    */
   context?: Record<string, unknown>;
   /**
-   * Необязательная карта переименования internal → external. Задаёт, под какими
-   * именами внутренние свойства поля видны через proxy (GET + ownKeys/spread +
-   * tracking). Если не передан — поведение и производительность без изменений.
+   * Optional internal → external rename map. Defines the names under which
+   * internal field properties are visible through the proxy (GET + ownKeys/
+   * spread + tracking). When omitted, behavior and performance are unchanged.
    *
-   * Тип литерала карты захватывается (через `const`-параметр класса Palistor) и
-   * прокидывается в тип `store.proxy` / `useForm(store)`, поэтому переименованные
-   * имена типизируются статически — без `as any`.
+   * The map's literal type is captured (via the Palistor class `const` type
+   * parameter) and threaded into the `store.proxy` / `useForm(store)` types,
+   * so renamed names are statically typed — no `as any`.
    *
    * @see FieldMapping
    */
@@ -746,32 +747,32 @@ export interface ProxyStore<
   TMapping extends FieldMapping = {},
 > {
   /**
-   * @internal Обратная карта переименования external → internal (sparse).
-   * Используется на входе proxy (GET/SET/tracking): приходящий external-ключ
-   * переводится в internal одной строкой. Пустая, если `fieldMapping` не задан.
+   * @internal Reverse rename map, external → internal (sparse).
+   * Used on proxy input (GET/SET/tracking): an incoming external key is
+   * translated to internal in one lookup. Empty when `fieldMapping` is unset.
    */
   readonly externalToInternal: Record<string, string>;
 
   /**
-   * Реактивный прокси. Повторяет структуру конфига.
-   * GET .value / .isVisible / … → из вычисленного FieldState
+   * Reactive proxy. Mirrors the config structure.
+   * GET .value / .isVisible / … → from the computed FieldState
    * SET .value = X → formatter → validate → recompute → notify
    *
-   * Имена свойств спроецированы согласно `TMapping` (см. {@link FieldMapping}).
+   * Property names are projected according to `TMapping` (see {@link FieldMapping}).
    *
-   * Тип помечен {@link RawStoreProxyMarker} — этот узел и все его поддеревья
-   * **нельзя** передавать в `useForm()` (ни на root-, ни на subtree-уровне).
-   * Для подписки в React используйте `useForm(store)` и обращайтесь к
-   * полям через возвращённый tracking-proxy.
+   * The type carries {@link RawStoreProxyMarker} — this node and all of its
+   * subtrees must **not** be passed to `useForm()` (neither root nor subtree).
+   * To subscribe in React, use `useForm(store)` and access fields through the
+   * returned tracking proxy.
    */
   proxy: RawStoreProxy<TConfig, TMapping>;
 
   /**
-   * Нереактивный контекст — произвольные данные, доступные во всех callback-ах
-   * (resolve.resolver, onSubmit, onChange, …) через `store.context`.
+   * Non-reactive context — arbitrary data available in all callbacks
+   * (resolve.resolver, onSubmit, onChange, …) via `store.context`.
    *
-   * Устанавливается через `setContext()` или хук `useStoreContext()`.
-   * Не является частью формы — не попадает в getValues(), submit, persist.
+   * Set via `setContext()` or the `useStoreContext()` hook.
+   * Not part of the form — excluded from getValues(), submit, persist.
    *
    * @example
    * store.context.accountId; // read
@@ -779,8 +780,8 @@ export interface ProxyStore<
   readonly context: Record<string, unknown>;
 
   /**
-   * Установить нереактивный контекст. Заменяет текущий context целиком.
-   * Вызывается из React (useStoreContext) или императивно.
+   * Sets the non-reactive context. Replaces the current context wholesale.
+   * Called from React (useStoreContext) or imperatively.
    *
    * @example
    * store.setContext({ accountId: "abc", tenant: "acme" });
@@ -788,55 +789,55 @@ export interface ProxyStore<
   setContext(ctx: Record<string, unknown>): void;
 
   /**
-   * Подписаться на изменение состояния конкретного узла конфига.
-   * Возвращает функцию-отписку.
+   * Subscribes to state changes of a specific config node.
+   * Returns an unsubscribe function.
    */
   subscribe: (node: object, listener: () => void) => Unsubscribe;
 
   /**
-   * Подписаться на ЛЮБОЕ изменение в хранилище.
-   * Используется useForm для useSyncExternalStore.
-   * Возвращает функцию-отписку.
+   * Subscribes to ANY store change.
+   * Used by useForm for useSyncExternalStore.
+   * Returns an unsubscribe function.
    */
   subscribeGlobal: (listener: () => void) => Unsubscribe;
 
   /**
-   * Глобальная версия хранилища. Инкрементируется при каждом изменении.
-   * Используется как snapshot для useSyncExternalStore.
+   * Global store version. Incremented on every change.
+   * Used as the snapshot for useSyncExternalStore.
    */
   getVersion: () => number;
 
   /**
-   * Версия конкретного узла. Обновляется при изменении состояния узла.
-   * Используется для точечной подписки (re-render только по прочитанным полям).
+   * Version of a specific node. Bumped when the node's state changes.
+   * Used for targeted subscriptions (re-render only on fields actually read).
    */
   getNodeVersion: (node: object) => number;
 
   /**
-   * Все текущие значения полей в виде вложенного объекта.
+   * All current field values as a nested object.
    */
   getValues: () => ExtractValues<TConfig>;
 
   /**
-   * Регистрирует функцию перевода (next-intl, i18next, …) для резолва
+   * Registers a translation function (next-intl, i18next, …) for resolving
    * label / placeholder / description.
    *
-   * При смене транслятора — все подписанные компоненты перерендерятся
-   * с актуальными переводами.
+   * When the translator changes, all subscribed components re-render with
+   * up-to-date translations.
    *
-   * @param t — функция перевода или null для сброса
+   * @param t — translation function, or null to clear
    */
   setTranslator: (t: TranslateFn | null) => void;
 
   /**
-   * Менеджер персистенции — гидратация и автосохранение состояния формы.
+   * Persistence manager — hydration and auto-saving of form state.
    */
   persist: PersistManager;
 
   /**
-   * Регистрирует функцию уведомления (toast, alert, …) для resolver onError.
+   * Registers a notification function (toast, alert, …) for resolver onError.
    *
-   * @param fn — функция уведомления или null для сброса
+   * @param fn — notification function, or null to clear
    */
   setNotifier: (fn: NotifyFn | null) => void;
 
@@ -847,28 +848,28 @@ export interface ProxyStore<
   submit(): Promise<SubmitResult>;
 
   /**
-   * Reset root form к defaults из конфига (или к переданным значениям).
+   * Resets the root form to config defaults (or to the provided values).
    */
   reset(values?: DeepPartialValues<ExtractValues<TConfig>>): void;
   /**
-   * Bulk-обновление значений: применяет патч ко всему store за один recompute + notify.
-   * Без setters (чтобы избежать рекурсии) и без форматтеров.
-   * Используется для подлива серверных данных или bulk-изменений из React.
+   * Bulk value update: applies a patch to the whole store in a single recompute + notify.
+   * Skips setters (to avoid recursion) and formatters.
+   * Used for feeding in server data or bulk changes from React.
    */
   setValues(patch: DeepPartialValues<ExtractValues<TConfig>>): void;
 
   /**
-   * Создать или обновить entity (или массив entities) в реестре.
-   * - Если entity с таким id не существует — создаётся, leaf-ноды регистрируются.
-   * - Если существует — рекурсивный merge; изменённые leaf-ноды уведомляются.
-   * - Batch-режим: массив обрабатывается одним recompute + notifyChanged.
+   * Creates or updates an entity (or an array of entities) in the registry.
+   * - If no entity with the id exists — it is created and its leaf nodes registered.
+   * - If it exists — recursive merge; changed leaf nodes are notified.
+   * - Batch mode: an array is processed in one recompute + notifyChanged.
    */
   set(data: import("../entityRegistry").EntityData | import("../entityRegistry").EntityData[]): void;
 
   /**
-   * Удалить entity из реестра по ID.
-   * Очищает leaf-ноды, bindings и resolvedCache. Уведомляет подписчиков.
-   * No-op если entity не существует.
+   * Deletes an entity from the registry by ID.
+   * Clears leaf nodes, bindings and resolvedCache. Notifies subscribers.
+   * No-op when the entity does not exist.
    */
   delete(id: string): void;
 }

@@ -16,11 +16,11 @@ describe("resolveGroupByPath", () => {
     expect(resolveGroupByPath(root, "")).toBe(root);
   });
 
-  it("одноуровневый путь → вложенная группа", () => {
+  it("a single-level path → a nested group", () => {
     expect(resolveGroupByPath(root, "passport")).toBe(root.passport);
   });
 
-  it("многоуровневый dot-путь", () => {
+  it("a multi-level dot-path", () => {
     const deep = {
       level1: { level2: { value: "" } },
     } as unknown as AnyConfigNode;

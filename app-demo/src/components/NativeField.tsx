@@ -1,32 +1,32 @@
 /**
- * NativeField — намеренно НЕ знает про Palistor.
+ * NativeField — deliberately knows NOTHING about Palistor.
  *
- * Это стилизованный input в стиле MUI / нативного HTML: он принимает пропсы
+ * A styled input in the MUI / native-HTML spirit: it accepts props
  * `required` / `disabled` / `readOnly` / `error` / `helperText` / `helpText`
- * — те самые имена, в которые `fieldMapping` переименовывает внутренние
- * свойства Palistor. Поэтому его можно рендерить простым спредом:
+ * — the very names `fieldMapping` renames Palistor's internal properties
+ * into. So it can be rendered with a plain spread:
  *
  *   <NativeField {...form.email} />
  *
- * Никаких адаптеров `required={form.email.isRequired}` — spread совпадает
- * один-к-одному.
+ * No `required={form.email.isRequired}` adapters — the spread matches
+ * one-to-one.
  */
 
 export interface NativeFieldProps {
-  // не переименованные Palistor-свойства
+  // Palistor properties that are not renamed
   label?: string;
   value?: string;
   placeholder?: string;
   onValueChange?: (v: string) => void;
   isVisible?: boolean;
-  // переименованные через fieldMapping (MUI / native-стиль)
+  // renamed via fieldMapping (MUI / native style)
   required?: boolean;
   disabled?: boolean;
   readOnly?: boolean;
   error?: boolean;
   helperText?: string;
   helpText?: string;
-  // остаточные ключи из spread (dirty, loading, componentProps…) — игнорируем
+  // leftover spread keys (dirty, loading, componentProps…) — ignored
   [key: string]: unknown;
 }
 
@@ -74,7 +74,7 @@ export function NativeField({
         `}
       />
 
-      {/* helperText (из errorMessage) в приоритете, иначе helpText (из description) */}
+      {/* helperText (from errorMessage) takes priority, otherwise helpText (from description) */}
       {error && helperText ? (
         <span className="block text-xs text-red-500 mt-1">{helperText}</span>
       ) : helpText ? (

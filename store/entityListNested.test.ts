@@ -1,18 +1,18 @@
 /**
- * Тесты nested-of-nested per-entity списков (вариант C, фаза C4).
+ * Tests for nested-of-nested per-entity lists.
  *
- * Покрываем две оси вложенности:
+ * Two nesting axes are covered:
  *
- *  1. **Entity-в-entity** (основная цель C4): `users[*].contacts[*].emails[*]`.
- *     Каждый уровень — отдельная entity со своим списком. Работает «почти
- *     автоматически» за счёт рекурсивных хелперов C1–C3; здесь фиксируем
- *     каскад на 3 уровня, изоляцию мутаций и tracking-версий на глубине.
+ *  1. **Entity-in-entity** (the main target): `users[*].contacts[*].emails[*]`.
+ *     Every level is a separate entity with its own list. Works "almost
+ *     automatically" thanks to the recursive helpers; here we pin down the
+ *     3-level cascade, mutation isolation and tracking-version isolation at depth.
  *
- *  2. **List-внутри-nested-группы** (закрытый в C4 блокер): список объявлен
- *     внутри структурной группы (`profile.contacts`), которая НЕ является
- *     отдельной entity. До C4 `buildEntityProjectionProxy` сбрасывал владельца
- *     при рекурсии в группу → список получал неверного владельца и возвращал
- *     undefined. Теперь настоящий owner протаскивается через рекурсию.
+ *  2. **List inside a nested group** (a fixed blocker): the list is declared
+ *     inside a structural group (`profile.contacts`) that is NOT a separate
+ *     entity. Previously `buildEntityProjectionProxy` reset the owner when
+ *     recursing into a group → the list got the wrong owner and returned
+ *     undefined. Now the real owner is threaded through the recursion.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -23,7 +23,7 @@ function flush() {
   return new Promise<void>((r) => setTimeout(r, 0));
 }
 
-// ─── Ось 1: entity → entity → entity ──────────────────────────────────────────
+// ─── Axis 1: entity → entity → entity ──────────────────────────────────────────
 
 function make3Level() {
   return new Palistor({
@@ -48,7 +48,7 @@ function make3Level() {
 }
 
 describe("nested-of-nested entity lists (C4)", () => {
-  it("add на каждом уровне; getValues отдаёт глубокую структуру", () => {
+  it("add at every level; getValues returns the deep structure", () => {
     const store = make3Level();
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
@@ -72,7 +72,7 @@ describe("nested-of-nested entity lists (C4)", () => {
     ]);
   });
 
-  it("list.getValues() на каждом уровне отдаёт свой состав", () => {
+  it("list.getValues() at every level returns its own membership", () => {
     const store = make3Level();
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
@@ -86,7 +86,7 @@ describe("nested-of-nested entity lists (C4)", () => {
     expect(contacts.items[0].emails.getValues()).toEqual([{ id: "e1", addr: "a@x.io" }]);
   });
 
-  it("каскадное удаление через 3 уровня: delete(u1) уносит contacts И emails", () => {
+  it("cascade deletion through 3 levels: delete(u1) takes contacts AND emails", () => {
     const store = make3Level();
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
@@ -96,14 +96,14 @@ describe("nested-of-nested entity lists (C4)", () => {
     contacts.items[0].emails.add({ id: "e1", addr: "a@x.io" });
     contacts.items[1].emails.add({ id: "e2", addr: "b@x.io" });
 
-    // Все 5 entity (u1 + c1,c2 + e1,e2) в реестре.
+    // All 5 entities (u1 + c1,c2 + e1,e2) are in the registry.
     for (const id of ["u1", "c1", "c2", "e1", "e2"]) {
       expect(store.entityRegistry.has(id)).toBe(true);
     }
 
     store.delete("u1");
 
-    // Каскад снёс всё дерево, без orphan'ов.
+    // The cascade removed the whole tree, no orphans.
     for (const id of ["u1", "c1", "c2", "e1", "e2"]) {
       expect(store.entityRegistry.has(id)).toBe(false);
     }
@@ -111,7 +111,7 @@ describe("nested-of-nested entity lists (C4)", () => {
     expect(store.entityRegistry.getChildrenByOwner("c1")).toBeUndefined();
   });
 
-  it("каскад одного поддерева не задевает соседнее (delete(c1) не трогает c2/e2)", () => {
+  it("a subtree cascade does not touch its sibling (delete(c1) leaves c2/e2 alone)", () => {
     const store = make3Level();
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
@@ -124,12 +124,12 @@ describe("nested-of-nested entity lists (C4)", () => {
     store.delete("c1");
 
     expect(store.entityRegistry.has("c1")).toBe(false);
-    expect(store.entityRegistry.has("e1")).toBe(false); // каскад вглубь
+    expect(store.entityRegistry.has("e1")).toBe(false); // deep cascade
     expect(store.entityRegistry.has("c2")).toBe(true);
     expect(store.entityRegistry.has("e2")).toBe(true);
   });
 
-  it("изоляция мутаций на глубине: emails двух contacts независимы", () => {
+  it("mutation isolation at depth: two contacts' emails are independent", () => {
     const store = make3Level();
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
@@ -144,7 +144,7 @@ describe("nested-of-nested entity lists (C4)", () => {
     expect(contacts.items[1].emails.length).toBe(0);
   });
 
-  it("изоляция tracking-версий на глубине: мутация c1.emails не бампит c2.emails", () => {
+  it("tracking-version isolation at depth: mutating c1.emails does not bump c2.emails", () => {
     const store = make3Level();
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
@@ -166,7 +166,7 @@ describe("nested-of-nested entity lists (C4)", () => {
     expect(store.getNodeVersion(elsC2 as unknown as object)).toBe(vC2before);
   });
 
-  it("resolver child-list тоже работает на 2-м уровне (contacts резолвятся)", async () => {
+  it("a child-list resolver also works at level 2 (contacts get resolved)", async () => {
     const contactsResolver = vi.fn(async (v: any) =>
       v.id === "u1" ? [{ id: "c1", phone: "+1" }] : [],
     );
@@ -195,14 +195,14 @@ describe("nested-of-nested entity lists (C4)", () => {
     await flush();
 
     expect(contactsResolver).toHaveBeenCalledTimes(1);
-    // У зарезолвленного contact c1 свой emails-список работает.
+    // The resolved contact c1 has a working emails list of its own.
     const c1List = (store.proxy as any).users.items[0].contacts.items[0];
     c1List.emails.add({ id: "e1", addr: "a@x.io" });
     expect(c1List.emails.getValues()).toEqual([{ id: "e1", addr: "a@x.io" }]);
   });
 });
 
-// ─── Ось 2: список внутри nested-группы (закрытый блокер) ──────────────────────
+// ─── Axis 2: a list inside a nested group (fixed blocker) ──────────────────────
 
 function makeGroupListStore() {
   return new Palistor({
@@ -223,8 +223,8 @@ function makeGroupListStore() {
   });
 }
 
-describe("list внутри nested-группы — owner = root entity (C4 блокер)", () => {
-  it("profile.contacts — рабочий list-proxy (не undefined), owner = root entity", () => {
+describe("a list inside a nested group — owner = root entity", () => {
+  it("profile.contacts is a working list proxy (not undefined), owner = root entity", () => {
     const store = makeGroupListStore();
     store.set({ id: "u1", name: "Alice", profile: { bio: "hi" } });
     (store.proxy as any).users.add("u1");
@@ -235,7 +235,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
 
     list.add({ id: "c1", phone: "+1" });
 
-    // owner проставлен на ROOT entity (u1), а не на группу profile.
+    // the owner is set to the ROOT entity (u1), not the profile group.
     expect(store.entityRegistry.get("c1")!.owner).toEqual({
       ownerId: "u1",
       ownerListNode: (store.rootConfig as any).users[0].profile.contacts,
@@ -243,7 +243,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
     expect([...store.entityRegistry.getChildrenByOwner("u1")!]).toEqual(["c1"]);
   });
 
-  it("getValues материализует список во вложенный path (users[0].profile.contacts)", () => {
+  it("getValues materializes the list into the nested path (users[0].profile.contacts)", () => {
     const store = makeGroupListStore();
     store.set({ id: "u1", name: "Alice", profile: { bio: "hi" } });
     (store.proxy as any).users.add("u1");
@@ -254,7 +254,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
     ]);
   });
 
-  it("entityProxy.values тоже содержит вложенный profile.contacts", () => {
+  it("entityProxy.values also contains the nested profile.contacts", () => {
     const store = makeGroupListStore();
     store.set({ id: "u1", name: "Alice", profile: { bio: "hi" } });
     (store.proxy as any).users.add("u1");
@@ -267,7 +267,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
     });
   });
 
-  it("каскадное удаление работает для списка в группе", () => {
+  it("cascade deletion works for a list inside a group", () => {
     const store = makeGroupListStore();
     store.set({ id: "u1", name: "Alice", profile: { bio: "hi" } });
     (store.proxy as any).users.add("u1");
@@ -278,7 +278,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
     expect(store.entityRegistry.has("c1")).toBe(false);
   });
 
-  it("изоляция между владельцами: profile.contacts разных users независимы", () => {
+  it("owner isolation: different users' profile.contacts are independent", () => {
     const store = makeGroupListStore();
     store.set([
       { id: "u1", name: "Alice", profile: { bio: "a" } },
@@ -296,7 +296,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
     expect((store.proxy as any).users.items[1].profile.contacts.length).toBe(0);
   });
 
-  it("persist round-trip переживает список в nested-группе", async () => {
+  it("a persist round-trip survives a list in a nested group", async () => {
     const storage = new Map<string, string>();
     const driver = {
       getItem: (k: string) => storage.get(k) ?? null,
@@ -319,7 +319,7 @@ describe("list внутри nested-группы — owner = root entity (C4 бл
     expect((store2.proxy as any).users.items[0].profile.contacts.getValues()).toEqual([
       { id: "c1", phone: "+1" },
     ]);
-    // Owner восстановлен → каскад работает после reload.
+    // The owner is restored → the cascade works after reload.
     expect(store2.entityRegistry.get("c1")!.owner!.ownerId).toBe("u1");
     store2.delete("u1");
     expect(store2.entityRegistry.has("c1")).toBe(false);

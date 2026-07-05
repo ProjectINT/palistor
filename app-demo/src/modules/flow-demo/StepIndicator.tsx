@@ -6,9 +6,9 @@ export interface StepMeta {
 }
 
 interface StepIndicatorProps {
-  /** Видимые шаги в порядке прохождения (скрытые ветвлением исключены). */
+  /** Visible steps in traversal order (those hidden by branching are excluded). */
   steps: StepMeta[];
-  /** flow-proxy — читаем реактивный `steps[key].status` каждого шага. */
+  /** The flow proxy — reads every step's reactive `steps[key].status`. */
   flow: any;
 }
 
@@ -28,7 +28,7 @@ export function StepIndicator({ steps, flow }: StepIndicatorProps) {
   return (
     <ol className="flex items-center gap-2">
       {steps.map((meta, index) => {
-        // status — вычисляемое свойство step-proxy: "active" | "completed" | null.
+        // status is a computed step-proxy property: "active" | "completed" | null.
         const status: "active" | "completed" | null = flow.steps[meta.key].status;
         const state = status ?? "pending";
 

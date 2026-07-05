@@ -9,11 +9,11 @@ export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amoun
     },
     value: "card" as PaymentType,
     label: (t: TranslateFn) => t("form.paymentType"),
-    // Пересчитывается только при изменении себя
+    // Recomputed only when it changes itself
     dependencies: [],
   },
   // --------------------------------------------------------------------------
-  // Сумма — общее поле
+  // Amount — a shared field
   // --------------------------------------------------------------------------
   
   amount: {

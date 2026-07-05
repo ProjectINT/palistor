@@ -1,14 +1,14 @@
 /**
- * Тесты: сущность с полем-списком, переданным в дочерний компонент
+ * Tests: an entity with a list field passed into a child component
  *
- * Сценарий:
- *   1. Объявляем сущность (простая форма / entity) с полем-списком.
- *   2. Рендерим родительский компонент — получаем form.listField.
- *   3. Передаём form.listField как проп в дочерний компонент.
- *   4. Дочерний компонент вызывает useForm(listField) и рендерит items.
+ * Scenario:
+ *   1. Declare an entity (simple form / entity) with a list field.
+ *   2. Render the parent component — obtain form.listField.
+ *   3. Pass form.listField as a prop into the child component.
+ *   4. The child component calls useForm(listField) and renders the items.
  *
- * Проверяем, что tracking proxy поддерева списка корректно принимается
- * useForm в дочернем компоненте.
+ * Verifies that the list subtree's tracking proxy is correctly accepted
+ * by useForm in the child component.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -21,10 +21,10 @@ function flushPromises() {
   return new Promise<void>((r) => setTimeout(r, 0));
 }
 
-// ─── Сценарий 1: простая форма с полем-списком ───────────────────────────────
+// ─── Scenario 1: a simple form with a list field ──────────────────────────────
 
-describe("простая форма с полем-списком — useForm(listField) в дочернем компоненте", () => {
-  it("list proxy из родительского useForm(store) передаётся в дочерний компонент, useForm работает", async () => {
+describe("a simple form with a list field — useForm(listField) in a child component", () => {
+  it("the list proxy from the parent useForm(store) is passed to the child; useForm works", async () => {
     const itemsResolver = vi.fn(async () => [
       { id: "i1", name: "Apple", qty: 3 },
       { id: "i2", name: "Banana", qty: 5 },
@@ -44,7 +44,7 @@ describe("простая форма с полем-списком — useForm(lis
       } as any,
     });
 
-    // Дочерний компонент принимает list proxy и вызывает useForm(listProp)
+    // The child component accepts the list proxy and calls useForm(listProp)
     function ItemsList({ items }: { items: any }) {
       const list = useForm(items) as any;
       const listItems = list.items; // lazy trigger resolve
@@ -59,7 +59,7 @@ describe("простая форма с полем-списком — useForm(lis
       );
     }
 
-    // Родительский компонент — передаёт form.items в дочерний
+    // The parent component — passes form.items into the child
     function CartForm() {
       const form = useForm(store) as any;
       return (
@@ -82,7 +82,7 @@ describe("простая форма с полем-списком — useForm(lis
     expect(itemsResolver).toHaveBeenCalledTimes(1);
   });
 
-  it("дочерний компонент ре-рендерится при добавлении элемента в список", async () => {
+  it("the child component re-renders when an item is added to the list", async () => {
     const store = new Palistor({
       config: {
         items: defineList({
@@ -94,7 +94,7 @@ describe("простая форма с полем-списком — useForm(lis
       } as any,
     });
 
-    // Предзаполняем список
+    // Pre-fill the list
     store.set({ id: "x1", label: "First" });
     (store.proxy as any).items.add("x1");
 
@@ -124,7 +124,7 @@ describe("простая форма с полем-списком — useForm(lis
 
     const rendersBefore = childRenderCount.mock.calls.length;
 
-    // Добавляем ещё один элемент — дочерний компонент должен ре-рендериться
+    // Add one more item — the child component must re-render
     act(() => {
       store.set({ id: "x2", label: "Second" });
       (store.proxy as any).items.add("x2");
@@ -135,21 +135,21 @@ describe("простая форма с полем-списком — useForm(lis
   });
 });
 
-// ─── Сценарий 2: entity с полем-списком в шаблоне ────────────────────────────
+// ─── Scenario 2: an entity with a list field in the template─────────────────────────
 //
-// Желаемый паттерн: entity template содержит поле-список.
-// Компонент получает entity proxy, читает form.contacts (list proxy),
-// передаёт его дочернему компоненту, который вызывает useForm(contacts).
+// The desired pattern: the entity template contains a list field.
+// A component receives the entity proxy, reads form.contacts (a list proxy),
+// and passes it into a child component that calls useForm(contacts).
 //
-// НЕ РАБОТАЕТ: buildEntityProjectionProxy возвращает undefined для array-полей
-// (list nodes) в entity template (~line 151 buildEntityProjectionProxy.ts).
+// PREVIOUSLY BROKEN: buildEntityProjectionProxy returned undefined for array
+// fields (list nodes) in an entity template.
 //   if (!templateField || typeof templateField !== "object" || Array.isArray(templateField))
-//     return undefined;   ← list node (массив) сюда и попадает
+//     return undefined;   ← the list node (array) landed here
 //
-// Для поддержки нужно per-entity list state.
+// Support requires per-entity list state.
 
-describe("entity с полем-списком в шаблоне — useForm(contacts) в дочернем компоненте", () => {
-  it("list proxy из entity template передаётся в дочерний компонент, useForm(contacts) работает", async () => {
+describe("an entity with a list field in the template — useForm(contacts) in a child component", () => {
+  it("the list proxy from the entity template is passed to the child; useForm(contacts) works", async () => {
     const contactsResolver = vi.fn(async () => [
       { id: "c1", phone: "+1-800-ALICE" },
       { id: "c2", phone: "+1-800-CALL" },
@@ -199,7 +199,7 @@ describe("entity с полем-списком в шаблоне — useForm(cont
       return (
         <div>
           <span data-testid="user-name">{form.name.value}</span>
-          {/* form.contacts должен быть list proxy, не undefined */}
+          {/* form.contacts must be a list proxy, not undefined */}
           <ContactsList contacts={form.contacts} />
         </div>
       );
@@ -218,7 +218,7 @@ describe("entity с полем-списком в шаблоне — useForm(cont
     expect(contactsResolver).toHaveBeenCalledTimes(1);
   });
 
-  it("два entity получают независимые per-entity списки через дочерний useForm(contacts)", async () => {
+  it("two entities get independent per-entity lists via the child useForm(contacts)", async () => {
     const contactsResolver = vi.fn(async (values: any) => {
       if (values.id === "u1") return [{ id: "c1", phone: "+111" }];
       return [{ id: "c2", phone: "+222" }, { id: "c3", phone: "+333" }];
@@ -289,11 +289,11 @@ describe("entity с полем-списком в шаблоне — useForm(cont
       await flushPromises();
     });
 
-    // Alice: 1 контакт
+    // Alice: 1 contact
     expect(screen.getByTestId("card-u1").querySelectorAll("li").length).toBe(1);
     expect(screen.getByTestId("phone-c1").textContent).toBe("+111");
 
-    // Bob: 2 контакта
+    // Bob: 2 contacts
     expect(screen.getByTestId("card-u2").querySelectorAll("li").length).toBe(2);
     expect(screen.getByTestId("phone-c2").textContent).toBe("+222");
     expect(screen.getByTestId("phone-c3").textContent).toBe("+333");

@@ -11,7 +11,7 @@ export function PassportSection() {
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Паспорт виден только когда paymentType === "bank"
+  // The passport is visible only when paymentType === "bank"
   if (!form.passport.isVisible) return null;
 
   const handleSubmit = async () => {

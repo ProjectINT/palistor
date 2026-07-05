@@ -13,7 +13,7 @@ const config = {
     },
   },
   users: [{ template: {} }], // ListNode
-  onSubmit: async () => {},  // CONFIG_PROP — должен быть пропущен
+  onSubmit: async () => {},  // CONFIG_PROP — must be skipped
 } as unknown as AnyConfigNode;
 
 describe("walkFull", () => {

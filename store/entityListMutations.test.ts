@@ -1,16 +1,16 @@
 /**
- * Тесты per-entity nested list mutations + ownership (вариант C, фаза C2).
+ * Tests for per-entity nested list mutations + ownership.
  *
- * Проверяем storage-слой напрямую (без React):
- *   - add(values) создаёт child с owner-ссылкой и добавляет в itemIds;
- *   - add(id) добавляет существующую entity; add несуществующего id → ошибка;
- *   - remove убирает из itemIds, НЕ трогает registry и другие списки;
- *   - setItems заменяет состав и проставляет owner;
- *   - delete(ownerId) каскадно удаляет children (без orphan'ов и утечек);
- *   - child с двумя владельцами: add(id) переадресует owner, delete первого
- *     владельца не трогает переадресованного child;
- *   - reset() восстанавливает initial-состав;
- *   - мутация бампает версию только своего EntityListState (изоляция).
+ * Exercises the storage layer directly (no React):
+ *   - add(values) creates a child with an owner reference and adds it to itemIds;
+ *   - add(id) adds an existing entity; add of a missing id → error;
+ *   - remove drops from itemIds, does NOT touch the registry or other lists;
+ *   - setItems replaces the membership and sets the owner;
+ *   - delete(ownerId) cascade-deletes the children (no orphans or leaks);
+ *   - a child with two owners: add(id) re-parents the owner; deleting the
+ *     first owner leaves the re-parented child alone;
+ *   - reset() restores the initial membership;
+ *   - a mutation bumps only its own EntityListState version (isolation).
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -19,8 +19,8 @@ import { defineList } from "./defineList";
 import { buildListProxy } from "./buildProxy/buildListProxy";
 
 /**
- * Шим под прежнюю сигнатуру теста: единый buildListProxy принимает ListState.
- * Per-entity ListState достаём из реестра по паре (owner, listNode).
+ * Shim for the old test signature: the unified buildListProxy takes a ListState.
+ * The per-entity ListState is fetched from the registry by the (owner, listNode) pair.
  */
 function buildEntityListProxy(owner: any, listNode: any, store: any) {
   return buildListProxy(
@@ -54,7 +54,7 @@ function makeStore(resolver?: (...a: any[]) => any) {
 }
 
 describe("per-entity list mutations (C2)", () => {
-  it("add(values) создаёт child с owner-ссылкой и добавляет в itemIds", () => {
+  it("add(values) creates a child with an owner reference and adds it to itemIds", () => {
     const { store, listNode } = makeStore();
     store.set({ id: "u1", name: "Alice" });
     const u1 = store.entityRegistry.get("u1")!;
@@ -69,11 +69,11 @@ describe("per-entity list mutations (C2)", () => {
     expect(c1.owner).toEqual({ ownerId: "u1", ownerListNode: listNode });
     expect(Object.keys(c1)).not.toContain("owner");
     expect([...store.entityRegistry.getChildrenByOwner("u1")!]).toEqual(["c1"]);
-    // child реально зарегистрирован — доступен через proxy.
+    // the child is actually registered — accessible via the proxy.
     expect(list.getById("c1").phone.value).toBe("+1");
   });
 
-  it("add(values) без id генерирует id и не дублирует entity", () => {
+  it("add(values) without an id generates one and doesn't duplicate the entity", () => {
     const { store, listNode } = makeStore();
     store.set({ id: "u1", name: "Alice" });
     const u1 = store.entityRegistry.get("u1")!;
@@ -87,7 +87,7 @@ describe("per-entity list mutations (C2)", () => {
     expect(els.itemIds).toHaveLength(1);
   });
 
-  it("add(id) добавляет существующую entity; несуществующий id → ошибка", () => {
+  it("add(id) adds an existing entity; a missing id → error", () => {
     const { store, listNode } = makeStore();
     store.set([{ id: "u1", name: "Alice" }, { id: "c1", phone: "+1" }]);
     const u1 = store.entityRegistry.get("u1")!;
@@ -101,12 +101,12 @@ describe("per-entity list mutations (C2)", () => {
     });
 
     expect(() => list.add("ghost")).toThrow(/not found/i);
-    // повторный add того же id — без дублей.
+    // a repeated add of the same id — no duplicates.
     list.add("c1");
     expect(store.entityRegistry.getOrCreateEntityListState(u1, listNode).itemIds).toEqual(["c1"]);
   });
 
-  it("remove убирает из itemIds, НЕ удаляет entity и не трогает другие списки", async () => {
+  it("remove drops from itemIds, does NOT delete the entity or touch other lists", async () => {
     const resolver = vi.fn(async (values: any) =>
       values.id === "u1"
         ? [{ id: "c1", phone: "+1" }, { id: "c2", phone: "+2" }]
@@ -125,17 +125,17 @@ describe("per-entity list mutations (C2)", () => {
     list1.remove("c1");
 
     expect(store.entityRegistry.getOrCreateEntityListState(u1, listNode).itemIds).toEqual(["c2"]);
-    // entity осталась в registry (может переиспользоваться).
+    // the entity stays in the registry (can be reused).
     expect(store.entityRegistry.has("c1")).toBe(true);
-    // другой владелец не затронут.
+    // the other owner is unaffected.
     expect(store.entityRegistry.getOrCreateEntityListState(u2, listNode).itemIds).toEqual(["c3"]);
 
-    // remove несуществующего — no-op.
+    // removing a missing one — no-op.
     list1.remove("nope");
     expect(store.entityRegistry.getOrCreateEntityListState(u1, listNode).itemIds).toEqual(["c2"]);
   });
 
-  it("setItems заменяет состав, проставляет owner и валидирует существование", () => {
+  it("setItems replaces the membership, sets the owner and validates existence", () => {
     const { store, listNode } = makeStore();
     store.set([
       { id: "u1", name: "Alice" },
@@ -154,7 +154,7 @@ describe("per-entity list mutations (C2)", () => {
     expect(() => list.setItems(["ghost"])).toThrow(/not found/i);
   });
 
-  it("delete(ownerId) каскадно удаляет children без orphan'ов", async () => {
+  it("delete(ownerId) cascade-deletes the children without orphans", async () => {
     const resolver = vi.fn(async () => [
       { id: "c1", phone: "+1" },
       { id: "c2", phone: "+2" },
@@ -174,11 +174,11 @@ describe("per-entity list mutations (C2)", () => {
     expect(store.entityRegistry.has("u1")).toBe(false);
     expect(store.entityRegistry.has("c1")).toBe(false);
     expect(store.entityRegistry.has("c2")).toBe(false);
-    // owner-индекс вычищен.
+    // the owner index is cleaned up.
     expect(store.entityRegistry.getChildrenByOwner("u1")).toBeUndefined();
   });
 
-  it("child с двумя владельцами: add(id) переадресует, delete первого не трогает child", async () => {
+  it("a child with two owners: add(id) re-parents; deleting the first owner leaves the child", async () => {
     const resolver = vi.fn(async () => [{ id: "c1", phone: "+1" }]);
     const { store, listNode } = makeStore(resolver);
     store.set([{ id: "u1", name: "Alice" }, { id: "u2", name: "Bob" }]);
@@ -189,23 +189,23 @@ describe("per-entity list mutations (C2)", () => {
     await flush();
     expect(store.entityRegistry.get("c1")!.owner!.ownerId).toBe("u1");
 
-    // u2 забирает c1 себе (модель «один владелец»): owner переадресуется.
+    // u2 takes c1 over (the "one owner" model): the owner is re-parented.
     const list2 = buildEntityListProxy(u2, listNode as any, store as any) as any;
     list2.add("c1");
     expect(store.entityRegistry.get("c1")!.owner!.ownerId).toBe("u2");
     expect([...(store.entityRegistry.getChildrenByOwner("u1") ?? [])]).not.toContain("c1");
     expect([...store.entityRegistry.getChildrenByOwner("u2")!]).toContain("c1");
 
-    // delete u1 не должен удалять c1 — он принадлежит u2.
+    // deleting u1 must not remove c1 — it belongs to u2.
     store.delete("u1");
     expect(store.entityRegistry.has("c1")).toBe(true);
 
-    // delete u2 — каскадно удаляет c1.
+    // deleting u2 cascade-deletes c1.
     store.delete("u2");
     expect(store.entityRegistry.has("c1")).toBe(false);
   });
 
-  it("reset() восстанавливает initial-состав списка", async () => {
+  it("reset() restores the list's initial membership", async () => {
     const resolver = vi.fn(async () => [{ id: "c1", phone: "+1" }]);
     const { store, listNode } = makeStore(resolver);
     store.set([{ id: "u1", name: "Alice" }, { id: "c2", phone: "+2" }]);
@@ -223,7 +223,7 @@ describe("per-entity list mutations (C2)", () => {
     expect(store.entityRegistry.getOrCreateEntityListState(u1, listNode).itemIds).toEqual(["c1"]);
   });
 
-  it("мутация бампает версию только своего EntityListState (изоляция)", async () => {
+  it("a mutation bumps only its own EntityListState version (isolation)", async () => {
     const resolver = vi.fn(async () => [{ id: "c1", phone: "+1" }]);
     const { store, listNode } = makeStore(resolver);
     store.set([

@@ -1,45 +1,34 @@
 /**
- * Palistor - State Manager для форм
+ * Palistor — reactive form state manager for React.
  *
- * Архитектура: createForm + useForm(id)
- *
- * createForm() вызывается на уровне модуля — задаёт статическую конфигурацию.
- * useForm(id) вызывается в React-компоненте — привязывает к экземпляру.
+ * A store is created from a declarative config (`new Palistor({ config })`)
+ * and consumed in React through `useForm(store)`, which returns a tracking
+ * proxy: components re-render only when a field they actually read changes.
  *
  * @example
  * ```ts
- * // config/orderForm.ts — модульный уровень
- * import { createForm } from 'palistor';
- * import { useTranslations } from 'next-intl';
+ * // config/orderForm.ts — module level
+ * import { Palistor } from "palistor";
  *
- * export const { useForm } = createForm<OrderValues>({
- *   config: orderConfig,
- *   defaults: orderDefaults,
- *   translateFunction: useTranslations,
- *   type: "Order",
+ * export const orderStore = new Palistor({
+ *   config: {
+ *     name:  { value: "", isRequired: true },
+ *     email: { value: "", validate: (v) => (!v.includes("@") ? "Invalid email" : undefined) },
+ *   },
  * });
  * ```
  *
  * ```tsx
- * // Корневой компонент — передаёт initial и колбэки
- * const { getFieldProps, submit } = useForm(order?.id ?? "NewOrder", {
- *   initial: order,
- *   onSubmit: async (values) => { await api.saveOrder(values); },
- * });
+ * // Component — subscribes via useForm
+ * import { useForm } from "palistor";
  *
- * return <Input {...getFieldProps("name")} />;
- * ```
- *
- * ```tsx
- * // Вложенный компонент — подключается к существующему store
- * const { getFieldProps } = useForm(orderId);
- *
- * return <Input {...getFieldProps("name")} />;
+ * const form = useForm(orderStore);
+ * return <input value={form.name.value} onChange={(e) => form.name.onValueChange(e.target.value)} />;
  * ```
  */
 
 // ============================================================================
-// Persist — драйверы и типы
+// Persist — drivers and types
 // ============================================================================
 
 export type { PersistDriver, PersistOptions } from "./store/persist/types";
@@ -47,7 +36,7 @@ export type { PersistManager } from "./store/persist/persistManager";
 export { localStorageDriver, sessionStorageDriver } from "./store/persist/drivers";
 
 // ============================================================================
-// Типы Store (config, proxy, values)
+// Store types (config, proxy, values)
 // ============================================================================
 
 export type {
@@ -88,7 +77,7 @@ export type { Palistor as PalistorProxy } from "./store/store/types";
 export { Palistor } from "./store/store";
 
 // ============================================================================
-// Resolve — типы и хуки
+// Resolve — types and hooks
 // ============================================================================
 
 export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline/";
@@ -125,7 +114,7 @@ export type {
 } from "./store/flow/defineFlow";
 
 // ============================================================================
-// defineFieldMapping — typed fieldMapping helper (сохраняет литералы)
+// defineFieldMapping — typed fieldMapping helper (preserves literals)
 // ============================================================================
 
 export { defineFieldMapping } from "./store/defineFieldMapping";

@@ -1,8 +1,8 @@
 /**
- * Полное вычисленное состояние одного поля.
+ * The full computed state of a single field.
  *
- * Хранится в WeakMap<configNode, FieldState>. Все функции из конфига
- * (isVisible, isRequired, validate…) уже вызваны, результат — чистые значения.
+ * Stored in WeakMap<configNode, FieldState>. All config functions
+ * (isVisible, isRequired, validate…) have been called; only plain values remain.
  */
 export interface FieldState {
   value: unknown;

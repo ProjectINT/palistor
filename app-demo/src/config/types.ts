@@ -6,50 +6,50 @@ export type CryptoNetwork = "ethereum" | "bitcoin" | "tron";
 export type Country = "ru" | "us" | "de";
 
 export interface PaymentFormValues {
-  // Тип оплаты
+  // Payment type
   paymentType: PaymentType;
   
-  // Карта
+  // Card
   cardNumber: string;
   cardExpiry: string;
   cardCvv: string;
   
-  // Банк
+  // Bank
   bankAccount: string;
   bankBik: string;
   
-  // Крипто
+  // Crypto
   cryptoWallet: string;
   cryptoNetwork: CryptoNetwork;
   
-  // Общие
+  // Shared
   amount: number;
   comment: string;
   
-  // Контакты
+  // Contacts
   email: string;
   phone: string;
   name: string;
   
-  // Тип аккаунта
+  // Account type
   accountType: AccountType;
   companyName: string;
   
-  // Адрес доставки
+  // Shipping address
   country: Country | "";
   city: string;
   shippingCost: number;
   
-  // Чекбоксы
+  // Checkboxes
   agreeTerms: boolean;
   newsletter: boolean;
   
-  // Калькулятор
+  // Calculator
   price: number;
   quantity: number;
   total: number;
   
-  // Паспорт — вложенное поле (nested)
+  // Passport — a nested field
   passport: {
     id: string | null;
     number: string;

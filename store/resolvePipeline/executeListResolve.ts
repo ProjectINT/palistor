@@ -9,21 +9,21 @@ import type { ResolveDeps } from "./types";
 // ─── List-specific deps ──────────────────────────────────────────────────────
 
 /**
- * Дополнительные зависимости для executeListResolve.
- * Расширяет ResolveDeps с list-специфичными колбэками.
+ * Extra dependencies for executeListResolve.
+ * Extends ResolveDeps with list-specific callbacks.
  */
 export interface ListResolveDeps extends ResolveDeps {
   /**
-   * Upsert entities в EntityRegistry + зарегистрировать leaf-ноды.
-   * Не вызывает recompute/notifyChanged — они вызываются после.
-   * Возвращает Set изменённых leaf-нод.
-   * Phase 4: listNode передаётся для автоматического запуска entity field resolves.
+   * Upsert entities into EntityRegistry + register leaf nodes.
+   * Does not call recompute/notifyChanged — those run afterwards.
+   * Returns the Set of changed leaf nodes.
+   * listNode is passed to trigger entity field resolves automatically.
    */
   setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
 
   /**
-   * Синхронизировать valuesCache с составом списка (единый метод, root + entity).
-   * Вызывается после обновления listState.itemIds.
+   * Sync valuesCache with the list membership (single method, root + entity).
+   * Called after listState.itemIds is updated.
    */
   syncListValuesCache: (listState: ListState) => void;
 }
@@ -44,13 +44,13 @@ const DEFAULT_LIST_STATE = {
 // ─── executeListResolve ──────────────────────────────────────────────────────
 
 /**
- * Запустить resolve для ListNode.
+ * Run resolve for a ListNode.
  *
- * Отличается от executeResolve (для групп):
- * - resolver возвращает Array<EntityData> вместо Record<string, unknown>
- * - Результат → upsert entities + обновление listState.itemIds
- * - initialItemIds обновляется при успехе → dirty = false после resolve
- * - loading state хранится в nodeState для listNode (создаётся на лету)
+ * Differs from executeResolve (for groups):
+ * - the resolver returns Array<EntityData> instead of Record<string, unknown>
+ * - the result → entity upserts + listState.itemIds update
+ * - initialItemIds is updated on success → dirty = false after resolve
+ * - loading state is kept in nodeState for the listNode (created on the fly)
  */
 export function executeListResolve(
   listNode: object,
@@ -72,7 +72,7 @@ export function executeListResolve(
   const state = resolveStates.get(listNode);
   if (!state) return Promise.resolve();
 
-  // Дедупликация
+  // Deduplication
   if (state.status === "pending" && state.promise) {
     return state.promise;
   }
@@ -81,12 +81,12 @@ export function executeListResolve(
   state.attempt = 0;
   state.error = null;
 
-  // Устанавливаем loading = true в nodeState для listNode
+  // Set loading = true in nodeState for the listNode
   const nodeSt = nodeState.get(listNode);
   nodeState.set(listNode, { ...(nodeSt ?? DEFAULT_LIST_STATE), loading: true });
 
-  // Уведомляем об изменении loading: true.
-  // U2: бампаем и сам ListState (новый ключ трекинга), и listNode (мост для тестов).
+  // Notify about loading: true.
+  // Bump both the ListState (the tracking key) and the listNode (bridge for tests).
   const loadingChanged = new Set<object>([listNode, listState as object]);
   recomputeAndNotify(loadingChanged, recompute, notifyChanged);
 
@@ -95,13 +95,13 @@ export function executeListResolve(
     let valuesTracking: ReturnType<typeof createValuesTrackingProxy> | null = null;
 
     try {
-      // Вызываем resolver со снимком текущих значений через tracking proxy
-      // для автоматической регистрации зависимостей (deps)
+      // Call the resolver with a snapshot of current values through a tracking
+      // proxy, so dependencies (deps) are registered automatically
       const { getValues } = deps;
       const freshValues = getValues();
       valuesTracking = createValuesTrackingProxy(freshValues);
 
-      // Оборачиваем store.context в tracking proxy для автоматических контекстных зависимостей
+      // Wrap store.context in a tracking proxy for automatic context dependencies
       contextTracking = createContextTrackingProxy(store.context);
       const storeProxy = new Proxy(store, {
         get(target, key) {
@@ -112,37 +112,37 @@ export function executeListResolve(
 
       const result = await resolve.resolver(valuesTracking.proxy, storeProxy);
 
-      // Прерываем, если статус изменился во время ожидания (например, reset)
+      // Abort when the status changed while awaiting (e.g. a reset)
       if (state.status !== "pending") return result;
 
       // ── Success path ────────────────────────────────────────────────────
-      // U2: ListState — ключ трекинга; listNode — мост обратной совместимости.
+      // ListState is the tracking key; listNode is the backward-compat bridge.
       const changed = new Set<object>([listNode, listState as object]);
 
       if (Array.isArray(result) && result.length > 0) {
-        // Upsert всех сущностей (регистрирует листья, возвращает изменённые узлы)
-        // Pass listNode so that entity field resolves are triggered automatically (Phase 4).
+        // Upsert all entities (registers leaves, returns changed nodes).
+        // Pass listNode so that entity field resolves are triggered automatically.
         const entityChanged = setEntitiesRaw(result as EntityData[], listNode);
         for (const n of entityChanged) changed.add(n);
 
-        // Обновляем itemIds из результата resolver-а
+        // Update itemIds from the resolver result
         listState.itemIds = (result as Array<Record<string, unknown>>)
           .map((item) => item.id)
           .filter((id): id is string => typeof id === "string" && id !== "");
 
-        // Сохраняем как начальный снимок для dirty-трекинга
+        // Store as the initial snapshot for dirty tracking
         listState.initialItemIds = [...listState.itemIds];
 
-        // Синхронизируем valuesCache.values[listKey]
+        // Sync valuesCache.values[listKey]
         syncListValuesCache(listState);
       } else if (Array.isArray(result) && result.length === 0) {
-        // Пустой результат — очищаем список
+        // Empty result — clear the list
         listState.itemIds = [];
         listState.initialItemIds = [];
         syncListValuesCache(listState);
       }
 
-      // Авто-зависимости: явные deps + values tracking + контекстные зависимости
+      // Auto-dependencies: explicit deps + values tracking + context dependencies
       const mergedDeps = new Set<string>(resolve.deps ?? []);
       for (const p of valuesTracking.getAccessedPaths()) mergedDeps.add(p);
       if (contextTracking) {
@@ -152,7 +152,7 @@ export function executeListResolve(
       }
       state.dependencies = mergedDeps;
 
-      // Обновляем loading = false, status = resolved
+      // Update loading = false, status = resolved
       const updatedSt = nodeState.get(listNode);
       nodeState.set(listNode, { ...(updatedSt ?? DEFAULT_LIST_STATE), loading: false });
       state.status = "resolved";
@@ -160,7 +160,7 @@ export function executeListResolve(
 
       recomputeAndNotify(changed, recompute, notifyChanged);
 
-      // Если зависимость изменилась пока были в pending — перезапускаем немедленно
+      // If a dependency changed while pending — re-run immediately
       if (state.pendingRetrigger) {
         state.pendingRetrigger = false;
         state.status = "idle";
@@ -178,7 +178,7 @@ export function executeListResolve(
       state.status = "error";
       state.error = err;
 
-      // Сохраняем контекстные зависимости даже в случае ошибки
+      // Store context dependencies even on the error path
       {
         const mergedDeps = new Set<string>(resolve.deps ?? []);
         if (valuesTracking) {
@@ -195,12 +195,12 @@ export function executeListResolve(
       try {
         resolve.onError?.(err, { notify });
       } catch {
-        // onError не должен бросать исключения
+        // onError should not throw
       }
 
       recomputeAndNotify(new Set([listNode, listState as object]), recompute, notifyChanged);
 
-      // Если зависимость изменилась пока были в pending — перезапускаем немедленно
+      // If a dependency changed while pending — re-run immediately
       if (state.pendingRetrigger) {
         state.pendingRetrigger = false;
         state.status = "idle";

@@ -4,40 +4,40 @@ import { type PendingWrite } from "./createValuesTrackingProxy";
 import type { FieldState } from "../compute/index";
 import type { ValuesCache } from "../valuesCache/valuesCache";
 
-// ─── Применение буферизированных записей ────────────────────────────────────
+// ─── Applying buffered writes ────────────────────────────────────────────────
 //
-// Это вторая половина пайплайна отложенных записей.
+// This is the second half of the deferred-write pipeline.
 //
-// КРАТКОЕ ОПИСАНИЕ ПОТОКА:
-//   1. Резолвер запускается с прокси из createValuesTrackingProxy().
-//   2. Каждое `values.x.y = z` внутри резолвера перехватывается и сохраняется как
-//      PendingWrite { path: "x.y", value: z } — ничего не мутируется.
-//   3. После возврата резолвера вызывается applyPendingWrites() со
-//      собранным списком PendingWrite-записей.
-//   4. Для каждой записи восстанавливаем вложенный патч-объект, который ожидает applyPatch(),
-//      затем вызываем applyPatch() для реальной записи в хранилище.
-//   5. applyPatch() фиксирует узлы конфига, которые изменились, в множество `changed`.
-//   6. Вызывающий код использует `changed`, чтобы решить, какие зависимые резолверы перезапустить.
+// FLOW OVERVIEW:
+//   1. The resolver runs with the proxy from createValuesTrackingProxy().
+//   2. Every `values.x.y = z` inside the resolver is intercepted and stored as
+//      PendingWrite { path: "x.y", value: z } — nothing is mutated.
+//   3. After the resolver returns, applyPendingWrites() is called with the
+//      collected PendingWrite list.
+//   4. For each write, the nested patch object applyPatch() expects is rebuilt,
+//      then applyPatch() performs the real store write.
+//   5. applyPatch() records the config nodes that changed into the `changed` set.
+//   6. The caller uses `changed` to decide which dependent resolvers to re-run.
 
 /**
- * Сбрасывает все буферизированные записи из одного запуска резолвера в реальное хранилище.
+ * Flushes all writes buffered during one resolver run into the real store.
  *
- * Преобразует каждый плоский путь (через точку) обратно во вложенную структуру патча,
- * которую понимает applyPatch(), затем применяет его.
+ * Converts each flat (dot-separated) path back into the nested patch
+ * structure applyPatch() understands, then applies it.
  *
- * Пример:
+ * Example:
  *   PendingWrite { path: "user.vehicleExists", value: false }
  *   → patch = { user: { vehicleExists: false } }
  *   → applyPatch(rootConfig, nodeState, patch, changed, valuesCache)
  *
- * Несколько уровней вложенности работают аналогично:
+ * Deeper nesting works the same way:
  *   path: "a.b.c" → patch = { a: { b: { c: value } } }
  *
- * @param writes      — записи, буферизированные createValuesTrackingProxy во время выполнения резолвера
- * @param rootConfig  — корень дерева конфига полей (используется applyPatch для поиска узлов)
- * @param nodeState   — состояние узлов в рантайме (флаги dirty, ошибки и т.д.)
- * @param valuesCache — изменяемый кэш значений, который applyPatch обновляет на месте
- * @returns           — множество узлов конфига, значение которых реально изменилось (для отслеживания зависимостей)
+ * @param writes      — writes buffered by createValuesTrackingProxy during the resolver run
+ * @param rootConfig  — root of the field config tree (used by applyPatch to find nodes)
+ * @param nodeState   — runtime node state (dirty flags, errors, etc.)
+ * @param valuesCache — mutable values cache that applyPatch updates in place
+ * @returns           — set of config nodes whose value actually changed (for dependency tracking)
  */
 export function applyPendingWrites(
   writes: PendingWrite[],
@@ -45,37 +45,34 @@ export function applyPendingWrites(
   nodeState: WeakMap<object, FieldState>,
   valuesCache: ValuesCache,
 ): Set<object> {
-  // Накапливает все узлы конфига, значение которых реально изменилось в ходе этого сброса.
-  // Возвращается вызывающему коду, чтобы тот мог запланировать повторный запуск зависимых резолверов.
+  // Accumulates all config nodes whose value actually changed during this flush.
+  // Returned to the caller so it can schedule re-runs of dependent resolvers.
   const changed = new Set<object>();
 
   for (const { path, value } of writes) {
-    // ── Восстанавливаем вложенный патч из пути через точку ──────────────────
-    // applyPatch() ожидает вложенный объект, зеркалирующий дерево конфига, а не плоский путь.
-    // Строим его вручную, обходя сегменты пути и вкладывая объекты друг в друга.
+    // ── Rebuild the nested patch from the dot-path ───────────────────────────
+    // applyPatch() expects a nested object mirroring the config tree, not a
+    // flat path. Build it manually by nesting objects along the path segments.
     //
-    // Пример: path = "user.vehicleExists"
+    // Example: path = "user.vehicleExists"
     //   parts = ["user", "vehicleExists"]
-    //   После цикла: patch = { user: { vehicleExists: <value> } }
+    //   After the loop: patch = { user: { vehicleExists: <value> } }
     const parts = path.split(".");
     let patch: Record<string, unknown> = {};
-    let current = patch; // курсор `current` идёт вглубь строящегося вложенного объекта
+    let current = patch; // the `current` cursor descends into the nested object being built
     for (let i = 0; i < parts.length - 1; i++) {
-      // Создаём промежуточный пустой объект для каждого сегмента пути, кроме последнего.
       current[parts[i]] = {};
       current = current[parts[i]] as Record<string, unknown>;
     }
-    // Помещаем реальное значение на листе (последний сегмент).
+    // Place the actual value at the leaf (the last segment).
     current[parts[parts.length - 1]] = value;
 
-    // ── Применяем патч к реальному хранилищу ────────────────────────────────
-    // applyPatch обходит rootConfig по форме патча, записывает значения в
-    // valuesCache, обновляет nodeState (флаги dirty и т.д.) и фиксирует
-    // в `changed` все узлы, значение которых изменилось.
+    // ── Apply the patch to the real store ────────────────────────────────────
+    // applyPatch walks rootConfig following the patch shape, writes values into
+    // valuesCache, updates nodeState (dirty flags etc.) and records every node
+    // whose value changed into `changed`.
     applyPatch(rootConfig, nodeState, patch, changed, valuesCache);
   }
 
-  // Возвращаем множество изменённых узлов, чтобы пайплайн резолвов мог
-  // запланировать повторные запуски для всего, что зависело от этих значений.
   return changed;
 }

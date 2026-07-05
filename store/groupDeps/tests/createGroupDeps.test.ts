@@ -12,7 +12,7 @@ function buildMaps(root: AnyConfigNode) {
 }
 
 describe("createGroupDeps", () => {
-  it("создаёт только self-зависимость для плоского конфига", () => {
+  it("creates only the self-dependency for a flat config", () => {
     const root = { email: { value: "" }, name: { value: "" } } as unknown as AnyConfigNode;
     const { nodePaths } = buildMaps(root);
     const deps = createGroupDeps(root, nodePaths);
@@ -21,7 +21,7 @@ describe("createGroupDeps", () => {
     expect(deps.size).toBe(1);
   });
 
-  it("создаёт self-зависимости для корня и каждой вложенной группы", () => {
+  it("creates self-dependencies for the root and every nested group", () => {
     const root = {
       paymentType: { value: "card" },
       passport: { number: { value: "" } },
@@ -36,12 +36,12 @@ describe("createGroupDeps", () => {
     expect(deps.size).toBe(3);
   });
 
-  it("не создаёт зависимости для листьев", () => {
+  it("creates no dependencies for leaves", () => {
     const root = { field: { value: "" } } as unknown as AnyConfigNode;
     const { nodePaths } = buildMaps(root);
     const deps = createGroupDeps(root, nodePaths);
 
-    // только root→root
+    // root→root only
     expect(deps.size).toBe(1);
   });
 });

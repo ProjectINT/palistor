@@ -4,13 +4,14 @@ import { Palistor } from "./store";
 import { defineFieldMapping } from "./defineFieldMapping";
 import { useForm } from "../react/useForm";
 
-// ─── Тестовые конфиги ────────────────────────────────────────────────────────
+// ─── Test configs ────────────────────────────────────────────────────────────
 
 /**
- * Конфиг в ЕДИНОМ ПУБЛИЧНОМ словаре карты `mapping` ниже (external-имена):
- * `required`, `disabled`, `helpText` вместо internal `isRequired`, `isDisabled`,
- * `description`. `value` / `label` картой не переименованы → пишутся как есть.
- * Нормализатор в конструкторе приведёт их к internal перед compute/init.
+ * A config in the SINGLE PUBLIC vocabulary of the `mapping` map below
+ * (external names): `required`, `disabled`, `helpText` instead of internal
+ * `isRequired`, `isDisabled`, `description`. `value` / `label` are not
+ * renamed by the map → written as-is. The normalizer in the constructor
+ * converts them to internal names before compute/init.
  */
 const makeMappedConfig = () => ({
   email: {
@@ -28,9 +29,9 @@ const makeMappedConfig = () => ({
 });
 
 /**
- * Конфиг в INTERNAL-именах — для сценариев БЕЗ активного маппинга config-ключей
- * (пустая карта либо карта только по вычисляемым ключам dirty/loading, которые
- * в конфиге не пишутся).
+ * A config in INTERNAL names — for scenarios WITHOUT active config-key
+ * mapping (an empty map, or a map over computed-only keys dirty/loading that
+ * never appear in a config).
  */
 const makeConfig = () => ({
   email: {
@@ -52,12 +53,13 @@ const makeListConfig = () => ({
 });
 
 /**
- * Ant-Design-подобный маппинг (см. RFC).
+ * Ant-Design-like mapping.
  *
- * ВАЖНО: `defineFieldMapping` (а не `: FieldMapping` и не `satisfies FieldMapping`)
- * — чтобы TypeScript сохранил литеральные значения (`"required"`, …) и прокинул
- * их в тип `store.proxy`. Аннотация/`satisfies` расширили бы значения до `string`
- * и статическое переименование бы не сработало (рантайм при этом работает всегда).
+ * IMPORTANT: `defineFieldMapping` (not `: FieldMapping` and not
+ * `satisfies FieldMapping`) — so TypeScript keeps the literal values
+ * (`"required"`, …) and threads them into the `store.proxy` type. An
+ * annotation/`satisfies` would widen the values to `string` and static
+ * renaming would not work (runtime always works regardless).
  */
 const mapping = defineFieldMapping({
   isRequired: "required",
@@ -68,11 +70,11 @@ const mapping = defineFieldMapping({
   description: "helpText",
 });
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("fieldMapping", () => {
-  describe("kernel — построение карт", () => {
-    it("строит externalToInternal как обратную к fieldMapping", () => {
+  describe("kernel — map construction", () => {
+    it("builds externalToInternal as the inverse of fieldMapping", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       expect(store.fieldMapping).toBe(mapping);
       expect(store.externalToInternal).toEqual({
@@ -85,29 +87,30 @@ describe("fieldMapping", () => {
       });
     });
 
-    it("без fieldMapping обе карты пусты (нулевой оверхед)", () => {
+    it("without fieldMapping both maps are empty (zero overhead)", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.fieldMapping).toEqual({});
       expect(store.externalToInternal).toEqual({});
     });
   });
 
-  describe("strict — конфиг в external-именах (нормализация на входе)", () => {
-    it("ingest видит external config-ключи: required питает валидацию", async () => {
-      // required:true написан в конфиге в external-имени. Нормализатор → isRequired,
-      // и это доходит до computeFieldState (не только до spread на выходе).
+  describe("strict — config in external names (normalization on input)", () => {
+    it("ingest sees external config keys: required feeds validation", async () => {
+      // required:true is authored in the config using the external name. The
+      // normalizer → isRequired, and it reaches computeFieldState (not just
+      // the output spread).
       const store = new Palistor({
         config: { email: { value: "", required: true } },
         fieldMapping: { isRequired: "required" },
       });
-      // карта тут только isRequired→required, поэтому невалидность читаем
-      // internal-именем isInvalid.
-      expect((store.proxy.email as any).isInvalid).toBeFalsy(); // до submit revalidate=false
+      // the map here contains only isRequired→required, so invalidity is read
+      // by the internal name isInvalid.
+      expect((store.proxy.email as any).isInvalid).toBeFalsy(); // before submit revalidate=false
       await store.submit();
-      expect((store.proxy.email as any).isInvalid).toBe(true); // required сработал на ingest-пути
+      expect((store.proxy.email as any).isInvalid).toBe(true); // required worked on the ingest path
     });
 
-    it("ingest видит external disabled → FieldState.isDisabled", () => {
+    it("ingest sees external disabled → FieldState.isDisabled", () => {
       const store = new Palistor({
         config: { email: { value: "", disabled: true } },
         fieldMapping: { isDisabled: "disabled" },
@@ -116,20 +119,21 @@ describe("fieldMapping", () => {
       expect((store.proxy.email as any).isDisabled).toBe(true);
     });
 
-    it("strict: internal-имя config-ключа при активном маппинге → ошибка", () => {
+    it("strict: an internal config-key name with an active mapping → error", () => {
       expect(
         () =>
           new Palistor({
-            // `as any` — конфиг намеренно невалиден (internal-имя при активной карте);
-            // здесь проверяем РАНТАЙМ-throw, а не тип (тип ловит это отдельно, см.
-            // «config-валидатор ловит internal-имена»).
+            // `as any` — the config is intentionally invalid (an internal name
+            // with an active map); this checks the RUNTIME throw, not the type
+            // (types catch this separately, see "the config validator catches
+            // internal names").
             config: { email: { value: "", isRequired: true } } as any,
             fieldMapping: { isRequired: "required" },
           }),
       ).toThrow(/write "required" instead of internal "isRequired"/);
     });
 
-    it("strict: вычисляемый ключ (error) в конфиге → ошибка", () => {
+    it("strict: a computed key (error) in the config → error", () => {
       expect(
         () =>
           new Palistor({
@@ -139,19 +143,19 @@ describe("fieldMapping", () => {
       ).toThrow(/computed/);
     });
 
-    it("нормализатор не мутирует исходный конфиг", () => {
+    it("the normalizer does not mutate the original config", () => {
       const config = { email: { value: "", required: true } };
       new Palistor({ config, fieldMapping: { isRequired: "required" } });
-      // оригинал остался в external-имени
+      // the original keeps the external name
       expect((config.email as any).required).toBe(true);
       expect((config.email as any).isRequired).toBeUndefined();
     });
   });
 
-  describe("GET через source proxy", () => {
-    it("external-имена возвращают вычисленное состояние поля (типизированно)", () => {
+  describe("GET via the source proxy", () => {
+    it("external names return the computed field state (typed)", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
-      // Никаких `as any` — имена типизированы через captured TMapping.
+      // No `as any` — the names are typed via the captured TMapping.
       const required: boolean = store.proxy.email.required;
       const disabled: boolean = store.proxy.email.disabled;
       const helpText: string | undefined = store.proxy.email.helpText;
@@ -160,17 +164,17 @@ describe("fieldMapping", () => {
       expect(helpText).toBe("Your email");
     });
 
-    it("internal-имена всё ещё читаются в рантайме (тип их скрывает)", () => {
+    it("internal names still resolve at runtime (types hide them)", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
-      // Рантайм-безопасность из RFC: старое имя резолвится штатным обработчиком.
-      // На уровне типов имя скрыто → доступ через `any`.
+      // Runtime safety: the old name resolves through the regular handler.
+      // At the type level the name is hidden → access via `any`.
       const email = store.proxy.email as any;
       expect(email.isRequired).toBe(true);
       expect(email.isDisabled).toBe(false);
       expect(email.description).toBe("Your email");
     });
 
-    it("не указанные в карте ключи остаются как есть", () => {
+    it("keys not in the map stay unchanged", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const value: string = store.proxy.email.value;
       const label: string | undefined = store.proxy.email.label;
@@ -179,41 +183,41 @@ describe("fieldMapping", () => {
       expect(typeof store.proxy.email.onValueChange).toBe("function");
     });
 
-    it("error/helperText отражают валидацию после submit", async () => {
+    it("error/helperText reflect validation after submit", async () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
-      // до submit revalidate=false → ошибок нет
+      // before submit revalidate=false → no errors
       expect(store.proxy.email.error).toBeFalsy();
       expect(store.proxy.email.helperText).toBeUndefined();
 
       await store.submit();
 
-      // external (типизированно)
+      // external (typed)
       const error: boolean | undefined = store.proxy.email.error;
       const helperText: string | undefined = store.proxy.email.helperText;
       expect(error).toBe(true);
       expect(helperText).toBe("Email is required");
-      // internal — то же значение читается в рантайме
+      // internal — the same value resolves at runtime
       expect((store.proxy.email as any).isInvalid).toBe(true);
       expect((store.proxy.email as any).errorMessage).toBe("Email is required");
     });
   });
 
-  describe("SET через source proxy", () => {
-    it("запись value (не переименован) работает как обычно", () => {
+  describe("SET via the source proxy", () => {
+    it("writing value (not renamed) works as usual", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       store.proxy.email.value = "a@b.com";
       expect(store.proxy.email.value).toBe("a@b.com");
     });
 
-    it("запись через переименованный value транслируется в internal (рантайм)", () => {
+    it("a write through a renamed value translates to internal (runtime)", () => {
       const store = new Palistor({
-        // value переименован в `val` → и в конфиге пишем `val`.
+        // value is renamed to `val` → the config also uses `val`.
         config: { email: { val: "", label: "Email" } },
         fieldMapping: { value: "val" },
       });
-      // Переименование самого `value` — экзотика (UI-киты зовут его `value`).
-      // Рантайм работает; тип прокси-значения при ремапе `value` не выводится
-      // (value структурен для type-derivation) → доступ через `any`.
+      // Renaming `value` itself is exotic (UI kits call it `value`).
+      // The runtime works; the proxy value type isn't inferred when `value`
+      // is remapped (value is structural for type derivation) → access via `any`.
       const email = store.proxy.email as any;
       email.val = "x@y.com";
       expect(email.val).toBe("x@y.com");
@@ -222,32 +226,32 @@ describe("fieldMapping", () => {
   });
 
   describe("spread / ownKeys", () => {
-    it("из spread видны только external-имена", () => {
+    it("only external names are visible in a spread", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const keys = Object.keys({ ...store.proxy.email });
 
       expect(keys).toContain("required");
       expect(keys).toContain("disabled");
       expect(keys).toContain("helpText");
-      // internal-имена исчезают из spread
+      // internal names disappear from the spread
       expect(keys).not.toContain("isRequired");
       expect(keys).not.toContain("isDisabled");
       expect(keys).not.toContain("description");
     });
 
-    it("значения в spread корректны, componentProps-ключи сохраняются", () => {
+    it("spread values are correct, componentProps keys are preserved", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const spread = { ...store.proxy.email };
       expect(spread.required).toBe(true);
       expect(spread.helpText).toBe("Your email");
       expect(spread.value).toBe("");
       expect(spread.label).toBe("Email");
-      // componentProps никогда не в карте — ключ проходит без переименования
+      // componentProps is never in the map — the key passes without renaming
       expect(Object.keys(spread)).toContain("size");
       expect(typeof spread.onValueChange).toBe("function");
     });
 
-    it("группа: mappable-ключи (dirty/loading) проецируются в spread", () => {
+    it("group: mappable keys (dirty/loading) are projected into the spread", () => {
       const store = new Palistor({
         config: makeConfig(),
         fieldMapping: { dirty: "isDirty", loading: "isLoading" },
@@ -257,27 +261,27 @@ describe("fieldMapping", () => {
       expect(keys).toContain("isLoading");
       expect(keys).not.toContain("dirty");
       expect(keys).not.toContain("loading");
-      // не-mappable групповые ключи не трогаются
+      // non-mappable group keys are untouched
       expect(keys).toContain("submit");
       expect(keys).toContain("value");
     });
 
-    it("группа: чтение переименованного dirty возвращает вычисленное состояние", () => {
+    it("group: reading a renamed dirty returns the computed state", () => {
       const store = new Palistor({
         config: makeConfig(),
         fieldMapping: { dirty: "isDirty" },
       });
       expect(store.proxy.profile.isDirty).toBe(false);
-      // делаем группу dirty — переименованный ключ должен отразить это
+      // make the group dirty — the renamed key must reflect it
       store.proxy.profile.firstName.value = "Changed";
       expect(store.proxy.profile.isDirty).toBe(true);
-      // internal-имя по-прежнему доступно в рантайме
+      // the internal name is still resolvable at runtime
       expect((store.proxy.profile as any).dirty).toBe(true);
     });
   });
 
   describe("list proxy", () => {
-    it("external-имена loading/dirty читаются и проецируются в spread", () => {
+    it("external loading/dirty names are readable and projected into the spread", () => {
       const store = new Palistor({
         config: makeListConfig(),
         fieldMapping: { loading: "isLoading", dirty: "isDirty" },
@@ -292,16 +296,16 @@ describe("fieldMapping", () => {
       expect(keys).toContain("isDirty");
       expect(keys).not.toContain("loading");
       expect(keys).not.toContain("dirty");
-      // не-mappable ключи списка сохраняются
+      // non-mappable list keys are preserved
       expect(keys).toContain("items");
       expect(keys).toContain("add");
     });
   });
 
-  describe("identity — пустой fieldMapping ≡ текущее поведение", () => {
-    it("GET и spread идентичны отсутствию карты (типы не меняются)", () => {
+  describe("identity — empty fieldMapping ≡ current behavior", () => {
+    it("GET and spread match the no-map behavior (types unchanged)", () => {
       const store = new Palistor({ config: makeConfig() });
-      // Без карты статический тип прежний: internal-имена доступны напрямую.
+      // Without a map the static type is the old one: internal names are direct.
       const isRequired: boolean = store.proxy.email.isRequired;
       expect(isRequired).toBe(true);
       const keys = Object.keys({ ...store.proxy.email });
@@ -311,50 +315,50 @@ describe("fieldMapping", () => {
     });
   });
 
-  describe("статическая типизация (compile-time)", () => {
-    it("external-имена типизированы, internal — скрыты", () => {
+  describe("static typing (compile-time)", () => {
+    it("external names are typed, internal ones are hidden", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
 
-      // external-имя присутствует в типе
+      // the external name exists in the type
       const required: boolean = store.proxy.email.required;
       expect(typeof required).toBe("boolean");
 
-      // @ts-expect-error internal-имя переименовано → отсутствует в типе
+      // @ts-expect-error the internal name was renamed → absent from the type
       store.proxy.email.isRequired;
 
-      // @ts-expect-error errorMessage переименован в helperText
+      // @ts-expect-error errorMessage was renamed to helperText
       store.proxy.email.errorMessage;
     });
 
-    it("useForm(store) сохраняет маппинг в типе", () => {
+    it("useForm(store) preserves the mapping in the type", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const { result } = renderHook(() => useForm(store));
 
       const required: boolean = result.current.email.required;
       expect(required).toBe(true);
 
-      // @ts-expect-error internal-имя скрыто и в tracking proxy
+      // @ts-expect-error the internal name is hidden in the tracking proxy too
       result.current.email.isRequired;
     });
 
-    // Валидатор external-config (Phase 2). Проверки — только на уровне типов;
-    // тело функции НЕ вызывается, поэтому рантайм-throw нормализатора не срабатывает.
-    // (В репозитории нет type-test-раннера — валидируется через `tsc --noEmit`.)
-    it("config-валидатор ловит internal-имена при активном маппинге", () => {
+    // External-config validator. Type-level checks only; the function body is
+    // NEVER called, so the normalizer's runtime throw doesn't fire.
+    // (There is no type-test runner in the repo — validated via `tsc --noEmit`.)
+    it("the config validator catches internal names with an active mapping", () => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       function _typeOnly() {
-        // чистый external-конфиг — компилируется
+        // a pure external config — compiles
         new Palistor({
           fieldMapping: mapping,
           config: { email: { value: "", required: true, helpText: "hi" } },
         });
-        // internal-имя ремапленного ключа — ошибка типа
+        // the internal name of a remapped key — type error
         new Palistor({
           fieldMapping: mapping,
           // @ts-expect-error write "required" instead of internal "isRequired"
           config: { email: { value: "", isRequired: true } },
         });
-        // вложенная группа
+        // a nested group
         new Palistor({
           fieldMapping: mapping,
           config: {
@@ -362,7 +366,7 @@ describe("fieldMapping", () => {
             passport: { number: { value: "", isDisabled: true } },
           },
         });
-        // без маппинга internal-имена валидны
+        // without a mapping internal names are valid
         new Palistor({ config: { email: { value: "", isRequired: true } } });
       }
       expect(typeof _typeOnly).toBe("function");
@@ -370,7 +374,7 @@ describe("fieldMapping", () => {
   });
 
   describe("tracking proxy (useForm)", () => {
-    it("external-имена читаются через tracking proxy (типизированно)", () => {
+    it("external names read through the tracking proxy (typed)", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const { result } = renderHook(() => useForm(store));
       const required: boolean = result.current.email.required;
@@ -379,7 +383,7 @@ describe("fieldMapping", () => {
       expect(helpText).toBe("Your email");
     });
 
-    it("spread через tracking proxy показывает только external", () => {
+    it("spread via the tracking proxy shows only external names", () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const { result } = renderHook(() => useForm(store));
       const keys = Object.keys({ ...result.current.email });
@@ -387,7 +391,7 @@ describe("fieldMapping", () => {
       expect(keys).not.toContain("isRequired");
     });
 
-    it("ре-рендерит компонент при изменении переименованного prop", async () => {
+    it("re-renders the component when a renamed prop changes", async () => {
       const store = new Palistor({ config: makeMappedConfig(), fieldMapping: mapping });
       const renderCount = vi.fn();
 

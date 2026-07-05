@@ -3,37 +3,37 @@ import type { AnyConfigNode } from "../store/types";
 
 export interface TreeVisitor {
   /**
-   * Вызывается для каждого leaf-узла ({ value: ... }).
-   * @param node — config-узел (ref на объект, можно использовать как ключ WeakMap)
-   * @param key — имя ключа в родителе (например "city")
-   * @param path — полный dot-path (например "address.city")
-   * @param parent — родительский config-узел
+   * Called for every leaf node ({ value: ... }).
+   * @param node — config node (object ref, usable as a WeakMap key)
+   * @param key — key name in the parent (e.g. "city")
+   * @param path — full dot-path (e.g. "address.city")
+   * @param parent — parent config node
    */
   onLeaf(node: object, key: string, path: string, parent: AnyConfigNode): void;
 
   /**
-   * Вызывается для group-узла ПЕРЕД входом в рекурсию.
-   * Верни false чтобы пропустить поддерево (например reset boundary).
-   * Если не определён — всегда входит.
+   * Called for a group node BEFORE recursing into it.
+   * Return false to skip the subtree (e.g. a reset boundary).
+   * When undefined — always enters.
    */
   onGroupEnter?(node: AnyConfigNode, key: string, path: string, parent: AnyConfigNode): boolean | void;
 
   /**
-   * Вызывается для group-узла ПОСЛЕ обхода всех его потомков.
-   * Опционально — для агрегации (например dirty = any child dirty).
+   * Called for a group node AFTER all its descendants have been visited.
+   * Optional — for aggregation (e.g. dirty = any child dirty).
    */
   onGroupExit?(node: AnyConfigNode, key: string, path: string, parent: AnyConfigNode): void;
 
   /**
-   * Вызывается для list-узла (Array).
-   * Если не определён — list пропускается.
+   * Called for a list node (Array).
+   * When undefined — lists are skipped.
    */
   onList?(node: unknown[], key: string, path: string, parent: AnyConfigNode): void;
 }
 
 /**
- * Обход полного дерева конфигурации с visitor-callback'ами.
- * Заменяет повторяющийся паттерн Object.keys + CONFIG_PROPS + leaf/group/list.
+ * Full config tree walk with visitor callbacks.
+ * Replaces the repeating Object.keys + CONFIG_PROPS + leaf/group/list pattern.
  */
 export function walkFull(
   node: AnyConfigNode,

@@ -11,7 +11,7 @@ type Kernel = Palistor<any, any>;
 
 // ─── Derived state ────────────────────────────────────────────────────────────
 
-/** Статус шага — производная от навигационного состояния (не хранится). */
+/** Step status — derived from navigation state (not stored). */
 export function getStepStatus(flowState: FlowState, stepNode: object): StepStatus {
   const idx = flowState.stepNodes.indexOf(stepNode as AnyConfigNode);
   if (idx === -1) return null;
@@ -19,12 +19,12 @@ export function getStepStatus(flowState: FlowState, stepNode: object): StepStatu
   return flowState.visitedKeys.has(flowState.stepKeys[idx]) ? "completed" : null;
 }
 
-/** Видимость шага — из вычисленного FieldState группы (isVisible реактивен). */
+/** Step visibility — from the group's computed FieldState (isVisible is reactive). */
 export function isStepVisible(kernel: Kernel, stepNode: object): boolean {
   return kernel.nodes.nodeState.get(stepNode)?.isVisible !== false;
 }
 
-/** Композитный loading флоу: true, если резолвится хотя бы один шаг. */
+/** Composite flow loading: true when at least one step is resolving. */
 export function flowLoading(kernel: Kernel, flowState: FlowState): boolean {
   for (const stepNode of flowState.stepNodes) {
     if (kernel.nodes.nodeState.get(stepNode as object)?.loading === true) return true;
@@ -35,15 +35,15 @@ export function flowLoading(kernel: Kernel, flowState: FlowState): boolean {
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
- * Собрать ошибки листьев поддерева шага. Валидация считается «вживую» через
- * computeFieldState(revalidate=true) — не зависит от флага revalidate группы
- * (тот выставляется только submit-пайплайном). Скрытые листья пропускаются.
- * Списки внутри шага пропускаются (паритет с collectLeafStates).
+ * Collect leaf errors of a step's subtree. Validation is computed "live" via
+ * computeFieldState(revalidate=true) — independent of the group's revalidate
+ * flag (which only the submit pipeline sets). Hidden leaves are skipped.
+ * Lists inside a step are skipped (parity with collectLeafStates).
  *
- * `basePath` — префикс путей ошибок. Флоу передаёт КЛЮЧ шага: пути получаются
- * относительными flow-ноды ("welcome.name") — та же база, что у ошибок
- * submit-пайплайна при flow.submit() (collectLeafStates строит пути от
- * submitted-ноды).
+ * `basePath` — prefix for error paths. The flow passes the step KEY: paths
+ * come out relative to the flow node ("welcome.name") — the same base the
+ * submit pipeline uses for errors on flow.submit() (collectLeafStates builds
+ * paths from the submitted node).
  */
 export function collectStepErrors(
   kernel: Kernel,
@@ -76,16 +76,16 @@ export function collectStepErrors(
   return errors;
 }
 
-/** Live-агрегат валидности шага (flow.steps.x.isInvalid). */
+/** Live aggregate of step validity (flow.steps.x.isInvalid). */
 export function stepIsInvalid(kernel: Kernel, stepNode: AnyConfigNode): boolean {
   return collectStepErrors(kernel, stepNode).length > 0;
 }
 
 /**
- * Ошибки флоу по посещённым видимым шагам (скоуп flow.validate()).
- * Скрытые шаги исключаются всегда — невзятая ветка не должна блокировать.
- * Пути ошибок относительны flow-ноды ("stepKey.field") — как у SubmitResult
- * при flow.submit().
+ * Flow errors over visited visible steps (the scope of flow.validate()).
+ * Hidden steps are always excluded — an untaken branch must not block.
+ * Error paths are relative to the flow node ("stepKey.field") — same as
+ * SubmitResult on flow.submit().
  */
 export function collectFlowErrors(kernel: Kernel, flowState: FlowState): FlowError[] {
   const errors: FlowError[] = [];
@@ -98,14 +98,14 @@ export function collectFlowErrors(kernel: Kernel, flowState: FlowState): FlowErr
   return errors;
 }
 
-/** Агрегат flow.isInvalid: есть ли ошибки в посещённых видимых шагах. */
+/** Aggregate flow.isInvalid: any errors in visited visible steps. */
 export function flowIsInvalid(kernel: Kernel, flowState: FlowState): boolean {
   return collectFlowErrors(kernel, flowState).length > 0;
 }
 
 /**
- * flow.validate(): собрать ошибки посещённых шагов, записать в реактивный
- * flow.errors и вернуть. Пустой массив = всё валидно.
+ * flow.validate(): collect errors of the visited steps, write them into the
+ * reactive flow.errors and return them. Empty array = all valid.
  */
 export function flowValidate(kernel: Kernel, flowState: FlowState): FlowError[] {
   const errors = collectFlowErrors(kernel, flowState);
@@ -115,14 +115,14 @@ export function flowValidate(kernel: Kernel, flowState: FlowState): FlowError[] 
 }
 
 /**
- * Отфильтровать из ошибок submit-пайплайна листья, лежащие под СКРЫТЫМИ
- * шагами любого флоу (Resolved Decision 14): базовый пайплайн валидирует все
- * листья независимо от видимости, и без фильтра невзятая ветка с isRequired
- * навсегда блокировала бы финализацию.
+ * Filter out submit-pipeline errors from leaves under HIDDEN steps of any
+ * flow: the base pipeline validates all leaves regardless of visibility, and
+ * without this filter an untaken branch with isRequired fields would block
+ * finalization forever.
  *
- * `submittedNode` — узел, для которого выполнялся submit: пути ошибок пайплайна
- * ОТНОСИТЕЛЬНЫ ему (collectLeafStates строит пути от submitted-ноды), поэтому
- * абсолютные пути скрытых шагов приводятся к той же базе.
+ * `submittedNode` — the node the submit ran for: pipeline error paths are
+ * RELATIVE to it (collectLeafStates builds paths from the submitted node),
+ * so the absolute paths of hidden steps are rebased to the same base.
  */
 export function filterHiddenFlowStepErrors(
   kernel: Kernel,
@@ -147,7 +147,7 @@ export function filterHiddenFlowStepErrors(
       } else if (stepPath.startsWith(basePath + ".")) {
         hiddenPrefixes.push(stepPath.slice(basePath.length + 1) + ".");
       }
-      // stepPath вне поддерева submitted-ноды — его листья в errors не попадают.
+      // stepPath outside the submitted node's subtree — its leaves never appear in errors.
     }
   }
   if (hiddenPrefixes.length === 0) return errors;
@@ -155,13 +155,13 @@ export function filterHiddenFlowStepErrors(
   return errors.filter((e) => !hiddenPrefixes.some((prefix) => e.path.startsWith(prefix)));
 }
 
-// ─── Submit (финализация) ─────────────────────────────────────────────────────
+// ─── Submit (finalization) ────────────────────────────────────────────────────
 
 /**
- * flow.submit(): стандартный group-submit пайплайн над flow-нодой
- * (submitting → beforeSubmit → validate → onSubmit → afterSubmit; листья
- * скрытых шагов отфильтровываются пайплайном). Ошибки валидации ложатся в
- * реактивный flow.errors; при успехе errors очищаются.
+ * flow.submit(): the standard group-submit pipeline over the flow node
+ * (submitting → beforeSubmit → validate → onSubmit → afterSubmit; leaves of
+ * hidden steps are filtered by the pipeline). Validation errors land in the
+ * reactive flow.errors; on success errors are cleared.
  */
 export async function flowSubmit(kernel: Kernel, flowState: FlowState): Promise<SubmitResult> {
   const result = await kernel.submitPipeline.execute(flowState.flowNode);
@@ -176,21 +176,21 @@ function fireCallback(cb: unknown, values: Record<string, unknown>, kernel: Kern
   if (typeof cb !== "function") return;
   try {
     void Promise.resolve((cb as (v: Record<string, unknown>, s: unknown) => unknown)(values, kernel))
-      .catch(() => { /* fire-and-forget: ошибки lifecycle подавляются */ });
+      .catch(() => { /* fire-and-forget: lifecycle errors are swallowed */ });
   } catch {
-    /* синхронный throw тоже подавляется */
+    /* synchronous throws are swallowed too */
   }
 }
 
 /**
- * Lifecycle входа в шаг: onEnter → resolve (eager) → onReady.
+ * Step entry lifecycle: onEnter → resolve (eager) → onReady.
  *
- * - `onEnter` / `onReady` получают FLOW-scoped values (все шаги по ключам) —
- *   живую ссылку groupSlot флоу; fire-and-forget.
- * - resolve шага — стандартный group resolve; флоу триггерит его НА ВХОДЕ
- *   (эквивалент первого доступа). Уже resolved/error (кэш) — не перезапускается,
- *   и onReady НЕ вызывается повторно (Resolved Decision 10).
- * - Без resolve — onReady сразу после onEnter.
+ * - `onEnter` / `onReady` receive FLOW-scoped values (all steps by key) —
+ *   the flow's live groupSlot reference; fire-and-forget.
+ * - the step's resolve is a standard group resolve; the flow triggers it ON
+ *   ENTRY (equivalent to first access). Already resolved/error (cached) — not
+ *   re-run, and onReady is NOT invoked again.
+ * - Without resolve — onReady fires right after onEnter.
  */
 export function runEntryLifecycle(kernel: Kernel, flowState: FlowState, stepNode: AnyConfigNode): void {
   const flowValues =
@@ -221,8 +221,8 @@ export function runEntryLifecycle(kernel: Kernel, flowState: FlowState, stepNode
       fireReady();
     }
   }
-  // pending — resolve уже запущен другим входом (onReady прикреплён там);
-  // resolved / error — кэш: onReady не перезапускается.
+  // pending — the resolve was started by another entry (onReady attached there);
+  // resolved / error — cached: onReady is not re-run.
 }
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
@@ -238,9 +238,9 @@ function notifyNavigation(kernel: Kernel, flowState: FlowState, prevNode: object
 }
 
 /**
- * Общий переход на шаг targetIndex.
- * `push: true` — nextStep()/goTo() (текущий ключ кладётся в стек);
- * `push: false` — back() (стек уже уменьшен вызывающим).
+ * Common transition to step targetIndex.
+ * `push: true`  — nextStep()/goTo() (the current key is pushed onto the stack);
+ * `push: false` — back() (the stack was already popped by the caller).
  */
 function enterStep(kernel: Kernel, flowState: FlowState, targetIndex: number, push: boolean): void {
   const prevIndex = flowState.currentIndex;
@@ -253,7 +253,7 @@ function enterStep(kernel: Kernel, flowState: FlowState, targetIndex: number, pu
   const nextKey = flowState.stepKeys[targetIndex];
   const nextNode = flowState.stepNodes[targetIndex];
 
-  // Предыдущий шаг был посещён (status → "completed"), новый — активен.
+  // The previous step becomes visited (status → "completed"), the new one is active.
   flowState.visitedKeys.add(prevKey);
   flowState.visitedKeys.add(nextKey);
 
@@ -262,9 +262,10 @@ function enterStep(kernel: Kernel, flowState: FlowState, targetIndex: number, pu
 }
 
 /**
- * nextStep(): следующий ВИДИМЫЙ шаг по порядку массива; скрытые пропускаются.
- * Если видимых впереди нет — финализация через flow.submit() (при ошибках
- * валидации onSubmit не вызывается, ошибки в flow.errors, шаг не меняется).
+ * nextStep(): the next VISIBLE step in array order; hidden ones are skipped.
+ * When no visible steps remain ahead — finalize via flow.submit() (on
+ * validation errors onSubmit is not called, errors land in flow.errors, the
+ * step does not change).
  */
 export function flowNextStep(kernel: Kernel, flowState: FlowState): void {
   for (let i = flowState.currentIndex + 1; i < flowState.stepNodes.length; i++) {
@@ -276,19 +277,19 @@ export function flowNextStep(kernel: Kernel, flowState: FlowState): void {
   void flowSubmit(kernel, flowState);
 }
 
-/** back(): вернуться по стеку посещений. No-op при пустом стеке (canGoBack). */
+/** back(): go back along the visit stack. No-op when the stack is empty (canGoBack). */
 export function flowBack(kernel: Kernel, flowState: FlowState): void {
   if (flowState.visitStack.length === 0) return;
   const targetKey = flowState.visitStack.pop()!;
   const targetIndex = flowState.stepKeys.indexOf(targetKey);
-  if (targetIndex === -1) return; // повреждённый стек (после гидратации со старым конфигом)
+  if (targetIndex === -1) return; // corrupted stack (hydrated against an older config)
   enterStep(kernel, flowState, targetIndex, false);
 }
 
 /**
- * goTo(keyOrIndex): произвольный переход по ключу или индексу.
- * Несуществующий ключ/индекс — throw (ловит опечатки на этапе разработки).
- * Переход в текущий шаг — no-op.
+ * goTo(keyOrIndex): arbitrary jump by key or index.
+ * Unknown key/index — throws (catches typos during development).
+ * Jumping to the current step is a no-op.
  */
 export function flowGoTo(kernel: Kernel, flowState: FlowState, keyOrIndex: string | number): void {
   let targetIndex: number;
@@ -310,9 +311,9 @@ export function flowGoTo(kernel: Kernel, flowState: FlowState, keyOrIndex: strin
 // ─── Reset ───────────────────────────────────────────────────────────────────
 
 /**
- * Сброс навигации флоу: первый шаг активен, стек и visited очищены,
- * resolve-состояния шагов сброшены в idle. Lifecycle входа первого шага
- * (onEnter → resolve → onReady) выполняется заново — зеркально инициализации.
+ * Reset flow navigation: the first step is active, the stack and visited set
+ * are cleared, step resolve states go back to idle. The first step's entry
+ * lifecycle (onEnter → resolve → onReady) runs anew — mirroring initialization.
  */
 export function resetFlowNav(kernel: Kernel, flowState: FlowState): void {
   flowState.currentIndex = 0;
@@ -333,8 +334,8 @@ export function resetFlowNav(kernel: Kernel, flowState: FlowState): void {
 }
 
 /**
- * Сбросить навигацию всех флоу, попавших в поддерево сброса.
- * Вызывается из ResetPipeline (root reset → все флоу; reset группы → флоу внутри неё).
+ * Reset navigation of all flows that fall into the reset subtree.
+ * Called from ResetPipeline (root reset → all flows; group reset → flows inside it).
  */
 export function resetFlowNavForSubtree(kernel: Kernel, groupNode: AnyConfigNode): void {
   const flows = kernel.nodes.allFlowStates;
@@ -357,13 +358,14 @@ export function resetFlowNavForSubtree(kernel: Kernel, groupNode: AnyConfigNode)
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 /**
- * Инициализационный lifecycle: первый шаг каждого флоу «входится» при создании
- * store (onEnter → resolve → onReady). Вызывается из конструктора Palistor.
+ * Initialization lifecycle: the first step of every flow is "entered" at
+ * store creation (onEnter → resolve → onReady). Called from the Palistor
+ * constructor.
  *
- * Дополнительно прогревает proxyCache flow-нод: identity-view шага снимает
- * parent.proxy из кэша при первом step.submit(), и flow-proxy к этому моменту
- * уже должен существовать — иначе onSubmit шага получил бы undefined
- * третьим аргументом.
+ * Also pre-warms the proxyCache of flow nodes: a step's identity view reads
+ * parent.proxy from the cache on the first step.submit(), and the flow proxy
+ * must already exist by then — otherwise the step's onSubmit would receive
+ * undefined as its third argument.
  */
 export function initFlows(kernel: Kernel): void {
   for (const flowState of kernel.nodes.allFlowStates) {
@@ -374,7 +376,7 @@ export function initFlows(kernel: Kernel): void {
 
 // ─── Persist ─────────────────────────────────────────────────────────────────
 
-/** Снимок навигации флоу в persist-снапшоте (значения полей хранятся отдельно). */
+/** Flow navigation snapshot in the persist payload (field values are stored separately). */
 export interface FlowNavSnapshot {
   currentStepKey: string;
   visitStack: string[];
@@ -382,8 +384,8 @@ export interface FlowNavSnapshot {
 }
 
 /**
- * Сериализовать навигацию всех флоу для persist: ключ — dot-путь flow-ноды.
- * Статусы шагов не сохраняются — выводятся из навигации при гидратации.
+ * Serialize navigation of all flows for persist: key — the flow node's dot-path.
+ * Step statuses are not saved — they are derived from navigation on hydrate.
  */
 export function serializeFlowNav(kernel: Kernel): Record<string, FlowNavSnapshot> | null {
   const flows = kernel.nodes.allFlowStates;
@@ -400,10 +402,10 @@ export function serializeFlowNav(kernel: Kernel): Record<string, FlowNavSnapshot
 }
 
 /**
- * Восстановить навигацию флоу из persist-снимка. Неизвестные ключи шагов
- * (конфиг изменился) отбрасываются; несовместимый currentStepKey — флоу
- * остаётся в текущем состоянии. Возвращает изменённые узлы для notify и
- * список флоу, чей активный шаг изменился (для повторного entry lifecycle).
+ * Restore flow navigation from a persist snapshot. Unknown step keys (the
+ * config changed) are dropped; an incompatible currentStepKey leaves the flow
+ * in its current state. Returns the changed nodes for notify and the flows
+ * whose active step changed (for a repeated entry lifecycle).
  */
 export function restoreFlowNav(
   kernel: Kernel,
@@ -443,7 +445,7 @@ export function restoreFlowNav(
   return { changed, entered };
 }
 
-/** Entry lifecycle текущего шага (используется persist после гидратации). */
+/** Entry lifecycle of the current step (used by persist after hydration). */
 export function runFlowEntryLifecycle(kernel: Kernel, flowState: FlowState): void {
   runEntryLifecycle(kernel, flowState, flowState.stepNodes[flowState.currentIndex]);
 }

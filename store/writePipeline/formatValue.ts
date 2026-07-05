@@ -1,13 +1,13 @@
 import type { AnyConfigNode } from "../store/types";
 
 /**
- * Фаза 1: Форматирование входного значения.
+ * Phase 1: format the incoming value.
  *
- * Если у узла есть formatter — вызывает его, передавая сырое значение
- * и текущий snapshot всех значений формы.
- * Если formatter отсутствует — возвращает значение как есть.
+ * If the node has a formatter — calls it with the raw value and the current
+ * snapshot of all form values.
+ * Without a formatter — returns the value as-is.
  *
- * Чистая функция: не мутирует nodeState, не имеет побочных эффектов.
+ * Pure function: does not mutate nodeState, no side effects.
  */
 export function formatValue(
   rawValue: unknown,

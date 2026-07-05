@@ -4,32 +4,32 @@ import type { AnyConfigNode } from "../store/types";
 import type { FlowError } from "./defineFlow";
 
 /**
- * Навигационное состояние одного флоу — ЕДИНЫЙ кубик «флоу».
+ * Navigation state of a single flow — the SINGLE "flow" building block.
  *
- * Идентичность узла для tracking — сам объект `FlowState` (ключ в хабе, как
- * `ListState` у списков): навигация бампает его версию через notifyChanged.
- * Статусы шагов НЕ хранятся — выводятся из (currentIndex + visitedKeys).
+ * Node identity for tracking is the `FlowState` object itself (hub key, like
+ * `ListState` for lists): navigation bumps its version via notifyChanged.
+ * Step statuses are NOT stored — derived from (currentIndex + visitedKeys).
  */
 export interface FlowState {
-  /** Сам конфиг-узел флоу — ключ в flowStates. */
+  /** The flow's config node — key in flowStates. */
   flowNode: AnyConfigNode;
-  /** Абсолютный dot-путь flow-ноды (для persist-снимка и reset-скоупа). */
+  /** Absolute dot-path of the flow node (for the persist snapshot and reset scope). */
   path: string;
-  /** Упорядоченные ключи шагов (копия FLOW_STEPS_PROP). */
+  /** Ordered step keys (copy of FLOW_STEPS_PROP). */
   stepKeys: string[];
-  /** Конфиг-ноды шагов в том же порядке. */
+  /** Step config nodes in the same order. */
   stepNodes: AnyConfigNode[];
-  /** Индекс активного шага. */
+  /** Index of the active step. */
   currentIndex: number;
-  /** Стек посещений — pop в back(). */
+  /** Visit stack — popped by back(). */
   visitStack: string[];
-  /** Все когда-либо посещённые шаги (стек lossy — back() убирает записи). */
+  /** All steps ever visited (the stack is lossy — back() removes entries). */
   visitedKeys: Set<string>;
-  /** Ошибки последнего validate()/finalize — реактивные (flow.errors). */
+  /** Errors of the last validate()/finalize — reactive (flow.errors). */
   errors: FlowError[];
 }
 
-/** Минимальный интерфейс реестра для регистрации флоу (NodeRegistry). */
+/** Minimal registry interface for flow registration (NodeRegistry). */
 export interface FlowRegistrySlice {
   readonly flowStates: WeakMap<object, FlowState>;
   readonly allFlowStates: FlowState[];
@@ -38,9 +38,9 @@ export interface FlowRegistrySlice {
 }
 
 /**
- * Обойти дерево конфига и создать FlowState для каждого узла с маркером
- * {@link FLOW_STEPS_PROP} (проставляется defineFlow). Вызывается из
- * конструктора NodeRegistry ПОСЛЕ buildNodeMaps — пути уже известны.
+ * Walk the config tree and create a FlowState for every node carrying the
+ * {@link FLOW_STEPS_PROP} marker (stamped by defineFlow). Called from the
+ * NodeRegistry constructor AFTER buildNodeMaps — paths are already known.
  */
 export function collectFlowStates(root: AnyConfigNode, registry: FlowRegistrySlice): void {
   walk(root);
@@ -55,8 +55,8 @@ export function collectFlowStates(root: AnyConfigNode, registry: FlowRegistrySli
         if (!child || typeof child !== "object" || Array.isArray(child) || "value" in child) {
           throw new Error(`[palistor] defineFlow: step "${key}" is not a group node in the flow config.`);
         }
-        // Пустой шаг ({} — read-only summary) эвристика hasChildren в
-        // registerNodes пометила бы как "leaf"; шаг по определению — группа.
+        // An empty step ({} — read-only summary) would be marked "leaf" by the
+        // hasChildren heuristic in registerNodes; a step is by definition a group.
         (child as Record<string, unknown>).__kind = "group";
         stepNodes.push(child as AnyConfigNode);
       }

@@ -1,9 +1,9 @@
 /**
- * List resolver + useStoreContext: resolver получает контекст через store.context.
+ * List resolver + useStoreContext: the resolver receives context via store.context.
  *
- * Покрывает сценарий, когда React-компонент устанавливает контекст через
- * useStoreContext (или store.setContext), а резольвер списка читает его
- * из второго аргумента `store.context`.
+ * Covers the scenario where a React component sets the context through
+ * useStoreContext (or store.setContext) and the list resolver reads it
+ * from the second argument's `store.context`.
  */
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
@@ -23,10 +23,10 @@ const userTemplate = {
   role: { value: "user" },
 };
 
-// ─── Тесты ────────────────────────────────────────────────────────────────────
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("list resolver читает store.context, установленный через useStoreContext", () => {
-  it("resolver получает accountId, засетанный через useStoreContext до resolve (проходит отдельно)", async () => {
+describe("the list resolver reads store.context set via useStoreContext", () => {
+  it("the resolver receives the accountId set via useStoreContext before resolve (passes in isolation)", async () => {
     const capturedContext: Record<string, unknown>[] = [];
 
     const resolver = vi.fn(async (_values: unknown, store: any) => {
@@ -43,15 +43,15 @@ describe("list resolver читает store.context, установленный �
       } as any,
     });
 
-    // Устанавливаем контекст через хук (как делает Layout/Provider в реальном приложении)
+    // Set the context via the hook (as a Layout/Provider does in a real app)
     const { unmount } = renderHook(() =>
       useStoreContext(store as any, { accountId: "acc-123", tenant: "acme" }),
     );
 
-    // Контекст уже установлен через useEffect → нужен act, чтобы эффект применился
+    // The context is set via useEffect → act is needed for the effect to apply
     await act(async () => {});
 
-    // Триггерим lazy resolve
+    // Trigger the lazy resolve
     void (store.proxy as any).users.items;
     await act(() => flushPromises());
 
@@ -61,7 +61,7 @@ describe("list resolver читает store.context, установленный �
     unmount();
   });
 
-  it("после unmount useStoreContext контекст очищается и resolver не видит старые данные (проходит отдельно)", async () => {
+  it("after useStoreContext unmounts, the context clears and the resolver doesn't see stale data (passes in isolation)", async () => {
     const capturedContexts: Record<string, unknown>[] = [];
     let callCount = 0;
 
@@ -80,7 +80,7 @@ describe("list resolver читает store.context, установленный �
       } as any,
     });
 
-    // Первый рендер — с контекстом
+    // First render — with the context
     const { unmount } = renderHook(() =>
       useStoreContext(store as any, { accountId: "acc-first" }),
     );
@@ -91,14 +91,14 @@ describe("list resolver читает store.context, установленный �
 
     expect(capturedContexts[0]).toMatchObject({ accountId: "acc-first" });
 
-    // Unmount НЕ очищает контекст
+    // Unmount does NOT clear the context
     unmount();
     await act(async () => {});
 
     expect(store.context).toEqual({ accountId: "acc-first" });
   });
 
-  it("useForm + useStoreContext в одном renderHook — resolver получает контекст", async () => {
+  it("useForm + useStoreContext in one renderHook — the resolver receives the context", async () => {
     const capturedContext: Record<string, unknown>[] = [];
 
     const resolver = vi.fn(async (_values: unknown, store: any) => {
@@ -115,7 +115,7 @@ describe("list resolver читает store.context, установленный �
       } as any,
     });
 
-    // Компонент одновременно подключает форму и устанавливает контекст
+    // The component wires up the form and sets the context at the same time
     renderHook(() => {
       useStoreContext(store as any, { accountId: "acc-xyz", locale: "ru" });
       return useForm(store as any);
@@ -123,7 +123,7 @@ describe("list resolver читает store.context, установленный �
 
     await act(async () => {});
 
-    // Триггерим lazy resolve
+    // Trigger the lazy resolve
     void (store.proxy as any).users.items;
     await act(() => flushPromises());
 
@@ -131,7 +131,7 @@ describe("list resolver читает store.context, установленный �
     expect(capturedContext[0]).toMatchObject({ accountId: "acc-xyz", locale: "ru" });
   });
 
-  it("контекст обновляется между вызовами — resolver повторного запуска получает новый контекст", async () => {
+  it("the context updates between calls — a re-run resolver gets the new context", async () => {
     const capturedContexts: Record<string, unknown>[] = [];
 
     const resolver = vi.fn(async (_values: unknown, store: any) => {
@@ -149,7 +149,7 @@ describe("list resolver читает store.context, установленный �
       } as any,
     });
 
-    // Устанавливаем начальный контекст
+    // Set the initial context
     store.setContext({ accountId: "acc-v1" });
 
     void (store.proxy as any).users.items;
@@ -157,10 +157,10 @@ describe("list resolver читает store.context, установленный �
 
     expect(capturedContexts[0]).toMatchObject({ accountId: "acc-v1" });
 
-    // Обновляем контекст
+    // Update the context
     store.setContext({ accountId: "acc-v2" });
 
-    // Меняем dep → перезапуск resolver
+    // Change the dep → the resolver re-runs
     act(() => {
       (store.proxy as any).filter.value = "user";
     });
@@ -169,7 +169,7 @@ describe("list resolver читает store.context, установленный �
     expect(capturedContexts[1]).toMatchObject({ accountId: "acc-v2" });
   });
 
-  it("resolver использует store.context.accountId для фильтрации — результат зависит от контекста", async () => {
+  it("the resolver uses store.context.accountId to filter — the result depends on the context", async () => {
     const users: Record<string, { id: string; name: string; role: string }[]> = {
       "acc-alice": [{ id: "u1", name: "Alice", role: "admin" }],
       "acc-bob":   [{ id: "u2", name: "Bob",   role: "user"  }],
@@ -197,7 +197,7 @@ describe("list resolver читает store.context, установленный �
     expect((store.proxy as any).users.length).toBe(1);
   });
 
-  it("изменение accountId через setContext автоматически перезапускает resolver", async () => {
+  it("changing accountId via setContext re-runs the resolver automatically", async () => {
     const capturedContexts: Record<string, unknown>[] = [];
 
     const resolver = vi.fn(async (_values: unknown, store: any) => {
@@ -214,8 +214,8 @@ describe("list resolver читает store.context, установленный �
       } as any,
     });
 
-    // Первый запуск: resolver читает store.context.accountId → автоматически
-    // добавляет $context.accountId в зависимости
+    // First run: the resolver reads store.context.accountId → automatically
+    // adds $context.accountId to the dependencies
     store.setContext({ accountId: "acc-v1" });
 
     void (store.proxy as any).users.items;
@@ -225,8 +225,8 @@ describe("list resolver читает store.context, установленный �
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(capturedContexts[0]).toMatchObject({ accountId: "acc-v1" });
 
-    // Меняем accountId — setContext вызывает retriggerByPaths("$context.accountId"),
-    // и resolver перезапускается автоматически без явного deps или изменения полей
+    // Change accountId — setContext calls retriggerByPaths("$context.accountId"),
+    // and the resolver re-runs automatically without explicit deps or field changes
     act(() => {
       store.setContext({ accountId: "acc-v2" });
     });

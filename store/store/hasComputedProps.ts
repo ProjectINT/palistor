@@ -2,8 +2,8 @@ import { FIELD_STATE_PROPS } from "../constants";
 import type { AnyConfigNode } from "./types";
 
 /**
- * Проверяет, есть ли у узла вычисляемые свойства (функции isVisible, isRequired…).
- * Нужно для промежуточных узлов-групп (passport.isVisible).
+ * Checks whether a node has computed props (isVisible, isRequired… functions).
+ * Needed for intermediate group nodes (passport.isVisible).
  */
 export function hasComputedProps(node: AnyConfigNode): boolean {
   for (const key of FIELD_STATE_PROPS) {

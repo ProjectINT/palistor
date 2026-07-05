@@ -1,9 +1,9 @@
 import { type AnyConfigNode } from "../store/types";
 
 /**
- * Собирает все узлы с `onChange` от самого узла вверх до корня.
+ * Collects all nodes with `onChange` from the node itself up to the root.
  *
- * Порядок: сам узел (если есть onChange) первым, затем ближайший предок и т.д.
+ * Order: the node itself first (if it has onChange), then the nearest ancestor, etc.
  */
 export function findOnChangeNodes(
   node: object,
@@ -11,12 +11,12 @@ export function findOnChangeNodes(
 ): AnyConfigNode[] {
   const result: AnyConfigNode[] = [];
 
-  // Сам узел
+  // The node itself
   if (typeof (node as AnyConfigNode).onChange === "function") {
     result.push(node as AnyConfigNode);
   }
 
-  // Предки
+  // Ancestors
   let current = nodeParents.get(node);
   while (current) {
     if (typeof (current as AnyConfigNode).onChange === "function") {

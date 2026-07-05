@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { NodeRegistry } from "./NodeRegistry/nodeRegistry";
 import type { AnyConfigNode } from "./types";
 
-// ─── Тестовые конфиги ─────────────────────────────────────────────────────────
+// ─── Test configs ─────────────────────────────────────────────────────────────
 
 const flat = {
   email: { value: "" },
@@ -33,11 +33,11 @@ const withComputed = {
 
 const translate = (v: string) => v;
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("NodeRegistry", () => {
-  describe("конструктор — инициализация узлов", () => {
-    it("регистрирует все листовые узлы", () => {
+  describe("constructor — node initialization", () => {
+    it("registers all leaf nodes", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       const leafPaths = reg.computeNodes.map((e) => e.path);
       expect(leafPaths).toContain("email");
@@ -45,7 +45,7 @@ describe("NodeRegistry", () => {
       expect(leafPaths).toContain("age");
     });
 
-    it("устанавливает начальное состояние для листьев", () => {
+    it("sets the initial state for leaves", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       const emailState = reg.nodeState.get((flat as any).email);
       expect(emailState).toBeDefined();
@@ -53,25 +53,25 @@ describe("NodeRegistry", () => {
       expect(emailState!.isVisible).toBe(true);
     });
 
-    it("применяет initialValues из конструктора", () => {
+    it("applies initialValues from the constructor", () => {
       const reg = new NodeRegistry(flat, { name: "Bob" }, translate);
       const nameState = reg.nodeState.get((flat as any).name);
       expect(nameState!.value).toBe("Bob");
     });
 
-    it("строит nodePaths для всех узлов вложенной структуры", () => {
+    it("builds nodePaths for every node of the nested structure", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.nodePaths.get((nested as any).passport.number)).toBe("passport.number");
       expect(reg.nodePaths.get((nested as any).address.city.name)).toBe("address.city.name");
     });
 
-    it("строит nodeParents для дочерних узлов", () => {
+    it("builds nodeParents for child nodes", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.nodeParents.get((nested as any).passport.number)).toBe((nested as any).passport);
       expect(reg.nodeParents.get((nested as any).passport)).toBe(nested);
     });
 
-    it("инициализирует submitting для корня и вложенных групп", () => {
+    it("initializes submitting for the root and nested groups", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       const rootState = reg.nodeState.get(nested);
       expect(rootState).toBeDefined();
@@ -80,7 +80,7 @@ describe("NodeRegistry", () => {
       expect(passportState!.submitting).toBe(false);
     });
 
-    it("регистрирует листья вложенных уровней", () => {
+    it("registers leaves at nested levels", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       const paths = reg.computeNodes.map((e) => e.path);
       expect(paths).toContain("email");
@@ -91,19 +91,19 @@ describe("NodeRegistry", () => {
   });
 
   describe("getState / setState", () => {
-    it("getState возвращает состояние листового узла", () => {
+    it("getState returns a leaf node's state", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       const state = reg.getState((flat as any).email);
       expect(state).toBeDefined();
       expect(state!.value).toBe("");
     });
 
-    it("getState возвращает undefined для незарегистрированного узла", () => {
+    it("getState returns undefined for an unregistered node", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       expect(reg.getState({})).toBeUndefined();
     });
 
-    it("setState обновляет состояние узла", () => {
+    it("setState updates a node's state", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       const node = (flat as any).email;
       const current = reg.getState(node)!;
@@ -113,94 +113,94 @@ describe("NodeRegistry", () => {
   });
 
   describe("getPath / getParent", () => {
-    it("getPath возвращает dot-путь узла", () => {
+    it("getPath returns the node's dot-path", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getPath((nested as any).passport.number)).toBe("passport.number");
       expect(reg.getPath((nested as any).email)).toBe("email");
     });
 
-    it("getPath возвращает undefined для корневого узла", () => {
+    it("getPath returns undefined for the root node", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getPath(nested)).toBeUndefined();
     });
 
-    it("getParent возвращает непосредственного родителя", () => {
+    it("getParent returns the direct parent", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getParent((nested as any).passport.number)).toBe((nested as any).passport);
       expect(reg.getParent((nested as any).passport)).toBe(nested);
     });
 
-    it("getParent возвращает undefined для корневого узла", () => {
+    it("getParent returns undefined for the root node", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getParent(nested)).toBeUndefined();
     });
   });
 
   describe("getGroupPath", () => {
-    it("листовой узел → path родительской группы", () => {
+    it("leaf node → the parent group's path", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getGroupPath((nested as any).passport.number)).toBe("passport");
     });
 
-    it("корневой лист → пустая строка", () => {
+    it("root-level leaf → an empty string", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       expect(reg.getGroupPath((flat as any).email)).toBe("");
     });
 
-    it("групповой узел → собственный path", () => {
+    it("group node → its own path", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getGroupPath((nested as any).passport)).toBe("passport");
     });
 
-    it("корневой группа → пустая строка", () => {
+    it("root group → an empty string", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.getGroupPath(nested)).toBe("");
     });
   });
 
   describe("findByPath", () => {
-    it("находит лист по точному пути", () => {
+    it("finds a leaf by exact path", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.findByPath("passport.number")).toBe((nested as any).passport.number);
       expect(reg.findByPath("email")).toBe((nested as any).email);
     });
 
-    it("возвращает undefined для несуществующего пути", () => {
+    it("returns undefined for a missing path", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.findByPath("nonexistent")).toBeUndefined();
     });
 
-    it("возвращает undefined для пути к группе (группы без computed-props не в computeNodes)", () => {
-      // Группы без computed-props не попадают в computeNodes
+    it("returns undefined for a group path (groups without computed props are not in computeNodes)", () => {
+      // Groups without computed props never enter computeNodes
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.findByPath("passport")).toBeUndefined();
     });
   });
 
   describe("isLeafNode / isGroupNode", () => {
-    it("isLeafNode возвращает true для листового узла", () => {
+    it("isLeafNode returns true for a leaf node", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       expect(reg.isLeafNode((flat as any).email)).toBe(true);
     });
 
-    it("isLeafNode возвращает false для группового узла", () => {
+    it("isLeafNode returns false for a group node", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.isLeafNode((nested as any).passport)).toBe(false);
     });
 
-    it("isGroupNode возвращает true для группового узла", () => {
+    it("isGroupNode returns true for a group node", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       expect(reg.isGroupNode((nested as any).passport)).toBe(true);
     });
 
-    it("isGroupNode возвращает false для листового узла", () => {
+    it("isGroupNode returns false for a leaf node", () => {
       const reg = new NodeRegistry(flat, {}, translate);
       expect(reg.isGroupNode((flat as any).email)).toBe(false);
     });
   });
 
   describe("forEachCompute", () => {
-    it("итерирует по всем листьям", () => {
+    it("iterates over all leaves", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       const collected: string[] = [];
       reg.forEachCompute((entry) => collected.push(entry.path));
@@ -211,26 +211,26 @@ describe("NodeRegistry", () => {
     });
   });
 
-  describe("groupComputeMap и proxyCache", () => {
-    it("groupComputeMap заполняется при инициализации", () => {
+  describe("groupComputeMap and proxyCache", () => {
+    it("groupComputeMap is populated at initialization", () => {
       const reg = new NodeRegistry(nested, {}, translate);
       const passportLeaves = reg.groupComputeMap.get((nested as any).passport);
       expect(passportLeaves).toBeDefined();
       expect(passportLeaves!.length).toBeGreaterThan(0);
     });
 
-    it("proxyCache изначально пустой (заполняется лениво через buildProxy)", () => {
+    it("proxyCache starts empty (filled lazily via buildProxy)", () => {
       const reg = new NodeRegistry(flat, {}, translate);
-      // proxyCache пустой — proxy ещё не созданы
+      // proxyCache is empty — no proxies created yet
       expect(reg.proxyCache.get((flat as any).email)).toBeUndefined();
     });
   });
 
-  describe("узлы с computed-props на группе", () => {
-    it("группа с isVisible попадает в computeNodes", () => {
+  describe("nodes with computed props on a group", () => {
+    it("a group with isVisible enters computeNodes", () => {
       const reg = new NodeRegistry(withComputed, {}, translate);
       const paths = reg.computeNodes.map((e) => e.path);
-      // passport — групповой узел с isVisible функцией → должен быть в computeNodes
+      // passport is a group node with an isVisible function → must be in computeNodes
       expect(paths).toContain("passport");
     });
   });

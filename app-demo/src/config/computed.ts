@@ -24,7 +24,7 @@ export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' 
       dataType: "Number" as const,
       type: "number"
     },
-    // Computed value — автоматически вычисляется
+    // Computed value — calculated automatically
     value: (values: PaymentFormValues) => values.price * values.quantity,
     label: (t: TranslateFn) => t("form.total"),
     isReadOnly: true,

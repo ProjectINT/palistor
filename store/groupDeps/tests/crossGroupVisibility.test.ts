@@ -1,19 +1,20 @@
 /**
- * Регрессия: isVisible ГРУППЫ, зависящий от листа ДРУГОЙ sibling-группы,
- * должен пересчитываться при targeted recompute.
+ * Regression: a GROUP's isVisible depending on a leaf of ANOTHER sibling
+ * group must recompute during a targeted recompute.
  *
- * Баг: compute-запись группового узла (с isVisible) лежит в groupComputeMap
- * под РОДИТЕЛЕМ, но кросс-групповая зависимость писалась на own-path группы.
- * При изменении листа соседней группы recompute трогал только детей группы,
- * но не её собственный isVisible-энтри (он под родителем), и isVisible
- * оставался устаревшим. Фикс: реципиент зависимости = путь родительской
- * группы (владельца compute-записи). См. GroupDepsMap.getTrackingWrap.
+ * The bug: a group node's compute entry (with isVisible) lives in
+ * groupComputeMap under the PARENT, but the cross-group dependency was
+ * recorded on the group's own path. When a sibling group's leaf changed, the
+ * recompute only touched the group's children — not its own isVisible entry
+ * (which lives under the parent) — so isVisible stayed stale. The fix: the
+ * dependency recipient = the parent group's path (the compute entry's owner).
+ * See GroupDepsMap.getTrackingWrap.
  */
 import { describe, it, expect } from "vitest";
 import { Palistor } from "../../store";
 
 describe("cross-group group isVisible — targeted recompute", () => {
-  it("isVisible группы реагирует на лист соседней sibling-группы", () => {
+  it("a group's isVisible reacts to a sibling group's leaf", () => {
     const store = new Palistor({
       config: {
         a: { kind: { value: "" } },
@@ -25,20 +26,20 @@ describe("cross-group group isVisible — targeted recompute", () => {
     });
 
     const bNode = (store as any).rootConfig.b;
-    // Изначально a.kind !== "yes" → b скрыт.
+    // Initially a.kind !== "yes" → b is hidden.
     expect(store.nodes.nodeState.get(bNode)?.isVisible).toBe(false);
     expect((store.proxy as any).b.isVisible).toBe(false);
 
-    // Пишем в лист другой группы — b.isVisible должен стать true.
+    // Write to the other group's leaf — b.isVisible must become true.
     (store.proxy as any).a.kind.value = "yes";
     expect((store.proxy as any).b.isVisible).toBe(true);
 
-    // И обратно — реактивность работает в обе стороны.
+    // And back — reactivity works both ways.
     (store.proxy as any).a.kind.value = "no";
     expect((store.proxy as any).b.isVisible).toBe(false);
   });
 
-  it("isVisible группы реагирует на лист во ВЛОЖЕННОЙ соседней группе", () => {
+  it("a group's isVisible reacts to a leaf in a NESTED sibling group", () => {
     const store = new Palistor({
       config: {
         source: {

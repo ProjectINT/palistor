@@ -7,16 +7,16 @@ function makeEntry(path: string, deps: string[] = []): { node: AnyConfigNode; pa
 }
 
 describe("topologicalSortComputed", () => {
-  it("возвращает пустой массив без изменений", () => {
+  it("returns an empty array unchanged", () => {
     expect(topologicalSortComputed([])).toEqual([]);
   });
 
-  it("возвращает массив из одного элемента без изменений", () => {
+  it("returns a single-element array unchanged", () => {
     const entry = makeEntry("a");
     expect(topologicalSortComputed([entry])).toEqual([entry]);
   });
 
-  it("независимые узлы: порядок сохраняется", () => {
+  it("independent nodes: the order is preserved", () => {
     const a = makeEntry("a");
     const b = makeEntry("b");
     const result = topologicalSortComputed([a, b]);
@@ -25,14 +25,14 @@ describe("topologicalSortComputed", () => {
     expect(result).toContain(b);
   });
 
-  it("B зависит от A → A идёт раньше B", () => {
+  it("B depends on A → A comes before B", () => {
     const a = makeEntry("a");
     const b = makeEntry("b", ["a"]);
     const result = topologicalSortComputed([b, a]);
     expect(result.indexOf(a)).toBeLessThan(result.indexOf(b));
   });
 
-  it("цепочка A → B → C сортируется корректно", () => {
+  it("the chain A → B → C sorts correctly", () => {
     const a = makeEntry("a");
     const b = makeEntry("b", ["a"]);
     const c = makeEntry("c", ["b"]);
@@ -41,14 +41,14 @@ describe("topologicalSortComputed", () => {
     expect(result.indexOf(b)).toBeLessThan(result.indexOf(c));
   });
 
-  it("зависимость на не-computed узел игнорируется", () => {
+  it("a dependency on a non-computed node is ignored", () => {
     const a = makeEntry("a", ["external"]);
     const b = makeEntry("b");
     const result = topologicalSortComputed([a, b]);
     expect(result).toHaveLength(2);
   });
 
-  it("циклическая зависимость: все узлы включаются в результат", () => {
+  it("a cyclic dependency: all nodes are included in the result", () => {
     const a = makeEntry("a", ["b"]);
     const b = makeEntry("b", ["a"]);
     const result = topologicalSortComputed([a, b]);

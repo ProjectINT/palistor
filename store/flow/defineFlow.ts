@@ -6,28 +6,28 @@ import {
 } from "../constants";
 import type { ExtractValues, ProxyStore } from "../store/types";
 
-// ─── Типы шага ────────────────────────────────────────────────────────────────
+// ─── Step types ───────────────────────────────────────────────────────────────
 
 /**
- * Статус шага флоу — вычисляемое свойство step-proxy, производное от
- * навигационного состояния (currentStepKey + visited set). Не является
- * leaf-нодой: не попадает в values, submit-payload и persisted-значения.
+ * Flow step status — a computed step-proxy property derived from navigation
+ * state (currentStepKey + visited set). Not a leaf node: never appears in
+ * values, submit payloads or persisted state.
  *
- * - `null`        — шаг ещё не посещался
- * - `"active"`    — текущий шаг
- * - `"completed"` — был активен, затем ушли (вперёд или назад)
+ * - `null`        — the step has not been visited yet
+ * - `"active"`    — the current step
+ * - `"completed"` — was active, then left (forward or back)
  */
 export type StepStatus = "active" | "completed" | null;
 
-/** Ошибка валидации флоу — та же форма, что в SubmitResult. */
+/** Flow validation error — same shape as in SubmitResult. */
 export interface FlowError {
   path: string;
   message: string;
 }
 
 /**
- * Результат defineStep: группа-конфиг шага + его ключ во флоу.
- * defineFlow разворачивает шаги в обычные дочерние группы flow-ноды.
+ * Result of defineStep: the step's group config + its key within the flow.
+ * defineFlow expands steps into regular child groups of the flow node.
  */
 export interface FlowStep<
   K extends string = string,
@@ -39,18 +39,18 @@ export interface FlowStep<
 
 export type AnyFlowStep = FlowStep<string, Record<string, any>>;
 
-/** Значения флоу — все шаги по ключам (аккумулированное состояние). */
+/** Flow values — all steps by key (accumulated state). */
 export type FlowValues<S extends readonly AnyFlowStep[]> = {
   [Step in S[number] as Step["key"]]: ExtractValues<Step["config"]>;
 };
 
-// ─── FlowNode (бренд) ─────────────────────────────────────────────────────────
+// ─── FlowNode (brand) ─────────────────────────────────────────────────────────
 
 declare const __flowBrand: unique symbol;
 
 /**
- * Узел флоу в дереве конфига: обычная группа (шаги — дочерние группы по ключам),
- * помеченная брендом с кортежем шагов для вывода типов proxy.
+ * A flow node in the config tree: a regular group (steps are child groups by
+ * key), branded with the step tuple for proxy type inference.
  */
 export type FlowNode<S extends readonly AnyFlowStep[]> = {
   readonly [__flowBrand]: S;
@@ -58,7 +58,7 @@ export type FlowNode<S extends readonly AnyFlowStep[]> = {
   [Step in S[number] as Step["key"]]: Step["config"];
 };
 
-/** Извлечь кортеж шагов из FlowNode (never — если узел не флоу). */
+/** Extract the step tuple from a FlowNode (never when the node is not a flow). */
 export type InferFlowSteps<T> = T extends { readonly [__flowBrand]: infer S extends readonly AnyFlowStep[] }
   ? S
   : never;
@@ -66,16 +66,17 @@ export type InferFlowSteps<T> = T extends { readonly [__flowBrand]: infer S exte
 // ─── defineStep ───────────────────────────────────────────────────────────────
 
 /**
- * Имя `status` зарезервировано на step-proxy под вычисляемый статус шага —
- * поле с таким именем в конфиге шага запрещено (по аналогии с dirty/loading).
+ * The name `status` is reserved on the step proxy for the computed step
+ * status — a config field with that name is forbidden (like dirty/loading).
  */
 const RESERVED_STEP_CONFIG_KEYS = new Set(["status"]);
 
 /**
- * Обернуть конфиг группы в шаг флоу.
+ * Wrap a group config into a flow step.
  *
- * Конфиг шага — обычная group-нода Palistor (поля, isVisible, validate,
- * resolve, onSubmit, …) плюс flow-lifecycle колбэки `onEnter` / `onReady`.
+ * A step config is a regular Palistor group node (fields, isVisible,
+ * validate, resolve, onSubmit, …) plus the flow lifecycle callbacks
+ * `onEnter` / `onReady`.
  *
  * @example
  * defineStep("welcome", {
@@ -111,8 +112,8 @@ export function defineStep<const K extends string, const C extends Record<string
 // ─── defineFlow ───────────────────────────────────────────────────────────────
 
 /**
- * Ключи шагов, конфликтующие со свойствами flow-proxy / steps-proxy /
- * служебными ключами конфига — запрещены как имена шагов.
+ * Step keys that conflict with flow-proxy / steps-proxy properties or service
+ * config keys — forbidden as step names.
  */
 const RESERVED_STEP_KEYS = new Set<string>([
   ...CONFIG_PROPS,
@@ -124,27 +125,28 @@ const RESERVED_STEP_KEYS = new Set<string>([
 ]);
 
 export interface DefineFlowOptions<S extends readonly AnyFlowStep[]> {
-  /** Упорядоченный массив шагов (defineStep). Порядок определяет nextStep(). */
+  /** Ordered array of steps (defineStep). The order drives nextStep(). */
   steps: S;
-  /** Flow-level submit: вызывается стандартным submit-пайплайном над всеми шагами. */
+  /** Flow-level submit: invoked by the standard submit pipeline over all steps. */
   onSubmit?: (
     values: FlowValues<S>,
     store: ProxyStore<any>,
     parent?: any,
   ) => Promise<unknown> | unknown;
-  /** Group-level трансформация значений перед submit. */
+  /** Group-level value transformation before submit. */
   beforeSubmit?: (values: FlowValues<S>) => FlowValues<S> | Promise<FlowValues<S>>;
-  /** Пост-обработка после успешного onSubmit. */
+  /** Post-processing after a successful onSubmit. */
   afterSubmit?: (result: unknown, actions: { reset: () => void }) => void | Promise<void>;
 }
 
 /**
- * Собрать flow-ноду из упорядоченного массива шагов.
+ * Build a flow node from an ordered array of steps.
  *
- * Возвращаемый узел — обычная группа в дереве конфига (шаги — дочерние группы
- * по своим ключам), помеченная маркером {@link FLOW_STEPS_PROP} с порядком
- * шагов. Участвует в values / persist / dirty как любая группа; NodeRegistry
- * по маркеру создаёт FlowState (навигация, статусы, история).
+ * The returned node is a regular group in the config tree (steps become child
+ * groups under their keys), stamped with the {@link FLOW_STEPS_PROP} marker
+ * holding the step order. It participates in values / persist / dirty like
+ * any group; NodeRegistry creates a FlowState (navigation, statuses, history)
+ * based on the marker.
  *
  * @example
  * const onboarding = defineFlow({
@@ -185,7 +187,7 @@ export function defineFlow<const S extends readonly AnyFlowStep[]>(
   if (beforeSubmit) node.beforeSubmit = beforeSubmit;
   if (afterSubmit) node.afterSubmit = afterSubmit;
 
-  // Маркер флоу: входит в CONFIG_PROPS → все обходы дерева его пропускают.
+  // Flow marker: part of CONFIG_PROPS → all tree walks skip it.
   node[FLOW_STEPS_PROP] = stepKeys;
 
   return node as unknown as FlowNode<S>;

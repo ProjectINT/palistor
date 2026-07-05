@@ -1,9 +1,9 @@
 /**
- * usePersist — React хук для подключения персистенции к ProxyStore.
+ * usePersist — React hook wiring persistence into a ProxyStore.
  *
- * Регистрирует драйвер и ключ при маунте, отключает при анмаунте.
- * Позволяет задавать ключ, который известен только в React-контексте
- * (например, из роутера или пропсов).
+ * Registers the driver and key on mount, disconnects on unmount.
+ * Lets you provide a key that is only known in the React context
+ * (e.g. from the router or props).
  *
  * @example
  * ```tsx
@@ -12,7 +12,7 @@
  * import { paymentStore } from "./config/appConfig";
  *
  * function PaymentPage({ orderId }: { orderId: string }) {
- *   // Ключ зависит от orderId — становится известен только в React
+ *   // The key depends on orderId — known only inside React
  *   usePersist(paymentStore, {
  *     key: `payment-${orderId}`,
  *     driver: localStorageDriver,
@@ -30,40 +30,40 @@ import type { ProxyStore } from "../store/store";
 import type { PersistOptions } from "../store/persist/types";
 
 /**
- * Подключает персистенцию к ProxyStore из React-компонента.
+ * Wires persistence into a ProxyStore from a React component.
  *
- * При маунте:
- *   - Вызывает `store.persist.enable(options)` — гидратация + auto-save.
+ * On mount:
+ *   - Calls `store.persist.enable(options)` — hydration + auto-save.
  *
- * При анмаунте:
- *   - Вызывает `store.persist.flush()` (финальное сохранение).
- *   - Вызывает `store.persist.disable()` — отписка.
+ * On unmount:
+ *   - Calls `store.persist.flush()` (final save).
+ *   - Calls `store.persist.disable()` — unsubscribes.
  *
- * При смене ключа — переподключается.
+ * Reconnects when the key changes.
  *
- * @param store   — ProxyStore, созданный через new Palistor()
- * @param options — опции персистенции (key, driver, debounce, …)
+ * @param store   — a ProxyStore created via new Palistor()
+ * @param options — persistence options (key, driver, debounce, …)
  */
 export function usePersist<TConfig extends Record<string, any>>(
   store: ProxyStore<TConfig>,
   options: PersistOptions,
 ): void {
-  // Храним options в ref, чтобы не пересоздавать эффект при каждом рендере
+  // Keep options in a ref so the effect isn't recreated on every render
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
   useEffect(() => {
     const opts = optionsRef.current;
 
-    // Включаем persist (hydrate + auto-save)
+    // Enable persist (hydrate + auto-save)
     store.persist.enable(opts);
 
     return () => {
-      // Финальное сохранение перед размонтированием
+      // Final save before unmount
       store.persist.flush();
       store.persist.disable();
     };
-    // Переподключение при смене store или ключа
+    // Reconnect when the store or key changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, options.key, options.driver]);
 }

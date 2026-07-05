@@ -1,27 +1,27 @@
 /**
- * Entity-leaf callbacks on React components — зеркало leafCallbacks.react.test.tsx
+ * Entity-leaf callbacks on React components — mirror of leafCallbacks.react.test.tsx
  *
- * Покрывает onChange и onSubmit на entity-листовом узле через реальные React-компоненты.
- * Форма получается через useForm(entityProxy, (s) => s.editTemplate).
+ * Covers onChange and onSubmit on an entity leaf node through real React components.
+ * The form is obtained via useForm(entityProxy, (s) => s.editTemplate).
  *
  * onChange (fire-and-forget):
- *   L-1: onChange срабатывает при записи value entity-листа и обновляет соседнее поле (patch)
- *   L-2: onChange получает {fieldKey, newValue, previousValue, allValues}
- *   L-5: onChange НЕ вызывается при submit() entity-листа
+ *   L-1: onChange fires when an entity leaf's value is written and updates a sibling field (patch)
+ *   L-2: onChange receives {fieldKey, newValue, previousValue, allValues}
+ *   L-5: onChange is NOT invoked on an entity leaf's submit()
  *
  * onSubmit (full pipeline via proxy.field.submit()):
- *   L-6: onSubmit получает (value, store, entityParentProxy) при submit на entity-листе
- *   L-7: submitting флаг виден в компоненте во время submit pipeline на entity-листе
- *   L-8: validate блокирует submit entity-листа, errorMessage доступен
- *   L-9: afterSubmit вызывается с результатом и reset-экшеном на entity-листе
- *   L-10: parent.id и parent.<sibling>.value доступны в onSubmit entity-листа
- *   L-11: onChange и onSubmit на одном template-поле независимы
+ *   L-6: onSubmit receives (value, store, entityParentProxy) on an entity-leaf submit
+ *   L-7: the submitting flag is visible in the component during the entity-leaf submit pipeline
+ *   L-8: validate blocks the entity-leaf submit, errorMessage is available
+ *   L-9: afterSubmit is called with the result and a reset action on the entity leaf
+ *   L-10: parent.id and parent.<sibling>.value are available in the entity leaf's onSubmit
+ *   L-11: onChange and onSubmit on one template field are independent
  *
- * Дополнительно:
- *   setter на entity-листе патчит соседний entity-лист (зеркало runSetter)
- *   beforeSubmit трансформирует value до onSubmit
- *   isRequired/isDisabled вычисляются из entity-сиблингов через allValues
- *   formatter применяется из template rules при записи
+ * Additionally:
+ *   a setter on an entity leaf patches a sibling entity leaf (mirror of runSetter)
+ *   beforeSubmit transforms the value before onSubmit
+ *   isRequired/isDisabled are computed from entity siblings via allValues
+ *   the formatter from the template rules is applied on write
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -54,17 +54,17 @@ function makeStore<T extends Record<string, any>>(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-1: onChange обновляет соседнее поле через patch (entity mode)
+// L-1: onChange updates a sibling field via a patch (entity mode)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-1 entity: onChange обновляет соседнее поле через patch", () => {
-  it("запись country entity-листа обновляет city через patch, возвращённый из onChange", async () => {
+describe("L-1 entity: onChange updates a sibling field via a patch", () => {
+  it("writing the entity leaf's country updates city via the patch returned from onChange", async () => {
     const editTemplate = {
       id: { value: "" },
       country: {
         value: "",
         onChange: async ({ newValue }: { newValue: string }) => {
-          return { city: newValue === "RU" ? "Москва" : "Unknown" };
+          return { city: newValue === "RU" ? "Moscow" : "Unknown" };
         },
       },
       city: { value: "" },
@@ -97,16 +97,16 @@ describe("L-1 entity: onChange обновляет соседнее поле че
       await flushPromises();
     });
 
-    expect(screen.getByTestId("city").textContent).toBe("Москва");
+    expect(screen.getByTestId("city").textContent).toBe("Moscow");
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-5: onChange НЕ вызывается при submit() entity-листа
+// L-5: onChange is NOT invoked on an entity leaf's submit()
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-5 entity: onChange не срабатывает при вызове submit() на entity-листе", () => {
-  it("после submit() entity-листа onChange не вызван", async () => {
+describe("L-5 entity: onChange does not fire when submit() is called on the entity leaf", () => {
+  it("after the entity leaf's submit() onChange was not invoked", async () => {
     const onChangeSpy = vi.fn();
 
     const editTemplate = {
@@ -145,11 +145,11 @@ describe("L-5 entity: onChange не срабатывает при вызове s
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-6: onSubmit получает (value, store, entityParentProxy)
+// L-6: onSubmit receives (value, store, entityParentProxy)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-6 entity: onSubmit получает корректные аргументы при submit на entity-листе", () => {
-  it("onSubmit(value, store, entityParentProxy) — все аргументы переданы", async () => {
+describe("L-6 entity: onSubmit receives the right arguments on an entity-leaf submit", () => {
+  it("onSubmit(value, store, entityParentProxy) — all arguments are passed", async () => {
     const onSubmitSpy = vi.fn();
 
     const editTemplate = {
@@ -196,19 +196,19 @@ describe("L-6 entity: onSubmit получает корректные аргум�
     });
 
     expect(onSubmitSpy).toHaveBeenCalledWith(
-      true,            // value — текущее значение entity-листа
-      store,           // store — экземпляр Palistor
-      expect.anything(), // entityParentProxy — entity projection proxy
+      true,            // value — the entity leaf's current value
+      store,           // store — the Palistor instance
+      expect.anything(), // entityParentProxy — the entity projection proxy
     );
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-7: submitting флаг виден в компоненте во время submit pipeline
+// L-7: the submitting flag is visible in the component during the submit pipeline
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-7 entity: submitting флаг отображается на entity-листе во время submit pipeline", () => {
-  it("submitting=true пока pipeline выполняется, false после завершения", async () => {
+describe("L-7 entity: the submitting flag shows on the entity leaf during the submit pipeline", () => {
+  it("submitting=true while the pipeline runs, false after it completes", async () => {
     let resolveSubmit!: () => void;
 
     const editTemplate = {
@@ -243,14 +243,14 @@ describe("L-7 entity: submitting флаг отображается на entity-�
 
     expect(screen.getByTestId("submitting").textContent).toBe("idle");
 
-    // Запускаем submit — pipeline зависает на resolveSubmit
+    // Start the submit — the pipeline hangs on resolveSubmit
     act(() => { screen.getByTestId("save-btn").click(); });
 
     await waitFor(() => {
       expect(screen.getByTestId("submitting").textContent).toBe("saving");
     });
 
-    // Завершаем pipeline
+    // Complete the pipeline
     await act(async () => {
       resolveSubmit();
       await flushPromises();
@@ -261,11 +261,11 @@ describe("L-7 entity: submitting флаг отображается на entity-�
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-8: validate блокирует submit entity-листа — onSubmit не вызывается
+// L-8: validate blocks the entity-leaf submit — onSubmit is not invoked
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-8 entity: валидация блокирует submit — onSubmit не вызывается, errorMessage доступен", () => {
-  it("пустой email entity-листа → submit возвращает errors, onSubmit не вызывается", async () => {
+describe("L-8 entity: validation blocks the submit — onSubmit is not invoked, errorMessage is available", () => {
+  it("empty entity-leaf email → submit returns errors, onSubmit is not called", async () => {
     const onSubmitSpy = vi.fn();
     let submitResult: any;
 
@@ -273,7 +273,7 @@ describe("L-8 entity: валидация блокирует submit — onSubmit 
       id: { value: "" },
       email: {
         value: "",
-        validate: (v: string) => (!v ? "Email обязателен" : undefined),
+        validate: (v: string) => (!v ? "Email is required" : undefined),
         onSubmit: onSubmitSpy,
       },
     };
@@ -313,21 +313,21 @@ describe("L-8 entity: валидация блокирует submit — onSubmit 
     });
 
     expect(submitResult.success).toBe(false);
-    expect(submitResult.errors[0].message).toBe("Email обязателен");
+    expect(submitResult.errors[0].message).toBe("Email is required");
     expect(onSubmitSpy).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toBe("Email обязателен");
+      expect(screen.getByTestId("error").textContent).toBe("Email is required");
     });
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-9: afterSubmit вызывается после onSubmit с результатом и reset-экшеном
+// L-9: afterSubmit is called after onSubmit with the result and a reset action
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-9 entity: afterSubmit получает результат onSubmit и может сбросить entity-лист", () => {
-  it("afterSubmit вызван с результатом, reset сбрасывает entity-лист к начальному значению", async () => {
+describe("L-9 entity: afterSubmit gets the onSubmit result and can reset the entity leaf", () => {
+  it("afterSubmit is called with the result; reset restores the entity leaf's initial value", async () => {
     const afterSubmitSpy = vi.fn((_result: unknown, { reset }: { reset: () => void }) => {
       reset();
     });
@@ -381,7 +381,7 @@ describe("L-9 entity: afterSubmit получает результат onSubmit �
       { reset: expect.any(Function) },
     );
 
-    // reset() внутри afterSubmit сбрасывает entity-лист к начальному значению ""
+    // reset() inside afterSubmit restores the entity leaf's initial value ""
     await waitFor(() => {
       expect(screen.getByTestId("notes").getAttribute("value")).toBe("");
     });
@@ -389,11 +389,11 @@ describe("L-9 entity: afterSubmit получает результат onSubmit �
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-10: parent.id и parent.<sibling>.value доступны в onSubmit entity-листа
+// L-10: parent.id and parent.<sibling>.value are available in the entity leaf's onSubmit
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-10 entity: parent proxy и store.context доступны в onSubmit entity-листа", () => {
-  it("onSubmit читает parent.id, parent.name.value и store.context.accountId", async () => {
+describe("L-10 entity: the parent proxy and store.context are available in the entity leaf's onSubmit", () => {
+  it("onSubmit reads parent.id, parent.name.value and store.context.accountId", async () => {
     const capturedArgs: { entityId: string; nameValue: string; accountId: string } = {
       entityId: "",
       nameValue: "",
@@ -453,11 +453,11 @@ describe("L-10 entity: parent proxy и store.context доступны в onSubmi
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-11: onChange и onSubmit на одном template-поле независимы
+// L-11: onChange and onSubmit on one template field are independent
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-11 entity: onChange и onSubmit на одном template-поле работают независимо", () => {
-  it("запись value вызывает только onChange; submit() вызывает только onSubmit", async () => {
+describe("L-11 entity: onChange and onSubmit on one template field work independently", () => {
+  it("writing the value triggers only onChange; submit() triggers only onSubmit", async () => {
     const onChangeSpy = vi.fn().mockResolvedValue(undefined);
     const onSubmitSpy = vi.fn().mockResolvedValue("done");
 
@@ -498,7 +498,7 @@ describe("L-11 entity: onChange и onSubmit на одном template-поле р
 
     render(<PriorityCard />);
 
-    // Изменяем значение → только onChange
+    // Change the value → only onChange
     await act(async () => {
       await userEvent.selectOptions(screen.getByTestId("priority"), "high");
       await flushPromises();
@@ -509,7 +509,7 @@ describe("L-11 entity: onChange и onSubmit на одном template-поле р
 
     onChangeSpy.mockClear();
 
-    // Нажимаем Save → только onSubmit
+    // Press Save → only onSubmit
     await act(async () => {
       screen.getByTestId("save-btn").click();
       await flushPromises();
@@ -522,11 +522,11 @@ describe("L-11 entity: onChange и onSubmit на одном template-поле р
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Дополнительно: setter на entity-листе патчит соседний entity-лист
+// Additionally: a setter on an entity leaf patches a sibling entity leaf
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("entity setter: запись поля с setter патчит соседний entity-лист", () => {
-  it("запись priority с setter обновляет urgencyLabel сиблинга", async () => {
+describe("entity setter: writing a field with a setter patches a sibling entity leaf", () => {
+  it("writing priority with a setter updates the sibling urgencyLabel", async () => {
     const editTemplate = {
       id: { value: "" },
       priority: {
@@ -577,11 +577,11 @@ describe("entity setter: запись поля с setter патчит сосед
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-2 entity: onChange получает {fieldKey, newValue, previousValue, allValues}
+// L-2 entity: onChange receives {fieldKey, newValue, previousValue, allValues}
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-2 entity: onChange коллбэк вызывается с полным контекстом изменения", () => {
-  it("onChange получает fieldKey, newValue, previousValue, allValues из entity", async () => {
+describe("L-2 entity: the onChange callback is invoked with the full change context", () => {
+  it("onChange receives fieldKey, newValue, previousValue, allValues from the entity", async () => {
     const calls: any[] = [];
 
     const editTemplate = {
@@ -631,11 +631,11 @@ describe("L-2 entity: onChange коллбэк вызывается с полны
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// beforeSubmit на entity-листе трансформирует value до onSubmit
+// beforeSubmit on an entity leaf transforms the value before onSubmit
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("entity beforeSubmit: трансформирует value перед onSubmit", () => {
-  it("beforeSubmit возвращает trimmed value — onSubmit получает уже обработанное значение", async () => {
+describe("entity beforeSubmit: transforms the value before onSubmit", () => {
+  it("beforeSubmit returns a trimmed value — onSubmit receives the processed value", async () => {
     const onSubmitSpy = vi.fn();
 
     const editTemplate = {
@@ -676,7 +676,7 @@ describe("entity beforeSubmit: трансформирует value перед onS
     );
   });
 
-  it("beforeSubmit получает parentValues с текущими entity-сиблингами", async () => {
+  it("beforeSubmit receives parentValues with the current entity siblings", async () => {
     let capturedParentValues: Record<string, unknown> | null = null;
 
     const editTemplate = {
@@ -719,11 +719,11 @@ describe("entity beforeSubmit: трансформирует value перед onS
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// isRequired / isDisabled вычисляются из entity-сиблингов через allValues
+// isRequired / isDisabled are computed from entity siblings via allValues
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("entity computed flags: isRequired/isDisabled из entity-сиблинговых значений", () => {
-  it("isRequired(allValues) → true когда флаг-сиблинг включён", async () => {
+describe("entity computed flags: isRequired/isDisabled from entity sibling values", () => {
+  it("isRequired(allValues) → true when the sibling flag is on", async () => {
     const editTemplate = {
       id: { value: "" },
       requiresComment: { value: false },
@@ -763,7 +763,7 @@ describe("entity computed flags: isRequired/isDisabled из entity-сиблин�
     expect(screen.getByTestId("required").textContent).toBe("yes");
   });
 
-  it("isDisabled(allValues) → true когда сиблинг-статус заблокирован", async () => {
+  it("isDisabled(allValues) → true when the sibling status is locked", async () => {
     const editTemplate = {
       id: { value: "" },
       locked: { value: false },
@@ -805,11 +805,11 @@ describe("entity computed flags: isRequired/isDisabled из entity-сиблин�
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// formatter из template rules применяется при записи entity-листа
+// The formatter from the template rules is applied when the entity leaf is written
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("entity formatter: template formatter применяется при записи entity-листа", () => {
-  it("formatter приводит строку к uppercase — компонент видит отформатированное значение", async () => {
+describe("entity formatter: the template formatter is applied when the entity leaf is written", () => {
+  it("the formatter uppercases the string — the component sees the formatted value", async () => {
     const editTemplate = {
       id: { value: "" },
       code: {

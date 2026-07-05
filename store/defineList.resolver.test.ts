@@ -1,40 +1,40 @@
 /**
- * Расширенные тесты async-резольверов для defineList.
+ * Extended async-resolver tests for defineList.
  *
- * Покрывает сценарии, которых нет в defineList.test.ts:
+ * Covers scenarios not present in defineList.test.ts:
  *
- *  A. Тайминг и жизненный цикл резольвера
- *     A1. Резольвер получает снимок значений на момент запуска (не после)
- *     A2. Резольвер с задержкой: items пусты во время ожидания, заполнены после
- *     A3. Re-resolve обновляет данные уже существующих entities
- *     A4. Re-resolve после ошибки срабатывает при изменении dep (status="error")
+ *  A. Resolver timing and lifecycle
+ *     A1. The resolver receives a values snapshot at launch time (not after)
+ *     A2. Delayed resolver: items are empty while waiting, filled afterwards
+ *     A3. Re-resolve updates the data of already-existing entities
+ *     A4. Re-resolve after an error fires on a dep change (status="error")
  *
- *  B. Поведение в состоянии "pending"
- *     B1. Изменение dep пока резольвер pending → НЕ перезапускает (dedup)
- *     B2. После завершения pending-резольвера следующее изменение dep работает
+ *  B. Behavior in the "pending" state
+ *     B1. A dep change while the resolver is pending → does NOT re-run (dedup)
+ *     B2. After the pending resolver completes, the next dep change works
  *
- *  C. Итерация и доступ к элементам после resolve
- *     C1. map() возвращает правильные элементы после resolver
- *     C2. Symbol.iterator обходит все элементы после resolver
- *     C3. getById() находит элемент по id после resolver
- *     C4. items с индексами работают после resolver
+ *  C. Iteration and item access after resolve
+ *     C1. map() returns the right items after the resolver
+ *     C2. Symbol.iterator walks all items after the resolver
+ *     C3. getById() finds an item by id after the resolver
+ *     C4. indexed items access works after the resolver
  *
- *  D. Dirty-флаг и initialItemIds
- *     D1. dirty = false сразу после resolver (initialItemIds обновляется)
- *     D2. dirty = true после ручного add() поверх resolve-данных
- *     D3. Re-resolve сбрасывает dirty обратно в false
- *     D4. dirty = false после полной замены setItems с теми же id
+ *  D. The dirty flag and initialItemIds
+ *     D1. dirty = false right after the resolver (initialItemIds is updated)
+ *     D2. dirty = true after a manual add() on top of resolve data
+ *     D3. Re-resolve resets dirty back to false
+ *     D4. dirty = false after a full setItems replacement with the same ids
  *
- *  E. Версии и уведомления
- *     E1. getNodeVersion(listNode) растёт при каждом успешном resolve
- *     E2. Подписка на list-ноду срабатывает при завершении resolver
- *     E3. subscriber НЕ вызывается при изменении поля entity (только list-level)
+ *  E. Versions and notifications
+ *     E1. getNodeVersion(listNode) grows on every successful resolve
+ *     E2. A list-node subscription fires when the resolver completes
+ *     E3. The subscriber is NOT invoked on an entity field change (list-level only)
  *
- *  F. Сложные сценарии
- *     F1. Resolver с несколькими deps: независимые изменения — каждое запускает resolver
- *     F2. Два списка с общим dep — оба перезапускаются при изменении dep
- *     F3. Resolver возвращает частично обновлённые данные — merge с существующими
- *     F4. Resolver для вложенного списка получает корректные значения родителя
+ *  F. Complex scenarios
+ *     F1. Resolver with several deps: independent changes — each re-runs the resolver
+ *     F2. Two lists with a shared dep — both re-run when the dep changes
+ *     F3. The resolver returns partially updated data — merged with existing
+ *     F4. A nested list's resolver receives the correct parent values
  */
 import { describe, it, expect, vi } from "vitest";
 import { defineList } from "./defineList";
@@ -46,12 +46,12 @@ function flushPromises() {
   return new Promise<void>((r) => setTimeout(r, 0));
 }
 
-/** Задержка на ms миллисекунд */
+/** Delay for ms milliseconds */
 function delay(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
-/** Создаёт управляемый promise: { promise, resolve, reject } */
+/** Creates a controllable promise: { promise, resolve, reject } */
 function deferred<T = any>() {
   let resolveFn!: (v: T) => void;
   let rejectFn!: (e: unknown) => void;
@@ -62,10 +62,10 @@ function deferred<T = any>() {
   return { promise, resolve: resolveFn, reject: rejectFn };
 }
 
-// ─── A. Тайминг и жизненный цикл резольвера ──────────────────────────────────
+// ─── A. Resolver timing and lifecycle ────────────────────────────────────────
 
-describe("A. Тайминг и жизненный цикл резольвера", () => {
-  it("A1. resolver получает снимок значений на момент запуска, а не после", async () => {
+describe("A. Resolver timing and lifecycle", () => {
+  it("A1. the resolver receives a values snapshot at launch, not afterwards", async () => {
     const capturedValues: any[] = [];
     const d = deferred<any[]>();
 
@@ -84,21 +84,21 @@ describe("A. Тайминг и жизненный цикл резольвера"
       } as any,
     });
 
-    // Запускаем резольвер
+    // Launch the resolver
     void (store.proxy as any).users.items;
     await Promise.resolve(); // flush microtask
 
-    // Меняем значение dep ПОКА резольвер ждёт результата
+    // Change the dep value WHILE the resolver awaits its result
     (store.proxy as any).filter.value = "changed";
 
     d.resolve([{ id: "u1", name: "Alice" }]);
     await flushPromises();
 
-    // Резольвер был вызван со значением "initial", а не "changed"
+    // The resolver was called with "initial", not "changed"
     expect(capturedValues[0].filter).toBe("initial");
   });
 
-  it("A2. items пусты во время ожидания, заполняются после", async () => {
+  it("A2. items are empty while waiting, filled afterwards", async () => {
     const d = deferred<any[]>();
     const resolver = vi.fn(() => d.promise);
 
@@ -114,7 +114,7 @@ describe("A. Тайминг и жизненный цикл резольвера"
     void (store.proxy as any).users.items;
     await Promise.resolve();
 
-    // Во время ожидания список пуст, но loading = true
+    // While waiting the list is empty, but loading = true
     expect((store.proxy as any).users.length).toBe(0);
     expect((store.proxy as any).users.loading).toBe(true);
 
@@ -124,14 +124,14 @@ describe("A. Тайминг и жизненный цикл резольвера"
     ]);
     await flushPromises();
 
-    // После resolve список заполнен
+    // After resolve the list is populated
     expect((store.proxy as any).users.length).toBe(2);
     expect((store.proxy as any).users.loading).toBe(false);
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
     expect((store.proxy as any).users.items[1].name.value).toBe("Bob");
   });
 
-  it("A3. re-resolve обновляет значения уже существующих entities", async () => {
+  it("A3. re-resolve updates the values of already-existing entities", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.filter === "v1") return [{ id: "u1", name: "Alice v1", role: "user" }];
       return [{ id: "u1", name: "Alice v2", role: "admin" }];
@@ -153,17 +153,17 @@ describe("A. Тайминг и жизненный цикл резольвера"
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice v1");
     expect((store.proxy as any).users.items[0].role.value).toBe("user");
 
-    // Изменяем dep → re-resolve
+    // Change the dep → re-resolve
     (store.proxy as any).filter.value = "v2";
     await flushPromises();
 
-    // Та же entity u1 теперь имеет обновлённые значения
+    // The same entity u1 now carries the updated values
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice v2");
     expect((store.proxy as any).users.items[0].role.value).toBe("admin");
     expect(resolver).toHaveBeenCalledTimes(2);
   });
 
-  it("A4. после ошибки резольвера изменение dep запускает повторную попытку", async () => {
+  it("A4. after a resolver error a dep change triggers a retry", async () => {
     let shouldFail = true;
     const resolver = vi.fn(async () => {
       if (shouldFail) throw new Error("temporary failure");
@@ -181,29 +181,29 @@ describe("A. Тайминг и жизненный цикл резольвера"
       } as any,
     });
 
-    // Первый запуск — ошибка
+    // First run — error
     void (store.proxy as any).users.items;
     await flushPromises();
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect((store.proxy as any).users.length).toBe(0);
 
-    // Исправляем ошибку и меняем dep
+    // Fix the error and change the dep
     shouldFail = false;
     (store.proxy as any).filter.value = "y";
     await flushPromises();
 
-    // Второй запуск успешен
+    // The second run succeeds
     expect(resolver).toHaveBeenCalledTimes(2);
     expect((store.proxy as any).users.length).toBe(1);
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
   });
 });
 
-// ─── B. Поведение в состоянии "pending" ──────────────────────────────────────
+// ─── B. Behavior in the "pending" state ──────────────────────────────────────
 
-describe("B. Поведение в состоянии pending", () => {
-  it("B1. изменение dep пока resolver pending → повторный запуск после завершения", async () => {
+describe("B. Behavior in the pending state", () => {
+  it("B1. a dep change while the resolver is pending → re-run after completion", async () => {
     const d = deferred<any[]>();
     const resolver = vi.fn((values: any) => {
       if (values.filter === "a") return d.promise;
@@ -220,30 +220,30 @@ describe("B. Поведение в состоянии pending", () => {
       } as any,
     });
 
-    // Запускаем resolver (status: idle → pending)
+    // Launch the resolver (status: idle → pending)
     void (store.proxy as any).users.items;
     await Promise.resolve();
 
     expect((store.proxy as any).users.loading).toBe(true);
     expect(resolver).toHaveBeenCalledTimes(1);
 
-    // Меняем dep пока pending — ставит флаг pendingRetrigger, новый вызов не начинается
+    // Change the dep while pending — sets pendingRetrigger, no new call starts
     (store.proxy as any).filter.value = "b";
     await Promise.resolve();
 
-    // Всё ещё только один активный вызов
+    // Still only one active call
     expect(resolver).toHaveBeenCalledTimes(1);
 
     d.resolve([{ id: "u1", name: "Alice" }]);
     await flushPromises();
 
-    // После завершения первого вызова — автоматически запустился второй (для filter="b")
+    // After the first call completed — a second one started automatically (for filter="b")
     expect(resolver).toHaveBeenCalledTimes(2);
     expect((store.proxy as any).users.length).toBe(1);
     expect((store.proxy as any).users.items[0].name.value).toBe("Bob");
   });
 
-  it("B2. после завершения pending-резольвера следующее изменение dep работает", async () => {
+  it("B2. after the pending resolver completes, the next dep change works", async () => {
     const d = deferred<any[]>();
     const resolver = vi.fn((values: any) => {
       if (values.filter === "a") return d.promise;
@@ -263,14 +263,14 @@ describe("B. Поведение в состоянии pending", () => {
     void (store.proxy as any).users.items;
     await Promise.resolve();
 
-    // Завершаем первый resolver
+    // Complete the first resolver
     d.resolve([{ id: "u1", name: "Alice" }]);
     await flushPromises();
 
     expect(resolver).toHaveBeenCalledTimes(1);
     expect((store.proxy as any).users.length).toBe(1);
 
-    // Теперь статус "resolved" → следующее изменение dep сработает
+    // Now the status is "resolved" → the next dep change fires
     (store.proxy as any).filter.value = "b";
     await flushPromises();
 
@@ -279,10 +279,10 @@ describe("B. Поведение в состоянии pending", () => {
   });
 });
 
-// ─── C. Итерация и доступ к элементам после resolve ──────────────────────────
+// ─── C. Iteration and item access after resolve ──────────────────────────────
 
-describe("C. Итерация и доступ к элементам после resolve", () => {
-  it("C1. map() возвращает правильные трансформированные элементы", async () => {
+describe("C. Iteration and item access after resolve", () => {
+  it("C1. map() returns the correctly transformed items", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -308,7 +308,7 @@ describe("C. Итерация и доступ к элементам после r
     expect(names).toEqual(["Alice", "Bob", "Carol"]);
   });
 
-  it("C2. map() передаёт корректные index и id", async () => {
+  it("C2. map() passes the correct index and id", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -335,7 +335,7 @@ describe("C. Итерация и доступ к элементам после r
     expect(result[1]).toEqual({ index: 1, id: "u2" });
   });
 
-  it("C3. getById() находит элемент по id после resolver", async () => {
+  it("C3. getById() finds an item by id after the resolver", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -364,7 +364,7 @@ describe("C. Итерация и доступ к элементам после r
     expect(nobody).toBeUndefined();
   });
 
-  it("C4. доступ по числовому индексу через items[i] работает после resolver", async () => {
+  it("C4. numeric index access via items[i] works after the resolver", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -389,10 +389,10 @@ describe("C. Итерация и доступ к элементам после r
   });
 });
 
-// ─── D. Dirty-флаг и initialItemIds ──────────────────────────────────────────
+// ─── D. The dirty flag and initialItemIds ────────────────────────────────────
 
-describe("D. Dirty-флаг и initialItemIds", () => {
-  it("D1. dirty = false сразу после resolver (initialItemIds обновляется)", async () => {
+describe("D. The dirty flag and initialItemIds", () => {
+  it("D1. dirty = false right after the resolver (initialItemIds is updated)", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -410,11 +410,11 @@ describe("D. Dirty-флаг и initialItemIds", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // После resolver список "чистый" — это его базовое состояние
+    // After the resolver the list is "clean" — that's its baseline state
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 
-  it("D2. dirty = true после ручного add() поверх resolve-данных", async () => {
+  it("D2. dirty = true after a manual add() on top of resolve data", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
     ]);
@@ -433,14 +433,14 @@ describe("D. Dirty-флаг и initialItemIds", () => {
 
     expect((store.proxy as any).users.dirty).toBe(false);
 
-    // Добавляем элемент вручную
+    // Add an item manually
     (store.proxy as any).users.add({ id: "u2", name: "Bob" });
 
     expect((store.proxy as any).users.dirty).toBe(true);
     expect((store.proxy as any).users.length).toBe(2);
   });
 
-  it("D3. re-resolve сбрасывает dirty обратно в false", async () => {
+  it("D3. re-resolve resets dirty back to false", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.filter === "a") return [{ id: "u1", name: "Alice" }];
       return [{ id: "u1", name: "Alice" }, { id: "u2", name: "Bob" }];
@@ -459,20 +459,20 @@ describe("D. Dirty-флаг и initialItemIds", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // Добавляем вручную — dirty = true
+    // Manual add — dirty = true
     (store.proxy as any).users.add({ id: "extra", name: "Extra" });
     expect((store.proxy as any).users.dirty).toBe(true);
 
-    // Re-resolve через deps-изменение
+    // Re-resolve via a deps change
     (store.proxy as any).filter.value = "b";
     await flushPromises();
 
-    // После re-resolve dirty сброшен
+    // After the re-resolve dirty is reset
     expect((store.proxy as any).users.dirty).toBe(false);
     expect((store.proxy as any).users.length).toBe(2);
   });
 
-  it("D4. dirty = false после remove() элемента который не был в initial (добавлен вручную)", async () => {
+  it("D4. dirty = false after remove() of an item absent from the initial set (added manually)", async () => {
     const resolver = vi.fn(async () => [{ id: "u1", name: "Alice" }]);
 
     const store = new Palistor({
@@ -487,22 +487,22 @@ describe("D. Dirty-флаг и initialItemIds", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // Добавляем → dirty = true
+    // Add → dirty = true
     (store.proxy as any).users.add({ id: "u2", name: "Bob" });
     expect((store.proxy as any).users.dirty).toBe(true);
 
-    // Удаляем добавленный — возвращаемся к initial состоянию
+    // Remove the added item — back to the initial state
     (store.proxy as any).users.remove("u2");
     expect((store.proxy as any).users.length).toBe(1);
-    // Состав списка снова = initial → dirty = false
+    // The list membership equals initial again → dirty = false
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 });
 
-// ─── E. Версии и уведомления ──────────────────────────────────────────────────
+// ─── E. Versions and notifications ────────────────────────────────────────────
 
-describe("E. Версии и уведомления", () => {
-  it("E1. версия list-ноды увеличивается при каждом успешном resolve", async () => {
+describe("E. Versions and notifications", () => {
+  it("E1. the list node version grows on every successful resolve", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.page === 1) return [{ id: "u1", name: "P1" }];
       return [{ id: "u2", name: "P2" }];
@@ -518,7 +518,7 @@ describe("E. Версии и уведомления", () => {
       } as any,
     });
 
-    // rootConfig.users — это массив (ListNode)
+    // rootConfig.users is the array (ListNode)
     const usersNode = (store as any).rootConfig.users;
 
     void (store.proxy as any).users.items;
@@ -534,7 +534,7 @@ describe("E. Версии и уведомления", () => {
     expect(v2).toBeGreaterThan(v1);
   });
 
-  it("E2. подписка на изменения вызывается при смене dep + завершении resolver", async () => {
+  it("E2. the change subscription fires on a dep change + resolver completion", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.filter === "a") return [{ id: "u1", name: "Alice" }];
       return [{ id: "u2", name: "Bob" }];
@@ -557,16 +557,16 @@ describe("E. Версии и уведомления", () => {
     store.subscribeGlobal(globalListener);
     globalListener.mockClear();
 
-    // Меняем dep → запускает resolver → после resolve notifyChanged
+    // Changing the dep → launches the resolver → notifyChanged after resolve
     (store.proxy as any).filter.value = "b";
     await flushPromises();
 
-    // Глобальный листенер вызван минимум раз (при обновлении данных)
+    // The global listener fired at least once (on the data update)
     expect(globalListener).toHaveBeenCalled();
     expect((store.proxy as any).users.items[0].name.value).toBe("Bob");
   });
 
-  it("E3. изменение поля entity не увеличивает версию list-ноды", async () => {
+  it("E3. an entity field change does not bump the list node version", async () => {
     const resolver = vi.fn(async () => [{ id: "u1", name: "Alice" }]);
 
     const store = new Palistor({
@@ -585,20 +585,20 @@ describe("E. Версии и уведомления", () => {
 
     const vBefore = store.getNodeVersion(usersNode);
 
-    // Меняем поле у entity (не структуру списка)
+    // Change an entity field (not the list structure)
     (store.proxy as any).users.items[0].name.value = "Alice Updated";
 
     const vAfter = store.getNodeVersion(usersNode);
 
-    // Версия list-ноды не должна измениться при изменении поля entity
+    // The list node version must not change on an entity field change
     expect(vAfter).toBe(vBefore);
   });
 });
 
-// ─── F. Сложные сценарии ──────────────────────────────────────────────────────
+// ─── F. Complex scenarios ──────────────────────────────────────────────────────
 
-describe("F. Сложные сценарии", () => {
-  it("F1. несколько deps: каждое независимое изменение перезапускает resolver", async () => {
+describe("F. Complex scenarios", () => {
+  it("F1. multiple deps: every independent change re-runs the resolver", async () => {
     const calls: Array<{ page: number; sort: string }> = [];
     const resolver = vi.fn(async (values: any) => {
       calls.push({ page: values.page, sort: values.sort });
@@ -632,7 +632,7 @@ describe("F. Сложные сценарии", () => {
     expect(calls[2]).toMatchObject({ page: 2, sort: "desc" });
   });
 
-  it("F2. два списка с общим dep — оба перезапускаются при изменении dep", async () => {
+  it("F2. two lists with a shared dep — both re-run when the dep changes", async () => {
     const usersResolver = vi.fn(async (values: any) => {
       if (values.org === "a") return [{ id: "u1", name: "Alice" }];
       return [{ id: "u2", name: "Bob" }];
@@ -663,18 +663,18 @@ describe("F. Сложные сценарии", () => {
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
     expect((store.proxy as any).groups.items[0].title.value).toBe("Dev");
 
-    // Меняем общий dep
+    // Change the shared dep
     (store.proxy as any).org.value = "b";
     await flushPromises();
 
-    // Оба списка перезапустились
+    // Both lists re-ran
     expect(usersResolver).toHaveBeenCalledTimes(2);
     expect(groupsResolver).toHaveBeenCalledTimes(2);
     expect((store.proxy as any).users.items[0].name.value).toBe("Bob");
     expect((store.proxy as any).groups.items[0].title.value).toBe("Ops");
   });
 
-  it("F3. resolver возвращает новый состав + обновлённые поля для overlap-id", async () => {
+  it("F3. the resolver returns a new membership + updated fields for the overlapping id", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.filter === "v1") {
         return [
@@ -682,7 +682,7 @@ describe("F. Сложные сценарии", () => {
           { id: "u2", name: "Bob", role: "user" },
         ];
       }
-      // u1 обновлён, u2 удалён, u3 добавлен
+      // u1 updated, u2 removed, u3 added
       return [
         { id: "u1", name: "Alice Admin", role: "admin" },
         { id: "u3", name: "Carol", role: "user" },
@@ -720,11 +720,11 @@ describe("F. Сложные сценарии", () => {
     expect(u3).toBeDefined();
     expect(u3.name.value).toBe("Carol");
 
-    // u2 больше не в списке (но может остаться в registry)
+    // u2 is no longer in the list (but may remain in the registry)
     expect(u2).toBeUndefined();
   });
 
-  it("F4. resolver вложенного списка получает значения родительских полей", async () => {
+  it("F4. a nested list's resolver receives the parent field values", async () => {
     const capturedValues: any[] = [];
     const resolver = vi.fn(async (values: any) => {
       capturedValues.push({ ...values });
@@ -752,7 +752,7 @@ describe("F. Сложные сценарии", () => {
     });
   });
 
-  it("F5. resolver возвращает entity с числовыми полями — значения правильного типа", async () => {
+  it("F5. the resolver returns entities with numeric fields — correctly typed values", async () => {
     const resolver = vi.fn(async () => [
       { id: "p1", price: 999, quantity: 5, active: true },
     ]);
@@ -780,7 +780,7 @@ describe("F. Сложные сценарии", () => {
     expect(p.active.value).toBe(true);
   });
 
-  it("F6. resolver + ручной remove() → список становится dirty, затем re-resolve снимает dirty", async () => {
+  it("F6. resolver + manual remove() → the list turns dirty, then a re-resolve clears it", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.q === "1")
         return [{ id: "u1", name: "Alice" }, { id: "u2", name: "Bob" }];
@@ -802,11 +802,11 @@ describe("F. Сложные сценарии", () => {
 
     expect((store.proxy as any).users.dirty).toBe(false);
 
-    // Ручное удаление → dirty
+    // Manual removal → dirty
     (store.proxy as any).users.remove("u1");
     expect((store.proxy as any).users.dirty).toBe(true);
 
-    // Re-resolve → dirty сбрасывается
+    // Re-resolve → dirty is reset
     (store.proxy as any).q.value = "2";
     await flushPromises();
 
@@ -814,7 +814,7 @@ describe("F. Сложные сценарии", () => {
     expect((store.proxy as any).users.length).toBe(2);
   });
 
-  it("F7. onError вызывается с правильными аргументами при сетевой ошибке", async () => {
+  it("F7. onError is called with the right arguments on a network error", async () => {
     const networkError = new TypeError("Failed to fetch");
     const onError = vi.fn();
     const notifyFn = vi.fn();
@@ -841,12 +841,12 @@ describe("F. Сложные сценарии", () => {
     expect(err).toBe(networkError);
     expect(typeof ctx.notify).toBe("function");
 
-    // ctx.notify должен проксировать в store.setNotifier
-    ctx.notify("Сообщение об ошибке");
-    expect(notifyFn).toHaveBeenCalledWith("Сообщение об ошибке");
+    // ctx.notify must proxy into store.setNotifier
+    ctx.notify("Error message");
+    expect(notifyFn).toHaveBeenCalledWith("Error message");
   });
 
-  it("F8. length и items.length консистентны после нескольких resolve", async () => {
+  it("F8. length and items.length stay consistent across several resolves", async () => {
     let callIdx = 0;
     const datasets = [
       [{ id: "u1", name: "A" }],

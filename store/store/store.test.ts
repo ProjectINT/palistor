@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from ".";
 
-// ─── Тестовый конфиг ─────────────────────────────────────────────────────────
+// ─── Test config ─────────────────────────────────────────────────────────────
 
 const makeConfig = () => ({
   email: {
@@ -42,17 +42,17 @@ const makeConfig = () => ({
   },
 });
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("Palistor", () => {
-  describe("чтение начального состояния", () => {
-    it("читает value из конфига", () => {
+  describe("reading initial state", () => {
+    it("reads value from the config", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.value).toBe("");
       expect(store.proxy.paymentType.value).toBe("card");
     });
 
-    it("применяет initialValues поверх конфига", () => {
+    it("applies initialValues over the config", () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "user@test.com" } as any,
@@ -60,24 +60,24 @@ describe("Palistor", () => {
       expect(store.proxy.email.value).toBe("user@test.com");
     });
 
-    it("читает label из конфига (строка)", () => {
+    it("reads label from the config (string)", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.label).toBe("Email");
       expect(store.proxy.cardNumber.label).toBe("Card Number");
     });
 
-    it("вычисляет isRequired (boolean)", () => {
+    it("computes isRequired (boolean)", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.isRequired).toBe(true);
     });
 
-    it("вычисляет isRequired (function)", () => {
+    it("computes isRequired (function)", () => {
       const store = new Palistor({ config: makeConfig() });
       // paymentType = "card" → cardNumber.isRequired = true
       expect(store.proxy.cardNumber.isRequired).toBe(true);
     });
 
-    it("вычисляет isVisible (function)", () => {
+    it("computes isVisible (function)", () => {
       const store = new Palistor({ config: makeConfig() });
       // paymentType = "card" → cardNumber.isVisible = true
       expect(store.proxy.cardNumber.isVisible).toBe(true);
@@ -85,24 +85,24 @@ describe("Palistor", () => {
       expect(store.proxy.passport.isVisible).toBe(false);
     });
 
-    it("isInvalid скрыт до первого submit (revalidate=false по умолчанию)", () => {
+    it("isInvalid is hidden before the first submit (revalidate=false by default)", () => {
       const store = new Palistor({ config: makeConfig() });
-      // revalidate=false → ошибки не вычисляются, пока не было submit
+      // revalidate=false → errors are not computed until a submit happens
       expect(store.proxy.email.isInvalid).toBeUndefined();
       expect(store.proxy.email.errorMessage).toBeUndefined();
     });
 
-    it("isInvalid показывается после submit (revalidate=true)", async () => {
+    it("isInvalid shows after submit (revalidate=true)", async () => {
       const store = new Palistor({ config: makeConfig() });
-      // Первый submit с пустым email → fail → revalidate=true
+      // First submit with an empty email → fail → revalidate=true
       const result = await store.submit();
       expect(result.success).toBe(false);
-      // Теперь ошибки видны
+      // Errors are visible now
       expect(store.proxy.email.isInvalid).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
-    it("isInvalid = undefined когда валидация проходит", () => {
+    it("isInvalid = undefined when validation passes", () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "user@test.com" } as any,
@@ -111,27 +111,27 @@ describe("Palistor", () => {
       expect(store.proxy.email.errorMessage).toBeUndefined();
     });
 
-    it("isDisabled и isReadOnly по умолчанию false", () => {
+    it("isDisabled and isReadOnly default to false", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.isDisabled).toBe(false);
       expect(store.proxy.email.isReadOnly).toBe(false);
     });
   });
 
-  describe("вложенные поля", () => {
-    it("доступ через точку к вложенным полям", () => {
+  describe("nested fields", () => {
+    it("dot access to nested fields", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.passport.number.value).toBe("");
       expect(store.proxy.passport.number.label).toBe("Passport Number");
       expect(store.proxy.passport.number.isRequired).toBe(true);
     });
 
-    it("isVisible на группе (промежуточном узле)", () => {
+    it("isVisible on a group (intermediate node)", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.passport.isVisible).toBe(false); // paymentType = "card"
     });
 
-    it("initialValues для вложенных полей", () => {
+    it("initialValues for nested fields", () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { passport: { number: "AB123" } } as any,
@@ -140,41 +140,41 @@ describe("Palistor", () => {
     });
   });
 
-  describe("запись value", () => {
-    it("обновляет значение поля", () => {
+  describe("writing value", () => {
+    it("updates the field value", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "new@test.com";
       expect(store.proxy.email.value).toBe("new@test.com");
     });
 
-    it("пересчитывает validate после записи (когда revalidate=true)", async () => {
+    it("re-runs validate after a write (when revalidate=true)", async () => {
       const store = new Palistor({ config: makeConfig() });
-      // До submit — ошибок нет (revalidate=false)
+      // Before submit — no errors (revalidate=false)
       expect(store.proxy.email.isInvalid).toBeUndefined();
 
       // Trigger revalidate via failed submit
       await store.submit();
 
-      expect(store.proxy.email.isInvalid).toBe(true); // пустой, revalidate=true
+      expect(store.proxy.email.isInvalid).toBe(true); // empty, revalidate=true
 
       store.proxy.email.value = "filled";
-      expect(store.proxy.email.isInvalid).toBeUndefined(); // заполнен
+      expect(store.proxy.email.isInvalid).toBeUndefined(); // filled
 
       store.proxy.email.value = "";
-      expect(store.proxy.email.isInvalid).toBe(true); // снова пустой
+      expect(store.proxy.email.isInvalid).toBe(true); // empty again
     });
 
-    it("пересчитывает isVisible зависимых полей", () => {
+    it("recomputes isVisible of dependent fields", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.cardNumber.isVisible).toBe(true); // paymentType = "card"
       expect(store.proxy.passport.isVisible).toBe(false);
 
       store.proxy.paymentType.value = "bank";
-      expect(store.proxy.cardNumber.isVisible).toBe(false); // теперь bank
+      expect(store.proxy.cardNumber.isVisible).toBe(false); // now bank
       expect(store.proxy.passport.isVisible).toBe(true);
     });
 
-    it("пересчитывает isRequired зависимых полей", () => {
+    it("recomputes isRequired of dependent fields", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.cardNumber.isRequired).toBe(true);
 
@@ -182,45 +182,45 @@ describe("Palistor", () => {
       expect(store.proxy.cardNumber.isRequired).toBe(false);
     });
 
-    it("применяет formatter при записи", () => {
+    it("applies the formatter on write", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.amount.value = "42";
       expect(store.proxy.amount.value).toBe(42);
     });
 
-    it("запись в вложенные поля", () => {
+    it("writes to nested fields", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.passport.number.value = "XY999";
       expect(store.proxy.passport.number.value).toBe("XY999");
     });
   });
 
-  describe("подписка и уведомления", () => {
-    it("вызывает listener при записи value", () => {
+  describe("subscriptions and notifications", () => {
+    it("calls the listener when value is written", () => {
       const config = makeConfig();
       const store = new Palistor({ config });
       const listener = vi.fn();
 
-      // Подписываемся на узел email конфига
+      // Subscribe to the email config node
       store.subscribe((config as any).email, listener);
       store.proxy.email.value = "hello";
 
       expect(listener).toHaveBeenCalled();
     });
 
-    it("уведомляет зависимые поля при изменении", () => {
+    it("notifies dependent fields on change", () => {
       const config = makeConfig();
       const store = new Palistor({ config });
       const cardListener = vi.fn();
 
       store.subscribe((config as any).cardNumber, cardListener);
-      // Меняем paymentType → cardNumber.isVisible пересчитывается → уведомление
+      // Changing paymentType → cardNumber.isVisible is recomputed → notification
       store.proxy.paymentType.value = "bank";
 
       expect(cardListener).toHaveBeenCalled();
     });
 
-    it("отписка работает", () => {
+    it("unsubscribe works", () => {
       const config = makeConfig();
       const store = new Palistor({ config });
       const listener = vi.fn();
@@ -232,13 +232,13 @@ describe("Palistor", () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it("не уведомляет, если computed-состояние не изменилось", () => {
+    it("does not notify when the computed state did not change", () => {
       const config = makeConfig();
       const store = new Palistor({ config });
       const issueDateListener = vi.fn();
 
       store.subscribe((config as any).passport.issueDate, issueDateListener);
-      // issueDate не зависит от email, его состояние не изменится
+      // issueDate doesn't depend on email; its state won't change
       store.proxy.email.value = "x";
 
       expect(issueDateListener).not.toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe("Palistor", () => {
   });
 
   describe("getValues", () => {
-    it("возвращает вложенный объект со значениями", () => {
+    it("returns a nested object with the values", () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "test@test.com" } as any,
@@ -259,7 +259,7 @@ describe("Palistor", () => {
       expect(values.passport.issueDate).toBe("");
     });
 
-    it("отражает изменения после записи", () => {
+    it("reflects changes after writes", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "updated";
       store.proxy.passport.number.value = "AB123";
@@ -270,15 +270,15 @@ describe("Palistor", () => {
     });
   });
 
-  describe("кэширование прокси", () => {
-    it("одинаковые пути возвращают один и тот же прокси", () => {
+  describe("proxy caching", () => {
+    it("the same path returns the same proxy", () => {
       const store = new Palistor({ config: makeConfig() });
       const p1 = store.proxy.passport;
       const p2 = store.proxy.passport;
       expect(p1).toBe(p2);
     });
 
-    it("конфиг не мутируется", () => {
+    it("the config is not mutated", () => {
       const config = makeConfig();
       const originalValue = config.email.value;
       const store = new Palistor({ config });
@@ -289,7 +289,7 @@ describe("Palistor", () => {
   });
 
   describe("onValueChange", () => {
-    it("устанавливает value через onValueChange", () => {
+    it("sets value via onValueChange", () => {
       const store = new Palistor({ config: makeConfig() });
 
       store.proxy.email.onValueChange("hello@test.com");
@@ -298,7 +298,7 @@ describe("Palistor", () => {
       expect(store.getValues().email).toBe("hello@test.com");
     });
 
-    it("onValueChange вызывает formatter", () => {
+    it("onValueChange invokes the formatter", () => {
       const store = new Palistor({ config: makeConfig() });
 
       store.proxy.amount.onValueChange("42");
@@ -306,7 +306,7 @@ describe("Palistor", () => {
       expect(store.proxy.amount.value).toBe(42);
     });
 
-    it("onValueChange вызывает пересчёт зависимых полей", () => {
+    it("onValueChange triggers a recompute of dependent fields", () => {
       const store = new Palistor({ config: makeConfig() });
 
       expect(store.proxy.cardNumber.isVisible).toBe(true);
@@ -318,7 +318,7 @@ describe("Palistor", () => {
       expect(store.proxy.passport.isVisible).toBe(true);
     });
 
-    it("onValueChange вызывает validate (когда revalidate=true)", async () => {
+    it("onValueChange invokes validate (when revalidate=true)", async () => {
       const store = new Palistor({ config: makeConfig() });
 
       // Trigger revalidate via failed submit
@@ -332,7 +332,7 @@ describe("Palistor", () => {
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
-    it("onValueChange уведомляет подписчиков", () => {
+    it("onValueChange notifies subscribers", () => {
       const store = new Palistor({ config: makeConfig() });
       const listener = vi.fn();
 
@@ -343,7 +343,7 @@ describe("Palistor", () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it("onValueChange возвращает стабильную ссылку", () => {
+    it("onValueChange returns a stable reference", () => {
       const store = new Palistor({ config: makeConfig() });
 
       const fn1 = store.proxy.email.onValueChange;
@@ -352,7 +352,7 @@ describe("Palistor", () => {
       expect(fn1).toBe(fn2);
     });
 
-    it("onValueChange работает для вложенных полей", () => {
+    it("onValueChange works for nested fields", () => {
       const store = new Palistor({ config: makeConfig() });
 
       store.proxy.passport.number.onValueChange("AB123");
@@ -362,8 +362,8 @@ describe("Palistor", () => {
     });
   });
 
-  describe("label как функция (translate)", () => {
-    it("вызывает функцию для label", () => {
+  describe("label as a function (translate)", () => {
+    it("invokes the function for label", () => {
       const config = {
         name: {
           value: "",
@@ -371,17 +371,17 @@ describe("Palistor", () => {
         },
       };
       const store = new Palistor({ config: config as any });
-      // Пока translate = identity → вернёт ключ
+      // translate is identity for now → returns the key
       expect(store.proxy.name.label).toBe("form.name");
     });
   });
 
   describe("spread proxy ({...proxy})", () => {
-    it("не утекает validate при spread листового узла", () => {
+    it("does not leak validate when spreading a leaf node", () => {
       const store = new Palistor({ config: makeConfig() });
       const spread = { ...store.proxy.cardNumber };
 
-      // validate не должен быть в spread
+      // validate must not be in the spread
       expect(spread).not.toHaveProperty("validate");
       expect(spread).not.toHaveProperty("formatter");
       expect(spread).not.toHaveProperty("setter");
@@ -389,7 +389,7 @@ describe("Palistor", () => {
       expect(spread).not.toHaveProperty("types");
     });
 
-    it("spread содержит все SPREADABLE_FIELD_STATE_PROPS и onValueChange", () => {
+    it("spread contains all SPREADABLE_FIELD_STATE_PROPS and onValueChange", () => {
       const store = new Palistor({ config: makeConfig() });
       const spread = { ...store.proxy.email };
 
@@ -403,12 +403,12 @@ describe("Palistor", () => {
       expect(spread).toHaveProperty("errorMessage");
       expect(spread).toHaveProperty("onValueChange");
 
-      // dirty и loading исключены из spread листового узла
+      // dirty and loading are excluded from a leaf node's spread
       expect(spread).not.toHaveProperty("dirty");
       expect(spread).not.toHaveProperty("loading");
     });
 
-    it("Object.keys не содержит внутренних ключей конфига", () => {
+    it("Object.keys contains no internal config keys", () => {
       const store = new Palistor({ config: makeConfig() });
       const keys = Object.keys(store.proxy.cardNumber);
 
@@ -420,25 +420,25 @@ describe("Palistor", () => {
       expect(keys).toContain("onValueChange");
     });
 
-    it("spread группового узла содержит GROUP_SPREAD_KEYS", () => {
+    it("spreading a group node yields GROUP_SPREAD_KEYS", () => {
       const store = new Palistor({ config: makeConfig() });
       const keys = Object.keys(store.proxy.passport);
 
-      // Групповой узел спредит только служебные ключи
+      // A group node spreads only service keys
       expect(keys).toContain("submitting");
       expect(keys).toContain("dirty");
       expect(keys).toContain("loading");
       expect(keys).toContain("submit");
       expect(keys).toContain("reset");
 
-      // Дочерние и внутренние ключи не попадают в spread
+      // Child and internal keys stay out of the spread
       expect(keys).not.toContain("number");
       expect(keys).not.toContain("issueDate");
       expect(keys).not.toContain("validate");
       expect(keys).not.toContain("formatter");
     });
 
-    it("validate вызывается после submit (не через spread)", async () => {
+    it("validate runs after submit (not via spread)", async () => {
       const config = {
         paymentType: { value: "card" },
         cardNumber: {
@@ -451,21 +451,21 @@ describe("Palistor", () => {
       };
       const store = new Palistor({ config });
 
-      // До submit — ошибки не вычисляются
+      // Before submit — errors are not computed
       expect(store.proxy.cardNumber.isInvalid).toBeUndefined();
 
-      // После submit — revalidate=true → ошибки видны
+      // After submit — revalidate=true → errors are visible
       await store.submit();
       expect(store.proxy.cardNumber.isInvalid).toBe(true);
       expect(store.proxy.cardNumber.errorMessage).toBe("required");
 
-      // Но НЕ утекает при spread
+      // But it does NOT leak in a spread
       const spread = { ...store.proxy.cardNumber };
       expect(spread).not.toHaveProperty("validate");
     });
   });
 
-  describe("computed values (value как функция)", () => {
+  describe("computed values (value as a function)", () => {
     const makeComputedConfig = () => ({
       price: {
         value: 100,
@@ -485,12 +485,12 @@ describe("Palistor", () => {
       },
     });
 
-    it("вычисляет начальное computed value", () => {
+    it("computes the initial computed value", () => {
       const store = new Palistor({ config: makeComputedConfig() });
       expect(store.proxy.total.value).toBe(100); // 100 * 1
     });
 
-    it("пересчитывает computed value при изменении зависимости", () => {
+    it("recomputes the computed value when a dependency changes", () => {
       const store = new Palistor({ config: makeComputedConfig() });
       expect(store.proxy.total.value).toBe(100);
 
@@ -501,7 +501,7 @@ describe("Palistor", () => {
       expect(store.proxy.total.value).toBe(1000); // 200 * 5
     });
 
-    it("computed value отражается в getValues()", () => {
+    it("the computed value is reflected in getValues()", () => {
       const store = new Palistor({ config: makeComputedConfig() });
       store.proxy.price.value = 50;
       store.proxy.quantity.value = 3;
@@ -510,12 +510,12 @@ describe("Palistor", () => {
       expect(values.total).toBe(150); // 50 * 3
     });
 
-    it("computed value доступен через isReadOnly", () => {
+    it("the computed value is exposed via isReadOnly", () => {
       const store = new Palistor({ config: makeComputedConfig() });
       expect(store.proxy.total.isReadOnly).toBe(true);
     });
 
-    it("уведомляет подписчиков при изменении computed value", () => {
+    it("notifies subscribers when the computed value changes", () => {
       const config = makeComputedConfig();
       const store = new Palistor({ config });
       const listener = vi.fn();
@@ -526,7 +526,7 @@ describe("Palistor", () => {
       expect(listener).toHaveBeenCalled();
     });
 
-    it("цепочка computed: A → B → C", () => {
+    it("computed chain: A → B → C", () => {
       const config = {
         base: { value: 10, dependencies: [] },
         doubled: {
@@ -547,17 +547,17 @@ describe("Palistor", () => {
       expect(store.proxy.quadrupled.value).toBe(20);
     });
 
-    it("initialValues перекрывает computed для обычных полей", () => {
+    it("initialValues overrides regular fields feeding computed ones", () => {
       const store = new Palistor({
         config: makeComputedConfig(),
         initialValues: { price: 50, quantity: 4 } as any,
       });
-      // total пересчитывается из новых price/quantity
+      // total is recomputed from the new price/quantity
       expect(store.proxy.total.value).toBe(200); // 50 * 4
     });
   });
 
-  describe("setter (сайд-эффект записи)", () => {
+  describe("setter (write side-effect)", () => {
     const makeSetterConfig = () => ({
       paymentType: {
         value: "card" as string,
@@ -579,32 +579,32 @@ describe("Palistor", () => {
       },
     });
 
-    it("setter сбрасывает значение другого поля при записи", () => {
+    it("the setter resets another field's value on write", () => {
       const store = new Palistor({ config: makeSetterConfig() });
       expect(store.proxy.cardNumber.value).toBe("4111111111111111");
 
       store.proxy.paymentType.value = "bank";
       expect(store.proxy.paymentType.value).toBe("bank");
-      expect(store.proxy.cardNumber.value).toBe(""); // сброшено setter-ом
+      expect(store.proxy.cardNumber.value).toBe(""); // reset by the setter
     });
 
-    it("setter не трогает не указанные поля", () => {
+    it("the setter does not touch unspecified fields", () => {
       const store = new Palistor({ config: makeSetterConfig() });
       store.proxy.bankAccount.value = "40817810099910004312";
 
       store.proxy.paymentType.value = "bank";
-      // bankAccount не указан в patch → не тронут
+      // bankAccount is not in the patch → untouched
       expect(store.proxy.bankAccount.value).toBe("40817810099910004312");
     });
 
-    it("setter + computed вместе", () => {
+    it("setter + computed together", () => {
       const config = {
         price: { value: 100, dependencies: [] },
         quantity: {
           value: 1,
           dependencies: [],
           setter: (value: number) => {
-            // При установке quantity > 10 — автоматически даём скидку
+            // Setting quantity > 10 automatically applies a discount
             if (value > 10) return { price: 80 };
             return {};
           },
@@ -619,12 +619,12 @@ describe("Palistor", () => {
       expect(store.proxy.total.value).toBe(100); // 100 * 1
 
       store.proxy.quantity.value = 15;
-      // setter уменьшил price до 80, computed пересчитал total
+      // the setter lowered price to 80, the computed recalculated total
       expect(store.proxy.price.value).toBe(80);
       expect(store.proxy.total.value).toBe(1200); // 80 * 15
     });
 
-    it("setter для вложенных полей", () => {
+    it("setter for nested fields", () => {
       const config = {
         country: {
           value: "ru" as string,
@@ -644,10 +644,10 @@ describe("Palistor", () => {
 
       store.proxy.country.value = "us";
       expect(store.proxy.address.city.value).toBe("New York");
-      expect(store.proxy.address.zip.value).toBe(""); // не тронут
+      expect(store.proxy.address.zip.value).toBe(""); // untouched
     });
 
-    it("getValues отражает изменения от setter", () => {
+    it("getValues reflects setter changes", () => {
       const store = new Palistor({ config: makeSetterConfig() });
       store.proxy.paymentType.value = "bank";
 
@@ -657,24 +657,23 @@ describe("Palistor", () => {
     });
   });
 
-  // ─── Setter-патч: уведомления подписчиков при массовом обновлении ────────
+  // ─── Setter patch: subscriber notifications on a bulk update ─────────────
 
-  describe("setter patch → уведомления подписчиков", () => {
+  describe("setter patch → subscriber notifications", () => {
     /**
-     * Конфиг, в котором setter одного поля (currency) патчит сразу несколько
-     * других полей (symbol, decimals, nested prefix). Это позволяет проверить,
-     * что подписчики ВСЕХ затронутых полей получают уведомление за один цикл
-     * записи, без необходимости отдельного `.value = …` для каждого поля.
+     * A config where one field's setter (currency) patches several other
+     * fields at once (symbol, decimals, nested prefix). Verifies that
+     * subscribers of ALL affected fields get notified in one write cycle,
+     * without a separate `.value = …` for each field.
      */
     const makePatchConfig = () => ({
       currency: {
         value: "USD" as string,
         label: "Currency",
         /**
-         * setter: при смене валюты — одним патчем обновляем символ,
-         * количество десятичных знаков и вложенный префикс.
-         * Таким образом setter *заменяет* необходимость
-         * ручного вызова `.value = …` для каждого из этих полей.
+         * setter: on a currency change — a single patch updates the symbol,
+         * decimal count and the nested prefix. The setter thus *replaces*
+         * the need to manually assign `.value = …` for each of those fields.
          */
         setter: (value: string) => {
           const presets: Record<string, { symbol: string; decimals: number; display: { prefix: string } }> = {
@@ -683,7 +682,7 @@ describe("Palistor", () => {
             BTC: { symbol: "₿", decimals: 8, display: { prefix: "BT" } },
           };
           const preset = presets[value] ?? presets.USD;
-          // Патч — вложенный объект, совпадающий по структуре с конфигом
+          // The patch is a nested object matching the config structure
           return {
             symbol: preset.symbol,
             decimals: preset.decimals,
@@ -707,15 +706,15 @@ describe("Palistor", () => {
       },
     });
 
-    it("setter патчит несколько полей за одну запись — значения обновлены", () => {
+    it("the setter patches several fields in one write — values updated", () => {
       const store = new Palistor({ config: makePatchConfig() });
 
-      // До патча — начальные значения USD
+      // Before the patch — the initial USD values
       expect(store.proxy.symbol.value).toBe("$");
       expect(store.proxy.decimals.value).toBe(2);
       expect(store.proxy.display.prefix.value).toBe("US");
 
-      // Одна запись → setter возвращает патч → все поля обновлены
+      // One write → the setter returns a patch → all fields updated
       store.proxy.currency.value = "BTC";
 
       expect(store.proxy.currency.value).toBe("BTC");
@@ -724,11 +723,11 @@ describe("Palistor", () => {
       expect(store.proxy.display.prefix.value).toBe("BT");
     });
 
-    it("подписчики ВСЕХ запатченных полей уведомлены за один цикл", () => {
+    it("subscribers of ALL patched fields are notified in one cycle", () => {
       const config = makePatchConfig();
       const store = new Palistor({ config });
 
-      // Подписываемся на каждое поле, затронутое патчем
+      // Subscribe to every field touched by the patch
       const symbolListener = vi.fn();
       const decimalsListener = vi.fn();
       const prefixListener = vi.fn();
@@ -739,37 +738,37 @@ describe("Palistor", () => {
       store.subscribe((config as any).display.prefix, prefixListener);
       store.subscribe((config as any).currency, currencyListener);
 
-      // Одна запись — setter патчит symbol, decimals, display.prefix
+      // One write — the setter patches symbol, decimals, display.prefix
       store.proxy.currency.value = "EUR";
 
-      // Все подписчики должны быть вызваны ровно один раз:
-      // — currencyListener: значение самого поля изменилось
-      // — symbolListener:   setter обновил через патч ($ → €)
-      // — decimalsListener: setter обновил через патч (2 → 2, но recompute может
-      //                     не вызвать, если значение не изменилось — проверяем ниже)
-      // — prefixListener:   setter обновил через патч (US → EU)
+      // All subscribers must fire exactly once:
+      // — currencyListener: the field's own value changed
+      // — symbolListener:   updated by the setter patch ($ → €)
+      // — decimalsListener: patched by the setter (2 → 2; recompute may skip
+      //                     it when the value is unchanged — checked below)
+      // — prefixListener:   updated by the setter patch (US → EU)
       expect(currencyListener).toHaveBeenCalledTimes(1);
       expect(symbolListener).toHaveBeenCalledTimes(1);
       expect(prefixListener).toHaveBeenCalledTimes(1);
 
-      // decimals: 2 → 2 (не изменилось) — подписчик НЕ вызывается,
-      // потому что recomputeAll фильтрует по fieldStateChanged
+      // decimals: 2 → 2 (unchanged) — the subscriber is NOT invoked,
+      // because recomputeAll filters by fieldStateChanged
       expect(decimalsListener).not.toHaveBeenCalled();
     });
 
-    it("глобальный подписчик уведомлён ровно один раз при патче", () => {
+    it("the global subscriber is notified exactly once for a patch", () => {
       const store = new Palistor({ config: makePatchConfig() });
       const globalListener = vi.fn();
 
       store.subscribeGlobal(globalListener);
       store.proxy.currency.value = "BTC";
 
-      // Несмотря на то что setter изменил 3+ поля,
-      // глобальный подписчик вызывается ровно один раз за цикл записи
+      // Even though the setter changed 3+ fields,
+      // the global subscriber fires exactly once per write cycle
       expect(globalListener).toHaveBeenCalledTimes(1);
     });
 
-    it("getValues отражает все изменения от setter-патча", () => {
+    it("getValues reflects all setter-patch changes", () => {
       const store = new Palistor({ config: makePatchConfig() });
       store.proxy.currency.value = "EUR";
 
@@ -782,23 +781,23 @@ describe("Palistor", () => {
       });
     });
 
-    it("setter-патч НЕ требует отдельного .value = для каждого поля", () => {
+    it("a setter patch does NOT require a separate .value = per field", () => {
       /**
-       * Ключевой сценарий: setter *заменяет* дефолтное поведение
-       * множественных записей. Вместо:
+       * The key scenario: the setter *replaces* the default multi-write
+       * behavior. Instead of:
        *
        *   proxy.symbol.value = "₿";
        *   proxy.decimals.value = 8;
        *   proxy.display.prefix.value = "BT";
        *
-       * Достаточно одной записи — setter сделает всё сам:
+       * a single write suffices — the setter does the rest:
        *
        *   proxy.currency.value = "BTC";
        */
       const config = makePatchConfig();
       const store = new Palistor({ config });
 
-      // Подписчики, которые считают вызовы
+      // Subscribers counting invocations
       const symbolCalls = vi.fn();
       const decimalsCalls = vi.fn();
       const prefixCalls = vi.fn();
@@ -807,41 +806,41 @@ describe("Palistor", () => {
       store.subscribe((config as any).decimals, decimalsCalls);
       store.subscribe((config as any).display.prefix, prefixCalls);
 
-      // Одна запись заменяет три — setter патчит всё за раз
+      // One write replaces three — the setter patches everything at once
       store.proxy.currency.value = "BTC";
 
-      // Значения корректны
+      // Values are correct
       expect(store.proxy.symbol.value).toBe("₿");
       expect(store.proxy.decimals.value).toBe(8);
       expect(store.proxy.display.prefix.value).toBe("BT");
 
-      // Подписчики вызваны — UI перерисует затронутые поля
+      // Subscribers fired — the UI redraws the affected fields
       expect(symbolCalls).toHaveBeenCalled();
       expect(prefixCalls).toHaveBeenCalled();
-      // decimals тоже изменилось (2 → 8) — подписчик вызван
+      // decimals changed too (2 → 8) — the subscriber fired
       expect(decimalsCalls).toHaveBeenCalled();
     });
 
-    it("версия узла обновляется для каждого запатченного поля", () => {
+    it("the node version is bumped for every patched field", () => {
       const config = makePatchConfig();
       const store = new Palistor({ config });
 
-      // Запоминаем начальные версии
+      // Remember the initial versions
       const symbolV0 = store.getNodeVersion((config as any).symbol);
       const prefixV0 = store.getNodeVersion((config as any).display.prefix);
 
       store.proxy.currency.value = "BTC";
 
-      // Версии должны увеличиться — означает, что поле было затронуто
+      // Versions must increase — meaning the field was touched
       expect(store.getNodeVersion((config as any).symbol)).toBeGreaterThan(symbolV0);
       expect(store.getNodeVersion((config as any).display.prefix)).toBeGreaterThan(prefixV0);
     });
 
-    it("повторный патч с теми же значениями — подписчики НЕ вызываются", () => {
+    it("re-patching with the same values — subscribers are NOT invoked", () => {
       const config = makePatchConfig();
       const store = new Palistor({ config });
 
-      // Первый раз: USD → EUR
+      // First time: USD → EUR
       store.proxy.currency.value = "EUR";
 
       const symbolListener = vi.fn();
@@ -850,12 +849,12 @@ describe("Palistor", () => {
       store.subscribe((config as any).symbol, symbolListener);
       store.subscribe((config as any).display.prefix, prefixListener);
 
-      // Второй раз: EUR → EUR (те же значения)
+      // Second time: EUR → EUR (same values)
       store.proxy.currency.value = "EUR";
 
-      // Значения не изменились → recomputeAll не включит их в changed →
-      // подписчики НЕ вызваны (за исключением самого currency, который
-      // всегда добавляется в changed через changed.add(node))
+      // Values unchanged → recomputeAll won't include them in changed →
+      // subscribers are NOT invoked (except currency itself, which is
+      // always added to changed via changed.add(node))
       expect(symbolListener).not.toHaveBeenCalled();
       expect(prefixListener).not.toHaveBeenCalled();
     });
@@ -864,7 +863,7 @@ describe("Palistor", () => {
   // ─── Translator (setTranslator / getTranslator) ───────────────────────────
 
   describe("setTranslator", () => {
-    it("без translator — label-функция возвращает ключ (identity fallback)", () => {
+    it("without a translator — a label function returns the key (identity fallback)", () => {
       const config = {
         name: {
           value: "",
@@ -877,11 +876,11 @@ describe("Palistor", () => {
       expect(store.proxy.name.placeholder).toBe("form.namePlaceholder");
     });
 
-    it("после setTranslator — label резолвится через translator", () => {
+    it("after setTranslator — label resolves through the translator", () => {
       const translations: Record<string, string> = {
-        "form.name": "Имя",
-        "form.namePlaceholder": "Введите имя",
-        "form.desc": "Описание поля",
+        "form.name": "Name",
+        "form.namePlaceholder": "Enter your name",
+        "form.desc": "Field description",
       };
       const t = (key: string) => translations[key] ?? key;
 
@@ -897,12 +896,12 @@ describe("Palistor", () => {
 
       store.setTranslator(t);
 
-      expect(store.proxy.name.label).toBe("Имя");
-      expect(store.proxy.name.placeholder).toBe("Введите имя");
-      expect(store.proxy.name.description).toBe("Описание поля");
+      expect(store.proxy.name.label).toBe("Name");
+      expect(store.proxy.name.placeholder).toBe("Enter your name");
+      expect(store.proxy.name.description).toBe("Field description");
     });
 
-    it("setTranslator(null) возвращает к fallback (ключам)", () => {
+    it("setTranslator(null) reverts to the fallback (keys)", () => {
       const t = (key: string) => `[${key}]`;
       const config = {
         name: {
@@ -919,7 +918,7 @@ describe("Palistor", () => {
       expect(store.proxy.name.label).toBe("form.name"); // fallback to identity
     });
 
-    it("setTranslator инкрементирует версию и уведомляет подписчиков", () => {
+    it("setTranslator bumps the version and notifies subscribers", () => {
       const config = {
         name: {
           value: "",
@@ -938,7 +937,7 @@ describe("Palistor", () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it("setTranslator с тем же translator не вызывает лишних уведомлений", () => {
+    it("setTranslator with the same translator causes no extra notifications", () => {
       const t = (key: string) => key.toUpperCase();
       const config = {
         name: { value: "", label: (t: (key: string) => string) => t("form.name") },
@@ -956,18 +955,18 @@ describe("Palistor", () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it("статические строковые label не зависят от translator", () => {
+    it("static string labels don't depend on the translator", () => {
       const config = {
         name: { value: "", label: "Static Label" },
       };
       const store = new Palistor({ config: config as any });
 
       store.setTranslator((key) => `translated:${key}`);
-      // Статическая строка — не вызывается как функция
+      // A static string is not called as a function
       expect(store.proxy.name.label).toBe("Static Label");
     });
 
-    it("spread корректно резолвит label через translator", () => {
+    it("spread resolves label through the translator correctly", () => {
       const t = (key: string) => `[${key}]`;
       const config = {
         name: {

@@ -8,25 +8,25 @@ function makeLeaf(path: string): { node: AnyConfigNode; path: string } {
 }
 
 describe("collectGroupComputeNodes", () => {
-  it("возвращает пустой массив для группы без листьев в карте", () => {
+  it("returns an empty array for a group with no leaves in the map", () => {
     const group = {} as AnyConfigNode;
     const map: GroupComputeMap = new WeakMap();
     expect(collectGroupComputeNodes(group, map)).toEqual([]);
   });
 
-  it("возвращает прямые листья группы", () => {
+  it("returns the group's direct leaves", () => {
     const group = {} as AnyConfigNode;
     const leaf = makeLeaf("a");
     const map: GroupComputeMap = new WeakMap([[group, [leaf]]]);
     expect(collectGroupComputeNodes(group, map)).toEqual([leaf]);
   });
 
-  it("рекурсивно собирает листья дочерних групп", () => {
+  it("recursively collects leaves of child groups", () => {
     const childGroup = {} as AnyConfigNode;
     const childLeaf = makeLeaf("child.x");
     const childMap: GroupComputeMap = new WeakMap([[childGroup, [childLeaf]]]);
 
-    // Родительская группа содержит дочернюю группу (без value)
+    // The parent group contains a child group (no value)
     const root = { child: childGroup } as unknown as AnyConfigNode;
     const rootLeaf = makeLeaf("root.y");
     const map: GroupComputeMap = new WeakMap([
@@ -39,12 +39,12 @@ describe("collectGroupComputeNodes", () => {
     expect(result).toContain(childLeaf);
   });
 
-  it("пропускает дочерние узлы с 'value' (листовые поля)", () => {
+  it("skips child nodes with 'value' (leaf fields)", () => {
     const leafNode = { value: "x" } as unknown as AnyConfigNode;
     const root = { field: leafNode } as unknown as AnyConfigNode;
     const map: GroupComputeMap = new WeakMap([[root, []]]);
 
-    // Не должен рекурсироваться в leafNode
+    // Must not recurse into leafNode
     const result = collectGroupComputeNodes(root, map);
     expect(result).toEqual([]);
   });

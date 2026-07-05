@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { Palistor } from "../store/store";
 import { useForm } from "./useForm";
 
-// ─── Тестовый конфиг ─────────────────────────────────────────────────────────
+// ─── Test config ─────────────────────────────────────────────────────────────
 
 const makeConfig = () => ({
   email: {
@@ -37,10 +37,10 @@ const makeConfig = () => ({
   },
 });
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("useForm", () => {
-  it("возвращает прокси с текущими значениями", () => {
+  it("returns a proxy with the current values", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -50,7 +50,7 @@ describe("useForm", () => {
     expect(result.current.paymentType.value).toBe("card");
   });
 
-  it("читает вычисленные свойства (isVisible, isRequired)", () => {
+  it("reads computed properties (isVisible, isRequired)", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -60,7 +60,7 @@ describe("useForm", () => {
     expect(result.current.passport.isVisible).toBe(false);
   });
 
-  it("вложенные поля доступны через точку", () => {
+  it("nested fields are accessible via dot notation", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -70,7 +70,7 @@ describe("useForm", () => {
     expect(result.current.passport.number.isRequired).toBe(true);
   });
 
-  it("ре-рендерит компонент при записи value", () => {
+  it("re-renders the component when value is written", () => {
     const store = new Palistor({ config: makeConfig() });
     const renderCount = vi.fn();
 
@@ -81,7 +81,7 @@ describe("useForm", () => {
 
     expect(renderCount).toHaveBeenCalledTimes(1);
 
-    // Запись через proxy
+    // Write through the proxy
     act(() => {
       store.proxy.email.value = "test@test.com";
     });
@@ -90,7 +90,7 @@ describe("useForm", () => {
     expect(result.current.email.value).toBe("test@test.com");
   });
 
-  it("пересчитывает зависимые поля после изменения", () => {
+  it("recomputes dependent fields after a change", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -106,7 +106,7 @@ describe("useForm", () => {
     expect(result.current.passport.isVisible).toBe(true);
   });
 
-  it("запись через useForm proxy работает из компонента", () => {
+  it("writing through the useForm proxy works from a component", () => {
     const store = new Palistor({ config: makeConfig() });
 
     function TestComponent() {
@@ -124,7 +124,7 @@ describe("useForm", () => {
 
     render(<TestComponent />);
 
-    // revalidate=false по умолчанию → ошибки скрыты до submit
+    // revalidate=false by default → errors are hidden until submit
     expect(screen.getByTestId("email-value").textContent).toBe("");
     expect(screen.getByTestId("email-error").textContent).toBe("none");
 
@@ -136,7 +136,7 @@ describe("useForm", () => {
     expect(screen.getByTestId("email-error").textContent).toBe("none");
   });
 
-  it("поддерево можно передать в дочерний компонент как проп", () => {
+  it("a subtree can be passed to a child component as a prop", () => {
     const store = new Palistor({ config: makeConfig() });
 
     function PassportSection({ passport }: { passport: any }) {
@@ -167,19 +167,19 @@ describe("useForm", () => {
 
     render(<App />);
 
-    // Изначально passport скрыт
+    // passport is hidden initially
     expect(screen.getByTestId("hidden").textContent).toBe("hidden");
 
-    // Переключаем на bank
+    // Switch to bank
     act(() => {
       screen.getByText("Switch to Bank").click();
     });
 
-    // Теперь passport видим
+    // passport is visible now
     expect(screen.getByTestId("passport-number").textContent).toBe("");
     expect(screen.getByTestId("passport-label").textContent).toBe("Passport Number");
 
-    // Устанавливаем номер паспорта
+    // Set the passport number
     act(() => {
       screen.getByText("Set Number").click();
     });
@@ -187,7 +187,7 @@ describe("useForm", () => {
     expect(screen.getByTestId("passport-number").textContent).toBe("AB123");
   });
 
-  it("несколько компонентов с одним store синхронизированы", () => {
+  it("multiple components with the same store stay in sync", () => {
     const store = new Palistor({ config: makeConfig() });
 
     function EmailDisplay() {
@@ -220,7 +220,7 @@ describe("useForm", () => {
     expect(screen.getByTestId("display").textContent).toBe("shared@test.com");
   });
 
-  it("getValues() отражает изменения сделанные через useForm proxy", () => {
+  it("getValues() reflects changes made through the useForm proxy", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -235,7 +235,7 @@ describe("useForm", () => {
     expect(values.passport.number).toBe("XY999");
   });
 
-  it("один и тот же прокси на каждом ре-рендере (referential equality)", () => {
+  it("the same proxy on every re-render (referential equality)", () => {
     const store = new Palistor({ config: makeConfig() });
     const proxies: any[] = [];
 
@@ -254,7 +254,7 @@ describe("useForm", () => {
 // ─── Tracking proxy: selective re-render ─────────────────────────────────────
 
 describe("useForm tracking (selective re-render)", () => {
-  it("НЕ перерендерит компонент, который не читает изменённое поле", () => {
+  it("does NOT re-render a component that doesn't read the changed field", () => {
     const store = new Palistor({ config: makeConfig() });
     const emailRender = vi.fn();
     const paymentRender = vi.fn();
@@ -281,18 +281,18 @@ describe("useForm tracking (selective re-render)", () => {
     expect(emailRender).toHaveBeenCalledTimes(1);
     expect(paymentRender).toHaveBeenCalledTimes(1);
 
-    // Меняем email → EmailDisplay должен перерендериться, PaymentDisplay — нет
+    // Changing email → EmailDisplay must re-render, PaymentDisplay must not
     act(() => {
       store.proxy.email.value = "changed@test.com";
     });
 
     expect(emailRender).toHaveBeenCalledTimes(2);
-    expect(paymentRender).toHaveBeenCalledTimes(1); // НЕ перерендерился!
+    expect(paymentRender).toHaveBeenCalledTimes(1); // did NOT re-render!
     expect(screen.getByTestId("email").textContent).toBe("changed@test.com");
     expect(screen.getByTestId("payment").textContent).toBe("card");
   });
 
-  it("перерендерит компонент только при изменении прочитанного поля", () => {
+  it("re-renders the component only when a field it read changes", () => {
     const store = new Palistor({ config: makeConfig() });
     const renderCount = vi.fn();
 
@@ -311,13 +311,13 @@ describe("useForm tracking (selective re-render)", () => {
     render(<CardSection />);
     expect(renderCount).toHaveBeenCalledTimes(1);
 
-    // Меняем email — CardSection не читает email → нет re-render
+    // Changing email — CardSection doesn't read email → no re-render
     act(() => {
       store.proxy.email.value = "test@test.com";
     });
     expect(renderCount).toHaveBeenCalledTimes(1);
 
-    // Меняем paymentType → cardNumber.isVisible зависит от него → re-render
+    // Changing paymentType → cardNumber.isVisible depends on it → re-render
     act(() => {
       store.proxy.paymentType.value = "bank";
     });
@@ -325,7 +325,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(screen.getByTestId("card-visible").textContent).toBe("no");
   });
 
-  it("tracking работает для вложенных полей (passport.number)", () => {
+  it("tracking works for nested fields (passport.number)", () => {
     const store = new Palistor({ config: makeConfig() });
     const passportRender = vi.fn();
     const emailRender = vi.fn();
@@ -354,7 +354,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(passportRender).toHaveBeenCalledTimes(1);
     expect(emailRender).toHaveBeenCalledTimes(1);
 
-    // Меняем passport.number → PassportNumber рендерится, EmailField — нет
+    // Changing passport.number → PassportNumber renders, EmailField doesn't
     act(() => {
       store.proxy.passport.number.value = "AB123";
     });
@@ -364,7 +364,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(screen.getByTestId("passport-num").textContent).toBe("AB123");
   });
 
-  it("tracking через переданный проп (без useForm в дочернем)", () => {
+  it("tracking via a passed prop (no useForm in the child)", () => {
     const store = new Palistor({ config: makeConfig() });
     const parentRender = vi.fn();
 
@@ -381,15 +381,15 @@ describe("useForm tracking (selective re-render)", () => {
     render(<Parent />);
     expect(parentRender).toHaveBeenCalledTimes(1);
 
-    // Меняем поле, которое Parent не читает
+    // Change a field Parent does not read
     act(() => {
       store.proxy.passport.number.value = "XY999";
     });
 
-    expect(parentRender).toHaveBeenCalledTimes(1); // Не перерендерился
+    expect(parentRender).toHaveBeenCalledTimes(1); // did not re-render
   });
 
-  it("запись через tracking proxy работает корректно", () => {
+  it("writing through the tracking proxy works correctly", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -402,7 +402,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(store.getValues().email).toBe("tracking@test.com");
   });
 
-  it("tracking proxy стабилен (referential equality между рендерами)", () => {
+  it("the tracking proxy is stable (referential equality across renders)", () => {
     const store = new Palistor({ config: makeConfig() });
     const proxies: any[] = [];
 
@@ -417,7 +417,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(proxies[0]).toBe(proxies[1]);
   });
 
-  it("три компонента: меняется одно поле, рендерится только один", () => {
+  it("three components: one field changes, only one renders", () => {
     const store = new Palistor({ config: makeConfig() });
     const renderA = vi.fn();
     const renderB = vi.fn();
@@ -455,13 +455,13 @@ describe("useForm tracking (selective re-render)", () => {
       store.proxy.passport.number.value = "ONLY_C";
     });
 
-    // Только C перерендерился
+    // Only C re-rendered
     expect(renderA).toHaveBeenCalledTimes(1);
     expect(renderB).toHaveBeenCalledTimes(1);
     expect(renderC).toHaveBeenCalledTimes(2);
   });
 
-  it("один useForm на верхнем уровне + пропсы вниз — все перерендериваются", () => {
+  it("one useForm at the top + props down — everyone re-renders", () => {
     const store = new Palistor({ config: makeConfig() });
     const renderParent = vi.fn();
     const renderA = vi.fn();
@@ -500,25 +500,25 @@ describe("useForm tracking (selective re-render)", () => {
     expect(renderB).toHaveBeenCalledTimes(1);
     expect(renderC).toHaveBeenCalledTimes(1);
 
-    // Меняем только passport.number
+    // Change only passport.number
     act(() => {
       store.proxy.passport.number.value = "ONLY_C";
     });
 
-    // Parent перерендерился, потому что passport.number в его tracked set
-    // → все дети тоже перерендерились (каскадный re-render)
+    // Parent re-rendered because passport.number is in its tracked set
+    // → all children re-rendered too (cascading re-render)
     expect(renderParent).toHaveBeenCalledTimes(2);
     expect(renderA).toHaveBeenCalledTimes(2);
     expect(renderB).toHaveBeenCalledTimes(2);
     expect(renderC).toHaveBeenCalledTimes(2);
 
-    // Но значения корректны
+    // But the values are correct
     expect(screen.getByTestId("a").textContent).toBe("");
     expect(screen.getByTestId("b").textContent).toBe("card");
     expect(screen.getByTestId("c").textContent).toBe("ONLY_C");
   });
 
-  it("useForm(subtree) — дочерние компоненты с независимой подпиской", () => {
+  it("useForm(subtree) — child components with independent subscriptions", () => {
     const store = new Palistor({ config: makeConfig() });
     const renderParent = vi.fn();
     const renderA = vi.fn();
@@ -527,7 +527,7 @@ describe("useForm tracking (selective re-render)", () => {
 
     function A({ section }: { section: any }) {
       renderA();
-      const email = useForm(section) as any; // независимый tracking
+      const email = useForm(section) as any; // independent tracking
       return <span data-testid="a">{email.value}</span>;
     }
     function B({ section }: { section: any }) {
@@ -560,23 +560,23 @@ describe("useForm tracking (selective re-render)", () => {
     expect(renderB).toHaveBeenCalledTimes(1);
     expect(renderC).toHaveBeenCalledTimes(1);
 
-    // Меняем только passport.number → только C перерендерится
+    // Change only passport.number → only C re-renders
     act(() => {
       store.proxy.passport.number.value = "ONLY_C";
     });
 
-    // Parent НЕ перерендерился — он не читал passport.number
+    // Parent did NOT re-render — it never read passport.number
     expect(renderParent).toHaveBeenCalledTimes(1);
-    // A и B тоже нет — у них свои tracked sets
+    // Neither did A and B — they have their own tracked sets
     expect(renderA).toHaveBeenCalledTimes(1);
     expect(renderB).toHaveBeenCalledTimes(1);
-    // Только C!
+    // Only C!
     expect(renderC).toHaveBeenCalledTimes(2);
 
     expect(screen.getByTestId("c").textContent).toBe("ONLY_C");
   });
 
-  it("useForm(subtree) — запись через поддерево работает", () => {
+  it("useForm(subtree) — writing through the subtree works", () => {
     const store = new Palistor({ config: makeConfig() });
 
     function EmailEditor({ emailProxy }: { emailProxy: any }) {
@@ -607,7 +607,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(store.getValues().email).toBe("subtree@test.com");
   });
 
-  it("onValueChange работает через tracking proxy", () => {
+  it("onValueChange works through the tracking proxy", () => {
     const store = new Palistor({ config: makeConfig() });
 
     function TestComponent() {
@@ -633,7 +633,7 @@ describe("useForm tracking (selective re-render)", () => {
     expect(store.getValues().email).toBe("on-change@test.com");
   });
 
-  it("onValueChange возвращает стабильную ссылку через tracking proxy", () => {
+  it("onValueChange returns a stable reference through the tracking proxy", () => {
     const store = new Palistor({ config: makeConfig() });
     const fns: any[] = [];
 
@@ -649,27 +649,27 @@ describe("useForm tracking (selective re-render)", () => {
   });
 });
 
-// ─── Антипаттерн: store.proxy напрямую в useForm ─────────────────────────────
+// ─── Anti-pattern: store.proxy passed directly into useForm ──────────────────
 
-describe("useForm: передача store.proxy напрямую вызывает ошибку", () => {
+describe("useForm: passing store.proxy directly throws", () => {
   /**
-   * store.proxy.usersPage.inviteUser — это сырой GroupProxyNode из внутреннего
-   * прокси стора. Он НЕ является ни ProxyStore (нет .proxy), ни tracking proxy
-   * (нет SOURCE_PROXY символа).
+   * store.proxy.usersPage.inviteUser is a raw GroupProxyNode from the store's
+   * internal proxy. It is neither a ProxyStore (no .proxy) nor a tracking
+   * proxy (no SOURCE_PROXY symbol).
    *
-   * resolveInput() получает его и делает:
+   * resolveInput() receives it and produces:
    *   { store: rawGroupProxy, sourceProxy: rawGroupProxy.proxy }
    *                                                            ^^ undefined
    *
-   * Затем createTrackingProxy(undefined, ...) вызывает WeakMap.has(undefined)
+   * Then createTrackingProxy(undefined, ...) calls WeakMap.has(undefined)
    * → TypeError: Invalid value used as weak map key.
    *
-   * Правильный способ:
+   * The correct way:
    *   const form = useForm(store);
-   *   // form.usersPage.inviteUser — это уже tracking proxy, его можно передать пропсом
-   *   // и в дочернем компоненте вызвать useForm(props.inviteUser)
+   *   // form.usersPage.inviteUser is already a tracking proxy; pass it as a prop
+   *   // and call useForm(props.inviteUser) in the child component
    */
-  it("выбрасывает ошибку при useForm(store.proxy.someGroup)", () => {
+  it("throws on useForm(store.proxy.someGroup)", () => {
     const store = new Palistor({
       config: {
         usersPage: {
@@ -681,17 +681,17 @@ describe("useForm: передача store.proxy напрямую вызывае�
       },
     });
 
-    // store.proxy.usersPage.inviteUser — сырой GroupProxyNode, НЕ tracking proxy
+    // store.proxy.usersPage.inviteUser is a raw GroupProxyNode, NOT a tracking proxy
     expect(() => {
-      // @ts-expect-error — TypeScript должен запретить передачу сырого
-      // store.proxy-поддерева в useForm. Если это ts-expect-error «протух» —
-      // значит компиляторный guard сломан, нужно чинить
-      // ForbidRawStoreProxy / RawStoreProxyMarker в палисторе.
+      // @ts-expect-error — TypeScript must forbid passing a raw
+      // store.proxy subtree into useForm. If this ts-expect-error goes stale,
+      // the compiler guard is broken — fix
+      // ForbidRawStoreProxy / RawStoreProxyMarker in palistor.
       renderHook(() => useForm(store.proxy.usersPage.inviteUser));
-    }).toThrow("useForm: получен сырой proxy-узел стора");
+    }).toThrow("useForm: received a raw store proxy node");
   });
 
-  it("правильный способ: useForm(store) → передать поддерево как проп", () => {
+  it("the correct way: useForm(store) → pass the subtree as a prop", () => {
     const store = new Palistor({
       config: {
         usersPage: {
@@ -703,11 +703,11 @@ describe("useForm: передача store.proxy напрямую вызывае�
       },
     });
 
-    // Правильно: получаем tracking proxy через useForm(store),
-    // затем передаём form.usersPage.inviteUser как проп дочернему компоненту.
+    // Correct: get a tracking proxy via useForm(store),
+    // then pass form.usersPage.inviteUser as a prop to the child component.
     function InviteUserForm({ inviteUser }: { inviteUser: any }) {
-      // Здесь inviteUser — tracking proxy (из родительского useForm),
-      // поэтому useForm(inviteUser) работает корректно.
+      // Here inviteUser is a tracking proxy (from the parent useForm),
+      // so useForm(inviteUser) works correctly.
       const form = useForm(inviteUser);
       return (
         <div>
@@ -732,7 +732,7 @@ describe("useForm: передача store.proxy напрямую вызывае�
 // ─── setValues: bulk update ───────────────────────────────────────────────────
 
 describe("setValues", () => {
-  it("store.setValues обновляет несколько полей сразу", () => {
+  it("store.setValues updates several fields at once", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -745,7 +745,7 @@ describe("setValues", () => {
     expect(result.current.paymentType.value).toBe("bank");
   });
 
-  it("store.setValues не затрагивает поля вне патча", () => {
+  it("store.setValues does not touch fields outside the patch", () => {
     const store = new Palistor({
       config: makeConfig(),
       initialValues: { email: "original@test.com", paymentType: "card" },
@@ -756,11 +756,11 @@ describe("setValues", () => {
     });
 
     const values = store.getValues();
-    expect(values.email).toBe("original@test.com");  // не тронуто
-    expect(values.paymentType).toBe("bank");         // обновлено
+    expect(values.email).toBe("original@test.com");  // untouched
+    expect(values.paymentType).toBe("bank");         // updated
   });
 
-  it("form.setValues через useForm proxy работает", () => {
+  it("form.setValues via the useForm proxy works", () => {
     const store = new Palistor({ config: makeConfig() });
 
     function TestComponent() {
@@ -786,7 +786,7 @@ describe("setValues", () => {
     expect(screen.getByTestId("payment").textContent).toBe("bank");
   });
 
-  it("form.passport.setValues обновляет вложенную группу", () => {
+  it("form.passport.setValues updates the nested group", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -798,10 +798,10 @@ describe("setValues", () => {
     const values = store.getValues();
     expect(values.passport.number).toBe("XY999");
     expect(values.passport.issueDate).toBe("2020-01-01");
-    expect(values.email).toBe(""); // root не тронут
+    expect(values.email).toBe(""); // root untouched
   });
 
-  it("setValues пересчитывает computed-свойства (isVisible)", () => {
+  it("setValues recomputes computed props (isVisible)", () => {
     const store = new Palistor({ config: makeConfig() });
 
     const { result } = renderHook(() => useForm(store));
@@ -817,7 +817,7 @@ describe("setValues", () => {
     expect(result.current.passport.isVisible).toBe(true);
   });
 
-  it("setValues триггерит ре-рендер только для компонентов, читающих изменённые поля", () => {
+  it("setValues re-renders only components that read the changed fields", () => {
     const store = new Palistor({ config: makeConfig() });
     const emailRender = vi.fn();
     const paymentRender = vi.fn();
@@ -851,21 +851,21 @@ describe("setValues", () => {
     expect(paymentRender).toHaveBeenCalledTimes(1);
     expect(passportRender).toHaveBeenCalledTimes(1);
 
-    // Патчим только email и passport.number — paymentType не трогаем
+    // Patch only email and passport.number — paymentType untouched
     act(() => {
       store.setValues({ email: "bulk@test.com", passport: { number: "AB123" } });
     });
 
-    expect(emailRender).toHaveBeenCalledTimes(2);   // читал email → ре-рендер
-    expect(paymentRender).toHaveBeenCalledTimes(1); // не читал изменённые → нет
-    expect(passportRender).toHaveBeenCalledTimes(2); // читал passport.number → ре-рендер
+    expect(emailRender).toHaveBeenCalledTimes(2);   // read email → re-render
+    expect(paymentRender).toHaveBeenCalledTimes(1); // read nothing changed → no
+    expect(passportRender).toHaveBeenCalledTimes(2); // read passport.number → re-render
 
     expect(screen.getByTestId("email").textContent).toBe("bulk@test.com");
     expect(screen.getByTestId("payment").textContent).toBe("card");
     expect(screen.getByTestId("passport").textContent).toBe("AB123");
   });
 
-  it("setValues возвращает стабильную ссылку между рендерами", () => {
+  it("setValues returns a stable reference across renders", () => {
     const store = new Palistor({ config: makeConfig() });
     const fns: any[] = [];
 
@@ -880,7 +880,7 @@ describe("setValues", () => {
     expect(fns[0]).toBe(fns[1]);
   });
 
-  it("store.setValues отражается в getValues()", () => {
+  it("store.setValues is reflected in getValues()", () => {
     const store = new Palistor({ config: makeConfig() });
 
     act(() => {
@@ -897,7 +897,7 @@ describe("setValues", () => {
   });
 });
 
-// ─── useForm(entity, templateSelector) — Phase 3A ────────────────────────────
+// ─── useForm(entity, templateSelector) ───────────────────────────────────────
 
 /**
  * Config with a list + a separate edit template.
@@ -923,7 +923,7 @@ function flushPromisesEntity() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-describe("useForm(entity, templateSelector) — Phase 3A", () => {
+describe("useForm(entity, templateSelector)", () => {
   it("returns entity projection proxy through template", () => {
     const store = new Palistor({ config: makeEntityConfig() });
     store.set({ id: "u1", name: "Alice", email: "alice@test.com", role: "admin" });
@@ -1076,7 +1076,7 @@ describe("useForm(entity, templateSelector) — Phase 3A", () => {
     // Initially not resolved
     expect(store.entityRegistry.isResolved("u1", templateNode)).toBe(false);
 
-    // Manually mark as resolved (simulating what Phase 3B will do)
+    // Manually mark as resolved (simulating a completed template resolve)
     store.entityRegistry.markResolved("u1", templateNode);
 
     expect(store.entityRegistry.isResolved("u1", templateNode)).toBe(true);
@@ -1113,7 +1113,7 @@ describe("useForm(entity, templateSelector) — Phase 3A", () => {
     // Unmount first component
     unmountA();
     // Debatable: after A unmounts, B's binding is gone too (Set.delete removes the templateNode).
-    // This is expected behavior for Phase 3A — Phase 3B will add ref-counting if needed.
+    // This is the current expected behavior — ref-counting can be added later if needed.
     // For now verify unbind was called.
     const bindingsAfterAUnmount = store.entityRegistry.getBindings("u1");
     expect(bindingsAfterAUnmount?.size).toBe(0);

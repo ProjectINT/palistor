@@ -1,20 +1,20 @@
 import type { ListState } from "../store/types";
 
 /**
- * Leaf-нода entity: минимальный объект со значением.
- * Совместим с AnyConfigNode leaf (имеет "value").
+ * Entity leaf node: a minimal object holding a value.
+ * Compatible with an AnyConfigNode leaf (has "value").
  */
 export interface EntityLeafNode {
   value: unknown;
 }
 
 /**
- * Группа leaf-нод внутри entity.
- * Рекурсивная: поддерживает вложенные группы (e.g. user.passport).
+ * A group of leaf nodes inside an entity.
+ * Recursive: supports nested groups (e.g. user.passport).
  *
- * Index-сигнатура расширена meta-членами (`lists`/`owner`) варианта C, чтобы
- * EntityNode мог объявить их как именованные поля без конфликта TS2411.
- * На рантайме они non-enumerable и встречаются только на корневых EntityNode.
+ * The index signature is widened with the `lists`/`owner` meta members so
+ * EntityNode can declare them as named fields without a TS2411 conflict.
+ * At runtime they are non-enumerable and appear only on root EntityNodes.
  */
 export interface EntityGroupNode {
   [key: string]:
@@ -27,25 +27,25 @@ export interface EntityGroupNode {
 
 
 /**
- * Корневая нода entity.
- * Обязательно содержит id-лист и произвольные поля (leaf или group).
+ * Root entity node.
+ * Always contains the id leaf plus arbitrary fields (leaf or group).
  *
- * Поля `lists` и `owner` ОБЯЗАТЕЛЬНО non-enumerable (присваиваются через
- * Object.defineProperty в EntityRegistry) — иначе `buildEntityValues`
- * и любые `Object.keys(entityNode)`-обходы утянут их в плоские values
- * резолверов/computed.
+ * The `lists` and `owner` fields MUST be non-enumerable (assigned via
+ * Object.defineProperty in EntityRegistry) — otherwise `buildEntityValues`
+ * and any `Object.keys(entityNode)` walk would drag them into the flat
+ * values seen by resolvers/computed props.
  */
 export interface EntityNode extends EntityGroupNode {
   id: EntityLeafNode;
-  /** Map<listConfigNode, ListState> (per-entity, ownerEntity!==null). Лениво. NON-ENUMERABLE. */
+  /** Map<listConfigNode, ListState> (per-entity, ownerEntity!==null). Lazy. NON-ENUMERABLE. */
   lists?: Map<object, ListState>;
-  /** Owner-ссылка для child-entity (проставляется при заливке resolver-результата). NON-ENUMERABLE. */
+  /** Owner reference for a child entity (set when resolver results are ingested). NON-ENUMERABLE. */
   owner?: { ownerId: string; ownerListNode: object };
 }
 
 /**
- * Плоский объект данных, передаваемый в upsert/set.
- * id — обязательный строковый ключ.
+ * Flat data object passed to upsert/set.
+ * id — the required string key.
  */
 export type EntityData = {
   id?: string;

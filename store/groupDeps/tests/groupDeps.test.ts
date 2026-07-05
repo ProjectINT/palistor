@@ -1,7 +1,7 @@
 /**
- * Интеграционный тест: tracking при recompute.
+ * Integration test: tracking during recompute.
  *
- * Unit-тесты для каждой функции — в co-located файлах:
+ * Unit tests for each function live in co-located files:
  *   pairKey.test.ts
  *   createGroupDeps.test.ts
  *   getRecipientGroups.test.ts
@@ -12,16 +12,16 @@
 import { describe, it, expect } from "vitest";
 import { createTrackingValues, getRecipientGroups, pairKey } from "../groupDeps";
 
-// ─── Интеграция: tracking при recompute ──────────────────────────────────────
+// ─── Integration: tracking during recompute───────────────────────────────────
 
 describe("tracking integration", () => {
-  it("обнаруживает кросс-групповую зависимость через isVisible", () => {
-    // Симуляция: passport.number isVisible читает paymentType (root)
-    // и записывает root→passport зависимость
+  it("detects a cross-group dependency via isVisible", () => {
+    // Simulation: passport.number's isVisible reads paymentType (root)
+    // and records the root→passport dependency
     const deps = new Set([pairKey("", ""), pairKey("passport", "passport")]);
     const values = { paymentType: "bank" };
 
-    // Эмулируем вычисление isVisible для passport.number
+    // Emulate the isVisible computation for passport.number
     const tracked = createTrackingValues(
       values as Record<string, unknown>,
       "passport",
@@ -31,10 +31,10 @@ describe("tracking integration", () => {
     const isVisible = tracked.paymentType === "bank";
 
     expect(isVisible).toBe(true);
-    // root → passport зависимость должна быть записана
+    // the root → passport dependency must be recorded
     expect(deps.has(pairKey("", "passport"))).toBe(true);
 
-    // Теперь getRecipientGroups должен найти passport как реципиента root
+    // Now getRecipientGroups must find passport as root's recipient
     expect(getRecipientGroups(deps, "")).toEqual(["passport"]);
   });
 });

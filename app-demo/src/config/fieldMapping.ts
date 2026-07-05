@@ -1,15 +1,15 @@
 /**
- * Демо fieldMapping — переименование внутренних свойств поля под конвенцию
- * конкретной UI-библиотеки.
+ * fieldMapping demo — renaming internal field properties to match a specific
+ * UI library's convention.
  *
- * Palistor по умолчанию отдаёт `isRequired` / `isDisabled` / `isInvalid` /
- * `errorMessage` / `description`. Многие UI-киты (MUI, Ant Design, нативный
- * HTML) ждут другие имена: `required` / `disabled` / `error` / `helperText`.
+ * By default Palistor exposes `isRequired` / `isDisabled` / `isInvalid` /
+ * `errorMessage` / `description`. Many UI kits (MUI, Ant Design, native HTML)
+ * expect other names: `required` / `disabled` / `error` / `helperText`.
  *
- * `fieldMapping` переименовывает свойства **на границе proxy** — GET, SET,
- * tracking и spread. Внутренний FieldState, compute и pipelines не меняются.
- * Благодаря этому `{...form.email}` можно спредить прямо в компонент чужой
- * библиотеки — без адаптеров.
+ * `fieldMapping` renames properties **at the proxy boundary** — GET, SET,
+ * tracking and spread. The internal FieldState, compute and pipelines are
+ * unchanged. Thanks to that, `{...form.email}` spreads straight into a
+ * third-party library component — no adapters.
  */
 
 import { Palistor } from "@palistor/store/store";
@@ -17,14 +17,14 @@ import { useForm } from "@palistor/react/useForm";
 import { defineFieldMapping } from "@palistor/store/defineFieldMapping";
 
 // ============================================================================
-// Карта переименования (MUI / HTML-native стиль)
+// The rename map (MUI / HTML-native style)
 // ============================================================================
 
 /**
- * `defineFieldMapping` (а не `: FieldMapping` и не `satisfies FieldMapping`) —
- * чтобы TypeScript сохранил литералы (`"required"`, …) и прокинул их в тип
- * `store.proxy`. Ключи слева — внутренние имена Palistor, значения справа —
- * имена, под которыми свойства будут видны наружу.
+ * `defineFieldMapping` (not `: FieldMapping` and not `satisfies FieldMapping`)
+ * — so TypeScript keeps the literals (`"required"`, …) and threads them into
+ * the `store.proxy` type. Keys on the left are Palistor's internal names,
+ * values on the right are the names the properties are exposed under.
  */
 export const uiFieldMapping = defineFieldMapping({
   isRequired: "required",
@@ -35,11 +35,11 @@ export const uiFieldMapping = defineFieldMapping({
   description: "helpText",
 });
 
-// Строки таблицы для UI (internal → external)
+// Table rows for the UI (internal → external)
 export const MAPPING_ROWS = Object.entries(uiFieldMapping) as Array<[string, string]>;
 
 // ============================================================================
-// Конфиг формы
+// Form config
 // ============================================================================
 
 export type MappingValues = {
@@ -48,14 +48,16 @@ export type MappingValues = {
   nickname: string;
 };
 
-// Конфиг пишется в ЕДИНОМ публичном словаре карты `uiFieldMapping` (external-имена):
-// `required` / `readOnly` / `helpText` вместо internal `isRequired` / `isReadOnly` /
-// `description`. Именно это и есть суть исправления: автор и потребитель поля
-// говорят на одном словаре. Нормализатор в конструкторе Palistor приведёт эти
-// имена к internal перед compute — прозрачно для автора.
-// Конфиг НЕ аннотируем типом: валидатор в конструкторе Palistor и так ловит
-// internal-имена (`isRequired`) при активном fieldMapping как ошибку типа, а
-// точный вывод значений полей (для initialValues) сохраняется из литерала.
+// The config is authored in the SINGLE public vocabulary of the
+// `uiFieldMapping` map (external names): `required` / `readOnly` / `helpText`
+// instead of internal `isRequired` / `isReadOnly` / `description`. That's the
+// whole point: the field's author and consumer speak the same vocabulary.
+// The normalizer in the Palistor constructor converts these names to internal
+// before compute — transparently to the author.
+// The config is NOT annotated with a type: the validator in the Palistor
+// constructor already flags internal names (`isRequired`) as a type error
+// when fieldMapping is active, while precise field-value inference (for
+// initialValues) is preserved from the literal.
 export const mappingConfig = {
   email: {
     value: "",
@@ -84,7 +86,7 @@ export const mappingConfig = {
 };
 
 // ============================================================================
-// Store — включаем fieldMapping
+// Store — enable fieldMapping
 // ============================================================================
 
 export const mappingStore = new Palistor({
@@ -94,7 +96,7 @@ export const mappingStore = new Palistor({
 });
 
 /**
- * Хук подключения к mappingStore. Возвращает proxy, где поля отдают
- * external-имена: `form.email.required`, `form.email.error`, `form.email.helperText`.
+ * Hook connecting to the mappingStore. Returns a proxy where fields expose
+ * external names: `form.email.required`, `form.email.error`, `form.email.helperText`.
  */
 export const useMappingForm = () => useForm(mappingStore) as any;

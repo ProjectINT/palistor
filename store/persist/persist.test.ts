@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Palistor } from "../store";
 import type { PersistDriver } from "./types";
 
-// ─── In-memory driver для тестов ─────────────────────────────────────────────
+// ─── In-memory driver for tests ──────────────────────────────────────────────
 
 function createMemoryDriver(): PersistDriver & { storage: Map<string, string> } {
   const storage = new Map<string, string>();
@@ -14,7 +14,7 @@ function createMemoryDriver(): PersistDriver & { storage: Map<string, string> } 
   };
 }
 
-// ─── Async driver для тестов ─────────────────────────────────────────────────
+// ─── Async driver for tests ──────────────────────────────────────────────────
 
 function createAsyncMemoryDriver(): PersistDriver & { storage: Map<string, string> } {
   const storage = new Map<string, string>();
@@ -26,7 +26,7 @@ function createAsyncMemoryDriver(): PersistDriver & { storage: Map<string, strin
   };
 }
 
-// ─── Тестовый конфиг ─────────────────────────────────────────────────────────
+// ─── Test config ─────────────────────────────────────────────────────────────
 
 const makeConfig = () => ({
   email: {
@@ -53,7 +53,7 @@ const makeConfig = () => ({
   },
 });
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("PersistManager", () => {
   let driver: ReturnType<typeof createMemoryDriver>;
@@ -66,18 +66,18 @@ describe("PersistManager", () => {
   // ─── enable / disable ────────────────────────────────────────────────────
 
   describe("enable / disable", () => {
-    it("isEnabled возвращает false до вызова enable", () => {
+    it("isEnabled returns false before enable is called", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.persist.isEnabled()).toBe(false);
     });
 
-    it("isEnabled возвращает true после enable", async () => {
+    it("isEnabled returns true after enable", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver });
       expect(store.persist.isEnabled()).toBe(true);
     });
 
-    it("isEnabled возвращает false после disable", async () => {
+    it("isEnabled returns false after disable", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver });
       store.persist.disable();
@@ -85,40 +85,40 @@ describe("PersistManager", () => {
     });
   });
 
-  // ─── Автосохранение ──────────────────────────────────────────────────────
+  // ─── Auto-save ────────────────────────────────────────────────────────────
 
   describe("auto-save", () => {
-    it("сохраняет значения при изменении (после debounce)", async () => {
+    it("saves values on change (after the debounce)", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver, debounce: 50 });
 
       store.proxy.email.value = "user@test.com";
 
-      // До истечения debounce — ничего не сохранено
+      // Before the debounce elapses — nothing is saved
       expect(driver.storage.has("test")).toBe(false);
 
-      // Прокрутим таймер
+      // Advance the timer
       vi.advanceTimersByTime(60);
 
-      // Теперь должно быть сохранено
+      // Now it should be saved
       const saved = JSON.parse(driver.storage.get("test")!);
       expect(saved.email).toBe("user@test.com");
     });
 
-    it("debounce: 0 — мгновенное сохранение", async () => {
+    it("debounce: 0 — immediate save", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver, debounce: 0 });
 
       store.proxy.name.value = "John";
 
-      // Нужен микротик для Promise.resolve внутри saveToStorage
+      // A microtick is needed for the Promise.resolve inside saveToStorage
       await vi.advanceTimersByTimeAsync(0);
 
       const saved = JSON.parse(driver.storage.get("test")!);
       expect(saved.name).toBe("John");
     });
 
-    it("не сохраняет после disable", async () => {
+    it("does not save after disable", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "test", driver, debounce: 50 });
 
@@ -130,10 +130,10 @@ describe("PersistManager", () => {
     });
   });
 
-  // ─── Гидратация ──────────────────────────────────────────────────────────
+  // ─── Hydration ───────────────────────────────────────────────────────────
 
   describe("hydrate", () => {
-    it("восстанавливает значения из storage при enable", async () => {
+    it("restores values from storage on enable", async () => {
       const saved = { email: "saved@test.com", name: "Saved Name" };
       driver.storage.set("hydrate-key", JSON.stringify(saved));
 
@@ -144,7 +144,7 @@ describe("PersistManager", () => {
       expect(store.proxy.name.value).toBe("Saved Name");
     });
 
-    it("восстанавливает вложенные объекты", async () => {
+    it("restores nested objects", async () => {
       const saved = { passport: { number: "1234567890", issueDate: "2020-01-01" } };
       driver.storage.set("nested", JSON.stringify(saved));
 
@@ -155,24 +155,24 @@ describe("PersistManager", () => {
       expect(store.proxy.passport.issueDate.value).toBe("2020-01-01");
     });
 
-    it("не падает если в storage нет данных", async () => {
+    it("does not crash when storage has no data", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "nonexistent", driver });
 
-      // Значения остаются по умолчанию
+      // Values keep their defaults
       expect(store.proxy.email.value).toBe("");
     });
 
-    it("не падает при битом JSON в storage", async () => {
+    it("does not crash on corrupted JSON in storage", async () => {
       driver.storage.set("broken", "not-valid-json{{{");
 
       const store = new Palistor({ config: makeConfig() });
-      // Не должно бросать исключение
+      // Must not throw
       await store.persist.enable({ key: "broken", driver });
       expect(store.proxy.email.value).toBe("");
     });
 
-    it("гидратация не тригерит автосохранение (нет цикла)", async () => {
+    it("hydration does not trigger auto-save (no loop)", async () => {
       const saved = { email: "hydrated@test.com" };
       driver.storage.set("cycle-test", JSON.stringify(saved));
 
@@ -180,7 +180,7 @@ describe("PersistManager", () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "cycle-test", driver, debounce: 0 });
 
-      // setItem не должен вызываться во время гидратации
+      // setItem must not be called during hydration
       await vi.advanceTimersByTimeAsync(10);
       expect(setItemSpy).not.toHaveBeenCalled();
     });
@@ -189,7 +189,7 @@ describe("PersistManager", () => {
   // ─── flush ────────────────────────────────────────────────────────────────
 
   describe("flush", () => {
-    it("принудительно сохраняет без ожидания debounce", async () => {
+    it("force-saves without waiting for the debounce", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "flush-test", driver, debounce: 5000 });
 
@@ -204,7 +204,7 @@ describe("PersistManager", () => {
   // ─── clear ────────────────────────────────────────────────────────────────
 
   describe("clear", () => {
-    it("удаляет данные из storage", async () => {
+    it("removes the data from storage", async () => {
       driver.storage.set("clear-test", JSON.stringify({ email: "x" }));
 
       const store = new Palistor({ config: makeConfig() });
@@ -218,7 +218,7 @@ describe("PersistManager", () => {
   // ─── pick / omit ─────────────────────────────────────────────────────────
 
   describe("pick / omit", () => {
-    it("pick — сохраняет только указанные поля", async () => {
+    it("pick — persists only the listed fields", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({
         key: "pick-test",
@@ -239,7 +239,7 @@ describe("PersistManager", () => {
       expect(saved.age).toBeUndefined();
     });
 
-    it("omit — исключает указанные поля", async () => {
+    it("omit — excludes the listed fields", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({
         key: "omit-test",
@@ -262,7 +262,7 @@ describe("PersistManager", () => {
   // ─── Async driver ─────────────────────────────────────────────────────────
 
   describe("async driver", () => {
-    it("работает с асинхронным драйвером", async () => {
+    it("works with an async driver", async () => {
       const asyncDriver = createAsyncMemoryDriver();
       asyncDriver.storage.set("async-key", JSON.stringify({ email: "async@test.com" }));
 
@@ -272,7 +272,7 @@ describe("PersistManager", () => {
       expect(store.proxy.email.value).toBe("async@test.com");
     });
 
-    it("сохраняет через асинхронный драйвер", async () => {
+    it("saves through an async driver", async () => {
       const asyncDriver = createAsyncMemoryDriver();
       const store = new Palistor({ config: makeConfig() });
       await store.persist.enable({ key: "async-save", driver: asyncDriver, debounce: 0 });
@@ -288,7 +288,7 @@ describe("PersistManager", () => {
   // ─── Custom serialize / deserialize ────────────────────────────────────────
 
   describe("custom serializer", () => {
-    it("использует кастомный serialize / deserialize", async () => {
+    it("uses custom serialize / deserialize", async () => {
       const prefix = "CUSTOM:";
       const store = new Palistor({ config: makeConfig() });
 
@@ -317,10 +317,10 @@ describe("PersistManager", () => {
     });
   });
 
-  // ─── Re-enable (смена ключа) ──────────────────────────────────────────────
+  // ─── Re-enable (key change) ───────────────────────────────────────────────
 
   describe("re-enable", () => {
-    it("при повторном enable — переключается на новый ключ", async () => {
+    it("a repeated enable switches to the new key", async () => {
       const store = new Palistor({ config: makeConfig() });
 
       driver.storage.set("key-1", JSON.stringify({ email: "key1@test.com" }));
@@ -334,10 +334,10 @@ describe("PersistManager", () => {
     });
   });
 
-  // ─── Очистка persist после успешного submit ────────────────────────────────
+  // ─── Persist cleanup after a successful submit ───────────────────────────────
 
   describe("clear on successful submit", () => {
-    it("persist storage очищается после успешного submit", async () => {
+    it("the persist storage is cleared after a successful submit", async () => {
       const config = {
         email: { value: "", label: "Email", isRequired: true },
         name: { value: "", label: "Name" },
@@ -347,23 +347,23 @@ describe("PersistManager", () => {
 
       await store.persist.enable({ key: "submit-clear", driver });
 
-      // Записываем значения
+      // Write the values
       store.proxy.email.value = "test@test.com";
       store.proxy.name.value = "John";
       await store.persist.flush();
 
-      // Убеждаемся что данные в storage
+      // Ensure the data is in storage
       expect(driver.storage.has("submit-clear")).toBe(true);
 
-      // Успешный submit
+      // A successful submit
       const result = await store.submit();
       expect(result.success).toBe(true);
 
-      // Storage очищен
+      // Storage is cleared
       expect(driver.storage.has("submit-clear")).toBe(false);
     });
 
-    it("persist storage НЕ очищается при неуспешном submit (validation errors)", async () => {
+    it("the persist storage is NOT cleared on a failed submit (validation errors)", async () => {
       const config = {
         email: {
           value: "",
@@ -382,22 +382,22 @@ describe("PersistManager", () => {
 
       expect(driver.storage.has("submit-fail")).toBe(true);
 
-      // Submit fails из-за валидации email
+      // Submit fails due to email validation
       const result = await store.submit();
       expect(result.success).toBe(false);
 
-      // Storage НЕ очищен
+      // Storage is NOT cleared
       expect(driver.storage.has("submit-fail")).toBe(true);
     });
 
-    it("persist storage НЕ очищается если persist не активен", async () => {
+    it("the persist storage is NOT cleared when persist is inactive", async () => {
       const config = {
         email: { value: "", label: "Email" },
         onSubmit: async () => ({ ok: true }),
       };
       const store = new Palistor({ config });
 
-      // Persist НЕ включен — submit не должен падать
+      // Persist is NOT enabled — submit must not crash
       const result = await store.submit();
       expect(result.success).toBe(true);
     });

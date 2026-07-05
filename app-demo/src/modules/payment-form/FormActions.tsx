@@ -14,11 +14,11 @@ export function FormActions() {
     const res = await form.submit();
     if (res.errors.length > 0) {
       console.error('Submit errors:', res.errors);
-      alert("Ошибка при отправке формы!\n\n" + JSON.stringify(res.errors, null, 2));
+      alert("Form submission failed!\n\n" + JSON.stringify(res.errors, null, 2));
       return;
     }
 
-    alert("Форма отправлена!\n\n" + JSON.stringify(values, null, 2));
+    alert("Form submitted!\n\n" + JSON.stringify(values, null, 2));
   };
 
   const handleReset = () => {

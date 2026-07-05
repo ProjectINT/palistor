@@ -4,7 +4,7 @@ import { defineFieldMapping } from "./defineFieldMapping";
 import { defineList } from "./defineList";
 import type { FieldMapping } from "./store/types";
 
-/** Строит обратную карту так же, как конструктор Palistor. */
+/** Builds the reverse map the same way the Palistor constructor does. */
 function e2i(fwd: FieldMapping): Record<string, string> {
   const out: Record<string, string> = {};
   for (const internal in fwd) {
@@ -23,13 +23,13 @@ const fwd = defineFieldMapping({
 });
 
 describe("normalizeConfig", () => {
-  it("пустая карта → возвращает исходный объект без копии (нулевой оверхед)", () => {
+  it("an empty map → returns the original object without a copy (zero overhead)", () => {
     const config = { email: { value: "", isRequired: true } };
     const result = normalizeConfig(config, {}, {});
-    expect(result).toBe(config); // тот же референс
+    expect(result).toBe(config); // same reference
   });
 
-  it("переименовывает external config-ключи в internal", () => {
+  it("renames external config keys to internal ones", () => {
     const config = {
       email: { value: "", label: "Email", required: true, disabled: false, helpText: "hi" },
     };
@@ -43,7 +43,7 @@ describe("normalizeConfig", () => {
     });
   });
 
-  it("не мутирует исходное дерево", () => {
+  it("does not mutate the original tree", () => {
     const config = { email: { value: "", required: true } };
     const result = normalizeConfig(config, e2i(fwd), fwd) as any;
     expect((config.email as any).required).toBe(true);
@@ -52,7 +52,7 @@ describe("normalizeConfig", () => {
     expect(result).not.toBe(config);
   });
 
-  it("рекурсирует во вложенные группы", () => {
+  it("recurses into nested groups", () => {
     const config = {
       passport: {
         number: { value: "", required: true },
@@ -64,7 +64,7 @@ describe("normalizeConfig", () => {
     expect(result.passport.issue).toEqual({ value: "", isDisabled: true });
   });
 
-  it("нормализует шаблон list-узла (defineList и массив-форма)", () => {
+  it("normalizes a list node's template (defineList and the array form)", () => {
     const typed = defineList<{ id: string; name: string }>({
       template: {
         id: { value: "" },
@@ -77,27 +77,27 @@ describe("normalizeConfig", () => {
     // defineList: [template, {resolve}]
     expect(result.users[0].name).toEqual({ value: "", isRequired: true });
     expect(result.users[1]).toHaveProperty("resolve");
-    // массив-форма
+    // the array form
     expect(result.products[0].title).toEqual({ value: "", isDisabled: true });
   });
 
-  it("служебные ключи (validate/componentProps/resolve) не рекурсируются и не трогаются", () => {
+  it("service keys (validate/componentProps/resolve) are not recursed into or touched", () => {
     const validate = (v: string) => (v ? undefined : "req");
     const componentProps = { size: "lg" };
     const config = { email: { value: "", required: true, validate, componentProps } };
     const result = normalizeConfig(config, e2i(fwd), fwd) as any;
     expect(result.email.validate).toBe(validate);
-    expect(result.email.componentProps).toBe(componentProps); // тот же референс
+    expect(result.email.componentProps).toBe(componentProps); // same reference
     expect(result.email.isRequired).toBe(true);
   });
 
-  it("dependencies (массив) в служебном ключе не принимается за list-узел", () => {
+  it("dependencies (an array) in a service key is not mistaken for a list node", () => {
     const config = { city: { value: "", dependencies: ["country"] } };
     const result = normalizeConfig(config, e2i(fwd), fwd) as any;
     expect(result.city.dependencies).toEqual(["country"]);
   });
 
-  it("rename value → leaf-detection не ломается (value присутствует)", () => {
+  it("renaming value → leaf detection doesn't break (value is present)", () => {
     const vfwd = defineFieldMapping({ value: "val" });
     const config = { email: { val: "x", label: "Email" } };
     const result = normalizeConfig(config, e2i(vfwd), vfwd) as any;
@@ -105,23 +105,23 @@ describe("normalizeConfig", () => {
     expect("value" in result.email).toBe(true);
   });
 
-  it("strict: internal-имя активно ремапленного config-ключа → бросает", () => {
+  it("strict: the internal name of an actively remapped config key → throws", () => {
     const config = { email: { value: "", isRequired: true } };
     expect(() => normalizeConfig(config, e2i(fwd), fwd)).toThrow(
       /write "required" instead of internal "isRequired"/,
     );
   });
 
-  it("strict: вычисляемый ключ (error/helperText) в конфиге → бросает", () => {
+  it("strict: a computed key (error/helperText) in the config → throws", () => {
     const config = { email: { value: "", error: true } };
     expect(() => normalizeConfig(config, e2i(fwd), fwd)).toThrow(/computed/);
   });
 
-  it("output-only ключи, НЕ написанные в конфиге, не мешают (dirty/loading карта)", () => {
+  it("output-only keys NOT written in the config don't interfere (a dirty/loading map)", () => {
     const dfwd = defineFieldMapping({ dirty: "isDirty", loading: "isLoading" });
     const config = { email: { value: "", isRequired: true, description: "d" } };
-    // isRequired/description здесь НЕ ремапятся (карта только по dirty/loading) →
-    // internal-имена остаются валидными, ошибки нет.
+    // isRequired/description are NOT remapped here (the map covers only dirty/
+    // loading) → internal names stay valid, no error.
     const result = normalizeConfig(config, e2i(dfwd), dfwd) as any;
     expect(result.email).toEqual({ value: "", isRequired: true, description: "d" });
   });

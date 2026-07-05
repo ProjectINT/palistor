@@ -1,12 +1,12 @@
 /**
- * Конфиг для вложенного поля passport
- * Демонстрирует nested структуру + group submit pipeline (Phase 5)
+ * Config for the nested passport field
+ * Demonstrates a nested structure + the group submit pipeline
  */
 
 import type { FormConfig, TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
-// Mock API — имитация сохранения паспорта на сервере
+// Mock API — simulates saving the passport on the server
 async function mockSavePassport(_values: { id: string | null; number: string; issueDate: string; expiryDate: string }): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 800));
   if (Math.random() < 0.2) {
@@ -17,11 +17,11 @@ async function mockSavePassport(_values: { id: string | null; number: string; is
 export const passport: FormConfig<PaymentFormValues> = {
   passport: {
     nested: true,
-    isVisible: (values: PaymentFormValues) => values.paymentType === "bank", // Показываем только для банковских переводов
+    isVisible: (values: PaymentFormValues) => values.paymentType === "bank", // Shown only for bank transfers
     
     id: {
       value: null,
-      isVisible: false, // Скрытое поле
+      isVisible: false, // Hidden field
     },
     
     number: {
@@ -49,7 +49,7 @@ export const passport: FormConfig<PaymentFormValues> = {
         if (!value) {
           return t("validation.required");
         }
-        // Проверяем что дата не в будущем
+        // Check the date is not in the future
         const date = new Date(value);
         if (date > new Date()) {
           return t("form.passport.issueDateFuture");
@@ -68,13 +68,13 @@ export const passport: FormConfig<PaymentFormValues> = {
       validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
         if (!value) return undefined;
         
-        // Проверяем что дата не в прошлом
+        // Check the date is not in the past
         const date = new Date(value);
         if (date < new Date()) {
           return t("form.passport.expiryDatePast");
         }
         
-        // Проверяем что дата выдачи раньше даты окончания
+        // Check the issue date precedes the expiry date
         if (values.passport?.issueDate) {
           const issueDate = new Date(values.passport.issueDate);
           if (date <= issueDate) {
@@ -84,7 +84,7 @@ export const passport: FormConfig<PaymentFormValues> = {
         
         return undefined;
       },
-      dependencies: ["passport.issueDate"], // Зависимость от другого вложенного поля!
+      dependencies: ["passport.issueDate"], // A dependency on another nested field!
       types: {
         dataType: "String" as const,
         type: "date"

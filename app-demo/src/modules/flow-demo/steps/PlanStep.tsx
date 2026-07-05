@@ -3,9 +3,10 @@
 import { PLAN_OPTIONS } from "@/config/flow";
 
 /**
- * Шаг 2 — выбор плана. Клик по карточке пишет `step.plan.value`. Выбор
- * `enterprise` включает (через `isVisible`) шаг «Компания» — иначе `nextStep()`
- * его пропускает. Ошибка обязательности читается из `step.plan.errorMessage`.
+ * Step 2 — the plan choice. Clicking a card writes `step.plan.value`.
+ * Choosing `enterprise` enables (via `isVisible`) the "Company" step —
+ * otherwise `nextStep()` skips it. The requiredness error is read from
+ * `step.plan.errorMessage`.
  */
 export function PlanStep({ step }: { step: any }) {
   const selected: string = step.plan.value;
@@ -35,7 +36,7 @@ export function PlanStep({ step }: { step: any }) {
                 </span>
                 {plan.value === "enterprise" && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
-                    +1 шаг
+                    +1 step
                   </span>
                 )}
               </span>

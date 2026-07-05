@@ -1,11 +1,11 @@
 /**
- * Фаза 2B: тесты proxy для списков и EntityProjectionProxy.
+ * Proxy tests for lists and the EntityProjectionProxy.
  *
- * Покрывает:
+ * Covers:
  * - ListProxy: items, length, loading, add, remove, getById, setItems, map, Symbol.iterator
- * - EntityProjectionProxy: чтение value, formatter, setter, validate, isRequired
- * - Запись через proxy обновляет entity leaf
- * - List в valuesCache: values.users = [entityObj1, entityObj2, ...]
+ * - EntityProjectionProxy: reading value, formatter, setter, validate, isRequired
+ * - Writes through the proxy update the entity leaf
+ * - Lists in valuesCache: values.users = [entityObj1, entityObj2, ...]
  */
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store";
@@ -62,22 +62,22 @@ function makeSingleUserStore() {
   });
 }
 
-// ─── ListProxy: базовый доступ ──────────────────────────────────────────────
+// ─── ListProxy: basic access ──────────────────────────────────────────────
 
-describe("ListProxy — базовый доступ", () => {
-  it("users.length === 0 при инициализации", () => {
+describe("ListProxy — basic access", () => {
+  it("users.length === 0 at initialization", () => {
     const store = makeListStore();
     const form = store.proxy as any;
     expect(form.users.length).toBe(0);
   });
 
-  it("users.items пустой при инициализации", () => {
+  it("users.items is empty at initialization", () => {
     const store = makeListStore();
     const form = store.proxy as any;
     expect(form.users.items).toEqual([]);
   });
 
-  it("users.loading === false по умолчанию", () => {
+  it("users.loading === false by default", () => {
     const store = makeListStore();
     const form = store.proxy as any;
     expect(form.users.loading).toBe(false);
@@ -87,7 +87,7 @@ describe("ListProxy — базовый доступ", () => {
 // ─── ListProxy: add ───────────────────────────────────────────────────────────
 
 describe("ListProxy.add(id)", () => {
-  it("add(id) добавляет entity в список", () => {
+  it("add(id) adds the entity to the list", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -95,7 +95,7 @@ describe("ListProxy.add(id)", () => {
     expect(form.users.length).toBe(1);
   });
 
-  it("add(id) — items[0] является EntityProjectionProxy", () => {
+  it("add(id) — items[0] is an EntityProjectionProxy", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -105,7 +105,7 @@ describe("ListProxy.add(id)", () => {
     expect(item.name.value).toBe("Alice");
   });
 
-  it("add(id) не дублирует entity которая уже в списке", () => {
+  it("add(id) does not duplicate an entity already in the list", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -114,14 +114,14 @@ describe("ListProxy.add(id)", () => {
     expect(form.users.length).toBe(1);
   });
 
-  it("add(id) для несуществующей entity — no-op", () => {
+  it("add(id) for a missing entity — no-op", () => {
     const store = makeListStore();
     const form = store.proxy as any;
     form.users.add("nonexistent");
     expect(form.users.length).toBe(0);
   });
 
-  it("add(id) уведомляет глобальных подписчиков", () => {
+  it("add(id) notifies global subscribers", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -133,7 +133,7 @@ describe("ListProxy.add(id)", () => {
 });
 
 describe("ListProxy.add(values)", () => {
-  it("add(values) создаёт entity и добавляет в список", () => {
+  it("add(values) creates the entity and adds it to the list", () => {
     const store = makeListStore();
     const form = store.proxy as any;
     form.users.add({ id: "u2", name: "Bob", role: "user" });
@@ -141,7 +141,7 @@ describe("ListProxy.add(values)", () => {
     expect(store.entityRegistry.get("u2")).toBeDefined();
   });
 
-  it("add(values) items[0] отображает добавленную entity", () => {
+  it("add(values) — items[0] shows the added entity", () => {
     const store = makeListStore();
     const form = store.proxy as any;
     form.users.add({ id: "u2", name: "Bob", role: "user" });
@@ -152,7 +152,7 @@ describe("ListProxy.add(values)", () => {
 // ─── ListProxy: remove ────────────────────────────────────────────────────────
 
 describe("ListProxy.remove(id)", () => {
-  it("remove удаляет entity из списка", () => {
+  it("remove deletes the entity from the list", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     store.set({ id: "u2", name: "Bob", role: "user" });
@@ -164,7 +164,7 @@ describe("ListProxy.remove(id)", () => {
     expect(form.users.items[0].id).toBe("u2");
   });
 
-  it("remove — entity остаётся в entityRegistry", () => {
+  it("remove — the entity stays in the entityRegistry", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -173,7 +173,7 @@ describe("ListProxy.remove(id)", () => {
     expect(store.entityRegistry.get("u1")).toBeDefined();
   });
 
-  it("remove несуществующего id — no-op", () => {
+  it("remove of a missing id — no-op", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -182,7 +182,7 @@ describe("ListProxy.remove(id)", () => {
     expect(form.users.length).toBe(1);
   });
 
-  it("remove уведомляет подписчиков", () => {
+  it("remove notifies subscribers", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -197,7 +197,7 @@ describe("ListProxy.remove(id)", () => {
 // ─── ListProxy: getById / setItems / map ──────────────────────────────────────
 
 describe("ListProxy.getById(id)", () => {
-  it("getById возвращает proxy для entity в списке", () => {
+  it("getById returns the proxy for an entity in the list", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -207,7 +207,7 @@ describe("ListProxy.getById(id)", () => {
     expect(found.name.value).toBe("Alice");
   });
 
-  it("getById возвращает undefined для entity не в списке", () => {
+  it("getById returns undefined for an entity not in the list", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -216,7 +216,7 @@ describe("ListProxy.getById(id)", () => {
 });
 
 describe("ListProxy.setItems(ids)", () => {
-  it("setItems заменяет список", () => {
+  it("setItems replaces the list", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     store.set({ id: "u2", name: "Bob", role: "user" });
@@ -232,7 +232,7 @@ describe("ListProxy.setItems(ids)", () => {
 });
 
 describe("ListProxy.map(fn)", () => {
-  it("map возвращает результаты маппинга", () => {
+  it("map returns the mapped results", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     store.set({ id: "u2", name: "Bob", role: "user" });
@@ -245,7 +245,7 @@ describe("ListProxy.map(fn)", () => {
 });
 
 describe("ListProxy[Symbol.iterator]", () => {
-  it("итерируется через все элементы", () => {
+  it("iterates over all items", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     store.set({ id: "u2", name: "Bob", role: "user" });
@@ -260,10 +260,10 @@ describe("ListProxy[Symbol.iterator]", () => {
   });
 });
 
-// ─── EntityProjectionProxy: чтение значений ──────────────────────────────────
+// ─── EntityProjectionProxy: reading values ──────────────────────────────────
 
-describe("EntityProjectionProxy — чтение", () => {
-  it("items[0].name.value возвращает значение entity", () => {
+describe("EntityProjectionProxy — reading", () => {
+  it("items[0].name.value returns the entity value", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -271,7 +271,7 @@ describe("EntityProjectionProxy — чтение", () => {
     expect(form.users.items[0].name.value).toBe("Alice");
   });
 
-  it("items[0].id возвращает entity id", () => {
+  it("items[0].id returns the entity id", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -279,7 +279,7 @@ describe("EntityProjectionProxy — чтение", () => {
     expect(form.users.items[0].id).toBe("u1");
   });
 
-  it("items[0].role.value отображает значение role", () => {
+  it("items[0].role.value shows the role value", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -288,20 +288,20 @@ describe("EntityProjectionProxy — чтение", () => {
   });
 });
 
-// ─── EntityProjectionProxy: запись ───────────────────────────────────────────
+// ─── EntityProjectionProxy: writing ───────────────────────────────────────────
 
-describe("EntityProjectionProxy — запись", () => {
-  it("proxy.name.value = 'X' обновляет entity leaf", () => {
+describe("EntityProjectionProxy — writing", () => {
+  it("proxy.name.value = 'X' updates the entity leaf", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
     form.users.add("u1");
     form.users.items[0].name.value = "Alice Cooper";
-    // Перечитываем значение
+    // Re-read the value
     expect(form.users.items[0].name.value).toBe("Alice Cooper");
   });
 
-  it("запись уведомляет глобальных подписчиков", () => {
+  it("a write notifies global subscribers", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -312,14 +312,14 @@ describe("EntityProjectionProxy — запись", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it("запись того же значения — no-op (нет notification)", () => {
+  it("writing the same value — no-op (no notification)", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
     form.users.add("u1");
     const listener = vi.fn();
     store.subscribeGlobal(listener);
-    form.users.items[0].name.value = "Alice"; // то же значение
+    form.users.items[0].name.value = "Alice"; // same value
     expect(listener).not.toHaveBeenCalled();
   });
 });
@@ -327,7 +327,7 @@ describe("EntityProjectionProxy — запись", () => {
 // ─── EntityProjectionProxy: formatter ────────────────────────────────────────
 
 describe("EntityProjectionProxy — formatter", () => {
-  it("formatter применяется при записи", () => {
+  it("the formatter is applied on write", () => {
     const store = makeListStoreWithRules();
     store.set({ id: "u1", name: "  Alice  ", age: 25 });
     // After store.set, name is stored as-is; formatter applies on write via proxy
@@ -342,7 +342,7 @@ describe("EntityProjectionProxy — formatter", () => {
 // ─── EntityProjectionProxy: validate ─────────────────────────────────────────
 
 describe("EntityProjectionProxy — validate", () => {
-  it("isInvalid = true если validate возвращает ошибку", () => {
+  it("isInvalid = true when validate returns an error", () => {
     const store = makeListStoreWithRules();
     store.set({ id: "u1", name: "", age: 25 });
     const form = store.proxy as any;
@@ -350,7 +350,7 @@ describe("EntityProjectionProxy — validate", () => {
     expect(form.users.items[0].name.isInvalid).toBe(true);
   });
 
-  it("isInvalid = false если validate не возвращает ошибку", () => {
+  it("isInvalid = false when validate returns no error", () => {
     const store = makeListStoreWithRules();
     store.set({ id: "u1", name: "Alice", age: 25 });
     const form = store.proxy as any;
@@ -358,7 +358,7 @@ describe("EntityProjectionProxy — validate", () => {
     expect(form.users.items[0].name.isInvalid).toBe(false);
   });
 
-  it("errorMessage возвращает текст ошибки", () => {
+  it("errorMessage returns the error text", () => {
     const store = makeListStoreWithRules();
     store.set({ id: "u1", name: "", age: 25 });
     const form = store.proxy as any;
@@ -366,7 +366,7 @@ describe("EntityProjectionProxy — validate", () => {
     expect(form.users.items[0].name.errorMessage).toBe("Name is required");
   });
 
-  it("errorMessage = undefined если нет ошибки", () => {
+  it("errorMessage = undefined when there is no error", () => {
     const store = makeListStoreWithRules();
     store.set({ id: "u1", name: "Alice", age: 25 });
     const form = store.proxy as any;
@@ -378,7 +378,7 @@ describe("EntityProjectionProxy — validate", () => {
 // ─── EntityProjectionProxy: isRequired computed ───────────────────────────────
 
 describe("EntityProjectionProxy — isRequired (computed)", () => {
-  it("isRequired вычисляется из entity values", () => {
+  it("isRequired is computed from entity values", () => {
     const store = makeListStoreWithRules();
     // age.isRequired: (vals) => Boolean(vals.name)
     store.set({ id: "u1", name: "Alice", age: 25 });
@@ -387,7 +387,7 @@ describe("EntityProjectionProxy — isRequired (computed)", () => {
     expect(form.users.items[0].age.isRequired).toBe(true);
   });
 
-  it("isRequired = false когда depends field пустое", () => {
+  it("isRequired = false when the depended-on field is empty", () => {
     const store = makeListStoreWithRules();
     store.set({ id: "u1", name: "", age: 25 });
     const form = store.proxy as any;
@@ -396,15 +396,15 @@ describe("EntityProjectionProxy — isRequired (computed)", () => {
   });
 });
 
-// ─── valuesCache для списков ──────────────────────────────────────────────────
+// ─── valuesCache for lists ──────────────────────────────────────────────────
 
 describe("valuesCache — list integration", () => {
-  it("values.users пустой массив изначально", () => {
+  it("values.users is an empty array initially", () => {
     const store = makeListStore();
     expect((store.getValues() as any).users).toEqual([]);
   });
 
-  it("values.users обновляется после add", () => {
+  it("values.users updates after add", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -414,7 +414,7 @@ describe("valuesCache — list integration", () => {
     expect(vals.users[0].name).toBe("Alice");
   });
 
-  it("entity projection obj является shared reference", () => {
+  it("the entity projection obj is a shared reference", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -430,7 +430,7 @@ describe("valuesCache — list integration", () => {
     expect(vals.users[0].name).toBe("Alice Cooper");
   });
 
-  it("values.users обновляется после remove", () => {
+  it("values.users updates after remove", () => {
     const store = makeListStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     store.set({ id: "u2", name: "Bob", role: "user" });
@@ -443,7 +443,7 @@ describe("valuesCache — list integration", () => {
     expect(vals.users[0].name).toBe("Bob");
   });
 
-  it("isVisible в computed field использует values.users.length", () => {
+  it("isVisible in a computed field uses values.users.length", () => {
     const store = new Palistor({
       config: {
         title: { value: "List" },
@@ -470,8 +470,8 @@ describe("valuesCache — list integration", () => {
 
 // ─── Stable proxy references ──────────────────────────────────────────────────
 
-describe("Стабильность ссылок на proxy", () => {
-  it("items[0] в разных обращениях — один и тот же proxy", () => {
+describe("Proxy reference stability", () => {
+  it("items[0] across accesses — the same proxy", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -481,7 +481,7 @@ describe("Стабильность ссылок на proxy", () => {
     expect(proxy1).toBe(proxy2);
   });
 
-  it("items[0].name в разных обращениях — один и тот же proxy", () => {
+  it("items[0].name across accesses — the same proxy", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -492,13 +492,13 @@ describe("Стабильность ссылок на proxy", () => {
   });
 });
 
-// ─── EntityProjectionProxy: ownKeys без дубликатов ───────────────────────────
+// ─── EntityProjectionProxy: ownKeys without duplicates ───────────────────────────
 
 describe("EntityProjectionProxy — ownKeys deduplication", () => {
-  it("Reflect.ownKeys(entity proxy) не содержит 'id' дважды когда шаблон тоже содержит id", () => {
-    // Регрессионный тест на баг: ownKeys возвращал ["id", "id", ...] когда
-    // templateKeys уже содержал "id" (потому что шаблон объявляет id: { value: "" }).
-    // Проксирование через Proxy бросало TypeError: trap returned duplicate entries.
+  it("Reflect.ownKeys(entity proxy) does not contain 'id' twice when the template also has id", () => {
+    // Regression test: ownKeys returned ["id", "id", ...] when templateKeys
+    // already contained "id" (because the template declares id: { value: "" }).
+    // Proxying then threw TypeError: trap returned duplicate entries.
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -510,7 +510,7 @@ describe("EntityProjectionProxy — ownKeys deduplication", () => {
     expect(idCount).toBe(1);
   });
 
-  it("spread {...entityProxy} не бросает TypeError при дубле id в шаблоне", () => {
+  it("spreading {...entityProxy} does not throw a TypeError on a duplicated template id", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -520,7 +520,7 @@ describe("EntityProjectionProxy — ownKeys deduplication", () => {
     expect(() => ({ ...entityProxy })).not.toThrow();
   });
 
-  it("Object.keys(entityProxy) содержит ожидаемые ключи", () => {
+  it("Object.keys(entityProxy) contains the expected keys", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -535,15 +535,15 @@ describe("EntityProjectionProxy — ownKeys deduplication", () => {
     expect(keys).toContain("submitting");
     expect(keys).toContain("submit");
     expect(keys).toContain("values");
-    // Убеждаемся что нет дубликатов
+    // Ensure there are no duplicates
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
 
-// ─── Store.set() + list write через EntityProjectionProxy ────────────────────
+// ─── Store.set() + list writes via the EntityProjectionProxy ────────────────────
 
 describe("store.set() + EntityProjectionProxy sync", () => {
-  it("store.set обновляет значение прочитанное через list proxy", () => {
+  it("store.set updates a value read through the list proxy", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;
@@ -553,7 +553,7 @@ describe("store.set() + EntityProjectionProxy sync", () => {
     expect(form.users.items[0].name.value).toBe("Alice Updated");
   });
 
-  it("EntityProjectionProxy write обновляет entityRegistry leaf", () => {
+  it("an EntityProjectionProxy write updates the entityRegistry leaf", () => {
     const store = makeSingleUserStore();
     store.set({ id: "u1", name: "Alice", role: "admin" });
     const form = store.proxy as any;

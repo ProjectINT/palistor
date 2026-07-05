@@ -4,7 +4,7 @@ import { buildNodeMaps } from "./nodeMap";
 import { pairKey } from "../groupDeps/pairKey";
 import type { AnyConfigNode } from "./types";
 
-// ─── Тестовые конфиги ─────────────────────────────────────────────────────────
+// ─── Test configs ─────────────────────────────────────────────────────────────
 
 function buildMaps(root: AnyConfigNode) {
   const nodePaths = new WeakMap<object, string>();
@@ -25,25 +25,25 @@ const nested = {
   },
 } as unknown as AnyConfigNode;
 
-// Две sibling-группы: `b` (групповой узел) читает лист другой группы `a`.
-// Это настоящая кросс-групповая зависимость для group-node isVisible.
+// Two sibling groups: `b` (a group node) reads a leaf of the other group `a`.
+// This is a real cross-group dependency for a group-node isVisible.
 const siblingGroups = {
   a: { kind: { value: "" } },
   b: { x: { value: "" } },
 } as unknown as AnyConfigNode;
 
-// ─── Тесты ───────────────────────────────────────────────────────────────────
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("GroupDepsMap", () => {
-  describe("конструктор — инициализация зависимостей", () => {
-    it("создаёт self-зависимость корня для плоского конфига", () => {
+  describe("constructor — dependency initialization", () => {
+    it("creates the root self-dependency for a flat config", () => {
       const { nodePaths, nodeParents } = buildMaps(flat);
       const gdm = new GroupDepsMap(flat, nodePaths, nodeParents);
       expect(gdm.deps.has(pairKey("", ""))).toBe(true);
       expect(gdm.deps.size).toBe(1);
     });
 
-    it("создаёт self-зависимости для корня и вложенных групп", () => {
+    it("creates self-dependencies for the root and nested groups", () => {
       const { nodePaths, nodeParents } = buildMaps(nested);
       const gdm = new GroupDepsMap(nested, nodePaths, nodeParents);
       expect(gdm.deps.has(pairKey("", ""))).toBe(true);
@@ -53,13 +53,13 @@ describe("GroupDepsMap", () => {
   });
 
   describe("isBuilt / markBuilt", () => {
-    it("isBuilt === false сразу после создания", () => {
+    it("isBuilt === false right after construction", () => {
       const { nodePaths, nodeParents } = buildMaps(flat);
       const gdm = new GroupDepsMap(flat, nodePaths, nodeParents);
       expect(gdm.isBuilt).toBe(false);
     });
 
-    it("isBuilt === true после markBuilt()", () => {
+    it("isBuilt === true after markBuilt()", () => {
       const { nodePaths, nodeParents } = buildMaps(flat);
       const gdm = new GroupDepsMap(flat, nodePaths, nodeParents);
       gdm.markBuilt();
@@ -67,35 +67,36 @@ describe("GroupDepsMap", () => {
     });
   });
 
-  describe("getTrackingWrap — захват кросс-групповых зависимостей", () => {
-    it("записывает зависимость при чтении листа ДРУГОЙ sibling-группы", () => {
+  describe("getTrackingWrap — capturing cross-group dependencies", () => {
+    it("records a dependency when reading a leaf of ANOTHER sibling group", () => {
       const { nodePaths, nodeParents } = buildMaps(siblingGroups);
       const gdm = new GroupDepsMap(siblingGroups, nodePaths, nodeParents);
       const wrap = gdm.getTrackingWrap();
 
-      // Групповой узел `b` (isVisible) получает scope родителя (root). Его compute-
-      // запись лежит под РОДИТЕЛЕМ (root), поэтому реципиент зависимости = "" (root),
-      // а не собственный путь "b". Чтение values.a.kind → донор "a" ≠ реципиент ""
-      // → записывается пара "a" → "".
+      // The group node `b` (isVisible) receives its parent's (root) scope. Its
+      // compute entry lives under the PARENT (root), so the dependency recipient
+      // is "" (root), not its own path "b". Reading values.a.kind → donor "a" ≠
+      // recipient "" → the pair "a" → "" is recorded.
       const b = (siblingGroups as any).b;
       const rootValues = { a: { kind: "" }, b: { x: "" } };
       const tracked = wrap(b, rootValues as any);
 
       void (tracked as any).a.kind;
       expect(gdm.deps.has(pairKey("a", ""))).toBe(true);
-      // Зависимость НЕ пишется на own-path группы — иначе recompute "b" трогает
-      // только детей b, но не её собственный isVisible-энтри (он под root).
+      // The dependency is NOT recorded on the group's own path — otherwise a
+      // recompute of "b" only touches b's children, not its own isVisible entry
+      // (which lives under root).
       expect(gdm.deps.has(pairKey("a", "b"))).toBe(false);
     });
 
-    it("чтение листа той же (родительской) группы не создаёт кросс-групповую пару", () => {
+    it("reading a leaf of the same (parent) group creates no cross-group pair", () => {
       const { nodePaths, nodeParents } = buildMaps(nested);
       const gdm = new GroupDepsMap(nested, nodePaths, nodeParents);
       const wrap = gdm.getTrackingWrap();
 
-      // passport (групповой узел) читает root-level sibling paymentType. Обе записи —
-      // под root, поэтому это self-зависимость root ("" → ""), уже покрытая
-      // конструктором; отдельная кросс-групповая пара не нужна.
+      // passport (a group node) reads the root-level sibling paymentType. Both
+      // entries are under root, so this is the root's self-dependency ("" → ""),
+      // already covered by the constructor; no separate cross-group pair is needed.
       const passport = (nested as any).passport;
       const rootValues = { paymentType: "card", passport: { number: "" } };
       const tracked = wrap(passport, rootValues as any);
@@ -104,7 +105,7 @@ describe("GroupDepsMap", () => {
       expect(gdm.deps.has(pairKey("", "passport"))).toBe(false);
     });
 
-    it("мемоизирует proxy по recipientPath: повторный вызов для того же узла возвращает тот же объект", () => {
+    it("memoizes the proxy by recipientPath: a repeat call for the same node returns the same object", () => {
       const { nodePaths, nodeParents } = buildMaps(nested);
       const gdm = new GroupDepsMap(nested, nodePaths, nodeParents);
       const wrap = gdm.getTrackingWrap();
@@ -116,7 +117,7 @@ describe("GroupDepsMap", () => {
       expect(proxy1).toBe(proxy2);
     });
 
-    it("markBuilt освобождает proxy-кэш (повторный вызов создаёт новый объект)", () => {
+    it("markBuilt releases the proxy cache (a repeat call creates a new object)", () => {
       const { nodePaths, nodeParents } = buildMaps(nested);
       const gdm = new GroupDepsMap(nested, nodePaths, nodeParents);
       const wrap = gdm.getTrackingWrap();
@@ -127,7 +128,7 @@ describe("GroupDepsMap", () => {
 
       gdm.markBuilt();
 
-      // После markBuilt кэш очищен — новый Proxy
+      // After markBuilt the cache is cleared — a new Proxy
       const proxy2 = wrap(passportNumber, values as any);
       expect(proxy1).not.toBe(proxy2);
     });

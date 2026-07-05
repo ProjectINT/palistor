@@ -20,10 +20,10 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 /**
- * Scoped recompute dirty: пересчитывает dirty только для групп,
- * содержащих изменённые узлы, и bubble-up к предкам.
+ * Scoped dirty recompute: recomputes dirty only for the groups containing
+ * changed nodes, bubbling up to the ancestors.
  *
- * Сложность: O(affectedGroups × childrenPerGroup) вместо O(allNodes).
+ * Complexity: O(affectedGroups × childrenPerGroup) instead of O(allNodes).
  */
 export function recomputeDirtyTargeted(
   changedNodes: Set<object>,
@@ -36,7 +36,7 @@ export function recomputeDirtyTargeted(
 ): RecomputeDirtyResult {
   const changed = new Set<object>();
 
-  // 1. Пересчитать dirty только для ЛИСТЬЕВ из changedNodes
+  // 1. Recompute dirty only for the LEAVES from changedNodes
   const affectedGroupPaths = new Set<string>();
   for (const node of changedNodes) {
     if (isLeafNode(node)) {
@@ -53,8 +53,8 @@ export function recomputeDirtyTargeted(
     affectedGroupPaths.add(getNodeGroupPath(node, nodeParents, nodePaths));
   }
 
-  // 2. Для каждой affected group — агрегировать dirty из immediate children
-  //    и bubble-up к предкам
+  // 2. For every affected group — aggregate dirty from its immediate children
+  //    and bubble up to the ancestors
   const processed = new Set<string>();
   const queue = [...affectedGroupPaths];
 
@@ -64,9 +64,9 @@ export function recomputeDirtyTargeted(
     processed.add(groupPath);
 
     const groupNode = resolveGroupByPath(rootConfig, groupPath);
-    if (!groupNode) continue; // entity-пути — пропускаем
+    if (!groupNode) continue; // entity paths — skip
 
-    // Агрегировать dirty из immediate children
+    // Aggregate dirty from immediate children
     let anyChildDirty = false;
     for (const key of configKeys(groupNode as Record<string, unknown>)) {
       const child = groupNode[key] as AnyConfigNode;
@@ -86,13 +86,13 @@ export function recomputeDirtyTargeted(
       if (childState?.dirty) anyChildDirty = true;
     }
 
-    // Обновить dirty на самой group-ноде
+    // Update dirty on the group node itself
     const groupState = nodeState.get(groupNode);
     if (groupState && groupState.dirty !== anyChildDirty) {
       nodeState.set(groupNode, { ...groupState, dirty: anyChildDirty });
       changed.add(groupNode);
 
-      // Bubble-up: добавить parent group в очередь
+      // Bubble up: enqueue the parent group
       const parent = nodeParents.get(groupNode);
       if (parent) {
         const parentPath = nodePaths.get(parent) ?? "";
@@ -103,7 +103,7 @@ export function recomputeDirtyTargeted(
     }
   }
 
-  // 3. Определить anyDirty по root
+  // 3. Determine anyDirty from the root
   const rootState = nodeState.get(rootConfig);
   const anyDirty = rootState?.dirty ?? false;
 

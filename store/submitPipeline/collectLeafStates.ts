@@ -3,8 +3,8 @@ import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 
 /**
- * Собирает все листовые узлы поддерева с их путями и текущим состоянием.
- * Используется для валидации при submit.
+ * Collects all leaf nodes of a subtree with their paths and current state.
+ * Used for validation on submit.
  */
 export function collectLeafStates(
   node: AnyConfigNode,

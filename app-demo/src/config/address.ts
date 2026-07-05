@@ -11,7 +11,7 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
     label: (t: TranslateFn) => t("form.country"),
     placeholder: (t: TranslateFn) => t("form.countryPlaceholder"),
     dependencies: [],
-    // Setter — при изменении страны сбрасываем город
+    // Setter — changing the country resets the city
     setter: (value: string, _values: PaymentFormValues) => ({ country: value as Country | "", city: "" }),
   },
 
@@ -33,7 +33,7 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
       dataType: "Number" as const,
       type: "number"
     },
-    // Computed value — стоимость доставки зависит от страны
+    // Computed value — the shipping cost depends on the country
     value: (values: PaymentFormValues) => {
       if (!values.country || !values.city) return 0;
       const costs: Record<Country, number> = {
@@ -45,7 +45,7 @@ export const address: Pick<FormConfig<PaymentFormValues>, 'country' | 'city' | '
     },
     label: (t: TranslateFn) => t("form.shippingCost"),
     isVisible: (values: PaymentFormValues) => values.country !== "" && values.city !== "",
-    isReadOnly: true, // Вычисляемое поле
+    isReadOnly: true, // A computed field
     dependencies: ["country", "city"],
   },
 };

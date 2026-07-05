@@ -2,10 +2,10 @@ import type { AnyConfigNode } from "../store/types";
 import type { ResolveState } from "../resolvePipeline/index";
 
 /**
- * Lazy trigger + suspense для группового узла с resolve.
+ * Lazy trigger + suspense for a group node with resolve.
  *
- * - Если resolve-статус «idle» — запускает resolve.
- * - Если «pending» и включён suspense — бросает promise (React Suspense).
+ * - resolve status "idle" → triggers the resolve.
+ * - "pending" with suspense enabled → throws the promise (React Suspense).
  */
 export function handleLazyResolve(
   node: AnyConfigNode,

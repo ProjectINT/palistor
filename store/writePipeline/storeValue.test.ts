@@ -8,22 +8,22 @@ function makeState(value: unknown): FieldState {
 }
 
 describe("storeValue", () => {
-  it("обновляет value в nodeState иммутабельно", () => {
+  it("updates value in nodeState immutably", () => {
     const node: AnyConfigNode = { value: "" };
     const original = makeState("old");
     const nodeState = new WeakMap([[node, original]]);
 
     expect(storeValue(node, "new", nodeState)).toBe(true);
     expect(nodeState.get(node)!.value).toBe("new");
-    expect(original.value).toBe("old"); // не мутирован
+    expect(original.value).toBe("old"); // not mutated
   });
 
-  it("возвращает false если узел не зарегистрирован", () => {
+  it("returns false when the node is not registered", () => {
     const node: AnyConfigNode = { value: "" };
     expect(storeValue(node, "x", new WeakMap())).toBe(false);
   });
 
-  it("сохраняет остальные поля FieldState", () => {
+  it("preserves the remaining FieldState fields", () => {
     const node: AnyConfigNode = { value: "" };
     const state: FieldState = {
       value: "old",

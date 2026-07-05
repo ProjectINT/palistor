@@ -1,10 +1,10 @@
 /**
- * Фаза 3B: тесты Template resolve + submit pipelines.
+ * Tests for the template resolve + submit pipelines.
  *
- * Покрывает:
+ * Covers:
  * - 3B.1: Template resolve pipeline (loading state, merge, markResolved, skip on repeat)
  * - 3B.2: Template submit pipeline (validation, onSubmit, afterSubmit, submitting state)
- * - 3B.3: store.invalidate() — сброс resolved cache → re-resolve при следующем bind
+ * - 3B.3: store.invalidate() — resolved-cache reset → re-resolve on the next bind
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Palistor } from "../store";

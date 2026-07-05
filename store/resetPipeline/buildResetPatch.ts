@@ -3,12 +3,12 @@ import { collectDefaults } from "./collectDefaults";
 import { collectInitialSnapshot } from "../dirtyTracking";
 
 /**
- * Строит патч для сброса группы.
+ * Builds the patch for a group reset.
  *
- * Приоритет:
- * 1. Если переданы явные `values` → используются как патч напрямую.
- * 2. Иначе берётся initial snapshot (или defaults из конфига как fallback),
- *    после чего применяется reset-трансформер группы (если задан).
+ * Priority:
+ * 1. Explicit `values` → used as the patch directly.
+ * 2. Otherwise the initial snapshot (or config defaults as a fallback),
+ *    then the group's reset transformer (if any) is applied.
  */
 export function buildResetPatch(
   groupNode: AnyConfigNode,

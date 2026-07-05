@@ -5,22 +5,22 @@ import type { FieldState } from "../compute/index";
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface ValuesCache {
-  /** Корневой объект значений — всегда актуальный, мутабельный. */
+  /** Root values object — always current, mutable. */
   readonly values: Record<string, unknown>;
-  /** Маппинг config-node → { parent, key } для O(1) обновления. */
+  /** config-node → { parent, key } mapping for O(1) updates. */
   readonly nodeSlot: WeakMap<object, { parent: Record<string, unknown>; key: string }>;
-  /** Маппинг group config-node → соответствующий вложенный объект values. */
+  /** group config-node → the corresponding nested values object. */
   readonly groupSlot: WeakMap<object, Record<string, unknown>>;
 }
 
 // ─── Build ───────────────────────────────────────────────────────────────────
 
 /**
- * Построить начальный кеш значений из дерева конфига + nodeState.
- * Вызывается ОДИН раз после registerNodes.
+ * Build the initial values cache from the config tree + nodeState.
+ * Called ONCE after registerNodes.
  *
- * Обходит дерево конфига и дополнительно
- * запоминает «слот» каждого листового узла для O(1) обновлений.
+ * Walks the config tree and additionally records each leaf node's "slot"
+ * for O(1) updates.
  */
 export function buildValuesCache(
   rootConfig: AnyConfigNode,
@@ -68,8 +68,8 @@ export function buildValuesCache(
 // ─── Update ──────────────────────────────────────────────────────────────────
 
 /**
- * Обновить одно значение в кеше — O(1).
- * Вызывается при каждой записи value в nodeState.
+ * Update a single cache value — O(1).
+ * Called on every value write to nodeState.
  */
 export function updateValuesCacheEntry(
   cache: ValuesCache,

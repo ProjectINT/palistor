@@ -1,18 +1,18 @@
 /**
- * Persist — абстрактный интерфейс драйвера хранения и опции персистенции.
+ * Persist — the abstract storage driver interface and persistence options.
  *
- * Драйвер может быть синхронным (localStorage) или асинхронным (IndexedDB).
- * Все методы возвращают `T | Promise<T>` — persist-менеджер обрабатывает оба
- * варианта единообразно через `Promise.resolve()`.
+ * A driver can be synchronous (localStorage) or asynchronous (IndexedDB).
+ * All methods return `T | Promise<T>` — the persist manager handles both
+ * uniformly via `Promise.resolve()`.
  */
 
 // ─── Driver ──────────────────────────────────────────────────────────────────
 
 /**
- * Интерфейс драйвера хранения.
+ * Storage driver interface.
  *
- * Реализуйте этот интерфейс для любого бэкенда:
- * localStorage, sessionStorage, IndexedDB, AsyncStorage, файловая система и т.д.
+ * Implement this interface for any backend:
+ * localStorage, sessionStorage, IndexedDB, AsyncStorage, the file system, etc.
  *
  * @example
  * ```ts
@@ -24,56 +24,56 @@
  * ```
  */
 export interface PersistDriver {
-  /** Прочитать значение по ключу. `null` если не найдено. */
+  /** Read a value by key. `null` when not found. */
   getItem(key: string): string | null | Promise<string | null>;
 
-  /** Записать значение по ключу. */
+  /** Write a value by key. */
   setItem(key: string, value: string): void | Promise<void>;
 
-  /** Удалить значение по ключу. */
+  /** Remove a value by key. */
   removeItem(key: string): void | Promise<void>;
 }
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 /**
- * Опции персистенции для ProxyStore.
+ * Persistence options for the ProxyStore.
  *
- * @template TValues — тип значений формы
+ * @template TValues — the form values type
  */
 export interface PersistOptions<TValues = Record<string, unknown>> {
-  /** Уникальный ключ хранения. */
+  /** Unique storage key. */
   key: string;
 
-  /** Драйвер хранения (localStorage, IndexedDB, …). */
+  /** Storage driver (localStorage, IndexedDB, …). */
   driver: PersistDriver;
 
   /**
-   * Кастомный сериализатор (по умолчанию `JSON.stringify`).
-   * Полезно для binary-форматов, шифрования и т.д.
+   * Custom serializer (defaults to `JSON.stringify`).
+   * Useful for binary formats, encryption, etc.
    */
   serialize?: (values: Partial<TValues>) => string;
 
   /**
-   * Кастомный десериализатор (по умолчанию `JSON.parse`).
+   * Custom deserializer (defaults to `JSON.parse`).
    */
   deserialize?: (raw: string) => Partial<TValues>;
 
   /**
-   * Задержка записи в ms (debounce). По умолчанию 100 ms.
-   * Установите 0 для мгновенной записи.
+   * Write delay in ms (debounce). Default 100 ms.
+   * Set 0 for immediate writes.
    */
   debounce?: number;
 
   /**
-   * Персистить только указанные поля верхнего уровня.
-   * Если задано — `omit` игнорируется.
+   * Persist only the listed top-level fields.
+   * When set, `omit` is ignored.
    */
   pick?: (keyof TValues & string)[];
 
   /**
-   * Исключить указанные поля верхнего уровня из персистенции.
-   * Игнорируется если задано `pick`.
+   * Exclude the listed top-level fields from persistence.
+   * Ignored when `pick` is set.
    */
   omit?: (keyof TValues & string)[];
 }

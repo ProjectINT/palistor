@@ -1,7 +1,7 @@
 /**
- * Вычисляет путь изменённого поля относительно узла-обработчика.
+ * Computes the changed field's path relative to the handler node.
  *
- * Примеры:
+ * Examples:
  *   nodePath="form.address.city", handlerPath="form"              → "address.city"
  *   nodePath="name",              handlerPath=""                   → "name"
  *   nodePath="form.country",      handlerPath="form.country"      → "country"  (self)

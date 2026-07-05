@@ -2,23 +2,23 @@ import { CONFIG_NODE, FLOW_STATE } from "../constants";
 import type { Palistor } from "../store/palistor";
 import type { FlowState } from "./flowState";
 
-/** Стабильный кэш steps-proxy — один на FlowState (как listProxyCache). */
+/** Stable steps-proxy cache — one per FlowState (like listProxyCache). */
 const stepsProxyCache = new WeakMap<object, object>();
 
 const NUMERIC_KEY = /^\d+$/;
 
 /**
- * Proxy коллекции шагов флоу (flow.steps).
+ * Proxy over the flow's step collection (flow.steps).
  *
- * Доступ:
- *   steps[0]        — по индексу (порядок массива шагов)
- *   steps.welcome   — по ключу
- *   steps.current   — живая ссылка на прокси активного шага
- *   steps.length    — число шагов
- *   [...steps]      — итерация по step-прокси
+ * Access:
+ *   steps[0]        — by index (step array order)
+ *   steps.welcome   — by key
+ *   steps.current   — live reference to the active step's proxy
+ *   steps.length    — number of steps
+ *   [...steps]      — iteration over step proxies
  *
- * Step-прокси — обычные group-прокси step-нод (кэшируются в proxyCache),
- * обогащённые `status` в group GET-трапе (через stepToFlow).
+ * Step proxies are regular group proxies of the step nodes (cached in
+ * proxyCache), enriched with `status` in the group GET trap (via stepToFlow).
  */
 export function buildFlowStepsProxy(flowState: FlowState, kernel: Palistor<any, any>): object {
   const cached = stepsProxyCache.get(flowState as unknown as object);
@@ -31,9 +31,9 @@ export function buildFlowStepsProxy(flowState: FlowState, kernel: Palistor<any, 
 
   const proxy = new Proxy({} as Record<string, unknown>, {
     get(_target, key: string | symbol) {
-      // Бренд трекинга: навигация бампает версию FlowState.
+      // Tracking brand: navigation bumps the FlowState version.
       if (key === FLOW_STATE) return flowState;
-      // steps — не config-узел; для tracking proxy прозрачен.
+      // steps is not a config node; transparent to the tracking proxy.
       if (key === CONFIG_NODE) return undefined;
 
       if (typeof key === "symbol") {
@@ -60,7 +60,7 @@ export function buildFlowStepsProxy(flowState: FlowState, kernel: Palistor<any, 
     },
 
     set() {
-      // Состав шагов статичен — запись запрещена.
+      // The step set is static — writes are forbidden.
       return false;
     },
 

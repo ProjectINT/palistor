@@ -5,10 +5,10 @@ import { resolveString } from "./resolveString";
 import { isEmpty } from "./isEmpty";
 
 /**
- * Вычисляет полное состояние одного поля на основе конфига и текущих values.
+ * Computes the full state of a single field from the config and current values.
  *
- * @param revalidate — если false, валидация пропускается (error/errorMessage остаются undefined).
- *                     Submit pipeline всегда передаёт true, чтобы принудительно запустить валидацию.
+ * @param revalidate — when false, validation is skipped (error/errorMessage stay undefined).
+ *                     The submit pipeline always passes true to force validation.
  */
 export function computeFieldState(
   configNode: Record<string, any>,
@@ -17,30 +17,30 @@ export function computeFieldState(
   revalidate = true,
   translate: TranslateFn,
 ): FieldState {
-  // Вычисляем флаги
+  // Flags
   const isVisible  = resolveFlag(configNode.isVisible, allValues, true, translate);
   const isRequired = resolveFlag(configNode.isRequired, allValues, false, translate);
   const isDisabled = resolveFlag(configNode.isDisabled, allValues, false, translate);
   const isReadOnly = resolveFlag(configNode.isReadOnly, allValues, false, translate);
 
-  // Строки
+  // Strings
   const label       = resolveString(configNode.label, allValues);
   const placeholder = resolveString(configNode.placeholder, allValues);
   const description = resolveString(configNode.description, allValues);
 
-  // Валидация — только если revalidate равен true
+  // Validation — only when revalidate is true
   let isInvalid: boolean | undefined;
   let errorMessage: string | undefined;
 
   if (revalidate) {
-    // Автовалидация isRequired: пустое значение → isInvalid
+    // isRequired auto-validation: empty value → isInvalid
     if (isRequired && isEmpty(currentValue)) {
       isInvalid = true;
       errorMessage = typeof configNode.isRequired === "string"
         ? resolveString(configNode.isRequired, allValues)
         : "required";
     }
-    // Пользовательская валидация (выполняется даже если isRequired уже не прошёл — сообщение из validate имеет приоритет)
+    // User validation (runs even when isRequired already failed — the validate message takes priority)
     if (typeof configNode.validate === "function") {
       const result = configNode.validate(currentValue, allValues, translate);
 

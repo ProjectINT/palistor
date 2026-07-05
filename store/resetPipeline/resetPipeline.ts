@@ -7,15 +7,15 @@ import { buildResetPatch } from "./buildResetPatch";
 import { resetFlowNavForSubtree } from "../flow/flowNavigation";
 
 /**
- * ResetPipeline — сброс значений группового узла.
+ * ResetPipeline — resets a group node's values.
  *
- * - Если `values` передан явно — применяется как патч (новая baseline → dirty = false).
- * - Иначе восстанавливается initial snapshot (или config defaults как fallback),
- *   с опциональной трансформацией через reset-функцию группы.
+ * - When `values` is passed explicitly — applied as a patch (new baseline → dirty = false).
+ * - Otherwise the initial snapshot is restored (or config defaults as a
+ *   fallback), optionally transformed by the group's reset function.
  *
- * После сброса:
- * - revalidate = false (очистка режима валидации)
- * - полный пересчёт вычисляемых свойств + уведомление подписчиков
+ * After the reset:
+ * - revalidate = false (validation mode cleared)
+ * - full recompute of computed props + subscriber notification
  */
 export class ResetPipeline {
   constructor(private readonly kernel: Palistor<any, any>) {}
@@ -25,8 +25,8 @@ export class ResetPipeline {
     const initialValueMap = this.kernel.dirty.initialValueMap;
     const valuesCache = this.kernel.values;
 
-    // При полном сбросе формы очищаем состояния резолва entity-полей,
-    // чтобы они заново выполнились при загрузке сущностей через list resolver.
+    // On a full form reset, clear entity-field resolve states so they run
+    // again when entities are loaded through the list resolver.
     if (groupNode === this.kernel.rootConfig) {
       this.kernel.resolveManager.entityStates.clearAll();
     }
@@ -35,9 +35,9 @@ export class ResetPipeline {
 
     const changed = applyPatch(groupNode, nodeState, patch, new Set(), valuesCache);
 
-    // C2: при полном сбросе восстанавливаем состав per-entity списков к initial
-    // и бампаем версии их EntityListState-узлов → React перерисует списки.
-    // C3: пересинхронизируем projectionObj владельца — getValues() вернёт initial.
+    // On a full reset, restore per-entity list membership to initial and bump
+    // their EntityListState versions → React redraws the lists. The owner's
+    // projectionObj is re-synced so getValues() returns the initial state.
     if (groupNode === this.kernel.rootConfig) {
       for (const { state } of this.kernel.entityRegistry.resetEntityListStates()) {
         this.kernel.syncListValuesCache(state);
@@ -58,9 +58,9 @@ export class ResetPipeline {
       (c) => this.kernel.notifyChanged(c),
     );
 
-    // Flow: сброс навигации флоу внутри поддерева сброса — первый шаг снова
-    // активен, resolve-состояния шагов idle, entry lifecycle первого шага
-    // выполняется заново (Resolved Decision 16).
+    // Flow: reset flow navigation inside the reset subtree — the first step is
+    // active again, step resolve states go idle, and the first step's entry
+    // lifecycle runs anew.
     resetFlowNavForSubtree(this.kernel, groupNode);
   }
 }

@@ -1,22 +1,22 @@
 /**
- * Leaf-level callbacks on React components — комплексные интеграционные тесты
+ * Leaf-level callbacks on React components — comprehensive integration tests
  *
- * Покрывает onChange и onSubmit на листовом узле через реальные React-компоненты:
+ * Covers onChange and onSubmit on a leaf node through real React components:
  *
  * onChange (fire-and-forget):
- *   L-1: onChange срабатывает при записи value и обновляет соседнее поле (patch)
- *   L-2: onChange получает fieldKey, newValue, previousValue, allValues
- *   L-3: компонент реагирует на обновление от onChange — patch применяется и рендер обновляется
- *   L-4: если onChange у листа И у группы-предка — оба срабатывают (лист первым)
- *   L-5: onChange не вызывается при submit — только при записи value
+ *   L-1: onChange fires when value is written and updates a sibling field (patch)
+ *   L-2: onChange receives fieldKey, newValue, previousValue, allValues
+ *   L-3: the component reacts to the onChange update — the patch applies and the render updates
+ *   L-4: onChange on the leaf AND on an ancestor group — both fire (leaf first)
+ *   L-5: onChange is not invoked on submit — only on a value write
  *
  * onSubmit (full pipeline via proxy.field.submit()):
- *   L-6: кнопка вызывает submit() — onSubmit получает (value, store, parent)
- *   L-7: submitting флаг виден в компоненте во время выполнения pipeline
- *   L-8: при ошибке валидации submit() возвращает errors, onSubmit не вызывается
- *   L-9: afterSubmit вызывается после onSubmit с результатом и reset-экшеном
- *   L-10: parent proxy даёт доступ к соседним полям и store.context
- *   L-11: onChange + onSubmit на одном поле — независимы и не мешают друг другу
+ *   L-6: a button calls submit() — onSubmit receives (value, store, parent)
+ *   L-7: the submitting flag is visible in the component while the pipeline runs
+ *   L-8: on a validation error submit() returns errors, onSubmit is not called
+ *   L-9: afterSubmit is called after onSubmit with the result and a reset action
+ *   L-10: the parent proxy gives access to sibling fields and store.context
+ *   L-11: onChange + onSubmit on one field are independent and don't interfere
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -25,24 +25,24 @@ import userEvent from "@testing-library/user-event";
 import { Palistor } from "../store/palistor";
 import { useForm } from "../../react/useForm";
 
-// ─── Хелпер: flush async ──────────────────────────────────────────────────────
+// ─── Helper: flush async ──────────────────────────────────────────────────────
 
 function flushPromises() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-1: onChange обновляет соседнее поле через patch
+// L-1: onChange updates a sibling field via a patch
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-1: onChange обновляет соседнее поле через patch", () => {
-  it("запись country обновляет city через patch, возвращённый из onChange", async () => {
+describe("L-1: onChange updates a sibling field via a patch", () => {
+  it("writing country updates city via the patch returned from onChange", async () => {
     const store = new Palistor({
       config: {
         country: {
           value: "",
           onChange: async ({ newValue }: { newValue: string }) => {
-            return { city: newValue === "RU" ? "Москва" : "Unknown" };
+            return { city: newValue === "RU" ? "Moscow" : "Unknown" };
           },
         },
         city: { value: "" },
@@ -73,16 +73,16 @@ describe("L-1: onChange обновляет соседнее поле через 
       await flushPromises();
     });
 
-    expect(screen.getByTestId("city").textContent).toBe("Москва");
+    expect(screen.getByTestId("city").textContent).toBe("Moscow");
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-2: onChange получает корректные аргументы
+// L-2: onChange receives the right arguments
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-2: onChange получает fieldKey, newValue, previousValue, allValues", () => {
-  it("коллбэк вызывается с полным контекстом изменения", async () => {
+describe("L-2: onChange receives fieldKey, newValue, previousValue, allValues", () => {
+  it("the callback is invoked with the full change context", async () => {
     const onChangeSpy = vi.fn();
 
     const store = new Palistor({
@@ -128,11 +128,11 @@ describe("L-2: onChange получает fieldKey, newValue, previousValue, allV
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-3: компонент реагирует на patch от onChange — рендер обновляется
+// L-3: the component reacts to the onChange patch — the render updates
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-3: компонент видит обновлённый patch от onChange", () => {
-  it("urgencyLabel пересчитывается и отображается после изменения priority", async () => {
+describe("L-3: the component sees the onChange patch applied", () => {
+  it("urgencyLabel is recomputed and shown after a priority change", async () => {
     const store = new Palistor({
       config: {
         priority: {
@@ -182,11 +182,11 @@ describe("L-3: компонент видит обновлённый patch от o
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-4: лист-предок onChange срабатывают оба (лист первым)
+// L-4: leaf and ancestor onChange both fire (leaf first)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-4: onChange листа и onChange группы-предка — оба срабатывают, лист первым", () => {
-  it("порядок вызовов: leaf-onChange → group-onChange", async () => {
+describe("L-4: the leaf's and the ancestor group's onChange — both fire, leaf first", () => {
+  it("call order: leaf-onChange → group-onChange", async () => {
     const order: string[] = [];
 
     const store = new Palistor({
@@ -224,11 +224,11 @@ describe("L-4: onChange листа и onChange группы-предка — о�
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-5: onChange НЕ вызывается при submit() — только при записи value
+// L-5: onChange is NOT invoked on submit() — only on a value write
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-5: onChange не срабатывает при вызове submit()", () => {
-  it("после submit() onChange не вызван дополнительно", async () => {
+describe("L-5: onChange does not fire when submit() is called", () => {
+  it("after submit() onChange was not invoked additionally", async () => {
     const onChangeSpy = vi.fn();
 
     const store = new Palistor({
@@ -265,11 +265,11 @@ describe("L-5: onChange не срабатывает при вызове submit()
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-6: onSubmit получает (value, store, parent) при вызове из компонента
+// L-6: onSubmit receives (value, store, parent) when called from a component
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-6: onSubmit получает корректные аргументы при вызове из компонента", () => {
-  it("onSubmit(value, store, parent) — все аргументы переданы", async () => {
+describe("L-6: onSubmit receives the right arguments when called from a component", () => {
+  it("onSubmit(value, store, parent) — all arguments are passed", async () => {
     const onSubmitSpy = vi.fn();
 
     const store = new Palistor({
@@ -314,19 +314,19 @@ describe("L-6: onSubmit получает корректные аргументы
     });
 
     expect(onSubmitSpy).toHaveBeenCalledWith(
-      true,           // value — текущее значение листа
-      store,          // store — экземпляр Palistor
-      expect.anything(), // parent — proxy родительской группы
+      true,           // value — the leaf's current value
+      store,          // store — the Palistor instance
+      expect.anything(), // parent — the parent group's proxy
     );
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-7: submitting флаг виден в компоненте во время pipeline
+// L-7: the submitting flag is visible in the component during the pipeline
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-7: submitting флаг отображается в компоненте во время submit pipeline", () => {
-  it("submitting=true пока pipeline выполняется, false после завершения", async () => {
+describe("L-7: the submitting flag shows in the component during the submit pipeline", () => {
+  it("submitting=true while the pipeline runs, false after it completes", async () => {
     let resolveSubmit!: () => void;
     const submittingValues: boolean[] = [];
 
@@ -361,14 +361,14 @@ describe("L-7: submitting флаг отображается в компонен�
 
     expect(screen.getByTestId("submitting").textContent).toBe("idle");
 
-    // Запускаем submit — pipeline зависает на resolveSubmit
+    // Start the submit — the pipeline hangs on resolveSubmit
     act(() => { screen.getByTestId("save-btn").click(); });
 
     await waitFor(() => {
       expect(screen.getByTestId("submitting").textContent).toBe("saving");
     });
 
-    // Завершаем pipeline
+    // Complete the pipeline
     await act(async () => {
       resolveSubmit();
       await flushPromises();
@@ -379,11 +379,11 @@ describe("L-7: submitting флаг отображается в компонен�
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-8: при ошибке валидации submit() возвращает errors, onSubmit не вызывается
+// L-8: on a validation error submit() returns errors, onSubmit is not called
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-8: валидация блокирует submit — onSubmit не вызывается, ошибка отображается", () => {
-  it("пустой email → submit возвращает errors, errorMessage виден в DOM", async () => {
+describe("L-8: validation blocks the submit — onSubmit is not called, the error is shown", () => {
+  it("empty email → submit returns errors, errorMessage is visible in the DOM", async () => {
     const onSubmitSpy = vi.fn();
     let submitResult: any;
 
@@ -391,7 +391,7 @@ describe("L-8: валидация блокирует submit — onSubmit не в
       config: {
         email: {
           value: "",
-          validate: (v: string) => (!v ? "Email обязателен" : undefined),
+          validate: (v: string) => (!v ? "Email is required" : undefined),
           onSubmit: onSubmitSpy,
         },
       },
@@ -429,21 +429,21 @@ describe("L-8: валидация блокирует submit — onSubmit не в
     });
 
     expect(submitResult.success).toBe(false);
-    expect(submitResult.errors[0].message).toBe("Email обязателен");
+    expect(submitResult.errors[0].message).toBe("Email is required");
     expect(onSubmitSpy).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(screen.getByTestId("error").textContent).toBe("Email обязателен");
+      expect(screen.getByTestId("error").textContent).toBe("Email is required");
     });
   });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-9: afterSubmit вызывается после onSubmit с результатом и reset-экшеном
+// L-9: afterSubmit is called after onSubmit with the result and a reset action
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-9: afterSubmit получает результат onSubmit и может сбросить форму", () => {
-  it("afterSubmit вызван с результатом, reset сбрасывает значение поля", async () => {
+describe("L-9: afterSubmit gets the onSubmit result and can reset the form", () => {
+  it("afterSubmit is called with the result; reset restores the field value", async () => {
     const afterSubmitSpy = vi.fn((_result: unknown, { reset }: { reset: () => void }) => {
       reset();
     });
@@ -494,7 +494,7 @@ describe("L-9: afterSubmit получает результат onSubmit и мо�
       { reset: expect.any(Function) },
     );
 
-    // reset() внутри afterSubmit сбрасывает поле к начальному значению
+    // reset() inside afterSubmit restores the field's initial value
     await waitFor(() => {
       expect(screen.getByTestId("notes").getAttribute("value")).toBe("");
     });
@@ -502,11 +502,11 @@ describe("L-9: afterSubmit получает результат onSubmit и мо�
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-10: parent proxy даёт доступ к соседним полям и store.context
+// L-10: the parent proxy gives access to sibling fields and store.context
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-10: parent proxy и store.context доступны в onSubmit", () => {
-  it("onSubmit читает parent.name.value и store.context.accountId", async () => {
+describe("L-10: the parent proxy and store.context are available in onSubmit", () => {
+  it("onSubmit reads parent.name.value and store.context.accountId", async () => {
     const capturedArgs: { nameValue: string; accountId: string } = {
       nameValue: "",
       accountId: "",
@@ -562,11 +562,11 @@ describe("L-10: parent proxy и store.context доступны в onSubmit", () 
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// L-11: onChange + onSubmit на одном поле — независимы
+// L-11: onChange + onSubmit on one field are independent
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("L-11: onChange и onSubmit на одном поле работают независимо", () => {
-  it("запись value вызывает только onChange; submit() вызывает только onSubmit", async () => {
+describe("L-11: onChange and onSubmit on one field work independently", () => {
+  it("writing the value triggers only onChange; submit() triggers only onSubmit", async () => {
     const onChangeSpy = vi.fn().mockResolvedValue(undefined);
     const onSubmitSpy = vi.fn().mockResolvedValue("done");
 
@@ -605,7 +605,7 @@ describe("L-11: onChange и onSubmit на одном поле работают �
 
     render(<PriorityCard />);
 
-    // Изменяем значение → только onChange
+    // Change the value → only onChange
     await act(async () => {
       await userEvent.selectOptions(screen.getByTestId("priority"), "high");
       await flushPromises();
@@ -616,7 +616,7 @@ describe("L-11: onChange и onSubmit на одном поле работают �
 
     onChangeSpy.mockClear();
 
-    // Нажимаем Save → только onSubmit
+    // Press Save → only onSubmit
     await act(async () => {
       screen.getByTestId("save-btn").click();
       await flushPromises();

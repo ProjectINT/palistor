@@ -1,8 +1,8 @@
 /**
- * Фаза 0.5: тесты array guard.
+ * Array guard tests.
  *
- * Конфиг с ListNode (массив длины 1 или 2) не ломает ни один
- * из модифицированных tree-walker-ов.
+ * A config with a ListNode (an array of length 1 or 2) must not break any
+ * of the modified tree walkers.
  */
 import { describe, it, expect } from "vitest";
 import { registerNodes } from "./registerNodes";
@@ -19,7 +19,7 @@ import { isListNode } from "./NodeRegistry/nodeUtils";
 import type { AnyConfigNode } from "./types";
 import type { FieldState } from "../compute";
 
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const translate = (k: string) => k;
 
@@ -35,13 +35,13 @@ function makeState(value: unknown): FieldState {
   };
 }
 
-/** Конфиг с обычным полем + ListNode длины 1 */
+/** Config with a regular field + a length-1 ListNode */
 const makeConfigWithList1 = () => ({
   name: { value: "" },
   users: [{ id: { value: "" }, title: { value: "" } }],
 } as unknown as AnyConfigNode);
 
-/** Конфиг с обычным полем + ListNode длины 2 (template + listConfig) */
+/** Config with a regular field + a length-2 ListNode (template + listConfig) */
 const makeConfigWithList2 = () => ({
   name: { value: "" },
   users: [
@@ -53,23 +53,23 @@ const makeConfigWithList2 = () => ({
 // ─── isListNode ───────────────────────────────────────────────────────────────
 
 describe("isListNode", () => {
-  it("массив длины 1 → true", () => {
+  it("array of length 1 → true", () => {
     expect(isListNode([{}])).toBe(true);
   });
 
-  it("массив длины 2 → true", () => {
+  it("array of length 2 → true", () => {
     expect(isListNode([{}, {}])).toBe(true);
   });
 
-  it("пустой массив → false", () => {
+  it("empty array → false", () => {
     expect(isListNode([])).toBe(false);
   });
 
-  it("массив длины 3 → false", () => {
+  it("array of length 3 → false", () => {
     expect(isListNode([{}, {}, {}])).toBe(false);
   });
 
-  it("обычный объект → false", () => {
+  it("plain object → false", () => {
     expect(isListNode({ value: "" })).toBe(false);
   });
 
@@ -78,10 +78,10 @@ describe("isListNode", () => {
   });
 });
 
-// ─── registerNodes не ломается на ListNode ────────────────────────────────────
+// ─── registerNodes doesn't break on a ListNode ───────────────────────────────────
 
 describe("registerNodes — array guard", () => {
-  it("регистрирует обычные листы, игнорирует ListNode (длина 1)", () => {
+  it("registers regular leaves, ignores the ListNode (length 1)", () => {
     const config = makeConfigWithList1();
     const computeNodes: any[] = [];
     const nodeState = new WeakMap<object, FieldState>();
@@ -91,12 +91,12 @@ describe("registerNodes — array guard", () => {
       registerNodes(config, undefined, computeNodes, nodeState, "", groupComputeMap, translate),
     ).not.toThrow();
 
-    // Только 'name' должен быть зарегистрирован
+    // Only 'name' must be registered
     expect(computeNodes).toHaveLength(1);
     expect(computeNodes[0].path).toBe("name");
   });
 
-  it("регистрирует обычные листы, игнорирует ListNode (длина 2)", () => {
+  it("registers regular leaves, ignores the ListNode (length 2)", () => {
     const config = makeConfigWithList2();
     const computeNodes: any[] = [];
     const nodeState = new WeakMap<object, FieldState>();
@@ -111,10 +111,10 @@ describe("registerNodes — array guard", () => {
   });
 });
 
-// ─── buildNodeMaps не ломается на ListNode ────────────────────────────────────
+// ─── buildNodeMaps doesn't break on a ListNode ───────────────────────────────────
 
 describe("buildNodeMaps — array guard", () => {
-  it("строит маппинги для обычных узлов, пропускает ListNode", () => {
+  it("builds mappings for regular nodes, skips the ListNode", () => {
     const config = makeConfigWithList1();
     const nodePaths = new WeakMap<object, string>();
     const nodeParents = new WeakMap<object, object>();
@@ -126,10 +126,10 @@ describe("buildNodeMaps — array guard", () => {
   });
 });
 
-// ─── buildValuesCache не ломается на ListNode ─────────────────────────────────
+// ─── buildValuesCache doesn't break on a ListNode──────────────────────────────
 
 describe("buildValuesCache — array guard", () => {
-  it("строит кеш для обычных полей, инициализирует ListNode как []", () => {
+  it("builds the cache for regular fields, initializes the ListNode as []", () => {
     const config = makeConfigWithList1();
     const nameNode = (config as any).name;
     const nodeState = new WeakMap<object, FieldState>();
@@ -144,10 +144,10 @@ describe("buildValuesCache — array guard", () => {
   });
 });
 
-// ─── applyPatch не ломается на ListNode ──────────────────────────────────────
+// ─── applyPatch doesn't break on a ListNode ────────────────────────────────────────
 
 describe("applyPatch — array guard", () => {
-  it("применяет патч к обычным полям, игнорирует ListNode в патче", () => {
+  it("applies the patch to regular fields, ignores the ListNode in the patch", () => {
     const config = makeConfigWithList1();
     const nameNode = (config as any).name;
     const nodeState = new WeakMap<object, FieldState>();
@@ -163,26 +163,26 @@ describe("applyPatch — array guard", () => {
   });
 });
 
-// ─── initResolveStates не ломается на ListNode ───────────────────────────────
+// ─── initResolveStates doesn't break on a ListNode────────────────────────────
 
 describe("initResolveStates — array guard", () => {
-  it("собирает resolve-ноды, включая ListResolveEntry для ListNode с resolver", () => {
+  it("collects resolve nodes, including a ListResolveEntry for a ListNode with a resolver", () => {
     const config = makeConfigWithList2();
     const resolveStates = new Map();
 
     let entries: ReturnType<typeof initResolveStates> | undefined;
     expect(() => { entries = initResolveStates(config, resolveStates); }).not.toThrow();
 
-    // Phase 2C: resolver внутри listConfig[1] собирается как ListResolveEntry
+    // A resolver inside listConfig[1] is collected as a ListResolveEntry
     expect(entries!).toHaveLength(1);
     expect((entries![0] as any).isListNode).toBe(true);
   });
 });
 
-// ─── recomputeDirty не ломается на ListNode ───────────────────────────────────
+// ─── recomputeDirty doesn't break on a ListNode ──────────────────────────────────
 
 describe("recomputeDirtyTargeted — array guard", () => {
-  it("пересчитывает dirty для обычных полей, пропускает ListNode", () => {
+  it("recomputes dirty for regular fields, skips the ListNode", () => {
     const config = makeConfigWithList1() as any;
     const nameNode = config.name;
     const nodeState = new WeakMap<object, FieldState>();
@@ -213,10 +213,10 @@ describe("recomputeDirtyTargeted — array guard", () => {
   });
 });
 
-// ─── initGroupSubmitting не ломается на ListNode ──────────────────────────────
+// ─── initGroupSubmitting doesn't break on a ListNode───────────────────────────
 
 describe("initGroupSubmitting — array guard", () => {
-  it("инициализирует submitting для обычных групп, пропускает ListNode", () => {
+  it("initializes submitting for regular groups, skips the ListNode", () => {
     const config = makeConfigWithList1();
     const nodeState = new WeakMap<object, FieldState>();
 
@@ -224,10 +224,10 @@ describe("initGroupSubmitting — array guard", () => {
   });
 });
 
-// ─── collectDefaults не ломается на ListNode ─────────────────────────────────
+// ─── collectDefaults doesn't break on a ListNode ────────────────────────────────
 
 describe("collectDefaults — array guard", () => {
-  it("собирает дефолты для обычных полей, пропускает ListNode", () => {
+  it("collects defaults for regular fields, skips the ListNode", () => {
     const config = makeConfigWithList1();
 
     let defaults: ReturnType<typeof collectDefaults> | undefined;
@@ -238,10 +238,10 @@ describe("collectDefaults — array guard", () => {
   });
 });
 
-// ─── captureInitialValues не ломается на ListNode ────────────────────────────
+// ─── captureInitialValues doesn't break on a ListNode─────────────────────────
 
 describe("captureInitialValues — array guard", () => {
-  it("захватывает initial values для обычных полей, пропускает ListNode", () => {
+  it("captures initial values for regular fields, skips the ListNode", () => {
     const config = makeConfigWithList1();
     const nameNode = (config as any).name;
     const nodeState = new WeakMap<object, FieldState>();
@@ -256,10 +256,10 @@ describe("captureInitialValues — array guard", () => {
   });
 });
 
-// ─── collectInitialSnapshot не ломается на ListNode ──────────────────────────
+// ─── collectInitialSnapshot doesn't break on a ListNode───────────────────────
 
 describe("collectInitialSnapshot — array guard", () => {
-  it("строит снапшот для обычных полей, пропускает ListNode", () => {
+  it("builds the snapshot for regular fields, skips the ListNode", () => {
     const config = makeConfigWithList1();
     const nameNode = (config as any).name;
     const initialValueMap = new WeakMap<object, unknown>();

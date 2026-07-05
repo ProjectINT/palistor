@@ -1,8 +1,8 @@
 import { TranslateFn } from "../store/types";
 
 /**
- * Вычисляет одно свойство-флаг из конфига: если это функция — вызывает с values,
- * иначе возвращает как есть. Если undefined — возвращает defaultValue.
+ * Resolves a single flag property from the config: a function is called with
+ * the values, anything else is returned as-is. undefined → defaultValue.
  */
 export function resolveFlag(
   configValue: boolean | ((values: any, translate: TranslateFn) => boolean) | undefined,

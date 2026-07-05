@@ -1,55 +1,59 @@
-# Проблема: отсутствует guard для ListNode в `collectGroupComputeNodes`
+# Known issue: `collectGroupComputeNodes` is missing a ListNode guard
 
-## Файл
+## File
 
 `store/compute/recompute/collectGroupComputeNodes.ts`
 
-## Суть
+## Summary
 
-В `collectGroupComputeNodes` нет проверки на массив (`Array.isArray`) при рекурсии по дочерним узлам. В итоге функция заходит внутрь ListNode-массивов и обрабатывает их template-узлы повторно.
+`collectGroupComputeNodes` has no array check (`Array.isArray`) when recursing
+into child nodes. As a result the function descends into ListNode arrays and
+processes their template nodes a second time.
 
-**Как это происходит:**
+**How it happens:**
 
-1. В `registerNodes` строка `(child as any).__kind = hasChildren(child) ? "group" : "leaf"` выполняется **до** проверки `Array.isArray(child)`.
-2. `hasChildren` вызывает `configKeys(array)`, который возвращает числовые ключи `["0", "1"]` (template + listConfig). Оба являются объектами → `hasChildren` возвращает `true`.
-3. ListNode-массив получает `__kind = "group"`.
-4. В `collectGroupComputeNodes` при обходе дочерних ключей родительской группы: `isLeafNode(array)` возвращает `false` (kind = "group") — guard не срабатывает, функция рекурсирует в массив.
-5. `groupComputeMap.get(array)` — undefined (массив не регистрируется в карте), но `configKeys(array)` возвращает `["0"]`, что приводит к рекурсии в template-узел.
-6. Template IS зарегистрирован в `groupComputeMap` через `registerNodes(template, ...)`, поэтому его compute-записи **дублируются** в результате.
+1. In `registerNodes` the line `(child as any).__kind = hasChildren(child) ? "group" : "leaf"` runs **before** the `Array.isArray(child)` check.
+2. `hasChildren` calls `configKeys(array)`, which returns the numeric keys `["0", "1"]` (template + listConfig). Both are objects → `hasChildren` returns `true`.
+3. The ListNode array gets `__kind = "group"`.
+4. In `collectGroupComputeNodes`, while walking the parent group's child keys: `isLeafNode(array)` returns `false` (kind = "group") — the guard doesn't fire, and the function recurses into the array.
+5. `groupComputeMap.get(array)` is undefined (arrays are never registered in the map), but `configKeys(array)` returns `["0"]`, which leads to a recursion into the template node.
+6. The template IS registered in `groupComputeMap` via `registerNodes(template, ...)`, so its compute entries are **duplicated** in the result.
 
 ```ts
-// collectGroupComputeNodes.ts — проблемный участок
+// collectGroupComputeNodes.ts — the problematic section
 for (const key of configKeys(groupNode as Record<string, unknown>)) {
   const child = groupNode[key] as AnyConfigNode;
 
   if (!child || typeof child !== "object") continue;
   if (isLeafNode(child)) continue;
-  // ← здесь нет: if (Array.isArray(child)) continue;
+  // ← missing here: if (Array.isArray(child)) continue;
   result.push(...collectGroupComputeNodes(child, groupComputeMap));
 }
 ```
 
-## Последствия
+## Consequences
 
-- **Корректность**: не нарушается — двойная обработка одного узла в `recomputeLeaves` идемпотентна.
-- **Производительность**: незначительные лишние вычисления на каждый полный recompute (один раз при старте и при invalidation всего дерева).
-- **groupDepsMap**: при первом recompute с `trackingWrap` дублирование может привести к двойной регистрации зависимостей для template-узлов. Практического эффекта не замечено в тестах, но потенциально может вызвать лишние перерасчёты при изменениях в группах-донорах.
+- **Correctness**: unaffected — processing a node twice in `recomputeLeaves` is idempotent.
+- **Performance**: minor extra work on every full recompute (once at startup and on full-tree invalidation).
+- **groupDepsMap**: during the first recompute with `trackingWrap`, the duplication may double-register dependencies for template nodes. No practical effect has been observed in the tests, but it could potentially cause extra recomputes when donor groups change.
 
-## Исправление
+## The fix
 
-Добавить один guard в цикл рекурсии:
+Add one guard to the recursion loop:
 
 ```ts
 for (const key of configKeys(groupNode as Record<string, unknown>)) {
   const child = groupNode[key] as AnyConfigNode;
 
   if (!child || typeof child !== "object") continue;
-  if (Array.isArray(child)) continue; // ListNode — пропустить
+  if (Array.isArray(child)) continue; // ListNode — skip
   if (isLeafNode(child)) continue;
   result.push(...collectGroupComputeNodes(child, groupComputeMap));
 }
 ```
 
-## Почему не исправлено сейчас
+## Why it isn't fixed yet
 
-Решение отложено — поведение не вызывает видимых сбоев в текущих 919 тестах. Исправление внесут отдельно после оценки влияния на groupDepsMap в реальных сценариях с ListNode.
+Deferred — the behavior causes no visible failures in the current test suite.
+The fix will land separately after assessing the impact on groupDepsMap in
+real ListNode scenarios.

@@ -2,8 +2,8 @@ import { configKeys, isLeafNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 
 /**
- * Применяет leaf-level `beforeSubmit` трансформации к snapshot'у значений.
- * Не мутирует store — работает с копией.
+ * Applies leaf-level `beforeSubmit` transforms to a values snapshot.
+ * Does not mutate the store — works on a copy.
  */
 export function applyLeafBeforeSubmit(
   node: AnyConfigNode,

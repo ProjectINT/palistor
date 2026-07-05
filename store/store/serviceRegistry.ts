@@ -2,24 +2,24 @@ import type { TranslateFn } from "./types";
 import type { NotifyFn } from "../resolvePipeline";
 
 /**
- * Хранит и делегирует сервисы перевода и уведомлений.
+ * Holds and delegates the translation and notification services.
  *
- * `translate` и `notify` — стабильные ссылки, безопасно передавать в замыкания.
- * Внутренние `_translator` / `_notifier` обновляются через `setTranslator` / `setNotifier`.
+ * `translate` and `notify` are stable references, safe to pass into closures.
+ * The internal `_translator` / `_notifier` are swapped via `setTranslator` / `setNotifier`.
  */
 export class ServiceRegistry {
   private _translator: TranslateFn = (v) => v;
   private _notifier: NotifyFn = () => {};
 
-  /** Стабильная функция перевода, делегирует в текущий translator. */
+  /** Stable translation function, delegates to the current translator. */
   readonly translate: TranslateFn = (...args: any[]) => this._translator(...args);
 
-  /** Стабильная функция уведомления, делегирует в текущий notifier. */
+  /** Stable notification function, delegates to the current notifier. */
   readonly notify: NotifyFn = (...args) => this._notifier(...args);
 
   /**
-   * Установить функцию перевода.
-   * @returns `true` если значение изменилось (вызывающий может инвалидировать кэши).
+   * Set the translation function.
+   * @returns `true` when the value changed (caller may invalidate caches).
    */
   setTranslator(t: TranslateFn | null): boolean {
     const next: TranslateFn = typeof t === "function" ? t : (v) => v;
@@ -28,7 +28,7 @@ export class ServiceRegistry {
     return true;
   }
 
-  /** Установить функцию уведомления. */
+  /** Set the notification function. */
   setNotifier(fn: NotifyFn | null): void {
     this._notifier = typeof fn === "function" ? fn : () => {};
   }

@@ -1,16 +1,17 @@
 /**
- * createContextTrackingProxy — оборачивает плоский объект контекста в read-only Proxy,
- * который записывает ключи, к которым обращался резолвер.
+ * createContextTrackingProxy — wraps the flat context object in a read-only
+ * Proxy that records the keys the resolver accessed.
  *
- * Используется в executeResolve для автоматического определения контекстных зависимостей:
- * если резолвер читает `store.context.accountId`, то `$context.accountId` добавляется
- * в auto-deps, и резолвер перезапустится при изменении этого ключа через `setContext`.
+ * Used in executeResolve to detect context dependencies automatically:
+ * when a resolver reads `store.context.accountId`, `$context.accountId` is
+ * added to the auto-deps, and the resolver re-runs when that key changes via
+ * `setContext`.
  */
 
 export interface ContextTrackingResult {
-  /** Прокси над context — передаётся внутри storeProxy в resolver */
+  /** Proxy over the context — handed to the resolver inside storeProxy */
   proxy: Record<string, unknown>;
-  /** Ключи контекста, к которым обратился резолвер */
+  /** Context keys the resolver accessed */
   getAccessedKeys: () => Set<string>;
 }
 

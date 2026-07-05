@@ -352,7 +352,7 @@ const store = new Palistor({
 > `RawStoreProxyMarker`, so any attempt to call `useForm(store.proxy.something)`
 > is rejected by the TypeScript compiler with a self-describing diagnostic
 > (`_PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first`).
-> At runtime it also throws: `useForm: получен сырой proxy-узел стора …`.
+> At runtime it also throws: `useForm: received a raw store proxy node …`.
 >
 > ```tsx
 > // ❌ TypeScript error + runtime throw

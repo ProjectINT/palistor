@@ -13,7 +13,7 @@ export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpir
     isVisible: (values: PaymentFormValues) => values.paymentType === "card",
     isRequired: (values: PaymentFormValues) => values.paymentType === "card",
     dependencies: ["paymentType"] as const,
-    // Форматтер — добавляем пробелы каждые 4 цифры
+    // Formatter — inserts a space every 4 digits
     formatter: (value) => {
       const digits = String(value).replace(/\D/g, "").slice(0, 16);
       return digits.replace(/(.{4})/g, "$1 ").trim();

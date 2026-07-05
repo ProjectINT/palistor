@@ -3,13 +3,13 @@ import type { AnyConfigNode } from "../store/types";
 import type { FieldState } from "../compute/index";
 
 /**
- * Устанавливает флаг `revalidate` на узле-группе и рекурсивно распространяет его
- * на ВСЕ дочерние узлы — как на листовые поля, так и на вложенные группы.
+ * Sets the `revalidate` flag on a group node and recursively propagates it
+ * to ALL child nodes — leaf fields as well as nested groups.
  *
- * @param node       — узел конфига (группа или поле)
- * @param revalidate — значение флага, которое нужно установить
- * @param nodeState  — WeakMap с текущим состоянием каждого узла (FieldState)
- * @returns          — множество узлов, у которых флаг revalidate действительно изменился
+ * @param node       — config node (group or field)
+ * @param revalidate — the flag value to set
+ * @param nodeState  — WeakMap with each node's current state (FieldState)
+ * @returns          — set of nodes whose revalidate flag actually changed
  */
 export function setGroupRevalidate(
   node: AnyConfigNode,
@@ -18,7 +18,7 @@ export function setGroupRevalidate(
 ): Set<object> {
   const changed = new Set<object>();
 
-  // Обновляем сам корневой узел (walkFull его не посещает).
+  // Update the root node itself (walkFull doesn't visit it).
   updateRevalidate(node, revalidate, nodeState, changed);
 
   walkFull(node, {

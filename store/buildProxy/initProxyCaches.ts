@@ -1,10 +1,10 @@
 /**
- * Инициализация кэшей для стабильных ссылок на функции (React-мемоизация).
+ * Initializes the caches for stable function references (React memoization).
  *
- * - onValueChange — функциональный setter для value
- * - submit — обёртка submitNode
- * - reset — обёртка resetNode
- * - setValues — обёртка setValuesNode
+ * - onValueChange — functional value setter
+ * - submit — submitNode wrapper
+ * - reset — resetNode wrapper
+ * - setValues — setValuesNode wrapper
  */
 export function initProxyCaches() {
   return {

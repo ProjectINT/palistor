@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeFieldState } from "../computeFieldState";
 
-// ─── Базовый конфиг ──────────────────────────────────────────────────────────
+// ─── Base config ─────────────────────────────────────────────────────────────
 
 const baseConfig = {
   label: "Email",

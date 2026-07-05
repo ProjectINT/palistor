@@ -5,7 +5,7 @@ import { collectLeafStates } from "./collectLeafStates";
 import { applyLeafBeforeSubmit } from "./applyLeafBeforeSubmit";
 import { Palistor } from "../store/palistor";
 
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeState(overrides: Partial<FieldState> = {}): FieldState {
   return {
@@ -27,7 +27,7 @@ function makeNodeState(entries: Array<[object, FieldState]>): WeakMap<object, Fi
 // ─── collectLeafStates ───────────────────────────────────────────────────────
 
 describe("collectLeafStates", () => {
-  it("собирает листовые узлы с их путями", () => {
+  it("collects leaf nodes with their paths", () => {
     const nameNode: AnyConfigNode = { value: "" };
     const ageNode: AnyConfigNode = { value: 0 };
     const form: AnyConfigNode = { name: nameNode, age: ageNode };
@@ -43,7 +43,7 @@ describe("collectLeafStates", () => {
     expect(leaves.find((l) => l.path === "age")?.state.value).toBe(30);
   });
 
-  it("рекурсивно обходит вложенные группы с составными путями", () => {
+  it("recursively walks nested groups with composite paths", () => {
     const cityNode: AnyConfigNode = { value: "" };
     const group: AnyConfigNode = { address: { city: cityNode } };
     const nodeState = makeNodeState([[cityNode, makeState({ value: "SPb" })]]);
@@ -54,7 +54,7 @@ describe("collectLeafStates", () => {
     expect(leaves[0].path).toBe("address.city");
   });
 
-  it("пропускает узел если нет state в nodeState", () => {
+  it("skips a node with no state in nodeState", () => {
     const leaf: AnyConfigNode = { value: "" };
     const form: AnyConfigNode = { field: leaf };
     const nodeState = new WeakMap<object, FieldState>();
@@ -68,7 +68,7 @@ describe("collectLeafStates", () => {
 // ─── applyLeafBeforeSubmit ───────────────────────────────────────────────────
 
 describe("applyLeafBeforeSubmit", () => {
-  it("применяет beforeSubmit трансформацию к листу", () => {
+  it("applies the beforeSubmit transform to a leaf", () => {
     const leaf: AnyConfigNode = {
       value: "",
       beforeSubmit: (v: unknown) => String(v).trim(),
@@ -80,7 +80,7 @@ describe("applyLeafBeforeSubmit", () => {
     expect(result.name).toBe("Alice");
   });
 
-  it("передаёт текущий snapshot как второй аргумент beforeSubmit", () => {
+  it("passes the current snapshot as beforeSubmit's second argument", () => {
     const transformFn = vi.fn((v: unknown) => v);
     const leaf: AnyConfigNode = { value: "", beforeSubmit: transformFn };
     const form: AnyConfigNode = { field: leaf };
@@ -91,7 +91,7 @@ describe("applyLeafBeforeSubmit", () => {
     expect(transformFn).toHaveBeenCalledWith("val", values);
   });
 
-  it("не трогает листы без beforeSubmit", () => {
+  it("does not touch leaves without beforeSubmit", () => {
     const leaf: AnyConfigNode = { value: "" };
     const form: AnyConfigNode = { name: leaf };
 
@@ -100,7 +100,7 @@ describe("applyLeafBeforeSubmit", () => {
     expect(result.name).toBe("Bob");
   });
 
-  it("рекурсивно обходит вложенные группы", () => {
+  it("recursively walks nested groups", () => {
     const leaf: AnyConfigNode = {
       value: "",
       beforeSubmit: (v: unknown) => Number(v) * 2,
@@ -113,10 +113,10 @@ describe("applyLeafBeforeSubmit", () => {
   });
 });
 
-// ─── SubmitPipeline (через Palistor) ──────────────────────────────────────────
+// ─── SubmitPipeline (via Palistor) ────────────────────────────────────────────
 
 describe("SubmitPipeline", () => {
-  it("возвращает success:true если нет ошибок и вызывает onSubmit", async () => {
+  it("returns success:true when there are no errors and calls onSubmit", async () => {
     const onSubmit = vi.fn().mockResolvedValue("ok");
     const root: AnyConfigNode = { x: { value: 1 }, onSubmit };
     const store = new Palistor({ config: root });
@@ -127,7 +127,7 @@ describe("SubmitPipeline", () => {
     expect(onSubmit).toHaveBeenCalledWith({ x: 1 }, expect.any(Object), undefined);
   });
 
-  it("возвращает success:false при наличии ошибок валидации", async () => {
+  it("returns success:false when validation errors exist", async () => {
     const root: AnyConfigNode = {
       field: { value: "", isRequired: true },
     };
@@ -141,7 +141,7 @@ describe("SubmitPipeline", () => {
     }
   });
 
-  it("устанавливает submitting=false в finally даже при ошибке onSubmit", async () => {
+  it("sets submitting=false in finally even when onSubmit throws", async () => {
     const root: AnyConfigNode = {
       onSubmit: vi.fn().mockRejectedValue(new Error("server error")),
     };
@@ -152,7 +152,7 @@ describe("SubmitPipeline", () => {
     expect(store.nodes.nodeState.get(root)?.submitting).toBe(false);
   });
 
-  it("вызывает afterSubmit с результатом и reset-экшеном", async () => {
+  it("calls afterSubmit with the result and a reset action", async () => {
     const afterSubmit = vi.fn();
     const root: AnyConfigNode = {
       onSubmit: vi.fn().mockResolvedValue(42),
@@ -166,10 +166,10 @@ describe("SubmitPipeline", () => {
   });
 });
 
-// ─── Leaf submit — интеграционные тесты (через proxy) ────────────────────────
+// ─── Leaf submit — integration tests (via the proxy) ─────────────────────────
 
 describe("Leaf submit (integration via proxy)", () => {
-  it("3.7: leaf submit() вызывает onSubmit(value, store, parent)", async () => {
+  it("3.7: leaf submit() calls onSubmit(value, store, parent)", async () => {
     const onSubmitSpy = vi.fn();
     const config = {
       isActive: { value: false, onSubmit: onSubmitSpy },
@@ -186,7 +186,7 @@ describe("Leaf submit (integration via proxy)", () => {
     );
   });
 
-  it("3.8: leaf submitting флаг устанавливается во время выполнения submit", async () => {
+  it("3.8: the leaf submitting flag is set while the submit runs", async () => {
     let capturedSubmitting: boolean | undefined;
     const config = {
       toggle: {
@@ -205,7 +205,7 @@ describe("Leaf submit (integration via proxy)", () => {
     expect(store.proxy.toggle.submitting).toBe(false);
   });
 
-  it("3.9: leaf submit() возвращает errors при ошибке валидации", async () => {
+  it("3.9: leaf submit() returns errors on a validation failure", async () => {
     const config = {
       email: {
         value: "",
@@ -221,7 +221,7 @@ describe("Leaf submit (integration via proxy)", () => {
     }
   });
 
-  it("3.10: leaf onSubmit получает parent proxy с доступом к соседним полям", async () => {
+  it("3.10: the leaf onSubmit receives a parent proxy with sibling access", async () => {
     const spy = vi.fn();
     const config = {
       isActive: {
@@ -238,7 +238,7 @@ describe("Leaf submit (integration via proxy)", () => {
     expect(spy).toHaveBeenCalledWith(true, "Alice");
   });
 
-  it("3.11: store.context доступен внутри leaf onSubmit", async () => {
+  it("3.11: store.context is available inside the leaf onSubmit", async () => {
     const spy = vi.fn();
     const config = {
       toggle: {
@@ -253,7 +253,7 @@ describe("Leaf submit (integration via proxy)", () => {
     expect(spy).toHaveBeenCalledWith("acc-42");
   });
 
-  it("3.12: leaf submit() не мешает group-level submit pipeline", async () => {
+  it("3.12: leaf submit() does not interfere with the group-level submit pipeline", async () => {
     const leafSubmitSpy = vi.fn();
     const groupSubmitSpy = vi.fn().mockResolvedValue("ok");
     const config = {
@@ -271,7 +271,7 @@ describe("Leaf submit (integration via proxy)", () => {
     expect(groupResult.success).toBe(true);
   });
 
-  it("3.13: group onSubmit получает parent как третий аргумент (backward-compatible)", async () => {
+  it("3.13: the group onSubmit receives parent as the third argument (backward-compatible)", async () => {
     const spy = vi.fn();
     const config = {
       name: { value: "Alice" },

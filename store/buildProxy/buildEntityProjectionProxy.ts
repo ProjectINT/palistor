@@ -7,7 +7,7 @@ import type { NodeView } from "../store/NodeRegistry/nodeView";
 import { isLeafNode, isGroupNode } from "../traversal";
 import { buildListProxy } from "./buildListProxy";
 
-/** Поэлементное сравнение двух массивов строк (для dirty по составу списка). */
+/** Element-wise comparison of two string arrays (for list-membership dirty). */
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -91,9 +91,9 @@ function materializeListsInto(
     const templateField = (templateSubtree as Record<string, unknown>)[key];
 
     if (Array.isArray(templateField)) {
-      // Включаем list-поле только если у entity есть его состояние (список
-      // загружался/менялся). Untouched-список ключ не добавляет — симметрично
-      // с материализацией в projectionObj (store.getValues()).
+      // Include the list field only when the entity has state for it (the list
+      // was loaded/mutated). An untouched list adds no key — symmetric with
+      // the projectionObj materialization (store.getValues()).
       const els = lists.get(templateField as unknown as object);
       if (!els) continue;
 
@@ -240,8 +240,8 @@ export function buildEntityProjectionProxy(
 
       if (typeof key === "symbol") return undefined;
 
-      // Обратный маппинг на входе: external → internal. Влияет на `loading`/`dirty`
-      // (mappable-ключи). Навигация к template-полям остаётся по оригинальному `key`.
+      // Reverse mapping on input: external → internal. Affects `loading`/`dirty`
+      // (mappable keys). Navigation to template fields keeps the original `key`.
       const ikey = kernel.externalToInternal[key] ?? key;
 
       // id is always exposed directly as value (not as a leaf proxy)

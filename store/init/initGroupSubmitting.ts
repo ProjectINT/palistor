@@ -3,18 +3,18 @@ import type { AnyConfigNode } from "../store/types";
 import { walkFull } from "../traversal";
 
 /**
- * Инициализирует submitting: false, dirty: false, revalidate: false
- * в nodeState для корневого и всех вложенных групповых узлов.
+ * Initializes submitting: false, dirty: false, revalidate: false
+ * in nodeState for the root and all nested group nodes.
  */
 export function initGroupSubmitting(
   node: AnyConfigNode,
   nodeState: WeakMap<object, FieldState>,
 ) {
-  // Инициализируем сам корневой узел (walkFull его не посещает)
+  // Initialize the root node itself (walkFull doesn't visit it)
   initGroupNode(node, nodeState);
 
   walkFull(node, {
-    onLeaf() {}, // листья пропускаем
+    onLeaf() {}, // leaves are skipped
     onGroupEnter(groupNode) {
       initGroupNode(groupNode as AnyConfigNode, nodeState);
     },

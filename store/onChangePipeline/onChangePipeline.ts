@@ -9,22 +9,23 @@ import { isLeafNode } from "../traversal";
 import { storeValue } from "../writePipeline/storeValue";
 
 export interface OnChangeOptions {
-  /** templateField — при entity-mode: onChange ищется в template-дереве, патч применяется к entity-сиблингам. */
+  /** templateField — in entity mode: onChange is looked up in the template tree, the patch is applied to entity siblings. */
   via?: AnyConfigNode;
 }
 
 /**
- * OnChangePipeline — fire-and-forget вызов onChange хендлеров
- * при изменении поля: сначала на самом узле (если есть onChange),
- * затем на всех группах-предках с onChange.
+ * OnChangePipeline — fire-and-forget invocation of onChange handlers when a
+ * field changes: first on the node itself (if it has onChange), then on all
+ * ancestor groups with onChange.
  *
- * Для каждого узла с `onChange`:
- * - вычисляется `fieldKey` — имя поля (для самого узла) или путь относительно предка
- * - onChange вызывается асинхронно, не блокируя pipeline записи
- * - если onChange вернул объект-патч — он применяется к store
+ * For every node with `onChange`:
+ * - `fieldKey` is computed — the field name (for the node itself) or the path relative to the ancestor
+ * - onChange runs asynchronously, without blocking the write pipeline
+ * - a returned patch object is applied to the store
  *
- * При opts.via — entity-mode: обход onChange через template-иерархию (не entity),
- * allValues — entity-значения из view.parent.getValues().
+ * With opts.via — entity mode: the onChange walk goes through the template
+ * hierarchy (not the entity); allValues are the entity values from
+ * view.parent.getValues().
  */
 export class OnChangePipeline {
   constructor(private readonly kernel: Palistor<any, any>) {}
@@ -33,7 +34,7 @@ export class OnChangePipeline {
     const { nodePaths, nodeParents } = this.kernel.nodes;
 
     if (opts?.via !== undefined) {
-      // ── Entity mode: onChange-обход по template-дереву ──
+      // ── Entity mode: onChange walk over the template tree ──
       const view = this.kernel.nodes.getView(node, opts.via);
       const onChangeNodes = findOnChangeNodes(view.rules as object, nodeParents);
       if (onChangeNodes.length === 0) return;
@@ -52,7 +53,7 @@ export class OnChangePipeline {
       return;
     }
 
-    // ── Config mode (существующая логика) ──
+    // ── Config mode ──
     const valuesCache = this.kernel.values;
     const onChangeNodes = findOnChangeNodes(node, nodeParents);
     if (onChangeNodes.length === 0) return;
@@ -71,7 +72,7 @@ export class OnChangePipeline {
     }
   }
 
-  /** Применить патч onChange к entity-сиблингам (entity-mode). */
+  /** Apply an onChange patch to entity siblings (entity mode). */
   private _applyEntityOnChangeResult(patch: unknown, view: NodeView): void {
     if (!patch || typeof patch !== "object" || Object.keys(patch as object).length === 0) return;
 
@@ -110,7 +111,7 @@ export class OnChangePipeline {
     }
   }
 
-  /** Применить патч onChange к config-узлам (config-mode). */
+  /** Apply an onChange patch to config nodes (config mode). */
   private _applyOnChangeResult(patch: unknown, sourceNode: AnyConfigNode): void {
     if (!patch || typeof patch !== "object" || Object.keys(patch as object).length === 0) return;
 

@@ -11,9 +11,9 @@ function randomStr(len: number): string {
 let seq = 0;
 
 /**
- * Генерирует временный ID с префиксом `_tmp_`.
- * Используется при upsert entity без явного id.
- * Формат: _tmp_<timestamp_base36>_<8 random chars>_<seq>
+ * Generates a temporary ID with the `_tmp_` prefix.
+ * Used when an entity is upserted without an explicit id.
+ * Format: _tmp_<timestamp_base36>_<8 random chars>_<seq>
  */
 export function generateTmpId(): string {
   return `_tmp_${Date.now().toString(36)}_${randomStr(8)}_${++seq}`;

@@ -1,15 +1,15 @@
 /**
- * Тесты per-entity nested list resolve (вариант C, фаза C1).
+ * Tests for per-entity nested list resolve.
  *
- * Проверяем storage-слой напрямую (без React):
- *   - resolver вызывается per-owner с правильным flat snapshot владельца;
- *   - lists/owner НЕ протекают в parentValues (non-enumerable);
- *   - повторный trigger той же entity не дёргает resolver (кэш hit);
- *   - два владельца → независимые itemIds;
- *   - изоляция tracking-версии между владельцами одного listConfigNode.
+ * Exercises the storage layer directly (no React):
+ *   - the resolver is called per owner with the owner's correct flat snapshot;
+ *   - lists/owner do NOT leak into parentValues (non-enumerable);
+ *   - a repeated trigger for the same entity doesn't call the resolver (cache hit);
+ *   - two owners → independent itemIds;
+ *   - tracking-version isolation between owners of one listConfigNode.
  *
- * Мутации (add/remove/setItems) и каскадное удаление покрыты в
- * entityListMutations.test.ts (фаза C2).
+ * Mutations (add/remove/setItems) and cascade deletion are covered in
+ * entityListMutations.test.ts.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -41,7 +41,7 @@ function makeStore(resolver: (...a: any[]) => any) {
 }
 
 describe("per-entity list resolve (C1)", () => {
-  it("resolver получает flat snapshot владельца; lists/owner не протекают", async () => {
+  it("the resolver receives the owner's flat snapshot; lists/owner don't leak", async () => {
     const seen: any[] = [];
     const resolver = vi.fn(async (values: any) => {
       seen.push(values);
@@ -59,13 +59,13 @@ describe("per-entity list resolve (C1)", () => {
     const parentValues = seen[0];
     expect(parentValues.id).toBe("u1");
     expect(parentValues.name).toBe("Alice");
-    // Регресс на non-enumerable: lists/owner НЕ должны попасть в snapshot.
+    // Non-enumerable regression: lists/owner must NOT land in the snapshot.
     expect("lists" in parentValues).toBe(false);
     expect("owner" in parentValues).toBe(false);
     expect(Object.keys(parentValues).sort()).toEqual(["id", "name"]);
   });
 
-  it("заливает children с owner-ссылкой и заполняет itemIds", async () => {
+  it("ingests children with the owner reference and fills itemIds", async () => {
     const resolver = vi.fn(async () => [
       { id: "c1", phone: "+1" },
       { id: "c2", phone: "+2" },
@@ -82,14 +82,14 @@ describe("per-entity list resolve (C1)", () => {
     expect(els.itemIds).toEqual(["c1", "c2"]);
     expect(els.initialItemIds).toEqual(["c1", "c2"]);
 
-    // owner-ссылка проставлена и проиндексирована (non-enumerable).
+    // the owner reference is set and indexed (non-enumerable).
     const c1 = store.entityRegistry.get("c1")!;
     expect(c1.owner).toEqual({ ownerId: "u1", ownerListNode: listNode });
     expect(Object.keys(c1)).not.toContain("owner");
     expect([...store.entityRegistry.getChildrenByOwner("u1")!]).toEqual(["c1", "c2"]);
   });
 
-  it("повторный trigger той же entity не дёргает resolver (кэш hit)", async () => {
+  it("a repeated trigger for the same entity doesn't call the resolver (cache hit)", async () => {
     const resolver = vi.fn(async () => [{ id: "c1", phone: "+1" }]);
     const { store, listNode } = makeStore(resolver);
 
@@ -105,7 +105,7 @@ describe("per-entity list resolve (C1)", () => {
     expect(store.resolveManager.entityStates.get("u1", listNode)?.status).toBe("resolved");
   });
 
-  it("два владельца → два независимых itemIds", async () => {
+  it("two owners → two independent itemIds", async () => {
     const resolver = vi.fn(async (values: any) =>
       values.id === "u1"
         ? [{ id: "c1", phone: "+1" }]
@@ -123,13 +123,13 @@ describe("per-entity list resolve (C1)", () => {
 
     expect(store.entityRegistry.getOrCreateEntityListState(u1, listNode).itemIds).toEqual(["c1"]);
     expect(store.entityRegistry.getOrCreateEntityListState(u2, listNode).itemIds).toEqual(["c2", "c3"]);
-    // Разные EntityListState-объекты на разных владельцах.
+    // Different EntityListState objects on different owners.
     expect(store.entityRegistry.getOrCreateEntityListState(u1, listNode)).not.toBe(
       store.entityRegistry.getOrCreateEntityListState(u2, listNode),
     );
   });
 
-  it("изоляция: resolve одного владельца не бампит версию списка другого", async () => {
+  it("isolation: one owner's resolve doesn't bump the other's list version", async () => {
     const resolver = vi.fn(async () => [{ id: "c1", phone: "+1" }]);
     const { store, listNode } = makeStore(resolver);
 
@@ -150,6 +150,6 @@ describe("per-entity list resolve (C1)", () => {
   });
 
   it.todo(
-    "смена deps владельца → re-resolve (deps-driven re-resolve появится в следующей C-фазе)",
+    "an owner deps change → re-resolve (deps-driven re-resolve is planned)",
   );
 });

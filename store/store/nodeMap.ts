@@ -3,13 +3,13 @@ import { isGroupNode } from "../traversal";
 import type { AnyConfigNode } from "./types";
 
 /**
- * Рекурсивно строит маппинги путей и родителей для всех узлов дерева конфига.
+ * Recursively builds the path and parent mappings for all config tree nodes.
  *
- * - `nodePaths`   — WeakMap<node, "user.email"> — абсолютный путь каждого узла.
- * - `nodeParents` — WeakMap<node, parentNode>  — непосредственный родитель.
+ * - `nodePaths`   — WeakMap<node, "user.email"> — absolute path of every node.
+ * - `nodeParents` — WeakMap<node, parentNode>  — direct parent.
  *
- * Используются onChange pipeline (поиск предков с `onChange`),
- * submit/reset (определение fieldKey) и другими хендлерами.
+ * Used by the onChange pipeline (finding ancestors with `onChange`),
+ * submit/reset (deriving fieldKey) and other handlers.
  */
 export function buildNodeMaps(
   node: AnyConfigNode,
@@ -22,13 +22,13 @@ export function buildNodeMaps(
 
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
-    if (Array.isArray(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
+    if (Array.isArray(child)) continue; // ListNode — handled in phase 2
 
     const path = parentPath ? `${parentPath}.${key}` : key;
     nodePaths.set(child, path);
     nodeParents.set(child, node);
 
-    // Рекурсия в групповые узлы (листья не имеют дочерних)
+    // Recurse into group nodes (leaves have no children)
     if (isGroupNode(child)) {
       buildNodeMaps(child, nodePaths, nodeParents, path);
     }

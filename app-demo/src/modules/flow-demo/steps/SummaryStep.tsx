@@ -8,9 +8,9 @@ interface Row {
 }
 
 /**
- * Шаг 4 — сводка (read-only). Читает агрегированные `flow.values` (все шаги по
- * ключам) и реактивный `flow.errors`. Финализация — кнопкой «Завершить» в
- * контейнере (вызов `flow.submit()`).
+ * Step 4 — the summary (read-only). Reads the aggregated `flow.values` (all
+ * steps by key) and the reactive `flow.errors`. Finalization happens via the
+ * "Finish" button in the container (a `flow.submit()` call).
  */
 export function SummaryStep({ flow }: { flow: any }) {
   const values = flow.values;
@@ -19,14 +19,14 @@ export function SummaryStep({ flow }: { flow: any }) {
   const isEnterprise = values.plan.plan === "enterprise";
 
   const rows: Row[] = [
-    { label: "Имя и фамилия", value: values.account.fullName || "—" },
+    { label: "Full name", value: values.account.fullName || "—" },
     { label: "Email", value: values.account.email || "—" },
-    { label: "План", value: planName },
+    { label: "Plan", value: planName },
   ];
   if (isEnterprise) {
     rows.push(
-      { label: "Компания", value: values.company.companyName || "—" },
-      { label: "Размер команды", value: values.company.teamSize },
+      { label: "Company", value: values.company.companyName || "—" },
+      { label: "Team size", value: values.company.teamSize },
     );
   }
 
@@ -35,7 +35,7 @@ export function SummaryStep({ flow }: { flow: any }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
-        Проверьте данные и завершите регистрацию.
+        Review your details and finish the registration.
       </p>
 
       <dl className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-700">
@@ -55,7 +55,7 @@ export function SummaryStep({ flow }: { flow: any }) {
       {errors.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-950/40">
           <p className="mb-1 text-xs font-medium text-red-700 dark:text-red-300">
-            Не удалось завершить — проверьте шаги:
+            Could not finish — check these steps:
           </p>
           <ul className="list-disc pl-4 text-xs text-red-600 dark:text-red-400">
             {errors.map((err) => (

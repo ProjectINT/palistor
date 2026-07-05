@@ -4,7 +4,7 @@ import { buildResetPatch } from "./buildResetPatch";
 import { Palistor } from "../store";
 import type { AnyConfigNode } from "../store/types";
 
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const leaf = (value: unknown): AnyConfigNode => ({ value });
 const computed = (): AnyConfigNode => ({ value: () => "computed" });
@@ -12,17 +12,17 @@ const computed = (): AnyConfigNode => ({ value: () => "computed" });
 // ─── collectDefaults ─────────────────────────────────────────────────────────
 
 describe("collectDefaults", () => {
-  it("берёт статическое значение из листового узла", () => {
+  it("takes the static value from a leaf node", () => {
     const node: AnyConfigNode = { name: leaf("Alice") };
     expect(collectDefaults(node)).toEqual({ name: "Alice" });
   });
 
-  it("computed-поле (функция) возвращает пустую строку", () => {
+  it("a computed field (function) returns an empty string", () => {
     const node: AnyConfigNode = { title: computed() };
     expect(collectDefaults(node)).toEqual({ title: "" });
   });
 
-  it("рекурсивно обходит группы без reset", () => {
+  it("recursively walks groups without reset", () => {
     const node: AnyConfigNode = {
       address: { city: leaf("Moscow"), zip: leaf("101000") },
     };
@@ -31,7 +31,7 @@ describe("collectDefaults", () => {
     });
   });
 
-  it("останавливается на reset boundary (вложенная группа со своим reset)", () => {
+  it("stops at a reset boundary (a nested group with its own reset)", () => {
     const node: AnyConfigNode = {
       name: leaf("Bob"),
       shipping: { reset: () => ({}), city: leaf("Paris") },
@@ -41,7 +41,7 @@ describe("collectDefaults", () => {
     expect("shipping" in result).toBe(false);
   });
 
-  it("пропускает служебные ключи конфига (value, validate, …)", () => {
+  it("skips service config keys (value, validate, …)", () => {
     const node: AnyConfigNode = {
       field: leaf("x"),
       validate: () => undefined,
@@ -53,25 +53,25 @@ describe("collectDefaults", () => {
 // ─── buildResetPatch ─────────────────────────────────────────────────────────
 
 describe("buildResetPatch", () => {
-  it("возвращает переданные values без изменений", () => {
+  it("returns the provided values unchanged", () => {
     const node: AnyConfigNode = { name: leaf("") };
     const values = { name: "explicit" };
     expect(buildResetPatch(node, undefined, values)).toBe(values);
   });
 
-  it("без initialValueMap использует collectDefaults", () => {
+  it("without an initialValueMap uses collectDefaults", () => {
     const node: AnyConfigNode = { age: leaf(42) };
     expect(buildResetPatch(node, undefined, undefined)).toEqual({ age: 42 });
   });
 
-  it("с initialValueMap использует initial snapshot", () => {
+  it("with an initialValueMap uses the initial snapshot", () => {
     const ageNode: AnyConfigNode = { value: 0 };
     const node: AnyConfigNode = { age: ageNode };
     const initialValueMap = new WeakMap<object, unknown>([[ageNode, 25]]);
     expect(buildResetPatch(node, initialValueMap, undefined)).toEqual({ age: 25 });
   });
 
-  it("применяет reset-трансформер группы", () => {
+  it("applies the group's reset transformer", () => {
     const node: AnyConfigNode = {
       count: leaf(0),
       reset: (v: Record<string, unknown>) => ({ ...v, count: -1 }),
@@ -80,7 +80,7 @@ describe("buildResetPatch", () => {
     expect(result.count).toBe(-1);
   });
 
-  it("reset-трансформер не вызывается при явных values", () => {
+  it("the reset transformer is not invoked with explicit values", () => {
     const resetFn = vi.fn((v: Record<string, unknown>) => v);
     const node: AnyConfigNode = { x: leaf(0), reset: resetFn };
     buildResetPatch(node, undefined, { x: 99 });
@@ -88,7 +88,7 @@ describe("buildResetPatch", () => {
   });
 });
 
-// ─── executeReset (интеграция) ───────────────────────────────────────────────
+// ─── executeReset (integration) ──────────────────────────────────────────────
 
 describe("executeReset (through store)", () => {
   const makeConfig = () => ({
@@ -100,7 +100,7 @@ describe("executeReset (through store)", () => {
     },
   });
 
-  it("сбрасывает значения к initial snapshot", () => {
+  it("resets values to the initial snapshot", () => {
     const store = new Palistor({ config: makeConfig() });
     store.proxy.name.value = "Alice";
     store.proxy.age.value = 30;
@@ -111,7 +111,7 @@ describe("executeReset (through store)", () => {
     expect(store.proxy.age.value).toBe(0);
   });
 
-  it("после reset поля не dirty", () => {
+  it("fields are not dirty after reset", () => {
     const store = new Palistor({ config: makeConfig() });
     store.proxy.name.value = "Alice";
     expect(store.proxy.name.dirty).toBe(true);
@@ -121,7 +121,7 @@ describe("executeReset (through store)", () => {
     expect(store.proxy.name.dirty).toBe(false);
   });
 
-  it("reset с явными values применяет их как новую baseline", () => {
+  it("reset with explicit values applies them as the new baseline", () => {
     const store = new Palistor({ config: makeConfig() });
     store.reset({ name: "Bob", age: 20 });
 
@@ -131,7 +131,7 @@ describe("executeReset (through store)", () => {
     expect(store.proxy.name.dirty).toBe(false);
   });
 
-  it("сбрасывает только вложенную группу", () => {
+  it("resets only the nested group", () => {
     const store = new Palistor({ config: makeConfig() });
     store.proxy.name.value = "Alice";
     store.proxy.address.city.value = "Moscow";
@@ -140,6 +140,6 @@ describe("executeReset (through store)", () => {
     store.proxy.address.reset();
 
     expect(store.proxy.address.city.value).toBe("");
-    expect(store.proxy.name.value).toBe("Alice"); // не затронуто
+    expect(store.proxy.name.value).toBe("Alice"); // untouched
   });
 });

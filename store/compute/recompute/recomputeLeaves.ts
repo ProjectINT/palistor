@@ -6,20 +6,21 @@ import { topologicalSortComputed } from "./topologicalSortComputed";
 import type { TrackingWrap } from "./types";
 
 /**
- * Пересчитать вычисленное состояние для заданного списка листовых узлов.
+ * Recompute the computed state for a given list of leaf nodes.
  *
- * Фаза 1: Пересчитать computed-значения (value — функция) в топологическом порядке.
- * Фаза 2: Пересчитать FieldState (isVisible, isRequired, error…) для всех полей.
+ * Phase 1: recompute computed values (value is a function) in topological order.
+ * Phase 2: recompute FieldState (isVisible, isRequired, error…) for all fields.
  *
- * Каждый узел получает group-scoped values — значения Parent-группы из nodeSlot.
- * Это позволяет конфигу писать функции в терминах своей группы (без навигации
- * от корня), даже когда конфиг вложен в глобальный store.
- * Для кросс-групповых зависимостей используется явная навигация через объект parent.
+ * Each node receives group-scoped values — the parent group's values from
+ * nodeSlot. This lets a config write functions in terms of its own group
+ * (no navigation from the root), even when the config is nested inside a
+ * global store. Cross-group dependencies use explicit navigation through the
+ * parent object.
  *
- * @param trackingWrap — опциональная обёртка для отслеживания кросс-групповых зависимостей.
- *                       Если передана, group-scoped values оборачиваются через неё.
+ * @param trackingWrap — optional wrapper for tracking cross-group dependencies.
+ *                       When provided, group-scoped values are wrapped by it.
  *
- * Возвращает Set узлов, чьё состояние изменилось (для notify).
+ * Returns the Set of nodes whose state changed (for notify).
  */
 export function recomputeLeaves(
   computeNodes: ComputeEntry[],
@@ -28,7 +29,7 @@ export function recomputeLeaves(
   translate: TranslateFn,
   trackingWrap?: TrackingWrap,
 ): Set<object> {
-  // ── Фаза 1: Пересчёт computed-значений ──────────────────────────────────
+  // ── Phase 1: recompute computed values ───────────────────────────────────
   const computedEntries = computeNodes.filter(({ node }) => typeof node.value === "function");
   const changed = new Set<object>();
 
@@ -36,42 +37,41 @@ export function recomputeLeaves(
     const sorted = topologicalSortComputed(computedEntries);
 
     for (const { node } of sorted) {
-      // Получаем group-scoped values: parent-объект из nodeSlot, чтобы computed-функция
-      // работала в терминах своей группы, а не глобального корня.
+      // Group-scoped values: the parent object from nodeSlot, so the computed
+      // function works in terms of its group rather than the global root.
       const groupValues = valuesCache.nodeSlot.get(node)?.parent ?? valuesCache.values;
       const currentValues = trackingWrap ? trackingWrap(node, groupValues) : groupValues;
 
       const state = nodeState.get(node);
-      if (!state) continue; // Узел ещё не инициализирован — пропускаем молча; Phase 2 всё равно возьмёт prev?.value ?? "".
+      if (!state) continue; // Node not initialized yet — skip silently; Phase 2 falls back to prev?.value ?? "".
 
-      // Вычисляем новое значение, передавая в функцию текущий снапшот.
-      // node.value здесь — selector вида (values) => values.a + values.b.
+      // Compute the new value from the current snapshot.
+      // node.value here is a selector like (values) => values.a + values.b.
       const computedValue = (node.value as (values: Record<string, unknown>) => unknown)(currentValues);
 
-      // Сравнение по ссылке (===): computed-функция должна возвращать стабильную ссылку,
-      // если содержимое не изменилось; иначе Phase 2 излишне пересчитает downstream-узлы.
-      // Если state отсутствует (узел ещё не инициализирован) — пропускаем молча;
-      // Phase 2 всё равно возьмёт prev?.value ?? "".
+      // Reference comparison (===): the computed function must return a stable
+      // reference when the content is unchanged; otherwise Phase 2 needlessly
+      // recomputes downstream nodes.
       if (state && state.value !== computedValue) {
         nodeState.set(node, { ...state, value: computedValue });
-        // Мутируем valuesCache.values in-place через slot (O(1)), чтобы узлы,
-        // идущие дальше в топологическом порядке, уже видели обновлённое значение.
+        // Mutate valuesCache.values in place via the slot (O(1)) so nodes later
+        // in the topological order already see the updated value.
         updateValuesCacheEntry(valuesCache, node, computedValue);
         changed.add(node);
       }
     }
   }
 
-  // ── Фаза 2: Пересчёт FieldState (флаги, валидация, строки) ──────────────
+  // ── Phase 2: recompute FieldState (flags, validation, strings) ───────────
 
   for (const { node } of computeNodes) {
     const prev = nodeState.get(node);
     const currentValue = prev?.value ?? "";
     // Preserve revalidate flag: skip validation when revalidate is false
     const revalidate = prev?.revalidate ?? false;
-    // Group-scoped values: config functions получают значения своей группы,
-    // а не глобального корня, что позволяет писать isVisible/validate/value
-    // в терминах текущего контекста независимо от глубины вложенности.
+    // Group-scoped values: config functions see their own group's values, not
+    // the global root — isVisible/validate/value are written in terms of the
+    // current context regardless of nesting depth.
     const groupValues = valuesCache.nodeSlot.get(node)?.parent ?? valuesCache.values;
     const allValues = trackingWrap ? trackingWrap(node, groupValues) : groupValues;
     const next = computeFieldState(node, currentValue, allValues, revalidate, translate);
@@ -81,7 +81,6 @@ export function recomputeLeaves(
     if (prev?.dirty !== undefined) next.dirty = prev.dirty;
     if (prev?.revalidate !== undefined) next.revalidate = prev.revalidate;
 
-    // Проверяем, изменилось ли что-то
     if (prev && !fieldStateChanged(prev, next)) continue;
 
     nodeState.set(node, next);

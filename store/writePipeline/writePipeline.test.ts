@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store/palistor";
 import type { AnyConfigNode } from "../store/types";
 
-// ─── WritePipeline (через Palistor) ─────────────────────────────────────────
+// ─── WritePipeline (via Palistor) ───────────────────────────────────────────
 
 describe("WritePipeline", () => {
-  it("возвращает null если узел не зарегистрирован", () => {
+  it("returns null when the node is not registered", () => {
     const root: AnyConfigNode = { field: { value: "" } };
     const store = new Palistor({ config: root });
     const unregistered: AnyConfigNode = { value: "x" };
@@ -15,7 +15,7 @@ describe("WritePipeline", () => {
     expect(result).toBeNull();
   });
 
-  it("выполняет полный цикл: format → store → recompute", () => {
+  it("runs the full cycle: format → store → recompute", () => {
     const node: AnyConfigNode = {
       value: 0,
       formatter: (v: unknown) => Number(v) || 0,
@@ -29,7 +29,7 @@ describe("WritePipeline", () => {
     expect(result!.changed.has(node)).toBe(true);
   });
 
-  it("setter-ветка: патчит зависимые узлы И записывает текущий", () => {
+  it("setter branch: patches dependent nodes AND writes the current one", () => {
     const targetNode: AnyConfigNode = { value: "old" };
     const node: AnyConfigNode = {
       value: "a",
@@ -46,7 +46,7 @@ describe("WritePipeline", () => {
     expect(store.nodes.nodeState.get(targetNode)!.value).toBe("new");
   });
 
-  it("возвращает skipped: true если значение не изменилось", () => {
+  it("returns skipped: true when the value is unchanged", () => {
     const node: AnyConfigNode = { value: "hello" };
     const root: AnyConfigNode = { field: node };
     const store = new Palistor({ config: root });
@@ -59,7 +59,7 @@ describe("WritePipeline", () => {
     expect(recomputeSpy).not.toHaveBeenCalled();
   });
 
-  it("возвращает skipped если значение совпадает после форматирования", () => {
+  it("returns skipped when the value matches after formatting", () => {
     const node: AnyConfigNode = {
       value: 42,
       formatter: (v: unknown) => Number(v) || 0,
@@ -74,7 +74,7 @@ describe("WritePipeline", () => {
     expect(recomputeSpy).not.toHaveBeenCalled();
   });
 
-  it("не пропускает запись если значение отличается", () => {
+  it("does not skip the write when the value differs", () => {
     const node: AnyConfigNode = { value: "hello" };
     const root: AnyConfigNode = { field: node };
     const store = new Palistor({ config: root });
@@ -87,7 +87,7 @@ describe("WritePipeline", () => {
     expect(recomputeSpy).toHaveBeenCalledOnce();
   });
 
-  it("корректно сравнивает NaN через Object.is", () => {
+  it("compares NaN correctly via Object.is", () => {
     const node: AnyConfigNode = { value: NaN };
     const root: AnyConfigNode = { field: node };
     const store = new Palistor({ config: root });

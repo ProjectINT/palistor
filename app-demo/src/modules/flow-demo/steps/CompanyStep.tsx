@@ -5,9 +5,9 @@ import { Select, type SelectOption } from "@/components/Select";
 import { TEAM_SIZE_OPTIONS } from "@/config/flow";
 
 /**
- * Шаг 3 — данные компании. Существует во флоу только для плана Enterprise
- * (`isVisible` шага). Для Free / Pro `nextStep()` его пропускает, и сюда
- * пользователь не попадает.
+ * Step 3 — the company details. Exists in the flow only for the Enterprise
+ * plan (the step's `isVisible`). For Free / Pro `nextStep()` skips it, and
+ * the user never lands here.
  */
 export function CompanyStep({ step }: { step: any }) {
   const options: SelectOption[] = TEAM_SIZE_OPTIONS;

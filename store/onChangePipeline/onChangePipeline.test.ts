@@ -4,10 +4,10 @@ import { computeFieldKey } from "./computeFieldKey";
 import { Palistor } from "../store/palistor";
 import type { AnyConfigNode } from "../store/types";
 
-// ─── OnChangePipeline (через Palistor) ───────────────────────────────────────
+// ─── OnChangePipeline (via Palistor) ─────────────────────────────────────────
 
 describe("OnChangePipeline.fire", () => {
-  it("не вызывает onChange если нет предков с onChange", async () => {
+  it("does not call onChange when no ancestor has onChange", async () => {
     const fieldNode: AnyConfigNode = { value: "" };
     const root: AnyConfigNode = { field: fieldNode };
     const store = new Palistor({ config: root });
@@ -20,7 +20,7 @@ describe("OnChangePipeline.fire", () => {
     expect(notifySpy.mock.calls.length).toBe(callsBefore);
   });
 
-  it("вызывает onChange предка с правильными аргументами", async () => {
+  it("calls the ancestor's onChange with the right arguments", async () => {
     const fieldNode: AnyConfigNode = { value: "" };
     const onChange = vi.fn().mockResolvedValue(null);
     const root: AnyConfigNode = { field: fieldNode, onChange };
@@ -37,7 +37,7 @@ describe("OnChangePipeline.fire", () => {
     });
   });
 
-  it("применяет патч, возвращённый onChange", async () => {
+  it("applies the patch returned by onChange", async () => {
     const fieldNode: AnyConfigNode = { value: "" };
     const otherNode: AnyConfigNode = { value: "" };
     const onChange = vi.fn().mockResolvedValue({ other: "patched" });
@@ -51,7 +51,7 @@ describe("OnChangePipeline.fire", () => {
     expect(notifySpy).toHaveBeenCalled();
   });
 
-  it("глотает исключение из onChange, не ронит pipeline", async () => {
+  it("swallows an onChange exception without crashing the pipeline", async () => {
     const fieldNode: AnyConfigNode = { value: "" };
     const onChange = vi.fn().mockRejectedValue(new Error("boom"));
     const root: AnyConfigNode = { field: fieldNode, onChange };
@@ -66,23 +66,23 @@ describe("OnChangePipeline.fire", () => {
 });
 
 describe("computeFieldKey", () => {
-  it("возвращает nodePath если ancestorPath пустой (корневой предок)", () => {
+  it("returns nodePath when ancestorPath is empty (root ancestor)", () => {
     expect(computeFieldKey("name", "")).toBe("name");
   });
 
-  it("вычисляет относительный путь при вложенном предке", () => {
+  it("computes the relative path for a nested ancestor", () => {
     expect(computeFieldKey("form.address.city", "form")).toBe("address.city");
   });
 
-  it("однословный путь относительно прямого родителя", () => {
+  it("a single-segment path relative to the direct parent", () => {
     expect(computeFieldKey("form.name", "form")).toBe("name");
   });
 
-  it("self-reference: возвращает последний сегмент для вложенного leaf", () => {
+  it("self-reference: returns the last segment for a nested leaf", () => {
     expect(computeFieldKey("form.country", "form.country")).toBe("country");
   });
 
-  it("self-reference: возвращает имя для корневого leaf", () => {
+  it("self-reference: returns the name for a root-level leaf", () => {
     expect(computeFieldKey("name", "name")).toBe("name");
   });
 });
@@ -90,27 +90,27 @@ describe("computeFieldKey", () => {
 // ─── findOnChangeNodes ───────────────────────────────────────────────────────
 
 describe("findOnChangeNodes", () => {
-  it("возвращает пустой массив если нет родителей и нет onChange на самом узле", () => {
+  it("returns an empty array with no parents and no onChange on the node itself", () => {
     const node = {};
     const parents = new WeakMap<object, object>();
     expect(findOnChangeNodes(node, parents)).toEqual([]);
   });
 
-  it("пропускает родителей без onChange", () => {
+  it("skips parents without onChange", () => {
     const node = {};
     const parent: AnyConfigNode = { someField: {} };
     const parents = new WeakMap<object, object>([[node, parent]]);
     expect(findOnChangeNodes(node, parents)).toEqual([]);
   });
 
-  it("собирает родителя с onChange", () => {
+  it("collects the parent with onChange", () => {
     const node = {};
     const parent: AnyConfigNode = { onChange: vi.fn() };
     const parents = new WeakMap<object, object>([[node, parent]]);
     expect(findOnChangeNodes(node, parents)).toEqual([parent]);
   });
 
-  it("собирает нескольких предков с onChange снизу вверх", () => {
+  it("collects several ancestors with onChange bottom-up", () => {
     const node = {};
     const parent: AnyConfigNode = { onChange: vi.fn() };
     const grandparent: AnyConfigNode = { onChange: vi.fn() };
@@ -124,9 +124,9 @@ describe("findOnChangeNodes", () => {
     expect(result).toEqual([parent, grandparent]);
   });
 
-  it("пропускает промежуточные узлы без onChange", () => {
+  it("skips intermediate nodes without onChange", () => {
     const node = {};
-    const parent: AnyConfigNode = {};           // нет onChange
+    const parent: AnyConfigNode = {};           // no onChange
     const grandparent: AnyConfigNode = { onChange: vi.fn() };
     const parents = new WeakMap<object, object>([
       [node, parent],
@@ -135,7 +135,7 @@ describe("findOnChangeNodes", () => {
     expect(findOnChangeNodes(node, parents)).toEqual([grandparent]);
   });
 
-  it("включает сам узел если у него есть onChange", () => {
+  it("includes the node itself when it has onChange", () => {
     const node: AnyConfigNode = { value: "", onChange: vi.fn() };
     const parent: AnyConfigNode = { onChange: vi.fn() };
     const parents = new WeakMap<object, object>([[node, parent]]);
@@ -143,7 +143,7 @@ describe("findOnChangeNodes", () => {
     expect(result).toEqual([node, parent]);
   });
 
-  it("включает только сам узел если у предков нет onChange", () => {
+  it("includes only the node itself when the ancestors lack onChange", () => {
     const node: AnyConfigNode = { value: "", onChange: vi.fn() };
     const parent: AnyConfigNode = {};
     const parents = new WeakMap<object, object>([[node, parent]]);
@@ -151,14 +151,14 @@ describe("findOnChangeNodes", () => {
   });
 });
 
-// ─── Leaf onChange — интеграционные тесты (через proxy) ─────────────────────
+// ─── Leaf onChange — integration tests (via the proxy) ───────────────────────
 
 describe("Leaf onChange (integration via proxy)", () => {
   function flushPromises() {
     return new Promise<void>((r) => setTimeout(r, 0));
   }
 
-  it("3.1: вызывается с { fieldKey, newValue, previousValue, allValues }", async () => {
+  it("3.1: called with { fieldKey, newValue, previousValue, allValues }", async () => {
     const onChangeSpy = vi.fn();
     const config = { name: { value: "Alice", onChange: onChangeSpy } };
     const store = new Palistor({ config });
@@ -172,7 +172,7 @@ describe("Leaf onChange (integration via proxy)", () => {
     });
   });
 
-  it("3.2: patch из leaf onChange применяется к parent group", async () => {
+  it("3.2: the patch from the leaf onChange is applied to the parent group", async () => {
     const config = {
       country: {
         value: "US",
@@ -188,7 +188,7 @@ describe("Leaf onChange (integration via proxy)", () => {
     expect(store.proxy.city.value).toBe("Moscow");
   });
 
-  it("3.3: ошибка в leaf onChange не блокирует запись значения", async () => {
+  it("3.3: an error in the leaf onChange does not block the value write", async () => {
     const config = {
       toggle: { value: false, onChange: () => { throw new Error("boom"); } },
     };
@@ -198,7 +198,7 @@ describe("Leaf onChange (integration via proxy)", () => {
     expect(store.proxy.toggle.value).toBe(true);
   });
 
-  it("3.4: leaf onChange и parent group onChange оба вызываются", async () => {
+  it("3.4: the leaf onChange and the parent group onChange both fire", async () => {
     const leafSpy = vi.fn();
     const groupSpy = vi.fn();
     const config = {
@@ -212,7 +212,7 @@ describe("Leaf onChange (integration via proxy)", () => {
     expect(groupSpy).toHaveBeenCalledWith(expect.objectContaining({ fieldKey: "name" }));
   });
 
-  it("3.5: async patch из leaf onChange применяется после резолва промиса", async () => {
+  it("3.5: an async patch from the leaf onChange applies after the promise resolves", async () => {
     const config = {
       search: {
         value: "",
@@ -228,7 +228,7 @@ describe("Leaf onChange (integration via proxy)", () => {
     expect(store.proxy.results.value).toBe("found:hello");
   });
 
-  it("3.6: leaf onChange не вызывается если значение не изменилось", async () => {
+  it("3.6: the leaf onChange is not invoked when the value is unchanged", async () => {
     const spy = vi.fn();
     const config = { name: { value: "same", onChange: spy } };
     const store = new Palistor({ config });

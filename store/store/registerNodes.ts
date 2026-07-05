@@ -5,8 +5,8 @@ import { hasComputedProps } from "./hasComputedProps";
 import { isListNode } from "./NodeRegistry/nodeUtils";
 
 /**
- * Служебные ключи узла конфига, которые пропускаются при обходе дерева.
- * Зеркалит runtime-набор CONFIG_PROPS на уровне типов.
+ * Service keys of a config node that tree walks skip.
+ * Mirrors the runtime CONFIG_PROPS set at the type level.
  */
 type ConfigPropKeys =
   | "value"
@@ -27,11 +27,11 @@ type ConfigPropKeys =
   | "dependencies";
 
 /**
- * Рекурсивный тип начальных значений, повторяющий структуру конфига:
- * - Служебные ключи пропускаются.
- * - Листовые узлы (есть `value`) → тип значения (или `unknown` для функции-вычислителя).
- * - Групповые узлы → вложенный `InitialSlice`.
- * - Все поля опциональны.
+ * Recursive initial-values type mirroring the config structure:
+ * - Service keys are skipped.
+ * - Leaf nodes (with `value`) → the value type (or `unknown` for a computed function).
+ * - Group nodes → nested `InitialSlice`.
+ * - All fields are optional.
  */
 export type InitialSlice<TNode> = {
   [K in keyof TNode as K extends ConfigPropKeys ? never : K]?:
@@ -43,22 +43,22 @@ export type InitialSlice<TNode> = {
 };
 
 /**
- * Фаза 1: Собираем все вычисляемые узлы и устанавливаем начальные value.
- * Ещё не вычисляем computed — для этого нужны все values.
+ * Phase 1: collect all compute nodes and set initial values.
+ * Computed props are not evaluated yet — that requires all values.
  */
 type MaybeFlag = boolean | ((values: any) => boolean) | undefined;
 
 export type ComputeEntry = { node: AnyConfigNode; path: string };
 
 /**
- * Маппинг группового узла → массив его прямых дочерних записей (листья + группы с computed-свойствами).
- * Все записи хранятся под родительской группой — единообразно.
+ * Group node → array of its direct child entries (leaves + groups with
+ * computed props). All entries are stored under the parent group, uniformly.
  *
- * Используется recomputeTargeted для пересчёта поддерева.
+ * Used by recomputeTargeted to recompute a subtree.
  */
 export type GroupComputeMap = WeakMap<object, ComputeEntry[]>;
 
-/** Получить или создать массив записей для группы. */
+/** Get or create the entry list for a group. */
 function getOrCreateComputeList(map: GroupComputeMap, group: object): ComputeEntry[] {
   let list = map.get(group);
   if (!list) {
@@ -69,11 +69,11 @@ function getOrCreateComputeList(map: GroupComputeMap, group: object): ComputeEnt
 }
 
 /**
- * resolveFlag с защитой от исключений на этапе init: computed-флаги
- * (isVisible и т.п.) могут читать значения соседних групп, которых в
- * initialSlice ещё нет (`values.goalSelection.goal`). На init берётся
- * default — первый полный recompute() в конструкторе пересчитает флаг
- * уже по полному valuesCache.
+ * resolveFlag guarded against exceptions during init: computed flags
+ * (isVisible etc.) may read values of sibling groups that don't exist in
+ * initialSlice yet (`values.goalSelection.goal`). Init falls back to the
+ * default — the first full recompute() in the constructor re-evaluates the
+ * flag against the complete valuesCache.
  */
 function safeResolveFlag(
   configValue: MaybeFlag,
@@ -106,11 +106,11 @@ export function registerNodes<TNode extends AnyConfigNode>(
 
     const path = parentPath ? `${parentPath}.${key}` : key;
 
-    // Проставить маркер __kind на каждый узел конфига
+    // Stamp the __kind marker on every config node
     (child as any).__kind = hasChildren(child) ? "group" : "leaf";
 
     if (Array.isArray(child)) {
-      // ListNode: создать ListState + зарегистрировать template как обычную группу
+      // ListNode: create a ListState + register the template as a regular group
       if (isListNode(child) && listStates) {
         const template = child[0] as AnyConfigNode;
         const listConfig = child.length > 1 ? (child[1] as ListConfig) : undefined;
@@ -124,17 +124,17 @@ export function registerNodes<TNode extends AnyConfigNode>(
         };
         listStates.set(child, listState);
         if (allListStates) allListStates.push(listState);
-        // Регистрируем поля template как обычную группу (path = ключ списка)
+        // Register template fields as a regular group (path = the list key)
         registerNodes(template, undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates);
       }
       continue;
     }
 
     if ("value" in child) {
-      // Листовой узел: запоминаем, ставим начальный value (computed позже)
+      // Leaf node: record it and set the initial value (computed props come later)
       const entry: ComputeEntry = { node: child, path };
       computeNodes.push(entry);
-      // Добавляем в compute-list текущей группы (node — родитель)
+      // Add to the current group's compute list (node is the parent)
       getOrCreateComputeList(groupComputeMap, node).push(entry);
 
       const rawSlice = initialSlice as Record<string, unknown> | undefined;
@@ -153,8 +153,8 @@ export function registerNodes<TNode extends AnyConfigNode>(
       });
     }
 
-    // Групповой узел: всегда добавляем в nodeState (value заполнится в buildValuesCache).
-    // Если есть computed-свойства (isVisible и т.п.) — добавляем в computeNodes под РОДИТЕЛЕМ.
+    // Group node: always add to nodeState (value is filled in buildValuesCache).
+    // If it has computed props (isVisible etc.) — add to computeNodes under the PARENT.
     if (!("value" in child)) {
       const sliceValues = (initialSlice as Record<string, unknown> | undefined ?? {}) as Record<string, unknown>;
       nodeState.set(child, {
@@ -169,12 +169,12 @@ export function registerNodes<TNode extends AnyConfigNode>(
       if (hasComputedProps(child)) {
         const entry: ComputeEntry = { node: child, path };
         computeNodes.push(entry);
-        // Группа с computed-свойствами хранится под РОДИТЕЛЕМ (единообразно с листьями)
+        // A group with computed props is stored under its PARENT (uniform with leaves)
         getOrCreateComputeList(groupComputeMap, node).push(entry);
       }
     }
 
-    // Рекурсия в дочерние
+    // Recurse into children
     registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates);
   }
 }

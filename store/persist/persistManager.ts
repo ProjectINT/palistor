@@ -1,13 +1,13 @@
 /**
- * PersistManager — управляет гидратацией и автосохранением состояния формы.
+ * PersistManager — manages hydration and auto-saving of form state.
  *
- * Инстанцируется внутри Palistor.
- * Не зависит от React — может быть подключён из любого окружения.
+ * Instantiated inside Palistor.
+ * React-independent — can be wired up from any environment.
  *
- * Жизненный цикл:
- *   1. Создаётся при new Palistor(...) (неактивен).
- *   2. Активируется через enable(options) — гидратация + auto-save.
- *   3. Деактивируется через disable() — отписка от store, отмена таймеров.
+ * Lifecycle:
+ *   1. Created by new Palistor(...) (inactive).
+ *   2. Activated via enable(options) — hydration + auto-save.
+ *   3. Deactivated via disable() — unsubscribes from the store, cancels timers.
  */
 
 import type { PersistDriver, PersistOptions } from "./types";
@@ -22,18 +22,18 @@ import {
 } from "../flow/flowNavigation";
 
 /**
- * Зарезервированный ключ persist-снимка для навигации флоу (defineFlow):
+ * Reserved persist-snapshot key for flow navigation (defineFlow):
  * `{ [flowPath]: { currentStepKey, visitStack, visitedKeys } }`.
- * Значения полей шагов хранятся как обычные значения; статусы шагов
- * не сохраняются — выводятся из навигации при гидратации.
+ * Step field values are stored as regular values; step statuses are not
+ * saved — derived from navigation on hydrate.
  */
 const FLOWS_PERSIST_KEY = "__flows";
 
-// ─── Фильтрация полей ────────────────────────────────────────────────────────
+// ─── Field filtering ─────────────────────────────────────────────────────────
 
 /**
- * Отфильтровать значения по pick/omit.
- * pick имеет приоритет. Если ни pick, ни omit не заданы — возвращает всё.
+ * Filter values by pick/omit.
+ * pick takes priority. When neither is set — everything is returned.
  */
 function filterValues(
   values: Record<string, unknown>,
@@ -60,17 +60,17 @@ function filterValues(
   return values;
 }
 
-// ─── Класс ───────────────────────────────────────────────────────────────────
+// ─── Class ───────────────────────────────────────────────────────────────────
 
 /**
- * Менеджер персистенции формы.
+ * The form's persistence manager.
  *
- * Получает доступ ко всем данным формы через `kernel` (Palistor instance).
+ * Accesses all form data through the `kernel` (Palistor instance).
  */
 export class PersistManager {
   private readonly kernel: Palistor<any, any>;
 
-  // ─── Внутреннее состояние ─────────────────────────────────────────────────
+  // ─── Internal state ───────────────────────────────────────────────────────
 
   private active = false;
   private currentKey: string | null = null;
@@ -81,20 +81,20 @@ export class PersistManager {
   private pickFields: string[] | undefined;
   private omitFields: string[] | undefined;
 
-  /** Отписка от subscribeGlobal. */
+  /** Unsubscribe from subscribeGlobal. */
   private unsubscribe: (() => void) | null = null;
 
-  /** ID таймера debounce. */
+  /** Debounce timer ID. */
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Флаг, предотвращающий сохранение во время гидратации. */
+  /** Flag preventing saves during hydration. */
   private isHydrating = false;
 
   constructor(kernel: Palistor<any, any>) {
     this.kernel = kernel;
   }
 
-  // ─── Вспомогательные ──────────────────────────────────────────────────────
+  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private cancelDebounce(): void {
     if (this.debounceTimer !== null) {
@@ -104,7 +104,7 @@ export class PersistManager {
   }
 
   /**
-   * Сохранить текущие значения в storage (без debounce).
+   * Save the current values to storage (no debounce).
    */
   private async saveToStorage(): Promise<void> {
     if (!this.active || !this.currentKey || !this.currentDriver) return;
@@ -112,8 +112,8 @@ export class PersistManager {
     const allValues = this.kernel.getValues() as Record<string, unknown>;
     const filtered = filterValues(allValues, this.pickFields, this.omitFields);
 
-    // Flow: навигация сохраняется отдельным зарезервированным ключом,
-    // не подпадающим под pick/omit (он не является полем формы).
+    // Flow: navigation is stored under a separate reserved key, not subject
+    // to pick/omit (it is not a form field).
     const flowNav = serializeFlowNav(this.kernel);
     const payload = flowNav ? { ...filtered, [FLOWS_PERSIST_KEY]: flowNav } : filtered;
 
@@ -121,12 +121,12 @@ export class PersistManager {
       const serialized = this.serialize(payload);
       await Promise.resolve(this.currentDriver.setItem(this.currentKey, serialized));
     } catch {
-      // Ошибки сериализации/записи — молчим (production-safe)
+      // Serialization/write errors are silenced (production-safe)
     }
   }
 
   /**
-   * Запланировать сохранение с debounce.
+   * Schedule a debounced save.
    */
   private scheduleSave = (): void => {
     if (!this.active || this.isHydrating) return;
@@ -145,7 +145,7 @@ export class PersistManager {
   };
 
   /**
-   * Прочитать из storage и применить значения к nodeState.
+   * Read from storage and apply the values to nodeState.
    */
   private async hydrateFromStorage(): Promise<void> {
     if (!this.currentKey || !this.currentDriver) return;
@@ -165,7 +165,7 @@ export class PersistManager {
         return;
       }
 
-      // Flow: извлекаем снимок навигации до применения патча значений.
+      // Flow: extract the navigation snapshot before applying the values patch.
       const flowSnapshots = (values as Record<string, unknown>)[FLOWS_PERSIST_KEY] as
         | Record<string, FlowNavSnapshot>
         | undefined;
@@ -173,8 +173,8 @@ export class PersistManager {
         delete (values as Record<string, unknown>)[FLOWS_PERSIST_KEY];
       }
 
-      // Применяем как патч — applyPatch рекурсивно обходит дерево конфига
-      // (скалярные/групповые поля; list-узлы он пропускает).
+      // Apply as a patch — applyPatch walks the config tree recursively
+      // (scalar/group fields; list nodes are skipped).
       const patchedNodes = applyPatch(
         this.kernel.rootConfig,
         this.kernel.nodes.nodeState,
@@ -182,13 +182,13 @@ export class PersistManager {
         new Set(),
       );
 
-      // C3: восстанавливаем состав корневых и per-entity списков из снимка.
-      // Для конфигов без списков — no-op (graceful для старых снимков).
+      // Restore root and per-entity list membership from the snapshot.
+      // No-op for configs without lists (graceful for older snapshots).
       const listChanged = this.kernel.restoreLists(values);
       for (const n of listChanged) patchedNodes.add(n);
 
-      // Flow: восстанавливаем навигацию (активный шаг, стек, visited).
-      // Статусы шагов пересчитываются из навигационного состояния.
+      // Flow: restore navigation (active step, stack, visited).
+      // Step statuses are recomputed from the navigation state.
       let enteredFlows: ReturnType<typeof restoreFlowNav>["entered"] = [];
       if (flowSnapshots && typeof flowSnapshots === "object") {
         const { changed: flowChanged, entered } = restoreFlowNav(this.kernel, flowSnapshots);
@@ -196,38 +196,38 @@ export class PersistManager {
         enteredFlows = entered;
       }
 
-      // Пересчитываем, объединяем и уведомляем подписчиков
+      // Recompute, merge, and notify subscribers
       recomputeAndNotify(
         patchedNodes,
         () => this.kernel.recompute(),
         (c) => this.kernel.notifyChanged(c),
       );
 
-      // Flow: если активный шаг изменился при гидратации — восстановленный шаг
-      // «входится» заново: onEnter → resolve → onReady.
+      // Flow: when the active step changed during hydration — the restored
+      // step is "entered" anew: onEnter → resolve → onReady.
       for (const flowState of enteredFlows) {
         runFlowEntryLifecycle(this.kernel, flowState);
       }
     } catch {
-      // Ошибки десериализации — молчим
+      // Deserialization errors are silenced
     } finally {
       this.isHydrating = false;
     }
   }
 
-  // ─── Публичный API ─────────────────────────────────────────────────────────
+  // ─── Public API ────────────────────────────────────────────────────────────
 
   /**
-   * Активировать персистенцию: гидратация из storage + auto-save при изменениях.
+   * Activate persistence: hydrate from storage + auto-save on changes.
    *
-   * Если persist уже активен — предыдущий отключается.
-   * Возвращает Promise, который резолвится после успешной гидратации.
+   * When persist is already active, the previous one is disabled first.
+   * Returns a Promise that resolves after successful hydration.
    */
   enable(options: PersistOptions): Promise<void> {
-    // Если уже активен — отключаем предыдущий
+    // Already active — disable the previous one
     if (this.active) this.disable();
 
-    // Сохраняем настройки
+    // Store the settings
     this.currentKey = options.key;
     this.currentDriver = options.driver;
     this.serialize = options.serialize ?? JSON.stringify;
@@ -237,14 +237,14 @@ export class PersistManager {
     this.omitFields = options.omit as string[] | undefined;
     this.active = true;
 
-    // Подписка на изменения для auto-save
+    // Subscribe to changes for auto-save
     this.unsubscribe = this.kernel.hub.subscribeGlobal(this.scheduleSave);
 
-    // Гидратация
+    // Hydrate
     return this.hydrateFromStorage();
   }
 
-  /** Деактивировать: отписка от store, отмена таймеров, очистка состояния. */
+  /** Deactivate: unsubscribe from the store, cancel timers, clear state. */
   disable(): void {
     this.active = false;
     this.cancelDebounce();
@@ -258,18 +258,18 @@ export class PersistManager {
     this.currentDriver = null;
   }
 
-  /** Принудительно сохранить текущие значения в storage (без debounce). */
+  /** Force-save the current values to storage (no debounce). */
   async flush(): Promise<void> {
     this.cancelDebounce();
     await this.saveToStorage();
   }
 
-  /** Принудительно гидратировать из storage. */
+  /** Force-hydrate from storage. */
   async hydrate(): Promise<void> {
     await this.hydrateFromStorage();
   }
 
-  /** Удалить данные из storage по текущему ключу. */
+  /** Remove the data from storage under the current key. */
   async clear(): Promise<void> {
     if (!this.currentKey || !this.currentDriver) return;
 
@@ -280,7 +280,7 @@ export class PersistManager {
     }
   }
 
-  /** Активна ли персистенция в данный момент. */
+  /** Whether persistence is currently active. */
   isEnabled(): boolean {
     return this.active;
   }

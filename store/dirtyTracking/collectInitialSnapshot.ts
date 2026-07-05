@@ -17,7 +17,7 @@ export function collectInitialSnapshot(
   for (const key of configKeys(node as Record<string, unknown>)) {
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
-    if (isListNode(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
+    if (isListNode(child)) continue; // ListNode — skipped, restored separately
 
     if (isLeafNode(child)) {
       const initial = initialValueMap.get(child);

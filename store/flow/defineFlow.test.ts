@@ -1,13 +1,13 @@
 /**
- * Тесты для defineFlow / defineStep — структура конфига и регистрация.
+ * Tests for defineFlow / defineStep — config structure and registration.
  *
- * Покрывает:
- *  1. defineStep — структура результата + валидация (status зарезервирован, leaf запрещён)
- *  2. defineFlow — сборка flow-ноды (шаги-группы + __flowSteps), валидация ключей
- *  3. Регистрация в Palistor: FlowState, stepToFlow, values / getValues
- *  4. Прокси: state-ключи флоу, steps-доступ (индекс / ключ / current / length)
- *  5. Статус шага: производный от навигации, не попадает в values
- *  6. Spread flow-proxy: ключи группы + флоу, без internal-ключей
+ * Covers:
+ *  1. defineStep — result structure + validation (status is reserved, a leaf is forbidden)
+ *  2. defineFlow — flow node assembly (step groups + __flowSteps), key validation
+ *  3. Registration in Palistor: FlowState, stepToFlow, values / getValues
+ *  4. Proxy: flow state keys, steps access (index / key / current / length)
+ *  5. Step status: derived from navigation, never enters values
+ *  6. Flow-proxy spread: group + flow keys, no internal keys
  */
 import { describe, it, expect, vi } from "vitest";
 import { defineFlow, defineStep } from "./defineFlow";
@@ -35,33 +35,33 @@ function makeOnboardingConfig() {
   };
 }
 
-// ─── 1. defineStep — структура ────────────────────────────────────────────────
+// ─── 1. defineStep — structure ────────────────────────────────────────────────
 
-describe("defineStep — структура результата", () => {
-  it("возвращает { key, config } с тем же конфигом", () => {
+describe("defineStep — result structure", () => {
+  it("returns { key, config } with the same config", () => {
     const config = { name: { value: "" } };
     const step = defineStep("welcome", config);
     expect(step.key).toBe("welcome");
     expect(step.config).toBe(config);
   });
 
-  it("бросает при зарезервированном поле status в конфиге шага", () => {
+  it("throws on the reserved status field in a step config", () => {
     expect(() => defineStep("s", { status: { value: "" } } as any)).toThrow(/reserved/);
   });
 
-  it("бросает, если конфиг шага — leaf (есть value)", () => {
+  it("throws when the step config is a leaf (has value)", () => {
     expect(() => defineStep("s", { value: "" } as any)).toThrow(/group node/);
   });
 
-  it("бросает при пустом ключе", () => {
+  it("throws on an empty key", () => {
     expect(() => defineStep("" as string, {})).toThrow(/non-empty/);
   });
 });
 
-// ─── 2. defineFlow — сборка ноды ─────────────────────────────────────────────
+// ─── 2. defineFlow — node assembly ────────────────────────────────────────────
 
-describe("defineFlow — структура результата", () => {
-  it("шаги становятся дочерними группами по своим ключам, порядок в __flowSteps", () => {
+describe("defineFlow — result structure", () => {
+  it("steps become child groups under their keys; the order lives in __flowSteps", () => {
     const welcome = { name: { value: "" } };
     const summary = {};
     const flow = defineFlow({
@@ -73,7 +73,7 @@ describe("defineFlow — структура результата", () => {
     expect(flow[FLOW_STEPS_PROP]).toEqual(["welcome", "summary"]);
   });
 
-  it("onSubmit / beforeSubmit / afterSubmit переносятся на flow-ноду", () => {
+  it("onSubmit / beforeSubmit / afterSubmit are moved onto the flow node", () => {
     const onSubmit = vi.fn();
     const afterSubmit = vi.fn();
     const flow = defineFlow({
@@ -85,27 +85,27 @@ describe("defineFlow — структура результата", () => {
     expect(flow.afterSubmit).toBe(afterSubmit);
   });
 
-  it("бросает при пустом массиве шагов", () => {
+  it("throws on an empty steps array", () => {
     expect(() => defineFlow({ steps: [] as any })).toThrow(/non-empty/);
   });
 
-  it("бросает при дубликате ключа шага", () => {
+  it("throws on a duplicate step key", () => {
     expect(() =>
       defineFlow({ steps: [defineStep("a", {}), defineStep("a", {})] as any }),
     ).toThrow(/duplicate/);
   });
 
-  it("бросает при зарезервированном ключе шага (values, steps, current, …)", () => {
+  it("throws on a reserved step key (values, steps, current, …)", () => {
     for (const key of ["values", "steps", "current", "submit", "value"]) {
       expect(() => defineFlow({ steps: [defineStep(key, {})] as any })).toThrow(/reserved/);
     }
   });
 });
 
-// ─── 3. Регистрация в Palistor ────────────────────────────────────────────────
+// ─── 3. Registration in Palistor ───────────────────────────────────────────────
 
-describe("defineFlow — регистрация в store", () => {
-  it("FlowState создаётся, шаги проиндексированы в stepToFlow", () => {
+describe("defineFlow — store registration", () => {
+  it("a FlowState is created, steps are indexed in stepToFlow", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
 
     expect(store.nodes.allFlowStates.length).toBe(1);
@@ -119,7 +119,7 @@ describe("defineFlow — регистрация в store", () => {
     }
   });
 
-  it("values флоу — все шаги по ключам; __flowSteps не протекает", () => {
+  it("the flow's values are all steps by key; __flowSteps does not leak", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
     const values = store.getValues() as any;
 
@@ -134,7 +134,7 @@ describe("defineFlow — регистрация в store", () => {
     expect(proxy.onboarding.values).toEqual(values.onboarding);
   });
 
-  it("initialValues применяются к полям шагов", () => {
+  it("initialValues are applied to step fields", () => {
     const store = new Palistor({
       config: makeOnboardingConfig() as any,
       initialValues: { onboarding: { welcome: { name: "Alice" } } } as any,
@@ -142,7 +142,7 @@ describe("defineFlow — регистрация в store", () => {
     expect((store.proxy as any).onboarding.steps.welcome.name.value).toBe("Alice");
   });
 
-  it("вложенный флоу (внутри группы) тоже регистрируется", () => {
+  it("a nested flow (inside a group) also registers", () => {
     const store = new Palistor({
       config: {
         section: {
@@ -155,10 +155,10 @@ describe("defineFlow — регистрация в store", () => {
   });
 });
 
-// ─── 4. Прокси: состояние флоу и steps ───────────────────────────────────────
+// ─── 4. Proxy: flow state and steps ─────────────────────────────────────────
 
 describe("defineFlow — flow proxy", () => {
-  it("начальное состояние: первый шаг активен, canGoBack=false, history=[first]", () => {
+  it("initial state: the first step is active, canGoBack=false, history=[first]", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
     const flow = (store.proxy as any).onboarding;
 
@@ -169,7 +169,7 @@ describe("defineFlow — flow proxy", () => {
     expect(flow.errors).toEqual([]);
   });
 
-  it("steps: доступ по индексу, ключу, current и length; ссылки стабильны", () => {
+  it("steps: access by index, key, current and length; references are stable", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
     const flow = (store.proxy as any).onboarding;
 
@@ -177,11 +177,11 @@ describe("defineFlow — flow proxy", () => {
     expect(flow.steps[0]).toBe(flow.steps.welcome);
     expect(flow.steps[1]).toBe(flow.steps.goal);
     expect(flow.steps.current).toBe(flow.steps.welcome);
-    expect(flow.steps).toBe(flow.steps); // кэш steps-proxy
-    expect([...flow.steps].length).toBe(3); // итерация
+    expect(flow.steps).toBe(flow.steps); // steps-proxy cache
+    expect([...flow.steps].length).toBe(3); // iteration
   });
 
-  it("поля шага доступны и пишутся через step proxy", () => {
+  it("step fields are readable and writable through the step proxy", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
     const flow = (store.proxy as any).onboarding;
 
@@ -191,7 +191,7 @@ describe("defineFlow — flow proxy", () => {
     expect(flow.dirty).toBe(true);
   });
 
-  it("status: первый шаг active, остальные null; status не попадает в values", () => {
+  it("status: the first step is active, the rest are null; status never enters values", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
     const flow = (store.proxy as any).onboarding;
 
@@ -201,7 +201,7 @@ describe("defineFlow — flow proxy", () => {
     expect("status" in flow.values.welcome).toBe(false);
   });
 
-  it("spread flow-proxy содержит групповые + флоу-ключи", () => {
+  it("the flow-proxy spread contains group + flow keys", () => {
     const store = new Palistor({ config: makeOnboardingConfig() as any });
     const keys = Object.keys((store.proxy as any).onboarding);
 

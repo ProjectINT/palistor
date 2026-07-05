@@ -10,17 +10,18 @@ import { type NodeView, type NodeViewKernel, makeIdentityView } from "./nodeView
 import { collectFlowStates, type FlowState } from "../../flow/flowState";
 
 /**
- * Рекурсивно собрать обратный индекс `listConfigNode → fieldPath` для ВСЕХ
- * списков конфига, включая вложенные в template списка (per-entity lists, C3)
- * и вложенные в nested-группы (C4).
+ * Recursively build the reverse index `listConfigNode → fieldPath` for ALL
+ * lists in the config, including lists nested inside a list template
+ * (per-entity lists) and inside nested groups.
  *
- * Путь хранится массивом ключей **относительно ближайшего entity-scope**:
- * - список прямо под template → `["contacts"]`;
- * - список внутри nested-группы → `["profile", "contacts"]`.
- * Путь сбрасывается на границе каждого списка (`child[0]` открывает новый
- * entity-scope — его item-ы это отдельные entity со своим projectionObj).
- * Это позволяет `syncListValuesCache` (per-entity ветка) записать состав в
- * правильное вложенное место projectionObj владельца.
+ * The path is stored as an array of keys **relative to the nearest entity
+ * scope**:
+ * - a list directly under a template → `["contacts"]`;
+ * - a list inside a nested group    → `["profile", "contacts"]`.
+ * The path resets at every list boundary (`child[0]` opens a new entity
+ * scope — its items are separate entities with their own projectionObj).
+ * This lets `syncListValuesCache` (per-entity branch) write the membership
+ * into the right nested spot of the owner's projectionObj.
  */
 function collectListFieldKeys(
   node: AnyConfigNode,
@@ -36,7 +37,7 @@ function collectListFieldKeys(
       map.set(child, [...prefix, key]);
       const template = child[0];
       if (template && typeof template === "object") {
-        // Новый entity-scope — путь сбрасывается.
+        // New entity scope — the path resets.
         collectListFieldKeys(template as AnyConfigNode, map, []);
       }
       continue;
@@ -49,26 +50,25 @@ function collectListFieldKeys(
 }
 
 /**
- * Реестр узлов конфига.
+ * Registry of config nodes.
  *
- * Объединяет данные,
- * `Palistor`: nodeState, nodePaths, nodeParents, computeNodes,
- * groupComputeMap, proxyCache.
+ * Bundles the data used by `Palistor`: nodeState, nodePaths, nodeParents,
+ * computeNodes, groupComputeMap, proxyCache.
  *
- * Выполняет инициализацию (registerNodes + buildNodeMaps + initGroupSubmitting)
- * в конструкторе.
+ * Runs initialization (registerNodes + buildNodeMaps + initGroupSubmitting)
+ * in the constructor.
  *
- * @internal используется пайплайнами и подсистемами через kernel
+ * @internal used by pipelines and subsystems via the kernel
  */
 export class NodeRegistry {
-  // ─── Инициализация ───────────────────────────────────────────────────────
+  // ─── Initialization ──────────────────────────────────────────────────────
 
   constructor(
     rootConfig: AnyConfigNode,
     initialValues: Record<string, unknown>,
     translate: TranslateFn,
   ) {
-    // Фаза 1: регистрируем все листовые узлы, устанавливаем начальные значения
+    // Phase 1: register all leaf nodes and set initial values
     registerNodes(
       rootConfig,
       initialValues as InitialSlice<AnyConfigNode>,
@@ -81,104 +81,104 @@ export class NodeRegistry {
       this.allListStates,
     );
 
-    // Фаза 2: инициализируем submitting/dirty/revalidate для групп
+    // Phase 2: initialize submitting/dirty/revalidate for groups
     initGroupSubmitting(rootConfig, this.nodeState);
 
-    // Фаза 3: строим маппинги путей и родителей
+    // Phase 3: build path and parent mappings
     buildNodeMaps(rootConfig, this.nodePaths, this.nodeParents);
 
-    // Фаза 4 (вариант C, C3): обратный индекс listConfigNode → fieldKey,
-    // нужен для материализации per-entity списков в projectionObj (getValues).
+    // Phase 4: reverse index listConfigNode → fieldKey, needed to
+    // materialize per-entity lists into projectionObj (getValues).
     collectListFieldKeys(rootConfig, this.listFieldKeys);
 
-    // Фаза 5 (defineFlow): регистрация FlowState для узлов с маркером
-    // __flowSteps. Выполняется после buildNodeMaps — путям flow-нод уже
-    // назначены значения (нужны для persist-снимка и reset-скоупа).
+    // Phase 5 (defineFlow): register FlowState for nodes carrying the
+    // __flowSteps marker. Runs after buildNodeMaps — flow node paths are
+    // already assigned (needed for the persist snapshot and reset scope).
     collectFlowStates(rootConfig, this);
   }
 
-  // ─── Данные ──────────────────────────────────────────────────────────────
+  // ─── Data ────────────────────────────────────────────────────────────────
 
   /**
-   * Вычисленное состояние каждого узла конфига.
-   * Ключ — объект-узел, значение — FieldState.
+   * Computed state of every config node.
+   * Key — the node object, value — its FieldState.
    */
   readonly nodeState: WeakMap<object, FieldState> = new WeakMap();
 
   /**
-   * Абсолютный dot-путь каждого узла конфига.
-   * Например, passport.number → "passport.number".
-   * Корневой узел не имеет пути в этой карте (используется "").
+   * Absolute dot-path of every config node.
+   * e.g. passport.number → "passport.number".
+   * The root node has no entry in this map ("" is used).
    */
   readonly nodePaths: WeakMap<object, string> = new WeakMap();
 
   /**
-   * Прямой родитель каждого узла конфига.
-   * Корневой узел → не имеет записи.
+   * Direct parent of every config node.
+   * The root node has no entry.
    */
   readonly nodeParents: WeakMap<object, object> = new WeakMap();
 
   /**
-   * Все compute-узлы в порядке обхода (DFS).
-   * Содержит листовые узлы и групповые узлы с computed-свойствами.
-   * Используется NotificationHub для bumpLeafVersions().
+   * All compute nodes in traversal (DFS) order.
+   * Contains leaf nodes and group nodes with computed props.
+   * Used by NotificationHub for bumpLeafVersions().
    */
   readonly computeNodes: ComputeEntry[] = [];
 
   /**
-   * Маппинг группового узла → массив его прямых дочерних записей (листья + группы с computed-свойствами).
-   * Используется recomputeTargeted для пересчёта поддерева.
+   * Group node → array of its direct child entries (leaves + groups with computed props).
+   * Used by recomputeTargeted to recompute a subtree.
    */
   readonly groupComputeMap: GroupComputeMap = new WeakMap();
 
   /**
-   * Кэш Proxy-объектов — один прокси на узел конфига.
-   * Гарантирует стабильность ссылок (===) на proxy.
+   * Proxy object cache — one proxy per config node.
+   * Guarantees stable (===) proxy references.
    */
   readonly proxyCache: WeakMap<object, unknown> = new WeakMap();
 
   /**
-   * ListState для каждого ListNode в конфиге.
-   * Ключ — объект-массив конфига (сам ListNode).
-   * Заполняется при registerNodes (Phase 2A).
+   * ListState for every ListNode in the config.
+   * Key — the config array object (the ListNode itself).
+   * Populated during registerNodes.
    */
   readonly listStates: WeakMap<object, ListState> = new WeakMap();
 
   /**
-   * Все ListState-объекты в порядке регистрации.
-   * Используется Palistor для регистрации списков в EntityRegistry.rekey() (Phase 2C).
+   * All ListState objects in registration order.
+   * Used by Palistor to register lists in EntityRegistry.rekey().
    */
   readonly allListStates: ListState[] = [];
 
   /**
-   * Единый кэш list proxy (root + per-entity) — ключ: объект `ListState`.
-   * Гарантирует стабильные ссылки на list-proxy для React (как proxyCache для групп).
-   * Каждой паре (owner, listConfigNode) и каждому root-списку соответствует свой
-   * `ListState`, поэтому ключевание по нему даёт корректную изоляцию.
+   * Single list-proxy cache (root + per-entity) — keyed by the `ListState` object.
+   * Guarantees stable list-proxy references for React (like proxyCache for groups).
+   * Every (owner, listConfigNode) pair and every root list has its own
+   * `ListState`, so keying by it gives correct isolation.
    */
   readonly listProxyCache: WeakMap<object, object> = new WeakMap();
 
   /**
-   * Обратный индекс `listConfigNode → fieldPath` (вариант C, C3/C4).
-   * Путь — массив ключей относительно entity-scope владельца
-   * (`["contacts"]` или `["profile", "contacts"]` для списка в nested-группе).
-   * Используется для записи состава per-entity списка в нужное вложенное место
-   * projectionObj владельца — чтобы `store.getValues()` включал вложенные списки.
+   * Reverse index `listConfigNode → fieldPath`.
+   * The path is an array of keys relative to the owner's entity scope
+   * (`["contacts"]`, or `["profile", "contacts"]` for a list in a nested group).
+   * Used to write per-entity list membership into the right nested spot of
+   * the owner's projectionObj — so `store.getValues()` includes nested lists.
    */
   readonly listFieldKeys: WeakMap<object, string[]> = new WeakMap();
 
   /**
-   * FlowState для каждого flow-узла (defineFlow) в конфиге.
-   * Ключ — сам config-узел флоу. Заполняется в collectFlowStates.
+   * FlowState for every flow node (defineFlow) in the config.
+   * Key — the flow's config node. Populated in collectFlowStates.
    */
   readonly flowStates: WeakMap<object, FlowState> = new WeakMap();
 
-  /** Все FlowState в порядке регистрации (persist, reset, init lifecycle). */
+  /** All FlowStates in registration order (persist, reset, init lifecycle). */
   readonly allFlowStates: FlowState[] = [];
 
   /**
-   * Обратный индекс: config-узел шага → FlowState владеющего флоу.
-   * Используется group-proxy для вычисления step.status / step.isInvalid.
+   * Reverse index: step config node → FlowState of the owning flow.
+   * Used by the group proxy to compute step.status / step.isInvalid.
    */
   readonly stepToFlow: WeakMap<object, FlowState> = new WeakMap();
 
@@ -223,39 +223,39 @@ export class NodeRegistry {
     return view;
   }
 
-  // ─── Навигация ───────────────────────────────────────────────────────────
+  // ─── Navigation ──────────────────────────────────────────────────────────
 
-  /** Получить вычисленное состояние узла. */
+  /** Get the computed state of a node. */
   getState(node: object): FieldState | undefined {
     return this.nodeState.get(node);
   }
 
-  /** Установить состояние узла. */
+  /** Set the state of a node. */
   setState(node: object, state: FieldState): void {
     this.nodeState.set(node, state);
   }
 
-  /** Получить абсолютный dot-путь узла. Для корневого — undefined. */
+  /** Get the absolute dot-path of a node. undefined for the root. */
   getPath(node: object): string | undefined {
     return this.nodePaths.get(node);
   }
 
-  /** Получить непосредственного родителя узла. */
+  /** Get the direct parent of a node. */
   getParent(node: object): object | undefined {
     return this.nodeParents.get(node);
   }
 
   /**
-   * Получить path группы, к которой принадлежит узел.
-   * - Листовой узел → path родительской группы
-   * - Групповой узел → собственный path
-   * - Корневой → ""
+   * Get the path of the group a node belongs to.
+   * - Leaf node  → the parent group's path
+   * - Group node → its own path
+   * - Root       → ""
    */
   getGroupPath(node: object): string {
     return getNodeGroupPath(node, this.nodeParents, this.nodePaths);
   }
 
-  /** Найти узел по dot-пути. Перебирает computeNodes и проверяет их пути. */
+  /** Find a node by dot-path. Scans computeNodes and checks their paths. */
   findByPath(path: string): object | undefined {
     for (const entry of this.computeNodes) {
       if (entry.path === path) return entry.node;
@@ -263,7 +263,7 @@ export class NodeRegistry {
     return undefined;
   }
 
-  /** Перебрать все compute-узлы. */
+  /** Iterate over all compute nodes. */
   forEachCompute(callback: (entry: ComputeEntry) => void): void {
     for (const entry of this.computeNodes) {
       callback(entry);
@@ -275,15 +275,15 @@ export class NodeRegistry {
   isListNode = isListNode;
 
   /**
-   * Зарегистрировать листовой узел, созданный в runtime (например, entity leaf при store.set()).
+   * Register a leaf node created at runtime (e.g. an entity leaf on store.set()).
    *
-   * Обновляет все WeakMap-ы реестра и добавляет запись в `computeNodes`,
-   * чтобы `bumpLeafVersions` (NotificationHub) автоматически захватил новый узел.
+   * Updates all registry WeakMaps and appends an entry to `computeNodes`,
+   * so `bumpLeafVersions` (NotificationHub) automatically picks up the new node.
    *
-   * @param node    Объект-узел (`{ value }`)
-   * @param path    Абсолютный dot-путь, e.g. "users.0.name"
-   * @param parent  Непосредственный родительский объект-узел
-   * @param state   Начальное FieldState
+   * @param node    Node object (`{ value }`)
+   * @param path    Absolute dot-path, e.g. "users.0.name"
+   * @param parent  Direct parent node object
+   * @param state   Initial FieldState
    */
   registerDynamicLeaf(
     node: object,
@@ -296,7 +296,7 @@ export class NodeRegistry {
     this.nodeState.set(node, state);
     this.nodePaths.set(node, path);
     this.nodeParents.set(node, parent);
-    // groupComputeMap: добавить в список родительской группы
+    // groupComputeMap: append to the parent group's list
     let list = this.groupComputeMap.get(parent);
     if (!list) {
       list = [];
@@ -306,20 +306,19 @@ export class NodeRegistry {
   }
 
   /**
-   * Снять регистрацию листового узла (например, при удалении entity).
+   * Unregister a leaf node (e.g. when an entity is deleted).
    *
-   * Удаляет запись из `computeNodes` и из `groupComputeMap` родителя.
-   * WeakMap-записи (nodeState, nodePaths, nodeParents) утилизируются GC автоматически.
+   * Removes the entry from `computeNodes` and from the parent's
+   * `groupComputeMap`. WeakMap entries (nodeState, nodePaths, nodeParents)
+   * are reclaimed by the GC automatically.
    *
-   * @param node  Листовой объект-узел
+   * @param node  Leaf node object
    */
   unregisterLeaf(node: object): void {
-    // Удалить из computeNodes
     const idx = this.computeNodes.findIndex((e) => e.node === node);
     if (idx !== -1) {
       this.computeNodes.splice(idx, 1);
     }
-    // Удалить из groupComputeMap родителя
     const parent = this.nodeParents.get(node);
     if (parent) {
       const list = this.groupComputeMap.get(parent);

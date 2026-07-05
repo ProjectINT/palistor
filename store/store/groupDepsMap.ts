@@ -6,14 +6,14 @@ import type { TrackingWrap } from "../compute/recompute";
 import { isLeafNode } from "../traversal";
 
 /**
- * Карта зависимостей между группами.
+ * Map of dependencies between groups.
  *
- * Объединяет:
- * - `Set<string>` пар donor→recipient (межгрупповые зависимости)
- * - кэш tracking-proxy и флаг «зависимости построены»
- * - логику `createTrackingValues` при первом полном recomputeAll
+ * Combines:
+ * - a `Set<string>` of donor→recipient pairs (cross-group dependencies)
+ * - a tracking-proxy cache and the "dependencies built" flag
+ * - the `createTrackingValues` logic during the first full recomputeAll
  *
- * @internal используется `Palistor` и compute-пайплайнами
+ * @internal used by `Palistor` and the compute pipelines
  */
 export class GroupDepsMap {
   private readonly _deps: Set<string>;
@@ -33,51 +33,52 @@ export class GroupDepsMap {
   }
 
   /**
-   * Raw `Set<string>` пар зависимостей — для совместимости с `recomputeTargeted`
-   * и другими функциями, принимающими `groupDeps` напрямую.
+   * Raw `Set<string>` of dependency pairs — for compatibility with
+   * `recomputeTargeted` and other functions taking `groupDeps` directly.
    * @internal
    */
   get deps(): Set<string> {
     return this._deps;
   }
 
-  /** Были ли кросс-групповые зависимости уже построены в первом recomputeAll? */
+  /** Whether cross-group dependencies were already built in the first recomputeAll. */
   get isBuilt(): boolean {
     return this._built;
   }
 
   /**
-   * Возвращает `TrackingWrap`-функцию, которая перехватывает READ-доступы
-   * к значениям других групп и записывает зависимости в `deps`.
+   * Returns a `TrackingWrap` function that intercepts READ accesses to other
+   * groups' values and records the dependencies into `deps`.
    *
-   * Использовать ТОЛЬКО при первом `recomputeAll` (`isBuilt === false`).
-   * После завершения вызвать `markBuilt()`.
+   * Use ONLY during the first `recomputeAll` (`isBuilt === false`).
+   * Call `markBuilt()` when done.
    *
-   * Принимает group-scoped values (parent из nodeSlot):
-   * - Для листовых узлов: values = scope родительской группы,
-   *   currentGroupPath = recipientPath (= путь родительской группы).
-   * - Для групповых узлов (с isVisible и т.п.): values = scope
-   *   родителя группы (grandparent scope), currentGroupPath = путь родителя.
-   *   recipientPath при этом = собственный путь группы.
+   * Receives group-scoped values (parent from nodeSlot):
+   * - For leaf nodes: values = the parent group's scope,
+   *   currentGroupPath = recipientPath (= the parent group's path).
+   * - For group nodes (with isVisible etc.): values = the group's parent
+   *   scope (grandparent scope), currentGroupPath = the parent's path.
+   *   recipientPath is then the group's own path.
    *
-   * Кэш использует составной ключ `currentGroupPath\0recipientPath`, чтобы
-   * избежать коллизии между листовыми и групповыми узлами с одинаковым recipientPath.
+   * The cache uses the composite key `currentGroupPath\0recipientPath` to
+   * avoid collisions between leaf and group nodes with the same recipientPath.
    */
   getTrackingWrap(): TrackingWrap {
     return (node: object, values: Record<string, unknown>): Record<string, unknown> => {
       const isLeaf = isLeafNode(node);
 
-      // Путь группы, ПОД которой эта compute-запись лежит в groupComputeMap —
-      // именно её пересчитывает recomputeTargeted, поэтому реципиентом кросс-
-      // групповой зависимости должна быть она:
-      // - лист хранится под родительской группой → getNodeGroupPath(leaf) = её путь;
-      // - групповой узел (isVisible и т.п.) тоже хранится под РОДИТЕЛЬСКОЙ группой,
-      //   поэтому берём путь родителя, а не собственный путь узла. Иначе зависимость
-      //   пишется на own-path группы, а recompute этой группы трогает только её
-      //   ДЕТЕЙ — но не её собственный isVisible-энтри (он под родителем), и
-      //   кросс-групповое isVisible соседа не пересчитывается.
-      // `values` здесь — scope этой же родительской группы, поэтому currentGroupPath
-      // (корень вложенности) совпадает с ownerGroupPath.
+      // The path of the group UNDER which this compute entry lives in
+      // groupComputeMap — that group is what recomputeTargeted recomputes, so
+      // it must be the recipient of the cross-group dependency:
+      // - a leaf is stored under its parent group → getNodeGroupPath(leaf) = its path;
+      // - a group node (isVisible etc.) is also stored under its PARENT group,
+      //   so we take the parent's path, not the node's own path. Otherwise the
+      //   dependency is recorded on the group's own path, and recomputing that
+      //   group only touches its CHILDREN — not its own isVisible entry (which
+      //   lives under the parent) — so a neighbor's cross-group isVisible would
+      //   never be recomputed.
+      // `values` here is the scope of that same parent group, so
+      // currentGroupPath (nesting root) equals ownerGroupPath.
       const ownerGroupPath: string = isLeaf
         ? getNodeGroupPath(node, this._nodeParents, this._nodePaths)
         : (() => {
@@ -95,8 +96,8 @@ export class GroupDepsMap {
   }
 
   /**
-   * Пометить зависимости как построенные и освободить proxy-кэш.
-   * Вызывается ровно один раз — после первого полного `recomputeAll`.
+   * Mark the dependencies as built and release the proxy cache.
+   * Called exactly once — after the first full `recomputeAll`.
    */
   markBuilt(): void {
     this._built = true;

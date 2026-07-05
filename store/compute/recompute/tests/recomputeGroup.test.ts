@@ -13,7 +13,7 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
 }
 
 describe("collectGroupComputeNodes + recomputeLeaves (group subtree)", () => {
-  it("возвращает пустой Set, если у группы нет листьев в карте", () => {
+  it("returns an empty Set when the group has no leaves in the map", () => {
     const root = {} as AnyConfigNode;
     const groupComputeMap: GroupComputeMap = new WeakMap();
     const leaves = collectGroupComputeNodes(root, groupComputeMap);
@@ -21,7 +21,7 @@ describe("collectGroupComputeNodes + recomputeLeaves (group subtree)", () => {
     expect(result.size).toBe(0);
   });
 
-  it("пересчитывает прямые листья группы и возвращает changed", () => {
+  it("recomputes the group's direct leaves and returns changed", () => {
     const fieldNode = {} as unknown as AnyConfigNode;
     const root = { field: fieldNode } as unknown as AnyConfigNode;
     const groupComputeMap: GroupComputeMap = new WeakMap([
@@ -32,11 +32,11 @@ describe("collectGroupComputeNodes + recomputeLeaves (group subtree)", () => {
     const leaves = collectGroupComputeNodes(root, groupComputeMap);
     const result = recomputeLeaves(leaves, nodeState, makeCache(), translate);
 
-    // fieldNode не имел предыдущего состояния → должен быть в changed
+    // fieldNode had no previous state → must be in changed
     expect(result.has(fieldNode)).toBe(true);
   });
 
-  it("рекурсивно собирает листья дочерних групп", () => {
+  it("recursively collects leaves of child groups", () => {
     const childField = {} as unknown as AnyConfigNode;
     const childGroup = { x: childField } as unknown as AnyConfigNode;
     const root = { child: childGroup } as unknown as AnyConfigNode;

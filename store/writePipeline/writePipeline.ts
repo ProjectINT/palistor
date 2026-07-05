@@ -17,18 +17,18 @@ export { runSetter } from "./runSetter";
 export { mergeChanged } from "./mergeChanged";
 
 export interface WriteOptions {
-  /** templateField — используется для entity-leaf: правила берутся из шаблона, хранилище — из entityLeaf. */
+  /** templateField — used for entity leaves: rules come from the template, storage from the entityLeaf. */
   via?: AnyConfigNode;
 }
 
 /**
- * WritePipeline — полный write pipeline: format → store → (setter?) → recompute → merge changed.
+ * WritePipeline — the full write pipeline: format → store → (setter?) → recompute → merge changed.
  *
- * Всегда записывает значение в текущий узел через storeValue.
- * Если у узла есть setter — дополнительно патчит зависимые поля.
+ * Always writes the value to the current node via storeValue.
+ * If the node has a setter — additionally patches dependent fields.
  *
- * При opts.via — entity-mode: правила (formatter, setter) берутся из templateField,
- * хранилище и recompute работают по entityLeaf (view.storage).
+ * With opts.via — entity mode: rules (formatter, setter) come from the
+ * templateField; storage and recompute operate on the entityLeaf (view.storage).
  */
 export class WritePipeline {
   constructor(private readonly kernel: Palistor<any, any>) {}
@@ -44,31 +44,31 @@ export class WritePipeline {
     const nodeState = this.kernel.nodes.nodeState;
     const valuesCache = this.kernel.values;
 
-    // Фаза 1: Форматирование (entity: parentValues из view; config: из valuesCache)
+    // Phase 1: format (entity: parentValues from the view; config: from valuesCache)
     const allValues = isEntityMode ? view.parent.getValues() : valuesCache.values;
     const processedValue = formatValue(rawValue, view.rules, allValues);
 
-    // Фаза 1.5: Быстрый выход — значение не изменилось
+    // Phase 1.5: fast exit — value unchanged
     const currentState = nodeState.get(view.storage);
     if (currentState && Object.is(processedValue, currentState.value)) {
       return { changed: new Set<object>(), skipped: true };
     }
 
-    // Фаза 2: Прямая запись значения
+    // Phase 2: direct value write
     const stored = storeValue(view.storage, processedValue, nodeState, valuesCache);
     if (!stored) return null;
 
-    // Entity sync: держим raw-значение entityLeaf в актуальном состоянии
-    // (нужно для walkAndSyncEntityNode при повторном upsert)
+    // Entity sync: keep the entityLeaf's raw value current
+    // (needed by walkAndSyncEntityNode on the next upsert)
     if (isEntityMode) {
       (view.storage as unknown as { value: unknown }).value = processedValue;
     }
 
-    // Фаза 2.5: Setter-ветка — патч зависимых полей
+    // Phase 2.5: setter branch — patch dependent fields
     let patchedNodes: Set<object>;
     if (typeof view.rules.setter === "function") {
       if (isEntityMode) {
-        // Entity mode: сиблинги живут в entity-дереве (не в config)
+        // Entity mode: siblings live in the entity tree (not the config)
         const entityParent = this.kernel.nodes.nodeParents.get(view.storage as object) as
           | Record<string, unknown>
           | undefined;
@@ -92,16 +92,16 @@ export class WritePipeline {
       patchedNodes = new Set<object>();
     }
 
-    // Фаза 3: Таргетированный пересчёт затронутых групп
+    // Phase 3: targeted recompute of the affected groups
     const changedSoFar = new Set<object>([view.storage]);
     for (const n of patchedNodes) changedSoFar.add(n);
     const recomputedNodes = this.kernel.recompute(changedSoFar);
 
-    // Фаза 4: Объединение всех изменённых узлов
+    // Phase 4: merge all changed nodes
     return { changed: mergeChanged(view.storage, patchedNodes, recomputedNodes) };
   }
 
-  /** Применить setter-патч к сиблингам entity leaf (storage-деревo, не template). */
+  /** Apply a setter patch to the entity leaf's siblings (storage tree, not the template). */
   private _applyEntitySetterPatch(
     setter: Function,
     processedValue: unknown,

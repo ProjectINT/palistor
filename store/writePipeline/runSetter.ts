@@ -5,8 +5,8 @@ import type { ValuesCache } from "../valuesCache/valuesCache";
 import type { Setter } from "./types";
 
 /**
- * Извлечь значения родительской группы из кеша.
- * Если parentPath пустой — вернуть корневые значения.
+ * Extract the parent group's values from the cache.
+ * Empty parentPath → return the root values.
  */
 function getParentValues(
   valuesCache: ValuesCache,
@@ -21,15 +21,15 @@ function getParentValues(
 }
 
 /**
- * Фаза 3 (альтернативная ветка): Применение setter.
+ * Phase 3 (alternate branch): apply the setter.
  *
- * Setter — дополнительный путь записи: возвращает патч для обновления
- * зависимых (sibling) полей после того, как текущее значение уже сохранено.
+ * A setter is an extra write path: it returns a patch that updates
+ * dependent (sibling) fields after the current value has been stored.
  *
- * Патч и values скоупятся к родительской группе узла (а не к root),
- * чтобы setter мог читать и патчить сиблинги напрямую.
+ * The patch and values are scoped to the node's parent group (not the root)
+ * so the setter can read and patch siblings directly.
  *
- * Если setter вернул не-объект — логирует ошибку, но не ломает рантайм.
+ * When the setter returns a non-object — logs an error without breaking the runtime.
  */
 export function runSetter(
   node: AnyConfigNode,

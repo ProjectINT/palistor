@@ -5,12 +5,12 @@ import { recomputeDirtyTargeted } from "../dirtyTracking/recomputeDirtyTargeted"
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
-/** Зависимости, необходимые для пересчёта dirty-флагов при уведомлении. */
+/** Dependencies needed to recompute dirty flags during notification. */
 export interface DirtyDeps {
   rootConfig: AnyConfigNode;
   nodeState: WeakMap<AnyConfigNode, FieldState>;
   initialValueMap: WeakMap<AnyConfigNode, unknown>;
-  /** ListStates для dirty-tracking по составу списков (Phase 2C). */
+  /** ListStates for list-membership dirty tracking. */
   listStates?: WeakMap<AnyConfigNode, ListState>;
   nodeParents: WeakMap<AnyConfigNode, AnyConfigNode>;
   nodePaths: WeakMap<AnyConfigNode, string>;
@@ -18,43 +18,43 @@ export interface DirtyDeps {
 
 export interface NotificationHubDeps {
   computeNodes: ComputeEntry[];
-  /** Маппинг узлов на их dot-пути (заполняется buildNodeMaps). */
+  /** Node → dot-path mapping (filled by buildNodeMaps). */
   nodePaths: WeakMap<object, string>;
 }
 
 // ─── Class ───────────────────────────────────────────────────────────────────
 
 /**
- * Система уведомлений хранилища.
+ * The store's notification system.
  *
- * Консолидирует:
- * - per-node и глобальные подписки
- * - версионирование (global + per-node)
- * - post-notify hook для внешних подсистем (resolve retrigger)
+ * Consolidates:
+ * - per-node and global subscriptions
+ * - versioning (global + per-node)
+ * - the post-notify hook for external subsystems (resolve re-trigger)
  */
 export class NotificationHub {
   private readonly computeNodes: ComputeEntry[];
   private readonly nodePaths: WeakMap<object, string>;
 
-  /** Подписчики на изменение каждого поля. */
+  /** Per-field change subscribers. */
   private readonly nodeListeners = new WeakMap<AnyConfigNode, Set<() => void>>();
 
-  /** Глобальные подписчики — уведомляются при ЛЮБОМ изменении. */
+  /** Global subscribers — notified on ANY change. */
   private readonly globalListeners = new Set<() => void>();
 
-  /** Глобальная версия — инкрементируется при каждом изменении. */
+  /** Global version — incremented on every change. */
   private version = 0;
 
-  /** Версии отдельных узлов — для точечной подписки. */
+  /** Per-node versions — for targeted subscriptions. */
   private readonly nodeVersions = new WeakMap<AnyConfigNode, number>();
 
-  /** Хук, вызываемый после каждого notifyChanged (resolve retrigger и т.д.) */
+  /** Hook invoked after every notifyChanged (resolve re-trigger etc.). */
   private postNotifyHook: ((changedPaths: Set<string>) => void) | null = null;
 
   /**
-   * Re-entrancy guard: предотвращает рекурсивный вызов postNotifyHook.
-   * Пути, накопленные во время активного хука, откладываются и обрабатываются
-   * последовательно после завершения текущего вызова.
+   * Re-entrancy guard: prevents recursive postNotifyHook invocation.
+   * Paths accumulated while a hook is active are deferred and processed
+   * sequentially after the current call completes.
    */
   private isDispatchingHook = false;
   private pendingHookPaths: Set<string> | null = null;
@@ -77,12 +77,12 @@ export class NotificationHub {
   // ─── Public API ──────────────────────────────────────────────────────────
 
   /**
-   * Обработать набор изменённых узлов:
-   * 1. Пересчитать dirty-флаги (leaf + group + root)
-   * 2. Инкрементировать глобальную версию
-   * 3. Обновить per-node версии + уведомить per-node подписчиков
-   * 4. Уведомить глобальных подписчиков
-   * 5. Вызвать postNotifyHook (retrigger resolves и т.д.)
+   * Process a set of changed nodes:
+   * 1. Recompute dirty flags (leaf + group + root)
+   * 2. Increment the global version
+   * 3. Update per-node versions + notify per-node subscribers
+   * 4. Notify global subscribers
+   * 5. Invoke the postNotifyHook (resolve re-triggers etc.)
    */
   notifyChanged(changed: Set<AnyConfigNode>, dirtyDeps: DirtyDeps): void {
     if (changed.size === 0) return;
@@ -92,22 +92,21 @@ export class NotificationHub {
     const dirtyResult = recomputeDirtyTargeted(changed, rootConfig, nodeState, initialValueMap, nodeParents, nodePaths, listStates);
     for (const n of dirtyResult.changed) changed.add(n as AnyConfigNode);
 
-    // Инкрементируем глобальную версию
+    // Increment the global version
     this.version++;
 
-    // Обновляем версии изменённых узлов + уведомляем per-node подписчиков
+    // Update the changed nodes' versions + notify per-node subscribers
     for (const node of changed) {
       this.nodeVersions.set(node, this.version);
       this.notifyNode(node);
     }
 
-    // Уведомляем глобальных подписчиков
     this.notifyGlobals();
 
-    // Post-notify hook (resolve retrigger и т.д.)
-    // Re-entrancy guard: если notifyChanged вызван рекурсивно (например,
-    // из executeListResolve во время postNotifyHook), пути накапливаются
-    // и обрабатываются последовательно после завершения внешнего вызова.
+    // Post-notify hook (resolve re-triggers etc.)
+    // Re-entrancy guard: when notifyChanged is called recursively (e.g. from
+    // executeListResolve during the postNotifyHook), the paths accumulate and
+    // are processed sequentially after the outer call completes.
     if (this.postNotifyHook) {
       const changedPaths = new Set<string>();
       for (const n of changed) {
@@ -116,14 +115,14 @@ export class NotificationHub {
       }
       if (changedPaths.size > 0) {
         if (this.isDispatchingHook) {
-          // Рекурсивный вызов: откладываем пути
+          // Recursive call: defer the paths
           if (!this.pendingHookPaths) this.pendingHookPaths = new Set();
           for (const p of changedPaths) this.pendingHookPaths.add(p);
         } else {
           this.isDispatchingHook = true;
           try {
             this.postNotifyHook(changedPaths);
-            // Дрейнируем пути, накопленные во время вызова хука
+            // Drain the paths accumulated during the hook invocation
             while (this.pendingHookPaths !== null && this.pendingHookPaths.size > 0) {
               const pending = this.pendingHookPaths;
               this.pendingHookPaths = null;
@@ -138,32 +137,32 @@ export class NotificationHub {
     }
   }
 
-  /** Подписаться на изменения конкретного узла. */
+  /** Subscribe to changes of a specific node. */
   subscribe = (node: AnyConfigNode, listener: () => void): (() => void) => {
     if (!this.nodeListeners.has(node)) this.nodeListeners.set(node, new Set());
     this.nodeListeners.get(node)!.add(listener);
     return () => this.nodeListeners.get(node)!.delete(listener);
   };
 
-  /** Подписаться на любое изменение в хранилище. */
+  /** Subscribe to any store change. */
   subscribeGlobal = (listener: () => void): (() => void) => {
     this.globalListeners.add(listener);
     return () => this.globalListeners.delete(listener);
   };
 
-  /** Глобальная версия хранилища. */
+  /** Global store version. */
   getVersion = (): number => {
     return this.version;
   };
 
-  /** Версия конкретного узла. */
+  /** Version of a specific node. */
   getNodeVersion = (node: AnyConfigNode): number => {
     return this.nodeVersions.get(node) ?? 0;
   };
 
   /**
-   * Инкрементировать версию для всех leaf-узлов + уведомить глобальных подписчиков.
-   * Используется при смене translator — все компоненты перерендерятся.
+   * Bump the version of all leaf nodes + notify global subscribers.
+   * Used on translator change — all components re-render.
    */
   bumpLeafVersions(): void {
     this.version++;
@@ -174,9 +173,9 @@ export class NotificationHub {
   }
 
   /**
-   * Зарегистрировать хук, вызываемый после каждого notifyChanged.
-   * Получает множество dot-путей изменённых узлов.
-   * Используется resolve-системой для retrigger по зависимостям.
+   * Register a hook invoked after every notifyChanged.
+   * Receives the set of dot-paths of the changed nodes.
+   * Used by the resolve system for dependency-driven re-triggers.
    */
   setPostNotifyHook(hook: ((changedPaths: Set<string>) => void) | null): void {
     this.postNotifyHook = hook;
@@ -189,4 +188,3 @@ export class NotificationHub {
 export function createNotificationHub(deps: NotificationHubDeps): NotificationHub {
   return new NotificationHub(deps);
 }
-

@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # для npm provenance
+      id-token: write # for npm provenance
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +47,7 @@ jobs:
 
       - run: npm test
 
-      - run: npm pkg set name=@projectint/palistor # scoped-имя только в CI-раннере
+      - run: npm pkg set name=@projectint/palistor # scoped name only inside the CI runner
 
       - run: npm publish
         env:

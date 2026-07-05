@@ -26,7 +26,7 @@ import {
 } from "../resolvePipeline/index";
 import { isLeafNode } from "../traversal";
 
-// ─── Типы ─────────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ResolveManagerDeps {
   rootConfig: AnyConfigNode;
@@ -34,52 +34,52 @@ export interface ResolveManagerDeps {
   recompute: () => Set<object>;
   notifyChanged: (changed: Set<object>) => void;
   notify: NotifyFn;
-  /** Снимок начальных значений — передаётся в resolve-пайплайн для dirty-трекинга. */
+  /** Initial values snapshot — passed to the resolve pipeline for dirty tracking. */
   initialValueMap: WeakMap<object, unknown>;
   valuesCache: ValuesCache;
-  /** Экземпляр ProxyStore — передаётся вторым аргументом в resolver. */
+  /** The ProxyStore instance — passed as the second resolver argument. */
   store: any;
-  // ─── Фаза 2C: специфика списков ─────────────────────────────────────────
-  /** Все объекты ListState из NodeRegistry (для диспетчеризации list resolve). */
+  // ─── List specifics ──────────────────────────────────────────────────────
+  /** All ListState objects from NodeRegistry (for list-resolve dispatch). */
   listStates: WeakMap<object, ListState>;
   /**
-   * Upsert-ит сущности и регистрирует их листья без вызова notify.
-   * Вызывается из executeListResolve после успешного list resolver-а.
-   * Фаза 4: listNode передаётся для автоматического запуска entity field resolves.
+   * Upserts entities and registers their leaves without calling notify.
+   * Called from executeListResolve after a successful list resolver.
+   * listNode is passed to trigger entity field resolves automatically.
    */
   setEntitiesRaw: (items: EntityData[], listNode?: object) => Set<object>;
   /**
-   * Синхронизирует valuesCache с составом списка (единый метод, root + entity).
-   * Вызывается из executeListResolve после обновления itemIds.
+   * Syncs valuesCache with the list membership (single method, root + entity).
+   * Called from executeListResolve after itemIds is updated.
    */
   syncListValuesCache: (listState: ListState) => void;
   /**
-   * Экземпляр EntityRegistry — используется в triggerEntityFieldResolve для проверки skipIfResolved.
+   * The EntityRegistry instance — used by triggerEntityFieldResolve for the skipIfResolved check.
    */
   entityRegistry: EntityRegistry;
 }
 
-// ─── Класс ───────────────────────────────────────────────────────────────────
+// ─── Class ───────────────────────────────────────────────────────────────────
 
 /**
- * Менеджер resolve-подсистемы.
+ * Manager of the resolve subsystem.
  *
- * Консолидирует:
- * - Инициализацию resolve-состояний (initResolveStates)
+ * Consolidates:
+ * - Resolve state initialization (initResolveStates)
  * - triggerResolve / getResolveState
- * - Post-notify hook для retrigger по зависимостям
- * - Запуск eager resolvers (lazy: false)
+ * - The post-notify hook for dependency-driven re-triggers
+ * - Launching eager resolvers (lazy: false)
  */
-// ─── Константы ─────────────────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 /**
- * Максимальное число автоматических перезапусков одного resolver-а подряд
- * (через postNotifyHook). При превышении — предупреждение и пропуск.
- * Защищает от циклических зависимостей вида A→B→A.
+ * Maximum number of consecutive automatic re-runs of one resolver
+ * (via postNotifyHook). Exceeding it → warning and skip.
+ * Guards against circular dependencies like A→B→A.
  */
 const MAX_AUTO_RETRIGGERS = 10;
 
-// ─── Вспомогательные функции ────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function isContextSatisfied(
   contextDeps: string[] | undefined,
@@ -89,33 +89,33 @@ function isContextSatisfied(
   return contextDeps.every((key) => context[key] != null);
 }
 
-// ─── Класс ───────────────────────────────────────────────────────────────────
+// ─── Class ───────────────────────────────────────────────────────────────────
 
 export class ResolveManager {
-  /** Resolve-состояния всех узлов с resolve-конфигом. */
+  /** Resolve states of all nodes with a resolve config. */
   readonly states = new Map<object, ResolveState>();
 
   /**
-   * Per-entity состояния resolve.
+   * Per-entity resolve states.
    * - Per-field: (entityId, templateFieldNode) → ResolveState
    * - Per-template binding: (entityId, templateNode) → ResolveState
-   *   где status === "pending" означает загрузку, state.submitting === true — отправку формы.
+   *   where status === "pending" means loading, state.submitting === true means a form submit.
    */
   readonly entityStates = new EntityResolveStateMap();
 
   private readonly resolveEntries: AnyResolveEntry[];
   private readonly resolveEntryMap: Map<AnyConfigNode, AnyResolveEntry>;
-  /** Записи template-полей (per-entity field resolves). */
+  /** Template-field entries (per-entity field resolves). */
   readonly templateFieldEntries: TemplateFieldResolveEntry[];
-  /** Быстрый поиск: templateFieldNode → TemplateFieldResolveEntry. */
+  /** Fast lookup: templateFieldNode → TemplateFieldResolveEntry. */
   private readonly templateFieldEntryMap: Map<AnyConfigNode, TemplateFieldResolveEntry>;
-  /** listNode → TemplateFieldResolveEntry[] (для фазы 4: запуск при создании entity). */
+  /** listNode → TemplateFieldResolveEntry[] (for triggering on entity creation). */
   readonly listNodeToTemplateFieldEntries: Map<AnyConfigNode, TemplateFieldResolveEntry[]>;
   private readonly resolveDeps: ResolveDeps;
   private readonly listResolveDeps: ListResolveDeps;
   private readonly listStates: WeakMap<object, ListState>;
   private readonly entityRegistry: EntityRegistry;
-  /** Записи, ожидающие удовлетворения contextDeps перед запуском. */
+  /** Entries waiting for their contextDeps to be satisfied before launching. */
   private readonly pendingContextQueue = new Set<AnyResolveEntry>();
 
   constructor(deps: ResolveManagerDeps) {
@@ -134,7 +134,7 @@ export class ResolveManager {
     this.resolveEntries = allEntries.filter((e) => !(e as TemplateFieldResolveEntry).isTemplateField);
     this.resolveEntryMap = new Map(this.resolveEntries.map((e) => [e.node, e]));
 
-    // Строим карты быстрого доступа для записей template-полей
+    // Build fast-access maps for template-field entries
     this.templateFieldEntryMap = new Map(
       this.templateFieldEntries.map((e) => [e.node, e]),
     );
@@ -169,40 +169,40 @@ export class ResolveManager {
     };
   }
 
-  // ─── Публичное API ─────────────────────────────────────────────────────────
+  // ─── Public API ────────────────────────────────────────────────────────────
 
   /**
-   * Запустить resolve для конкретного узла (если у него есть resolve-конфиг).
-   * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
+   * Run resolve for a specific node (if it has a resolve config).
+   * Arrow function — keeps `this` when destructured/passed as a callback.
    */
   triggerResolve = (node: AnyConfigNode): void => {
     const entry = this.resolveEntryMap.get(node);
     if (!entry) return;
-    // Ручной запуск сбрасывает счётчик автоматических перезапусков
+    // A manual trigger resets the auto-retrigger counter
     const state = this.states.get(node as object);
     if (state) state.autoRetriggerCount = 0;
     this._executeEntry(entry);
   };
 
   /**
-   * Получить текущее состояние resolve для узла.
-   * Arrow function — сохраняет `this` при деструктуризации/передаче как callback.
+   * Get the current resolve state of a node.
+   * Arrow function — keeps `this` when destructured/passed as a callback.
    */
   getResolveState = (node: AnyConfigNode): ResolveState | undefined => {
     return this.states.get(node as object);
   };
 
-  // ─── Фаза 2: entity field resolve ──────────────────────────────────────────
+  // ─── Entity field resolve ──────────────────────────────────────────────────
 
   /**
-   * Запустить per-entity field resolve для конкретного entity и template-поля.
+   * Run a per-entity field resolve for a specific entity and template field.
    *
-   * Логика:
-   * 1. Найти TemplateFieldResolveEntry по templateFieldNode
-   * 2. getOrCreate ResolveState в entityStates
-   * 3. skipIfResolved: если entity leaf уже имеет значение ≠ template default → skip
-   * 4. Deduplication: если status === "pending" → return
-   * 5. Вызвать _executeEntityFieldEntry (Phase 2: stub, Phase 3: реальная execution)
+   * Logic:
+   * 1. Find the TemplateFieldResolveEntry by templateFieldNode
+   * 2. getOrCreate a ResolveState in entityStates
+   * 3. skipIfResolved: when the entity leaf already has a value ≠ template default → skip
+   * 4. Deduplication: when status === "pending" → return
+   * 5. Call _executeEntityFieldEntry
    */
   triggerEntityFieldResolve(entityId: string, templateFieldNode: AnyConfigNode): void {
     const entry = this.templateFieldEntryMap.get(templateFieldNode);
@@ -214,7 +214,7 @@ export class ResolveManager {
       new Set(entry.resolve.deps ?? []),
     );
 
-    // Проверка skipIfResolved: если у entity leaf уже есть значение ≠ template default
+    // skipIfResolved check: the entity leaf already has a value ≠ template default
     const skipIfResolved = entry.resolve.options?.skipIfResolved ?? true;
     if (skipIfResolved) {
       const entityNode = this.entityRegistry.get(entityId);
@@ -228,7 +228,7 @@ export class ResolveManager {
           entityLeaf.value !== undefined &&
           entityLeaf.value !== null
         ) {
-          // Значение уже отличается от дефолтного — помечаем resolved и пропускаем
+          // Already differs from the default — mark resolved and skip
           if (state.status === "idle") {
             state.status = "resolved";
           }
@@ -237,20 +237,19 @@ export class ResolveManager {
       }
     }
 
-    // Дедупликация: уже выполняется
+    // Deduplication: already running
     if (state.status === "pending") return;
 
     this._executeEntityFieldEntry(entry, entityId);
   }
 
   /**
-   * Запустить resolve для entity-template binding.
-   * Перенесено из Palistor (фаза 6 — унификация entity resolve в ResolveManager).
+   * Run resolve for an entity-template binding.
    *
-   * - Проверяет наличие templateNode.resolve.resolver
-   * - Deduplication: пропускает если уже loading (status === "pending")
+   * - Checks that templateNode.resolve.resolver exists
+   * - Deduplication: skipped when already loading (status === "pending")
    * - status "pending" → resolver(entityProxy, store) → upsert result → markResolved → status "resolved"
-   * - При ошибке: onError → status "error"
+   * - On error: onError → status "error"
    */
   triggerEntityTemplateResolve(
     entityId: string,
@@ -300,7 +299,7 @@ export class ResolveManager {
             { notify: this.resolveDeps.notify },
           );
         } catch {
-          // подавляем ошибки в onError
+          // swallow onError failures
         }
         this.resolveDeps.notifyChanged(new Set<object>([entityNodeObj]));
       }
@@ -308,17 +307,19 @@ export class ResolveManager {
   }
 
   /**
-   * Запустить resolve для per-entity вложенного списка (вариант C, фаза C1).
+   * Run resolve for a per-entity nested list.
    *
-   * Состояние resolve хранится в общем `entityStates`, ключ — (ownerId, listConfigNode).
-   * Состав списка — в `EntityListState` (на `ownerEntity.lists`), идентичность
-   * которого служит ключом изолированной версии в хабе.
+   * The resolve state lives in the shared `entityStates`, keyed by
+   * (ownerId, listConfigNode). The list membership lives in the
+   * `EntityListState` (on `ownerEntity.lists`), whose identity serves as the
+   * isolated version key in the hub.
    *
-   * - Проверяет `listConfigNode[1].resolve.resolver`.
-   * - Дедупликация: пропускает, если уже `pending`/`resolved`.
-   * - `pending` → resolver(parentValues, store) → upsert children с owner-ссылкой →
-   *   обновление `EntityListState.itemIds` → notify (bump версии entityListState).
-   * - При ошибке: onError → status `error`.
+   * - Checks `listConfigNode[1].resolve.resolver`.
+   * - Deduplication: skipped when already `pending`/`resolved`.
+   * - `pending` → resolver(parentValues, store) → upsert children with the
+   *   owner reference → update `EntityListState.itemIds` → notify (bump the
+   *   entityListState version).
+   * - On error: onError → status `error`.
    */
   triggerEntityListResolve(
     ownerId: string,
@@ -341,7 +342,7 @@ export class ResolveManager {
       listConfigNode as object,
       new Set(resolve.deps ?? []),
     );
-    // Дедупликация: уже выполняется или завершён (C1 — без deps-driven re-resolve).
+    // Deduplication: already running or completed (no deps-driven re-resolve here).
     if (state.status === "pending" || state.status === "resolved") return;
 
     state.status = "pending";
@@ -349,7 +350,7 @@ export class ResolveManager {
 
     void (async () => {
       try {
-        // Q4: resolver получает плоский snapshot ВЛАДЕЛЬЦА (не projection-proxy).
+        // The resolver receives a flat snapshot of the OWNER (not a projection proxy).
         const parentValues = buildEntityValues(
           ownerEntity,
           this.resolveDeps.nodeState as WeakMap<object, { value: unknown }>,
@@ -360,7 +361,7 @@ export class ResolveManager {
         const items = Array.isArray(result) ? (result as EntityData[]) : [];
         const changed = new Set<object>();
 
-        // Предварительно фиксируем id (стабильно для items без id), затем заливаем.
+        // Fix ids upfront (stable for items without an id), then ingest.
         const ids: string[] = [];
         const itemsWithIds: EntityData[] = items.map((item) => {
           const rawId = item.id;
@@ -373,7 +374,7 @@ export class ResolveManager {
         if (itemsWithIds.length > 0) {
           const entityChanged = this.listResolveDeps.setEntitiesRaw(itemsWithIds);
           for (const n of entityChanged) changed.add(n);
-          // Проставить owner-ссылку каждому child + проиндексировать.
+          // Set the owner reference on every child + index it.
           for (const id of ids) {
             const childNode = this.entityRegistry.get(id);
             if (childNode) {
@@ -389,7 +390,7 @@ export class ResolveManager {
         els.itemIds = ids;
         els.initialItemIds = [...ids];
 
-        // C3: материализовать состав в projectionObj владельца (для getValues).
+        // Materialize the membership into the owner's projectionObj (for getValues).
         (this.resolveDeps.store as any).syncListValuesCache(els);
 
         changed.add(entityListState);
@@ -404,14 +405,14 @@ export class ResolveManager {
             { notify: this.resolveDeps.notify },
           );
         } catch {
-          // подавляем ошибки в onError
+          // swallow onError failures
         }
         this.resolveDeps.notifyChanged(new Set<object>([entityListState]));
       }
     })();
   }
 
-  /** Текущий id владельца (учитывает rekey через nodeState). */
+  /** Current owner id (accounts for rekey via nodeState). */
   private _listOwnerId(ownerEntity: EntityNode): string {
     const idLeaf = ownerEntity.id as object;
     const ns = this.resolveDeps.nodeState as WeakMap<object, { value: unknown }>;
@@ -419,15 +420,16 @@ export class ResolveManager {
   }
 
   /**
-   * Единая точка чтения resolve-state списка (root + per-entity).
+   * Single read point for a list's resolve state (root + per-entity).
    *
-   * Дает builder-у/loading один источник, не зная, где физически лежит состояние:
-   *   - root  → `this.states` (ключ — listConfigNode);
-   *   - entity→ `this.entityStates` (ключ — (ownerId, listConfigNode)).
+   * Gives the builder/loading one source without knowing where the state
+   * physically lives:
+   *   - root  → `this.states` (keyed by listConfigNode);
+   *   - entity→ `this.entityStates` (keyed by (ownerId, listConfigNode)).
    *
-   * Физическое слияние двух хранилищ не делается намеренно: root-list states
-   * сцеплены с общим `this.states` (deps-retrigger/reset), и их вынос дороже
-   * и рискованнее, чем выигрыш. Унификация здесь — на уровне доступа.
+   * The two stores are deliberately not merged: root-list states are coupled
+   * to the shared `this.states` (deps re-trigger/reset), and extracting them
+   * costs more than it gains. Unification here is at the access level.
    */
   getListResolveState(listState: ListState): ResolveState | undefined {
     if (listState.ownerEntity === null) {
@@ -438,8 +440,8 @@ export class ResolveManager {
   }
 
   /**
-   * Единая точка запуска resolve списка (root + per-entity).
-   * Диспетчеризует по `ownerEntity` на существующие тела
+   * Single trigger point for a list resolve (root + per-entity).
+   * Dispatches by `ownerEntity` onto the existing bodies
    * ({@link triggerResolve} → executeListResolve / {@link triggerEntityListResolve}).
    */
   triggerListResolve(listState: ListState): void {
@@ -456,18 +458,18 @@ export class ResolveManager {
   }
 
   /**
-   * Очистить все per-entity resolve states для удалённой entity.
-   * Вызывается из Palistor.delete(entityId) — фаза 4.
+   * Clear all per-entity resolve states for a deleted entity.
+   * Called from Palistor.delete(entityId).
    */
   cleanupEntityResolveStates(entityId: string): void {
     this.entityStates.delete(entityId);
   }
 
   /**
-   * Подключить retrigger resolve в notification hub.
-   * Возвращает функцию-хук `(changedPaths) => void`, которую нужно
-   * установить в `hub.setPostNotifyHook`.
-   * Возвращает `null`, если resolve-записей нет.
+   * Wire the resolve re-trigger into the notification hub.
+   * Returns the `(changedPaths) => void` hook to install via
+   * `hub.setPostNotifyHook`.
+   * Returns `null` when there are no resolve entries.
    */
   createPostNotifyHook(): ((changedPaths: Set<string>) => void) | null {
     if (this.resolveEntries.length === 0 && this.templateFieldEntries.length === 0) return null;
@@ -479,8 +481,8 @@ export class ResolveManager {
         this.resolveEntries,
       );
 
-      // Отслеживаем узлы, которые только что запущены, чтобы не помечать их
-      // pendingRetrigger в том же тике (у них уже есть новое значение зависимости).
+      // Track the nodes just triggered so we don't mark them pendingRetrigger
+      // in the same tick (they already have the new dependency value).
       const justTriggeredNodes = new Set<object>(toRetrigger.map((e) => e.node as object));
 
       for (const entry of toRetrigger) {
@@ -500,8 +502,8 @@ export class ResolveManager {
         this._executeEntry(entry);
       }
 
-      // Помечаем resolver-ы, которые УЖЕ были в pending (не только что запущены),
-      // чьи зависимости изменились — они перезапустятся после завершения текущей резолюции.
+      // Mark resolvers that were ALREADY pending (not just triggered) whose
+      // dependencies changed — they re-run after the current resolution completes.
       for (const entry of this.resolveEntries) {
         if (justTriggeredNodes.has(entry.node as object)) continue;
         const state = this.states.get(entry.node as object);
@@ -514,7 +516,7 @@ export class ResolveManager {
         }
       }
 
-      // Фаза 4: перезапуск entity field resolves при изменении путей entity.
+      // Re-trigger entity field resolves when entity paths change.
       if (this.templateFieldEntries.length > 0) {
         this._retriggerEntityFieldResolves(changedPaths);
       }
@@ -522,14 +524,15 @@ export class ResolveManager {
   }
 
   /**
-   * Фаза 4: парсит entity-пути из changedPaths и перезапускает entity field resolves,
-   * чьи зависимости пересекаются с изменёнными путями полей.
+   * Parses entity paths out of changedPaths and re-triggers entity field
+   * resolves whose dependencies intersect the changed field paths.
    *
-   * Entity-пути имеют вид `_entity_.${entityId}.${fieldPath}`.
-   * Зависимости в entityStates хранятся относительно entity (например, "name", не "_entity_.u1.name").
+   * Entity paths look like `_entity_.${entityId}.${fieldPath}`.
+   * Dependencies in entityStates are stored relative to the entity
+   * (e.g. "name", not "_entity_.u1.name").
    */
   private _retriggerEntityFieldResolves(changedPaths: Set<string>): void {
-    // Парсим entity-пути: строим карту entityId → Set<changedFieldPath>
+    // Parse entity paths: build the entityId → Set<changedFieldPath> map
     const entityChanges = new Map<string, Set<string>>();
     for (const path of changedPaths) {
       if (!path.startsWith("_entity_.")) continue;
@@ -554,7 +557,7 @@ export class ResolveManager {
         if (!state) continue;
 
         if (state.status === "resolved" || state.status === "error") {
-          // Проверяем, изменилась ли хоть одна зависимость → перезапуск
+          // Any dependency changed → re-run
           let shouldRetrigger = false;
           for (const dep of state.dependencies) {
             if (changedFields.has(dep)) {
@@ -563,14 +566,14 @@ export class ResolveManager {
             }
           }
           if (shouldRetrigger) {
-            // Сбрасываем состояние в idle и выполняем напрямую (обходим skipIfResolved —
-            // это перезапуск по изменению зависимости, а не начальная загрузка).
+            // Reset the state to idle and execute directly (bypassing
+            // skipIfResolved — this is a dependency-driven re-run, not an initial load).
             state.status = "idle";
             state.pendingRetrigger = false;
             this._executeEntityFieldEntry(entry, entityId);
           }
         } else if (state.status === "pending") {
-          // Помечаем pendingRetrigger, чтобы перезапустить после завершения текущего resolve
+          // Mark pendingRetrigger to re-run after the current resolve completes
           for (const dep of state.dependencies) {
             if (changedFields.has(dep)) {
               state.pendingRetrigger = true;
@@ -582,7 +585,7 @@ export class ResolveManager {
     }
   }
 
-  /** Запустить eager resolvers (lazy: false). */
+  /** Launch eager resolvers (lazy: false). */
   launchEager(): void {
     for (const entry of this.resolveEntries) {
       const lazy = entry.resolve?.options?.lazy ?? true;
@@ -593,9 +596,9 @@ export class ResolveManager {
   }
 
   /**
-   * Ретриггерить резолверы, зависящие от изменённых путей.
-   * Используется из `Palistor.setContext()` для реактивного перезапуска
-   * резолверов при изменении контекста.
+   * Re-trigger resolvers that depend on the changed paths.
+   * Used by `Palistor.setContext()` to reactively re-run resolvers on
+   * context changes.
    */
   retriggerByPaths(changedPaths: Set<string>): void {
     if (changedPaths.size === 0) return;
@@ -607,14 +610,14 @@ export class ResolveManager {
     );
 
     for (const entry of toRetrigger) {
-      // setContext — явное внешнее изменение, сбрасываем счётчик авто-перезапусков
+      // setContext is an explicit external change — reset the auto-retrigger counter
       const state = this.states.get(entry.node as object);
       if (state) state.autoRetriggerCount = 0;
       resetResolveState(entry.node as AnyConfigNode, this.states);
       this._executeEntry(entry);
     }
 
-    // Сбрасываем очередь отложенных: запускаем записи, у которых contextDeps теперь удовлетворены
+    // Flush the deferred queue: launch entries whose contextDeps are now satisfied
     for (const entry of this.pendingContextQueue) {
       const resolve = entry.resolve as Resolve | undefined;
       if (isContextSatisfied(resolve?.contextDeps, this.resolveDeps.store.context)) {
@@ -624,11 +627,11 @@ export class ResolveManager {
     }
   }
 
-  // ─── Внутренняя диспетчеризация ──────────────────────────────────────────────
+  // ─── Internal dispatch ───────────────────────────────────────────────────────
 
-  /** Диспетчеризует запись в нужную функцию выполнения (группа или список). */
+  /** Dispatches an entry to the right execution function (group or list). */
   private _executeEntry(entry: AnyResolveEntry): void {
-    // Фаза 4, условие запуска: если contextDeps не удовлетворены — откладываем в очередь
+    // Launch condition: when contextDeps are not satisfied — defer into the queue
     const resolve = entry.resolve as Resolve | undefined;
     if (!isContextSatisfied(resolve?.contextDeps, this.resolveDeps.store.context)) {
       this.pendingContextQueue.add(entry);
@@ -655,8 +658,8 @@ export class ResolveManager {
   }
 
   /**
-   * Выполняет entity field resolve для заданной entry + entityId.
-   * Делегирует вызов executeEntityFieldResolve с per-entity ResolveDeps.
+   * Executes the entity field resolve for a given entry + entityId.
+   * Delegates to executeEntityFieldResolve with per-entity ResolveDeps.
    */
   private _executeEntityFieldEntry(
     entry: TemplateFieldResolveEntry,
@@ -674,9 +677,9 @@ export class ResolveManager {
   }
 }
 
-// ─── Устаревший алиас-фабрика ───────────────────────────────────────────────
+// ─── Deprecated factory alias ────────────────────────────────────────────────
 
-/** @deprecated Используйте `new ResolveManager(deps)`. */
+/** @deprecated Use `new ResolveManager(deps)`. */
 export function createResolveManager(deps: ResolveManagerDeps): ResolveManager {
   return new ResolveManager(deps);
 }

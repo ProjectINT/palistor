@@ -1,13 +1,13 @@
 /**
- * Фаза 2C: тесты для List resolver + React tracking + Dirty для списков.
+ * Tests for the list resolver + React tracking + list dirty state.
  *
- * Покрывает:
- * 2C.1 - List resolver: resolver загружает список → entities созданы → proxy работает.
- * 2C.2 - rekey обновляет itemIds во всех списках.
- * 2C.3 - List tracking: version++ при add/remove → re-render (через getNodeVersion).
- *         Entity leaf change → только leaf нода меняет версию (не весь список).
- * 2C.4 - Dirty: добавление/удаление → dirty. После resolve → clean.
- * 2C.5 - Интеграция полного сценария.
+ * Covers:
+ * 1 - List resolver: the resolver loads a list → entities are created → the proxy works.
+ * 2 - rekey updates itemIds in all lists.
+ * 3 - List tracking: version++ on add/remove → re-render (via getNodeVersion).
+ *     An entity leaf change → only the leaf node's version changes (not the whole list).
+ * 4 - Dirty: add/remove → dirty. After resolve → clean.
+ * 5 - Full end-to-end scenario.
  */
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from "../store";
@@ -26,10 +26,10 @@ const userTemplate = {
   role: { value: "user" },
 };
 
-// ─── 2C.1: List resolver ─────────────────────────────────────────────────────
+// ─── List resolver ───────────────────────────────────────────────────────────
 
-describe("2C.1: List resolver", () => {
-  it("resolver загружает список → entities созданы в registry", async () => {
+describe("List resolver", () => {
+  it("the resolver loads the list → entities are created in the registry", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
       { id: "u2", name: "Bob", role: "user" },
@@ -55,7 +55,7 @@ describe("2C.1: List resolver", () => {
     expect(store.entityRegistry.get("u2")).toBeDefined();
   });
 
-  it("resolver загружает список → listState.itemIds обновлён", async () => {
+  it("the resolver loads the list → listState.itemIds is updated", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
       { id: "u2", name: "Bob", role: "user" },
@@ -76,7 +76,7 @@ describe("2C.1: List resolver", () => {
     expect((store.proxy as any).users.length).toBe(2);
   });
 
-  it("root list loading берётся из resolve-state (единый источник, U5)", async () => {
+  it("root list loading comes from the resolve state (single source)", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => {
       release = r;
@@ -96,16 +96,16 @@ describe("2C.1: List resolver", () => {
     const listState = listProxy[LIST_STATE] as object;
     const rm = store.resolveManager as any;
 
-    // До доступа: resolve idle → loading false. loading === (status === "pending").
+    // Before access: resolve is idle → loading false. loading === (status === "pending").
     expect(rm.getListResolveState(listState).status).toBe("idle");
     expect(listProxy.loading).toBe(false);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
 
-    // Доступ к items → lazy resolve (deferred queueMicrotask) → resolver висит на gate.
+    // Accessing items → lazy resolve (deferred queueMicrotask) → the resolver hangs on the gate.
     void listProxy.items;
     await flushPromises();
 
-    // Pending: loading === true, и это РОВНО статус resolve-state (не nodeState).
+    // Pending: loading === true, and it is EXACTLY the resolve-state status (not nodeState).
     expect(rm.getListResolveState(listState).status).toBe("pending");
     expect(listProxy.loading).toBe(true);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
@@ -113,16 +113,17 @@ describe("2C.1: List resolver", () => {
     release();
     await flushPromises();
 
-    // Resolved: loading false, источник тот же.
+    // Resolved: loading false, same source.
     expect(rm.getListResolveState(listState).status).toBe("resolved");
     expect(listProxy.loading).toBe(false);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
   });
 
-  it("per-entity list loading берётся из resolve-state (единый источник, U5)", async () => {
-    // Симметрия к root-тесту выше: per-entity ветка (ownerEntity !== null) должна
-    // читать loading из ТОГО ЖЕ getListResolveState(listState), а lazy-доступ к .items
-    // должен идти через единый вход triggerListResolve(listState) → triggerEntityListResolve.
+  it("per-entity list loading comes from the resolve state (single source)", async () => {
+    // Mirror of the root test above: the per-entity branch (ownerEntity !== null)
+    // must read loading from the SAME getListResolveState(listState), and lazy
+    // access to .items must go through the single entry point
+    // triggerListResolve(listState) → triggerEntityListResolve.
     let release!: () => void;
     const gate = new Promise<void>((r) => {
       release = r;
@@ -138,9 +139,9 @@ describe("2C.1: List resolver", () => {
           template: {
             id: { value: "" },
             name: { value: "" },
-            // Вложенный per-entity список внутри entity-шаблона. Каст к any —
-            // известная дыра в типах TemplateConfig на nested-списках (тот же
-            // паттерн в react/entity-list-nested.test.tsx); поведение верное.
+            // A nested per-entity list inside an entity template. The `any`
+            // cast is a known TemplateConfig typing gap on nested lists (same
+            // pattern in react/entity-list-nested.test.tsx); behavior is correct.
             contacts: defineList({
               template: { id: { value: "" }, phone: { value: "" } },
               resolve: { resolver, onError: vi.fn() },
@@ -153,23 +154,23 @@ describe("2C.1: List resolver", () => {
     store.set({ id: "u1", name: "Alice" });
     (store.proxy as any).users.add("u1");
 
-    // Per-entity list proxy владельца u1 (ownerEntity !== null).
+    // The per-entity list proxy of owner u1 (ownerEntity !== null).
     const listProxy = (store.proxy as any).users.items[0].contacts;
     const listState = listProxy[LIST_STATE] as { ownerEntity: unknown };
     const rm = store.resolveManager as any;
-    expect(listState.ownerEntity).not.toBeNull(); // именно per-entity ветка
+    expect(listState.ownerEntity).not.toBeNull(); // specifically the per-entity branch
 
-    // До доступа: resolve-state ещё не создан → loading false.
+    // Before access: the resolve state doesn't exist yet → loading false.
     // loading === (getListResolveState(...)?.status === "pending").
     expect(rm.getListResolveState(listState)?.status).toBeUndefined();
     expect(listProxy.loading).toBe(false);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState)?.status === "pending");
 
-    // Доступ к items → lazy resolve (deferred) → resolver висит на gate.
+    // Accessing items → lazy resolve (deferred) → the resolver hangs on the gate.
     void listProxy.items;
     await flushPromises();
 
-    // Pending: loading === true, ровно статус resolve-state (не nodeState/entityStates напрямую).
+    // Pending: loading === true, exactly the resolve-state status (not nodeState/entityStates directly).
     expect(rm.getListResolveState(listState).status).toBe("pending");
     expect(listProxy.loading).toBe(true);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
@@ -177,14 +178,14 @@ describe("2C.1: List resolver", () => {
     release();
     await flushPromises();
 
-    // Resolved: loading false, источник тот же; состав списка залит.
+    // Resolved: loading false, same source; the list membership landed.
     expect(rm.getListResolveState(listState).status).toBe("resolved");
     expect(listProxy.loading).toBe(false);
     expect(listProxy.loading).toBe(rm.getListResolveState(listState).status === "pending");
     expect(listProxy.length).toBe(1);
   });
 
-  it("resolver загружает список → proxy items отображает entities", async () => {
+  it("the resolver loads the list → the proxy items show the entities", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
     ]);
@@ -206,7 +207,7 @@ describe("2C.1: List resolver", () => {
     expect(users.items[0].role.value).toBe("admin");
   });
 
-  it("loading: true пока resolver выполняется", async () => {
+  it("loading: true while the resolver runs", async () => {
     let resolvePromise!: (v: any) => void;
     const resolver = vi.fn(
       () => new Promise<any[]>((r) => { resolvePromise = r; }),
@@ -234,14 +235,14 @@ describe("2C.1: List resolver", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("loading: false если resolver не задан", () => {
+  it("loading: false when no resolver is configured", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("resolver уведомляет глобальных подписчиков после успешного resolve", async () => {
+  it("the resolver notifies global subscribers after a successful resolve", async () => {
     const resolver = vi.fn(async () => [{ id: "u1", name: "Alice", role: "admin" }]);
 
     const store = new Palistor({
@@ -263,7 +264,7 @@ describe("2C.1: List resolver", () => {
     expect(listener).toHaveBeenCalled();
   });
 
-  it("resolver — eager (lazy: false) запускается сразу при init", async () => {
+  it("an eager resolver (lazy: false) launches right at init", async () => {
     const resolver = vi.fn(async () => [{ id: "u1", name: "Alice", role: "admin" }]);
 
     new Palistor({
@@ -275,11 +276,11 @@ describe("2C.1: List resolver", () => {
       } as any,
     });
 
-    // Resolver вызывается немедленно (eager)
+    // The resolver is called immediately (eager)
     expect(resolver).toHaveBeenCalledTimes(1);
   });
 
-  it("onError вызывается при ошибке resolver", async () => {
+  it("onError is called when the resolver throws", async () => {
     const onError = vi.fn();
     const resolver = vi.fn(async () => { throw new Error("network error"); });
 
@@ -299,7 +300,7 @@ describe("2C.1: List resolver", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("resolver обновляет initialItemIds → dirty = false после resolve", async () => {
+  it("the resolver updates initialItemIds → dirty = false after resolve", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
     ]);
@@ -316,11 +317,11 @@ describe("2C.1: List resolver", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // После resolve → clean (initialItemIds == itemIds)
+    // After resolve → clean (initialItemIds == itemIds)
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 
-  it("resolver не создаёт дублей при повторном доступе", async () => {
+  it("the resolver creates no duplicates on repeated access", async () => {
     let callCount = 0;
     const resolver = vi.fn(async () => {
       callCount++;
@@ -345,7 +346,7 @@ describe("2C.1: List resolver", () => {
     expect(callCount).toBe(1);
   });
 
-  it("resolver получает store вторым аргументом", async () => {
+  it("the resolver receives the store as the second argument", async () => {
     let capturedStore: unknown;
     const resolver = vi.fn(async (_values: unknown, store: unknown) => {
       capturedStore = store;
@@ -364,16 +365,16 @@ describe("2C.1: List resolver", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // storeProxy оборачивает store для отслеживания context-зависимостей,
-    // поэтому capturedStore !== store по ссылке, но делегирует все остальные свойства
+    // storeProxy wraps the store to track context dependencies, so
+    // capturedStore !== store by reference, but delegates all other properties
     expect((capturedStore as any).entityRegistry).toBe(store.entityRegistry);
   });
 });
 
-// ─── 2C.2: rekey — обновление itemIds ─────────────────────────────────────────
+// ─── rekey — itemIds updates ─────────────────────────────────────────────────
 
-describe("2C.2: rekey() — обновление itemIds", () => {
-  it("rekey обновляет id entity", () => {
+describe("rekey() — itemIds updates", () => {
+  it("rekey updates the entity id", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -387,7 +388,7 @@ describe("2C.2: rekey() — обновление itemIds", () => {
     expect(store.entityRegistry.get("_tmp_abc")).toBeUndefined();
   });
 
-  it("rekey обновляет itemIds в ListState", () => {
+  it("rekey updates itemIds in ListState", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -402,7 +403,7 @@ describe("2C.2: rekey() — обновление itemIds", () => {
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
   });
 
-  it("rekey обновляет itemIds в нескольких списках", () => {
+  it("rekey updates itemIds across multiple lists", () => {
     const store = new Palistor({
       config: {
         users: [userTemplate],
@@ -420,7 +421,7 @@ describe("2C.2: rekey() — обновление itemIds", () => {
     expect((store.proxy as any).admins.items[0].name.value).toBe("Alice");
   });
 
-  it("rekey уведомляет подписчиков", () => {
+  it("rekey notifies subscribers", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -435,7 +436,7 @@ describe("2C.2: rekey() — обновление itemIds", () => {
     expect(listener).toHaveBeenCalled();
   });
 
-  it("rekey no-op для несуществующего id", () => {
+  it("rekey is a no-op for a missing id", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -445,10 +446,10 @@ describe("2C.2: rekey() — обновление itemIds", () => {
   });
 });
 
-// ─── 2C.3: List tracking для React ─────────────────────────────────────────────
+// ─── List tracking for React ─────────────────────────────────────────────────
 
-describe("2C.3: List tracking — versions", () => {
-  it("version списка инкрементируется при add", () => {
+describe("List tracking — versions", () => {
+  it("the list version is bumped on add", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -469,20 +470,20 @@ describe("2C.3: List tracking — versions", () => {
     expect(vAfter).toBeGreaterThan(vBefore);
   });
 
-  it("root-list трекается по объекту LIST_STATE (версия растёт на нём при add/remove)", () => {
+  it("the root list is tracked via the LIST_STATE object (its version grows on add/remove)", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
 
     store.set({ id: "u1", name: "Alice", role: "admin" });
 
-    // Root-list proxy теперь экспонирует бренд LIST_STATE → объект ListState.
+    // The root list proxy exposes the LIST_STATE brand → the ListState object.
     const listProxy = (store.proxy as any).users;
     const listState = listProxy[LIST_STATE] as object;
     expect(listState).toBeDefined();
     expect((listState as any).ownerEntity).toBeNull();
 
-    // Трекинг ведётся по этому объекту: его версия растёт при мутациях.
+    // Tracking is keyed by this object: its version grows on mutations.
     const vBefore = store.getNodeVersion(listState);
     listProxy.add("u1");
     const vAfterAdd = store.getNodeVersion(listState);
@@ -493,7 +494,7 @@ describe("2C.3: List tracking — versions", () => {
     expect(vAfterRemove).toBeGreaterThan(vAfterAdd);
   });
 
-  it("version списка инкрементируется при remove", () => {
+  it("the list version is bumped on remove", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -511,7 +512,7 @@ describe("2C.3: List tracking — versions", () => {
     expect(vAfter).toBeGreaterThan(vBefore);
   });
 
-  it("entity leaf версия инкрементируется при изменении через store.set()", () => {
+  it("the entity leaf version is bumped on a change through store.set()", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -530,7 +531,7 @@ describe("2C.3: List tracking — versions", () => {
     expect(leafAfter).toBeGreaterThan(leafBefore);
   });
 
-  it("add не меняет версию entity leaf", () => {
+  it("add does not change the entity leaf version", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -551,7 +552,7 @@ describe("2C.3: List tracking — versions", () => {
     expect(leafAfter).toBe(leafBefore);
   });
 
-  it("resolve бампает версию listNode", async () => {
+  it("resolve bumps the listNode version", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
     ]);
@@ -577,17 +578,17 @@ describe("2C.3: List tracking — versions", () => {
   });
 });
 
-// ─── 2C.4: Dirty для списков ───────────────────────────────────────────────────
+// ─── Dirty for lists ─────────────────────────────────────────────────────────
 
-describe("2C.4: Dirty для списков", () => {
-  it("dirty = false при инициализации", () => {
+describe("Dirty for lists", () => {
+  it("dirty = false at initialization", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 
-  it("dirty = true после add", () => {
+  it("dirty = true after add", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -596,7 +597,7 @@ describe("2C.4: Dirty для списков", () => {
     expect((store.proxy as any).users.dirty).toBe(true);
   });
 
-  it("dirty = true после remove", () => {
+  it("dirty = true after remove", () => {
     const store = new Palistor({
       config: { users: [userTemplate] } as any,
     });
@@ -611,7 +612,7 @@ describe("2C.4: Dirty для списков", () => {
     expect((store.proxy as any).users.dirty).toBe(true);
   });
 
-  it("dirty вносит вклад в root form.dirty", () => {
+  it("dirty contributes to root form.dirty", () => {
     const store = new Palistor({
       config: {
         title: { value: "Users" },
@@ -633,7 +634,7 @@ describe("2C.4: Dirty для списков", () => {
     expect((store.proxy as any).dirty).toBe(true);
   });
 
-  it("dirty = false после resolver загружает список (initialItemIds синхронизируется)", async () => {
+  it("dirty = false after the resolver loads the list (initialItemIds syncs)", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
       { id: "u2", name: "Bob", role: "user" },
@@ -655,7 +656,7 @@ describe("2C.4: Dirty для списков", () => {
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 
-  it("dirty = true после add на resolved список", async () => {
+  it("dirty = true after add on a resolved list", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
     ]);
@@ -672,17 +673,17 @@ describe("2C.4: Dirty для списков", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // Add new entity → dirty
+    // Add a new entity → dirty
     store.set({ id: "u2", name: "Bob", role: "user" });
     (store.proxy as any).users.add("u2");
     expect((store.proxy as any).users.dirty).toBe(true);
   });
 });
 
-// ─── 2C.5: Интеграционный сценарий ───────────────────────────────────────────
+// ─── End-to-end scenario ─────────────────────────────────────────────────────
 
-describe("2C.5: Интеграционный сценарий", () => {
-  it("полный цикл: resolver → proxy → edit → notify", async () => {
+describe("End-to-end scenario", () => {
+  it("full cycle: resolver → proxy → edit → notify", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice", role: "admin" },
       { id: "u2", name: "Bob", role: "user" },
@@ -704,30 +705,30 @@ describe("2C.5: Интеграционный сценарий", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    // Список загружен
+    // The list is loaded
     expect((store.proxy as any).users.length).toBe(2);
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
 
-    // Редактируем имя через proxy
+    // Edit the name through the proxy
     listener.mockClear();
     (store.proxy as any).users.items[0].name.value = "Alice Cooper";
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice Cooper");
     expect(listener).toHaveBeenCalled();
 
-    // Список по составу — clean (не добавляли/удаляли)
+    // Membership-wise the list is clean (nothing added/removed)
     expect((store.proxy as any).users.dirty).toBe(false);
 
-    // Добавляем новую entity → dirty
+    // Add a new entity → dirty
     store.set({ id: "u3", name: "Carol", role: "user" });
     (store.proxy as any).users.add("u3");
     expect((store.proxy as any).users.length).toBe(3);
     expect((store.proxy as any).users.dirty).toBe(true);
 
-    // Удаляем entity → всё ещё dirty
+    // Remove the entity → still dirty?
     (store.proxy as any).users.remove("u3");
     expect((store.proxy as any).users.length).toBe(2);
-    // Still dirty (we removed u3 which wasn't in initialItemIds, but now itemIds=[u1,u2]
-    // which equals initialItemIds=[u1,u2]) - actually at this point we're back to clean!
+    // We removed u3 which wasn't in initialItemIds; now itemIds=[u1,u2]
+    // which equals initialItemIds=[u1,u2] — so we're back to clean!
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 

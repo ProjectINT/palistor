@@ -1,8 +1,8 @@
 /**
- * Встроенные драйверы хранения для persist.
+ * Built-in storage drivers for persist.
  *
- * Каждый драйвер реализует интерфейс PersistDriver.
- * Все драйверы проверяют доступность API (SSR-совместимо).
+ * Each driver implements the PersistDriver interface.
+ * All drivers check API availability (SSR-safe).
  */
 
 import type { PersistDriver } from "./types";
@@ -10,9 +10,9 @@ import type { PersistDriver } from "./types";
 // ─── localStorage ────────────────────────────────────────────────────────────
 
 /**
- * Драйвер на основе `window.localStorage`.
+ * Driver backed by `window.localStorage`.
  *
- * Безопасен для SSR: при отсутствии `localStorage` — no-op.
+ * SSR-safe: no-op when `localStorage` is unavailable.
  *
  * @example
  * ```ts
@@ -34,7 +34,7 @@ export const localStorageDriver: PersistDriver = {
     try {
       if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
     } catch {
-      // Quota exceeded или private mode — молчим
+      // Quota exceeded or private mode — stay silent
     }
   },
 
@@ -50,9 +50,9 @@ export const localStorageDriver: PersistDriver = {
 // ─── sessionStorage ──────────────────────────────────────────────────────────
 
 /**
- * Драйвер на основе `window.sessionStorage`.
+ * Driver backed by `window.sessionStorage`.
  *
- * Данные сохраняются до закрытия вкладки/окна.
+ * Data survives until the tab/window is closed.
  *
  * @example
  * ```ts

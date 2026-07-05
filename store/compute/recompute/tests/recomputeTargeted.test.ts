@@ -13,7 +13,7 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
 }
 
 describe("recomputeTargeted", () => {
-  it("пересчитывает группу изменённого узла", () => {
+  it("recomputes the changed node's group", () => {
     const fieldNode = { value: "" } as unknown as AnyConfigNode;
     const root = { field: fieldNode } as unknown as AnyConfigNode;
 
@@ -36,11 +36,11 @@ describe("recomputeTargeted", () => {
       translate,
     });
 
-    // fieldNode не имел prev-состояния → должен быть в changed
+    // fieldNode had no prev state → must be in changed
     expect(result.has(fieldNode)).toBe(true);
   });
 
-  it("также пересчитывает группы-реципиенты через BFS", () => {
+  it("also recomputes recipient groups via BFS", () => {
     const donorField = { value: "" } as unknown as AnyConfigNode;
     const recipientField = { value: "" } as unknown as AnyConfigNode;
     const donorGroup = { d: donorField } as unknown as AnyConfigNode;
@@ -65,7 +65,7 @@ describe("recomputeTargeted", () => {
       [recipientGroup, [{ node: recipientField, path: "recipient.r" }]],
     ]);
     const nodeState = new WeakMap<object, FieldState>();
-    // Зависимость: donor → recipient
+    // Dependency: donor → recipient
     const groupDeps = new Set([pairKey("donor", "recipient")]);
 
     const result = recomputeTargeted(new Set([donorField]), {
@@ -79,12 +79,12 @@ describe("recomputeTargeted", () => {
       translate,
     });
 
-    // Оба узла должны быть пересчитаны
+    // Both nodes must be recomputed
     expect(result.has(donorField)).toBe(true);
     expect(result.has(recipientField)).toBe(true);
   });
 
-  it("возвращает пустой Set, если у группы нет листьев", () => {
+  it("returns an empty Set when the group has no leaves", () => {
     const groupNode = {} as unknown as AnyConfigNode;
     const root = { g: groupNode } as unknown as AnyConfigNode;
 

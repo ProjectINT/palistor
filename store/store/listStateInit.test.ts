@@ -1,13 +1,13 @@
 /**
- * Фаза 2A: тесты ListState + registerNodes.
+ * Tests for ListState + registerNodes.
  *
- * Проверяем:
- *  - ListState создаётся при registerNodes для ListNode (длина 1 и 2)
- *  - template-поля (leaf-ноды шаблона) регистрируются в nodeState
- *  - listConfig корректно извлекается из array[1]
- *  - Обычные поля рядом со списком по-прежнему регистрируются
- *  - Вложенные ListNode (списки внутри групп) обрабатываются
- *  - Типы ConfigNodeToProxy и ExtractValues компилируются для ListNode
+ * Verifies:
+ *  - A ListState is created by registerNodes for a ListNode (length 1 and 2)
+ *  - Template fields (the template's leaf nodes) are registered in nodeState
+ *  - listConfig is correctly extracted from array[1]
+ *  - Regular fields next to the list still register
+ *  - Nested ListNodes (lists inside groups) are handled
+ *  - The ConfigNodeToProxy and ExtractValues types compile for a ListNode
  */
 import { describe, it, expect } from "vitest";
 import { registerNodes } from "./registerNodes";
@@ -15,7 +15,7 @@ import type { ListState } from "./types";
 import type { AnyConfigNode } from "./types";
 import type { FieldState } from "../compute";
 
-// ─── Хелперы ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const translate = (k: string) => k;
 
@@ -31,10 +31,10 @@ function runRegisterNodes(config: AnyConfigNode) {
   return { leafNodes, nodeState, groupLeafMap, listStates };
 }
 
-// ─── ListState создаётся для ListNode длины 1 ─────────────────────────────────
+// ─── A ListState is created for a length-1 ListNode──────────────────────────────
 
-describe("registerNodes — создание ListState", () => {
-  it("создаёт ListState для ListNode длины 1", () => {
+describe("registerNodes — ListState creation", () => {
+  it("creates a ListState for a length-1 ListNode", () => {
     const config = {
       users: [{ id: { value: "" }, name: { value: "" } }],
     } as unknown as AnyConfigNode;
@@ -49,12 +49,12 @@ describe("registerNodes — создание ListState", () => {
     expect(ls!.initialItemIds).toEqual([]);
     expect(ls!.listConfig).toBeUndefined();
     expect(ls!.template).toBe(usersNode[0]);
-    // Унифицированный ListState: root list — ownerEntity === null, ключ — сам узел.
+    // Unified ListState: a root list has ownerEntity === null; the key is the node itself.
     expect(ls!.ownerEntity).toBeNull();
     expect(ls!.listConfigNode).toBe(usersNode);
   });
 
-  it("создаёт ListState для ListNode длины 2 + извлекает listConfig", () => {
+  it("creates a ListState for a length-2 ListNode + extracts listConfig", () => {
     const listConfig = { resolve: { resolver: async () => [] } };
     const config = {
       users: [{ id: { value: "" } }, listConfig],
@@ -70,7 +70,7 @@ describe("registerNodes — создание ListState", () => {
     expect(ls!.template).toBe(usersNode[0]);
   });
 
-  it("создаёт ListState с пустым itemIds", () => {
+  it("creates a ListState with empty itemIds", () => {
     const config = {
       items: [{ value: { value: "" } }],
     } as unknown as AnyConfigNode;
@@ -85,10 +85,10 @@ describe("registerNodes — создание ListState", () => {
   });
 });
 
-// ─── Template-поля регистрируются в nodeState ─────────────────────────────────
+// ─── Template fields register in nodeState ────────────────────────────────────
 
-describe("registerNodes — регистрация template-листьев", () => {
-  it("регистрирует листы template в leafNodes с правильными путями", () => {
+describe("registerNodes — template leaf registration", () => {
+  it("registers template leaves in leafNodes with the right paths", () => {
     const config = {
       users: [{ id: { value: "" }, name: { value: "" } }],
     } as unknown as AnyConfigNode;
@@ -100,7 +100,7 @@ describe("registerNodes — регистрация template-листьев", () 
     expect(paths).toContain("users.name");
   });
 
-  it("регистрирует листы template в nodeState", () => {
+  it("registers template leaves in nodeState", () => {
     const template = { id: { value: "default-id" }, title: { value: "default-title" } };
     const config = {
       items: [template],
@@ -114,7 +114,7 @@ describe("registerNodes — регистрация template-листьев", () 
     expect(nodeState.get(template.title)!.value).toBe("default-title");
   });
 
-  it("обычные поля рядом со списком регистрируются нормально", () => {
+  it("regular fields next to the list register normally", () => {
     const config = {
       name: { value: "Alice" },
       users: [{ id: { value: "" } }],
@@ -131,10 +131,10 @@ describe("registerNodes — регистрация template-листьев", () 
   });
 });
 
-// ─── Вложенный ListNode (список внутри группы) ────────────────────────────────
+// ─── A nested ListNode (a list inside a group) ────────────────────────────────
 
-describe("registerNodes — вложенный ListNode", () => {
-  it("создаёт ListState для списка внутри группы", () => {
+describe("registerNodes — a nested ListNode", () => {
+  it("creates a ListState for a list inside a group", () => {
     const config = {
       section: {
         title: { value: "Section" },
@@ -150,16 +150,16 @@ describe("registerNodes — вложенный ListNode", () => {
     expect(ls).toBeDefined();
     expect(ls!.template).toBe(usersNode[0]);
 
-    // template-листья должны иметь путь section.users.id
+    // template leaves must have the path section.users.id
     const paths = leafNodes.map((e) => e.path);
     expect(paths).toContain("section.users.id");
   });
 });
 
-// ─── Несколько списков ────────────────────────────────────────────────────────
+// ─── Multiple lists ───────────────────────────────────────────────────────────
 
-describe("registerNodes — несколько ListNode в одном конфиге", () => {
-  it("создаёт независимые ListState для нескольких списков", () => {
+describe("registerNodes — several ListNodes in one config", () => {
+  it("creates independent ListStates for several lists", () => {
     const template1 = { id: { value: "" } };
     const template2 = { code: { value: "" }, title: { value: "" } };
     const config = {
@@ -188,23 +188,23 @@ describe("registerNodes — несколько ListNode в одном конфи
   });
 });
 
-// ─── Типизация (compile-time) ─────────────────────────────────────────────────
+// ─── Typing (compile-time) ─────────────────────────────────────────────────────
 
-describe("типизация ConfigNodeToProxy и ExtractValues", () => {
-  it("ConfigNodeToProxy выводит ListProxyNode для ListNode", () => {
-    // Если тип компилируется — тест проходит.
-    // Это type-level тест: проверяем что TypeScript принимает синтаксис.
+describe("typing of ConfigNodeToProxy and ExtractValues", () => {
+  it("ConfigNodeToProxy infers ListProxyNode for a ListNode", () => {
+    // If the type compiles — the test passes.
+    // This is a type-level test: it verifies TypeScript accepts the syntax.
     type ItemConfig = { id: { value: string }; name: { value: string } };
     type ListConfig2 = readonly [ItemConfig];
     type Config = { users: ListConfig2; title: { value: string } };
 
-    // Если импорт типов работает и нет ошибок — всё в порядке.
-    // Фактическая проверка: ListProxyNode импортируется без ошибок из types
+    // If the type imports work with no errors — everything is fine.
+    // The actual check: ListProxyNode imports from types without errors
     const check: boolean = true;
     expect(check).toBe(true);
   });
 
-  it("ListState интерфейс корректно типизирован", () => {
+  it("the ListState interface is correctly typed", () => {
     const ls: ListState = {
       listConfigNode: {},
       template: {},

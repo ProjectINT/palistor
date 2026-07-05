@@ -19,7 +19,7 @@ import {
   stepIsInvalid,
 } from "../flow/flowNavigation";
 
-/** Возвращает закэшированное значение, создавая при первом обращении. */
+/** Returns the cached value, creating it on first access. */
 function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V): V {
   let v = cache.get(key);
   if (v === undefined) {
@@ -30,22 +30,22 @@ function getCached<V>(cache: WeakMap<object, V>, key: object, factory: () => V):
 }
 
 /**
- * ProxyBuilder — строит реактивный Proxy для узлов конфига.
+ * ProxyBuilder — builds the reactive Proxy for config nodes.
  *
- * Proxy перехватывает:
+ * The Proxy intercepts:
  *
  * GET:
- *   - FIELD_STATE_PROPS → из вычисленного FieldState (value, isVisible, error…)
- *   - другой ключ → рекурсивный прокси дочернего узла
+ *   - FIELD_STATE_PROPS → from the computed FieldState (value, isVisible, error…)
+ *   - any other key → recursive proxy of the child node
  *
  * SET:
  *   - "value" → write pipeline → recomputeAll → notify
- *   - остальное → запрещено
+ *   - everything else → forbidden
  *
  * OWNKEYS / GETOWNPROPERTYDESCRIPTOR:
- *   - Контролируют, какие ключи видны при spread ({...proxy}),
- *     Object.keys() и for...in. Скрывают внутренние ключи конфига
- *     (validate, formatter, setter, …), которые не должны утекать как пропсы.
+ *   - Control which keys are visible in spread ({...proxy}), Object.keys()
+ *     and for...in. They hide internal config keys (validate, formatter,
+ *     setter, …) that must not leak as props.
  */
 export class ProxyBuilder {
   private readonly caches = initProxyCaches();
@@ -75,8 +75,8 @@ export class ProxyBuilder {
     if (proxyCache.has(node)) return proxyCache.get(node);
 
     // ── ListNode branch ─────────────────────────────────────────────────────
-    // Root-list: идентифицируется своим ListState (ownerEntity === null).
-    // Proxy кэшируется внутри buildListProxy по ListState, а не в proxyCache.
+    // Root list: identified by its ListState (ownerEntity === null).
+    // The proxy is cached inside buildListProxy by ListState, not in proxyCache.
     if (isListNode(node)) {
       return buildListProxy(this.kernel.nodes.listStates.get(node)!, this.kernel);
     }
@@ -89,21 +89,21 @@ export class ProxyBuilder {
       get(_target, key: string | symbol) {
         if (key === CONFIG_NODE) return node;
 
-        // Бренд флоу: FlowState своего флоу (flow-нода) либо владеющего
-        // флоу (step-нода) — для tracking proxy (status, currentStepKey, …).
+        // Flow brand: the FlowState of its own flow (flow node) or of the
+        // owning flow (step node) — for the tracking proxy (status, currentStepKey, …).
         if (key === FLOW_STATE) {
           return kernel.nodes.flowStates.get(node) ?? kernel.nodes.stepToFlow.get(node);
         }
 
-        // Любой символ кроме CONFIG_NODE/FLOW_STATE не имеет смысла
+        // Any symbol other than CONFIG_NODE/FLOW_STATE is meaningless
         if (typeof key === "symbol") return undefined;
 
-        // Обратный маппинг на входе: external → internal одной строкой.
-        // Дальше вся dispatch-логика работает по internal-ключу `ikey`;
-        // оригинальный `key` нужен только для навигации к дочерним узлам.
+        // Reverse mapping on input: external → internal in one lookup.
+        // All dispatch logic below works with the internal key `ikey`;
+        // the original `key` is only used to navigate to child nodes.
         const ikey = kernel.externalToInternal[key] ?? key;
 
-        // onValueChange — стабильный functional setter для React
+        // onValueChange — a stable functional setter for React
         if (ikey === "onValueChange") {
           return getCached(caches.onValueChange, node, () => (v: unknown) => { proxyNode.value = v; });
         }
@@ -111,12 +111,12 @@ export class ProxyBuilder {
         const currentNode = kernel.nodes.nodeState.get(node);
         const isGroup = isGroupNode(node);
 
-        // ── Групповой узел: методы и состояние ───────────────────────────
+        // ── Group node: methods and state ─────────────────────────────────
         if (isGroup) {
-          // ── Flow-нода (defineFlow): навигация + производное состояние ──
-          // Проверяется ДО group-handlers: submit/loading/isInvalid у флоу
-          // переопределены (errors в flow.errors, композитный loading,
-          // агрегатная валидность посещённых шагов).
+          // ── Flow node (defineFlow): navigation + derived state ──────────
+          // Checked BEFORE the group handlers: a flow overrides
+          // submit/loading/isInvalid (errors land in flow.errors, composite
+          // loading, aggregate validity of visited steps).
           const flowState = kernel.nodes.flowStates.get(node);
           if (flowState) {
             switch (ikey) {
@@ -149,7 +149,7 @@ export class ProxyBuilder {
             }
           }
 
-          // ── Step-нода: вычисляемый статус + агрегатная валидность ──────
+          // ── Step node: computed status + aggregate validity ─────────────
           const owningFlow = kernel.nodes.stepToFlow.get(node);
           if (owningFlow) {
             if (ikey === "status") return getStepStatus(owningFlow, node);
@@ -174,7 +174,7 @@ export class ProxyBuilder {
           );
         }
 
-        // ── Вычисленное состояние поля ───────────────────────────────────
+        // ── Computed field state ─────────────────────────────────────────
         const translatableHandler = () => {
           const configValue = node[ikey];
           if (typeof configValue === "function") {
@@ -209,7 +209,7 @@ export class ProxyBuilder {
           return field;
         }
 
-        // Дочерний узел → рекурсивный прокси (по ОРИГИНАЛЬНОМУ key)
+        // Child node → recursive proxy (by the ORIGINAL key)
         const child = node[key];
 
         if (child && typeof child === "object") return builder.build(child as AnyConfigNode);
@@ -228,28 +228,28 @@ export class ProxyBuilder {
           return true;
         }
 
-        // Захватываем предыдущее значение для onChange
+        // Capture the previous value for onChange
         const previousValue = kernel.nodes.nodeState.get(node)?.value;
 
-        // Весь процесс записи делегирован write pipeline:
+        // The whole write is delegated to the write pipeline:
         // format → store → setter patch → recompute → merge changed
         const result = kernel.writePipeline.execute(node, newValue, previousValue);
 
         if (!result) return false;
 
-        // Значение после форматирования совпадает с текущим — запись пропущена
+        // The formatted value equals the current one — the write was skipped
         if (result.skipped) {
           console.warn(
-            "[Palistor] Запись пропущена: значение не изменилось. " +
-            "Возможно, ваше приложение делает лишние ре-рендеры, " +
-            "или вы пытаетесь установить значение внутри рендера.",
+            "[Palistor] Write skipped: the value did not change. " +
+            "Your app may be doing redundant re-renders, " +
+            "or you may be setting a value during render.",
           );
           return true;
         }
 
         kernel.notifyChanged(result.changed);
 
-        // Fire onChange на группах-предках (fire-and-forget, async)
+        // Fire onChange on ancestor groups (fire-and-forget, async)
         const actualNewValue = kernel.nodes.nodeState.get(node)?.value;
         kernel.onChangePipeline.fire(node, actualNewValue, previousValue);
 
@@ -257,17 +257,17 @@ export class ProxyBuilder {
       },
 
       /**
-       * Контролирует Object.keys(), Object.getOwnPropertyNames(), for...in, spread.
-       * Скрывает внутренние ключи конфига (validate, formatter, …),
-       * которые не должны утекать как пропсы в UI-компоненты.
+       * Controls Object.keys(), Object.getOwnPropertyNames(), for...in, spread.
+       * Hides internal config keys (validate, formatter, …) that must not
+       * leak as props into UI components.
        */
       ownKeys() {
         return computeProxyKeys(node, kernel.fieldMapping);
       },
 
       /**
-       * Должен соответствовать ownKeys: для каждого ключа возвращаем
-       * дескриптор enumerable + configurable, иначе Proxy выбросит invariant.
+       * Must match ownKeys: every key gets an enumerable + configurable
+       * descriptor, otherwise the Proxy throws an invariant violation.
        */
       getOwnPropertyDescriptor(_target, key: string | symbol) {
         if (typeof key === "symbol") return undefined;
@@ -311,7 +311,7 @@ export class ProxyBuilder {
 
         if (typeof key === "symbol") return undefined;
 
-        // Обратный маппинг на входе: external → internal. Дальше switch по `ikey`.
+        // Reverse mapping on input: external → internal. Then switch on `ikey`.
         const ikey = kernel.externalToInternal[key] ?? key;
 
         // Entity values from view (registered lazily in buildEntityProjectionProxy GET trap).

@@ -9,7 +9,7 @@ function makeState(value: unknown): FieldState {
 }
 
 describe("runSetter", () => {
-  it("применяет патч от setter к зависимым полям", () => {
+  it("applies the setter's patch to dependent fields", () => {
     const targetNode: AnyConfigNode = { value: "4111" };
     const node: AnyConfigNode = {
       value: "card",
@@ -28,7 +28,7 @@ describe("runSetter", () => {
     expect(changed.has(targetNode)).toBe(true);
   });
 
-  it("логирует ошибку и возвращает пустой Set если setter вернул не-объект", () => {
+  it("logs an error and returns an empty Set when the setter returns a non-object", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const node: AnyConfigNode = { value: "x", setter: () => null as unknown as Record<string, unknown> };
     const root: AnyConfigNode = { field: node };
@@ -42,7 +42,7 @@ describe("runSetter", () => {
     errorSpy.mockRestore();
   });
 
-  it("передаёт текущие значения и previousValue в setter", () => {
+  it("passes the current values and previousValue into the setter", () => {
     const setterSpy = vi.fn(() => ({}));
     const otherNode: AnyConfigNode = { value: "active" };
     const node: AnyConfigNode = { value: "x", setter: setterSpy };
@@ -58,13 +58,13 @@ describe("runSetter", () => {
     expect(setterSpy).toHaveBeenCalledWith("y", { source: "x", status: "active" }, "prev");
   });
 
-  it("скоупит values и patch к родительской группе (вложенный setter)", () => {
-    // Структура: root → group → { trigger (setter), target }
+  it("scopes values and the patch to the parent group (a nested setter)", () => {
+    // Structure: root → group → { trigger (setter), target }
     const targetNode: AnyConfigNode = { value: "" };
     const triggerNode: AnyConfigNode = {
       value: false,
       setter: (v: unknown, values: Record<string, unknown>) => {
-        // setter должен видеть sibling-значения группы, а не root
+        // the setter must see the group's sibling values, not root's
         if (v) return { target: values.shared ?? "fallback" };
         return {};
       },

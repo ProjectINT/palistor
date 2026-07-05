@@ -4,13 +4,13 @@ import { isLeafNode } from "../traversal";
 import { formatValue } from "./formatValue";
 
 /**
- * Отформатировать патч: рекурсивно обходит дерево конфига параллельно с деревом патча
- * и для каждого листового значения применяет formatter узла (если он есть).
+ * Format a patch: recursively walks the config tree in parallel with the
+ * patch tree and applies the node's formatter (if any) to each leaf value.
  *
- * Возвращает новый объект-патч с отформатированными значениями.
- * Исходный patch не мутируется.
+ * Returns a new patch object with formatted values.
+ * The original patch is not mutated.
  *
- * Используется как первая фаза перед applyPatch:
+ * Used as the first phase before applyPatch:
  *   const formatted = formatPatch(config, patch, allValues);
  *   applyPatch(config, nodeState, formatted);
  */
@@ -30,10 +30,10 @@ export function formatPatch(
     const patchValue = patch[key];
 
     if (isLeafNode(child)) {
-      // Листовой узел — прогоняем через formatter
+      // Leaf node — run through the formatter
       result[key] = formatValue(patchValue, child, allValues);
     } else if (patchValue && typeof patchValue === "object" && !Array.isArray(patchValue)) {
-      // Групповой узел — рекурсия
+      // Group node — recurse
       result[key] = formatPatch(child, patchValue as Record<string, unknown>, allValues);
     }
   }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { recomputeAndNotify } from "../recomputeAndNotify";
 
 describe("recomputeAndNotify", () => {
-  it("вызывает recomputeAll и передаёт результат в notifyChanged", () => {
+  it("calls recomputeAll and passes the result to notifyChanged", () => {
     const nodeA = {};
     const nodeB = {};
     const recomputeAll = vi.fn(() => new Set<object>([nodeA]));
@@ -16,7 +16,7 @@ describe("recomputeAndNotify", () => {
     expect(notifiedSet.has(nodeA)).toBe(true);
   });
 
-  it("объединяет changed с результатом recomputeAll", () => {
+  it("merges changed with the recomputeAll result", () => {
     const nodeA = {};
     const nodeB = {};
     const recomputeAll = vi.fn(() => new Set<object>([nodeA]));
@@ -29,7 +29,7 @@ describe("recomputeAndNotify", () => {
     expect(notifiedSet.has(nodeB)).toBe(true);
   });
 
-  it("работает с пустыми множествами", () => {
+  it("works with empty sets", () => {
     const recomputeAll = vi.fn(() => new Set<object>());
     const notifyChanged = vi.fn();
 

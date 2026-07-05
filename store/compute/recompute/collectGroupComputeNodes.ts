@@ -3,11 +3,11 @@ import { configKeys, isLeafNode } from "../../traversal";
 import type { ComputeEntry, GroupComputeMap } from "../../store/registerNodes";
 
 /**
- * Рекурсивно собирает все compute-записи поддерева группового узла.
+ * Recursively collects all compute entries of a group node's subtree.
  *
- * Для каждого группового узла из groupComputeMap берутся его прямые записи
- * (листья + группы с computed-свойствами), затем рекурсия в дочерние группы.
- * Листовые узлы пропускаются — они уже учтены в compute-list своего родителя.
+ * For each group node, its direct entries from groupComputeMap are taken
+ * (leaves + groups with computed props), then child groups are recursed into.
+ * Leaf nodes are skipped — they are already in their parent's compute list.
  */
 export function collectGroupComputeNodes(
   groupNode: AnyConfigNode,
@@ -15,17 +15,17 @@ export function collectGroupComputeNodes(
 ): ComputeEntry[] {
   const result: ComputeEntry[] = [];
 
-  // Прямые записи этой группы (листья + группы с computed-свойствами)
+  // Direct entries of this group (leaves + groups with computed props)
   const ownEntries = groupComputeMap.get(groupNode);
   if (ownEntries) result.push(...ownEntries);
 
-  // Рекурсия в дочерние группы
+  // Recurse into child groups
   for (const key of configKeys(groupNode as Record<string, unknown>)) {
     const child = groupNode[key] as AnyConfigNode;
 
     if (!child || typeof child !== "object") continue;
 
-    if (isLeafNode(child)) continue; // уже в ownEntries родителя
+    if (isLeafNode(child)) continue; // already in the parent's ownEntries
     result.push(...collectGroupComputeNodes(child, groupComputeMap));
   }
 

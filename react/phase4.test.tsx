@@ -2,17 +2,17 @@
  * Phase 4: Integration & E2E tests
  *
  * 4.1: Shared leaf notifications — entity leaf `version++` → all observers
- *      (list + form) re-render. Тест: edit name в форме → UserRow в списке
- *      re-render (та же leaf нода).
+ *      (list + form) re-render. Test: edit name in the form → the UserRow in
+ *      the list re-renders (same leaf node).
  *
- * 4.2: bumpLeafVersions с entity leafs — entity leafs registered via
+ * 4.2: bumpLeafVersions with entity leafs — entity leafs registered via
  *      registerDynamicLeaf in shared computeNodes array → translator change
- *      бампит всё автоматически. Верифицировать.
+ *      bumps everything automatically. Verify.
  *
- * 4.3: E2E — полный сценарий:
- *      список → resolver загружает entities → клик → useForm(entity, template)
- *      → resolve доп. полей → edit name → список обновился → close → open снова
- *      (кеш) → submit.
+ * 4.3: E2E — the full scenario:
+ *      list → the resolver loads entities → click → useForm(entity, template)
+ *      → extra field resolves → edit name → the list updated → close → open
+ *      again (cache) → submit.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -226,9 +226,9 @@ describe("4.1: Shared leaf notifications", () => {
   });
 });
 
-// ─── 4.2: bumpLeafVersions с entity leafs ────────────────────────────────────
+// ─── 4.2: bumpLeafVersions with entity leafs ───────────────────────────────────
 
-describe("4.2: bumpLeafVersions с entity leafs", () => {
+describe("4.2: bumpLeafVersions with entity leafs", () => {
   /**
    * Entity leafs added via registerDynamicLeaf must end up in the shared
    * `computeNodes` array so that bumpLeafVersions() covers them.
@@ -343,9 +343,9 @@ describe("4.2: bumpLeafVersions с entity leafs", () => {
   });
 });
 
-// ─── 4.3: E2E — полный сценарий ──────────────────────────────────────────────
+// ─── 4.3: E2E — the full scenario ──────────────────────────────────────────────
 
-describe("4.3: E2E — полный сценарий", () => {
+describe("4.3: E2E — the full scenario", () => {
   /**
    * Full scenario:
    *   1. List resolver loads entities → UI shows names

@@ -1,12 +1,12 @@
 /**
- * Тесты persist round-trip для per-entity nested list (вариант C, фаза C3).
+ * Persist round-trip tests for per-entity nested lists.
  *
- * Проверяем:
- *   - getValues включает вложенные списки → сериализуются в snapshot;
- *   - hydrate восстанавливает корневой список + per-entity списки с owner;
- *   - round-trip save → reload → restore эквивалентен исходному состоянию;
- *   - старый snapshot без вложенных списков грузится без ошибки (graceful);
- *   - вложенность 3 уровня переживает round-trip.
+ * Verifies:
+ *   - getValues includes nested lists → they serialize into the snapshot;
+ *   - hydrate restores the root list + per-entity lists with owners;
+ *   - a save → reload → restore round-trip is equivalent to the original state;
+ *   - an old snapshot without nested lists loads without errors (graceful);
+ *   - 3-level nesting survives the round-trip.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -55,7 +55,7 @@ describe("per-entity list persist round-trip (C3)", () => {
     driver = createMemoryDriver();
   });
 
-  it("save сериализует вложенные contacts в snapshot", async () => {
+  it("save serializes the nested contacts into the snapshot", async () => {
     const store = makeStore();
     store.proxy.title.value = "Team";
     store.set([{ id: "u1", name: "Alice" }, { id: "u2", name: "Bob" }]);
@@ -73,7 +73,7 @@ describe("per-entity list persist round-trip (C3)", () => {
     expect(saved.users[1].contacts).toEqual([{ id: "c2", phone: "+2" }]);
   });
 
-  it("round-trip: reload восстанавливает корневой и per-entity списки", async () => {
+  it("round-trip: a reload restores the root and per-entity lists", async () => {
     const store1 = makeStore();
     store1.set([{ id: "u1", name: "Alice" }, { id: "u2", name: "Bob" }]);
     (store1.proxy as any).users.add("u1");
@@ -85,15 +85,15 @@ describe("per-entity list persist round-trip (C3)", () => {
     await store1.persist.enable({ key: "k", driver, debounce: 0 });
     await store1.persist.flush();
 
-    // Новый store с тем же конфигом — гидратация из storage.
+    // A new store with the same config — hydrated from storage.
     const store2 = makeStore();
     await store2.persist.enable({ key: "k", driver });
 
     expect(store2.getValues()).toEqual(store1.getValues());
 
-    // Корневой список восстановлен.
+    // The root list is restored.
     expect((store2.proxy as any).users.length).toBe(2);
-    // Per-entity списки восстановлены с правильным составом.
+    // The per-entity lists are restored with the right membership.
     expect((store2.proxy as any).users.items[0].contacts.getValues()).toEqual([
       { id: "c1", phone: "+1" },
       { id: "c2", phone: "+2" },
@@ -102,7 +102,7 @@ describe("per-entity list persist round-trip (C3)", () => {
       { id: "c3", phone: "+3" },
     ]);
 
-    // Owner-ссылки восстановлены → каскадное удаление работает.
+    // Owner references are restored → cascade deletion works.
     expect(store2.entityRegistry.get("c1")!.owner!.ownerId).toBe("u1");
     store2.delete("u1");
     expect(store2.entityRegistry.has("c1")).toBe(false);
@@ -110,7 +110,7 @@ describe("per-entity list persist round-trip (C3)", () => {
     expect(store2.entityRegistry.has("c3")).toBe(true);
   });
 
-  it("старый snapshot без вложенных списков грузится без ошибки (graceful)", async () => {
+  it("an old snapshot without nested lists loads without errors (graceful)", async () => {
     driver.storage.set(
       "legacy",
       JSON.stringify({ title: "Legacy", users: [{ id: "u1", name: "Old" }] }),
@@ -121,11 +121,11 @@ describe("per-entity list persist round-trip (C3)", () => {
 
     expect(store.proxy.title.value).toBe("Legacy");
     expect((store.proxy as any).users.length).toBe(1);
-    // contacts отсутствуют в snapshot → список пуст, без падения.
+    // contacts are absent from the snapshot → the list is empty, no crash.
     expect((store.proxy as any).users.items[0].contacts.getValues()).toEqual([]);
   });
 
-  it("round-trip переживает вложенность 3 уровня", async () => {
+  it("the round-trip survives 3-level nesting", async () => {
     const make3 = () =>
       new Palistor({
         config: {

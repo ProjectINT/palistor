@@ -1,8 +1,8 @@
 /**
- * Тесты: defineList + useForm в React
+ * Tests: defineList + useForm in React
  *
- * Проверяет, что список можно объявить, зарезолвить и получить
- * доступ ко всем items через useForm в компоненте.
+ * Verifies that a list can be declared, resolved and that all items are
+ * accessible through useForm inside a component.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -15,10 +15,10 @@ function flushPromises() {
   return new Promise<void>((r) => setTimeout(r, 0));
 }
 
-// ─── defineList + useForm: доступ к items в компоненте ───────────────────────
+// ─── defineList + useForm: items access in a component ──────────────────────
 
-describe("defineList + useForm — консоль списка в React", () => {
-  it("после resolve items доступны через useForm и можно вызвать console.log", async () => {
+describe("defineList + useForm — logging the list in React", () => {
+  it("after resolve, items are accessible via useForm and console.log works", async () => {
     const mockData = [
       { id: "p1", name: "Alice", age: 30 },
       { id: "p2", name: "Bob", age: 25 },
@@ -45,10 +45,10 @@ describe("defineList + useForm — консоль списка в React", () => 
       const form = useForm(store);
       const people = (form as any).people;
 
-      // Доступ к items → триггерит lazy-resolve
+      // Accessing items → triggers the lazy resolve
       const items: any[] = people.items;
 
-      // Консолим весь список как плейн-объекты
+      // Log the whole list as plain objects
       console.log("list:", people.getValues());
 
       return (
@@ -64,20 +64,20 @@ describe("defineList + useForm — консоль списка в React", () => 
 
     render(<PeopleList />);
 
-    // Ждём выполнения resolver
+    // Wait for the resolver to run
     await act(async () => {
       await flushPromises();
     });
 
-    // Resolver вызван
+    // The resolver was called
     expect(resolver).toHaveBeenCalledTimes(1);
 
-    // Все три элемента отрендерены
+    // All three items are rendered
     expect(screen.getByTestId("person-0").textContent).toBe("Alice (30)");
     expect(screen.getByTestId("person-1").textContent).toBe("Bob (25)");
     expect(screen.getByTestId("person-2").textContent).toBe("Carol (35)");
 
-    // console.log вызван с правильными данными (хотя бы один раз после resolve)
+    // console.log was called with the right data (at least once after resolve)
     const calls = consoleSpy.mock.calls;
     const loggedWithData = calls.find(
       (args) =>
@@ -92,7 +92,7 @@ describe("defineList + useForm — консоль списка в React", () => 
     consoleSpy.mockRestore();
   });
 
-  it("loading=true пока resolver выполняется, false после", async () => {
+  it("loading=true while the resolver runs, false afterwards", async () => {
     let resolveList!: (data: any[]) => void;
     const resolver = vi.fn(
       () =>
@@ -126,7 +126,7 @@ describe("defineList + useForm — консоль списка в React", () => 
       await flushPromises();
     });
 
-    // Пока Promise не resolved — loading должен был побывать в true
+    // While the Promise is unresolved, loading must have been true at some point
     expect(loadingStates.some((v) => v === true)).toBe(true);
 
     await act(async () => {
@@ -138,15 +138,15 @@ describe("defineList + useForm — консоль списка в React", () => 
     });
 
     expect(screen.getByTestId("count").textContent).toBe("2");
-    // После resolve — loading false
+    // After resolve — loading is false
     expect(loadingStates[loadingStates.length - 1]).toBe(false);
   });
 });
 
-// ─── defineList + useForm entity mode: поля списка доступны через другой конфиг ──
+// ─── defineList + useForm entity mode: list fields available via another config ──
 
-describe("defineList + useForm entity mode — поля из резолва списка в другом конфиге", () => {
-  it("после resolve списка все поля entity доступны через другой конфиг (editForm)", async () => {
+describe("defineList + useForm entity mode — list-resolved fields in another config", () => {
+  it("after the list resolve, all entity fields are accessible via another config (editForm)", async () => {
     const mockData = [
       { id: "p1", name: "Alice", age: 30, status: "active" },
       { id: "p2", name: "Bob", age: 25, status: "inactive" },
@@ -156,7 +156,7 @@ describe("defineList + useForm entity mode — поля из резолва сп
 
     const store = new Palistor({
       config: {
-        // Список объявлен с шаблоном, содержащим все поля
+        // The list is declared with a template containing all fields
         people: defineList({
           template: {
             id: { value: "" },
@@ -166,7 +166,7 @@ describe("defineList + useForm entity mode — поля из резолва сп
           },
           resolve: { resolver: listResolver, onError: vi.fn() },
         }),
-        // Отдельный конфиг для редактирования одной entity
+        // A separate config for editing a single entity
         editPersonForm: {
           id: { value: "" },
           name: { value: "" },
@@ -176,11 +176,11 @@ describe("defineList + useForm entity mode — поля из резолва сп
       } as any,
     });
 
-    // Рендерим список — тригерит resolve
+    // Render the list — triggers the resolve
     function PeopleListApp() {
       const form = useForm(store);
       const people = (form as any).people;
-      void people.items; // триггер lazy-resolve
+      void people.items; // trigger the lazy resolve
       return (
         <ul>
           {people.map((p: any, _i: number, id: string) => (
@@ -194,32 +194,32 @@ describe("defineList + useForm entity mode — поля из резолва сп
 
     render(<PeopleListApp />);
 
-    // Ждём завершения resolver
+    // Wait for the resolver to complete
     await act(async () => {
       await flushPromises();
     });
 
     expect(listResolver).toHaveBeenCalledTimes(1);
 
-    // Берём первую entity из списка
+    // Take the first entity from the list
     const aliceProxy = (store.proxy as any).people.items[0];
 
-    // Открываем entity через другой конфиг (editPersonForm)
+    // Open the entity through another config (editPersonForm)
     const { result } = renderHook(() =>
       useForm(aliceProxy, (s: any) => s.editPersonForm),
     );
 
     const editForm = result.current as any;
 
-    // Все поля, загруженные резолвером списка, доступны в editPersonForm.
-    // id возвращается напрямую как строка (entity projection proxy особый случай).
+    // All fields loaded by the list resolver are accessible in editPersonForm.
+    // id is returned directly as a string (an entity projection proxy special case).
     expect(editForm.id).toBe("p1");
     expect(editForm.name.value).toBe("Alice");
     expect(editForm.age.value).toBe(30);
     expect(editForm.status.value).toBe("active");
   });
 
-  it("поля второй entity из списка корректно доступны через editForm", async () => {
+  it("the second list entity's fields are correctly accessible via editForm", async () => {
     const mockData = [
       { id: "p1", name: "Alice", age: 30, status: "active" },
       { id: "p2", name: "Bob", age: 25, status: "inactive" },
@@ -260,7 +260,7 @@ describe("defineList + useForm entity mode — поля из резолва сп
       await flushPromises();
     });
 
-    // Вторая entity
+    // The second entity
     const bobProxy = (store.proxy as any).people.items[1];
 
     const { result } = renderHook(() =>
@@ -276,10 +276,10 @@ describe("defineList + useForm entity mode — поля из резолва сп
   });
 });
 
-// ─── store.set() upsert — React видит обновление ─────────────────────────────
+// ─── store.set() upsert — React sees the update ───────────────────────────────
 
-describe("store.set() upsert — React получает сигнал и видит обновлённые данные", () => {
-  it("store.set обновляет entity в списке — компонент ре-рендерится с новым значением", () => {
+describe("store.set() upsert — React gets the signal and sees the updated data", () => {
+  it("store.set updates a list entity — the component re-renders with the new value", () => {
     const store = new Palistor({
       config: {
         users: [
@@ -316,21 +316,21 @@ describe("store.set() upsert — React получает сигнал и види
 
     const rendersBefore = renderCount.mock.calls.length;
 
-    // Обновляем только u1 — только её поля меняются
+    // Update only u1 — only its fields change
     act(() => {
       store.set({ id: "u1", name: "Alice Updated", role: "admin" });
     });
 
-    // Компонент ре-рендерился
+    // The component re-rendered
     expect(renderCount.mock.calls.length).toBeGreaterThan(rendersBefore);
 
-    // DOM обновлён для u1
+    // The DOM is updated for u1
     expect(screen.getByTestId("user-u1").textContent).toBe("Alice Updated / admin");
-    // u2 не изменился
+    // u2 is unchanged
     expect(screen.getByTestId("user-u2").textContent).toBe("Bob / viewer");
   });
 
-  it("store.set обновляет только одно поле entity — компонент, читающий другое поле, не ре-рендерится", () => {
+  it("store.set updates only one entity field — a component reading another field doesn't re-render", () => {
     const store = new Palistor({
       config: {
         users: [
@@ -344,7 +344,7 @@ describe("store.set() upsert — React получает сигнал и види
 
     const roleRenderCount = vi.fn();
 
-    // Компонент читает ТОЛЬКО role — должен реагировать только на изменение role
+    // The component reads ONLY role — it must react only to role changes
     function RoleDisplay() {
       roleRenderCount();
       const form = useForm(store);
@@ -355,18 +355,18 @@ describe("store.set() upsert — React получает сигнал и види
     render(<RoleDisplay />);
     const rendersBefore = roleRenderCount.mock.calls.length;
 
-    // Меняем только name — role не трогаем
+    // Change only name — role is untouched
     act(() => {
       store.set({ id: "u1", name: "Alice Updated" });
     });
 
-    // role не изменился — компонент не должен ре-рендериться
-    // (tracking proxy записал только чтение role.value)
+    // role is unchanged — the component must not re-render
+    // (the tracking proxy recorded only the role.value read)
     expect(roleRenderCount.mock.calls.length).toBe(rendersBefore);
     expect(screen.getByTestId("role").textContent).toBe("viewer");
   });
 
-  it("store.set обновляет несколько entities — компонент видит все обновления за один render", () => {
+  it("store.set updates several entities — the component sees all updates in one render", () => {
     const store = new Palistor({
       config: {
         users: [
@@ -402,7 +402,7 @@ describe("store.set() upsert — React получает сигнал и види
     render(<UserList />);
     const rendersBefore = renderCount.mock.calls.length;
 
-    // Batch update — все три entity за один store.set
+    // Batch update — all three entities in one store.set
     act(() => {
       store.set([
         { id: "u1", name: "Alice v2" },
@@ -411,10 +411,10 @@ describe("store.set() upsert — React получает сигнал и види
       ]);
     });
 
-    // Один batch → один ре-рендер
+    // One batch → one re-render
     expect(renderCount.mock.calls.length).toBe(rendersBefore + 1);
 
-    // Все обновления видны в DOM
+    // All updates are visible in the DOM
     expect(screen.getByTestId("user-u1").textContent).toBe("Alice v2");
     expect(screen.getByTestId("user-u2").textContent).toBe("Bob v2");
     expect(screen.getByTestId("user-u3").textContent).toBe("Carol v2");

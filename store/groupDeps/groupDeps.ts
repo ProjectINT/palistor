@@ -1,14 +1,14 @@
 /**
- * Карта зависимостей между группами.
+ * Map of dependencies between groups.
  *
- * Хранит пары "донор→реципиент" в Set<string>.
- * Когда значение в группе-доноре меняется, все группы-реципиенты
- * нужно пересчитать.
+ * Stores "donor→recipient" pairs in a Set<string>.
+ * When a value in a donor group changes, all recipient groups
+ * need to be recomputed.
  *
- * Пример: если поле в группе passport читает значение из root,
- * записывается зависимость "→passport" (root — донор, passport — реципиент).
+ * Example: if a field in the passport group reads a value from the root,
+ * the dependency "→passport" is recorded (root is the donor, passport the recipient).
  *
- * Каждая группа по умолчанию зависит от себя ("AA", "BB").
+ * Every group depends on itself by default ("AA", "BB").
  */
 export { pairKey } from "./pairKey";
 export { createGroupDeps } from "./createGroupDeps";

@@ -7,15 +7,15 @@ import { Badge } from "@/modules/shared";
 import { useMappingForm, mappingStore } from "@/config/fieldMapping";
 import { MappingTable } from "./MappingTable";
 
-// Внутренние имена, которые переименовываются картой — подсвечиваем их в инспекторе
+// Internal names renamed by the map — highlighted in the inspector
 const RENAMED_EXTERNAL = new Set(["required", "disabled", "readOnly", "error", "helperText", "helpText"]);
 
 export function FieldMappingDemo() {
   const form = useMappingForm();
   const [submitted, setSubmitted] = useState(false);
 
-  // Живой снимок того, что реально видно через spread одного поля.
-  // Ключи — уже external (переименованные): required, error, helperText…
+  // A live snapshot of what a single field's spread actually exposes.
+  // The keys are already external (renamed): required, error, helperText…
   const spread = { ...form.email } as Record<string, unknown>;
   const spreadKeys = Object.keys(spread).filter((k) => typeof spread[k] !== "function");
 
@@ -31,32 +31,32 @@ export function FieldMappingDemo() {
           Field Mapping
         </h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-          Единый публичный словарь имён поля: конфиг <b>пишется</b> в тех же именах,
-          что и <b>читаются</b>. Поля спредятся в «нативный» компонент без адаптеров.
+          A single public vocabulary of field names: the config is <b>written</b> in the
+          same names it is <b>read</b> with. Fields spread into a "native" component with no adapters.
         </p>
       </div>
 
-      {/* Как настроен store — конфиг и чтение в ОДНОМ словаре */}
+      {/* How the store is set up — config and reads in ONE vocabulary */}
       <div className="rounded-lg bg-zinc-900 dark:bg-black p-4 overflow-auto">
         <pre className="text-xs leading-relaxed text-zinc-300">
 {`fieldMapping: { isRequired: "required", isReadOnly: "readOnly",
                 errorMessage: "helperText", description: "helpText", … }
 
-// конфиг — в ЕДИНОМ словаре карты (external-имена):
+// the config — in the map's SINGLE vocabulary (external names):
 config: {
   email: { value: "", label: "Email",
-           required: true,            // ← не isRequired
-           helpText: "We never share it" },  // ← не description
+           required: true,            // ← not isRequired
+           helpText: "We never share it" },  // ← not description
 }
-// чтение — те же имена:
+// reads — the same names:
 form.email.required   // true
-form.email.helperText // ошибка валидации`}
+form.email.helperText // the validation error`}
         </pre>
       </div>
 
       <MappingTable />
 
-      {/* Форма — спред external-имён прямо в компонент */}
+      {/* The form — spreading external names straight into the component */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
@@ -77,13 +77,13 @@ form.email.helperText // ошибка валидации`}
         </button>
         {submitted && (
           <p className="text-xs text-zinc-400">
-            После submit пустые поля дают <code>error === true</code> и{" "}
-            <code>helperText</code> — оба под external-именами.
+            After submit, empty fields yield <code>error === true</code> and{" "}
+            <code>helperText</code> — both under external names.
           </p>
         )}
       </div>
 
-      {/* Живой инспектор spread */}
+      {/* Live spread inspector */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
@@ -106,9 +106,9 @@ form.email.helperText // ошибка валидации`}
           ))}
         </div>
         <p className="text-xs text-zinc-400 dark:text-zinc-500">
-          Подсвеченные ключи — переименованные картой. Внутренних имён
+          The highlighted keys are the ones renamed by the map. The internal
           (<code>isRequired</code>, <code>isInvalid</code>, <code>errorMessage</code>)
-          в spread больше нет.
+          names are no longer in the spread.
         </p>
       </div>
     </div>

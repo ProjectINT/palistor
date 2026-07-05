@@ -11,8 +11,9 @@ import {
 } from "./flowNavigation";
 
 /**
- * Навигационные методы flow-proxy. Все — bound-замыкания над (kernel, flowState),
- * поэтому деструктуризация в onSubmit работает: `(values, store, { nextStep }) => …`.
+ * Navigation methods of the flow proxy. All are closures bound over
+ * (kernel, flowState), so destructuring in onSubmit works:
+ * `(values, store, { nextStep }) => …`.
  */
 export interface FlowApi {
   nextStep: () => void;
@@ -22,7 +23,7 @@ export interface FlowApi {
   submit: () => Promise<SubmitResult>;
 }
 
-/** Стабильные ссылки на методы — один FlowApi на FlowState (для React). */
+/** Stable method references — one FlowApi per FlowState (for React). */
 const flowApiCache = new WeakMap<object, FlowApi>();
 
 export function getFlowApi(kernel: Palistor<any, any>, flowState: FlowState): FlowApi {

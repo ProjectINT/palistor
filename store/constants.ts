@@ -1,61 +1,61 @@
 /**
- * Символ для доступа к исходному config-узлу из Proxy.
- * Используется tracking proxy для определения, какой узел читается.
+ * Symbol for accessing the original config node through a Proxy.
+ * Used by tracking proxies to identify which node is being read.
  */
 export const CONFIG_NODE: unique symbol = Symbol("configNode");
 
 /**
- * Символ для получения исходного source-proxy (store.proxy) из tracking proxy.
- * Позволяет useForm принять tracking proxy поддерево и извлечь source.
+ * Symbol for extracting the source proxy (store.proxy) from a tracking proxy.
+ * Lets useForm accept a tracking-proxy subtree and unwrap the source.
  */
 export const SOURCE_PROXY: unique symbol = Symbol("sourceProxy");
 
 /**
- * Символ для получения ссылки на ProxyStore из tracking proxy.
- * Позволяет useForm принять tracking proxy поддерево и подписаться на store.
+ * Symbol for extracting the owning ProxyStore from a tracking proxy.
+ * Lets useForm accept a tracking-proxy subtree and subscribe to the store.
  */
 export const STORE_REF: unique symbol = Symbol("storeRef");
 
 /**
- * Символ для получения entity ID из EntityProjectionProxy.
- * Позволяет useForm(entity, templateSelector) извлечь entityId и store из proxy.
+ * Symbol for extracting the entity ID from an EntityProjectionProxy.
+ * Lets useForm(entity, templateSelector) recover entityId and store from the proxy.
  */
 export const ENTITY_ID: unique symbol = Symbol("entityId");
 
 /**
- * Символ для получения объекта id-листа (EntityLeafNode) из EntityProjectionProxy.
- * Используется tracking proxy для регистрации подписки на id — чтобы rekey()
- * корректно триггерил перерендер компонентов, читающих `entity.id`.
+ * Symbol for extracting the id leaf object (EntityLeafNode) from an
+ * EntityProjectionProxy. Tracking proxies register a subscription on it so
+ * rekey() correctly re-renders components that read `entity.id`.
  */
 export const ENTITY_ID_LEAF: unique symbol = Symbol("entityIdLeaf");
 
 /**
- * Бренд-символ list proxy — возвращает объект `ListState` (единый кубик «список»).
- * Идентичность узла для tracking/resolve: сам объект `ListState` (ключ в хабе).
- * Root-list — `ownerEntity === null`; per-entity — изолированный `ListState` на
- * каждую пару (owner, listConfigNode).
+ * Brand symbol of a list proxy — returns the `ListState` object (the single
+ * "list" building block). Node identity for tracking/resolve is the `ListState`
+ * object itself (hub key). Root lists have `ownerEntity === null`; per-entity
+ * lists get an isolated `ListState` per (owner, listConfigNode) pair.
  */
 export const LIST_STATE: unique symbol = Symbol("listState");
 
 /**
- * Бренд-символ flow proxy — возвращает объект `FlowState` (навигационное
- * состояние флоу). Экспонируется тремя прокси: flow-нодой, steps-прокси и
- * каждой step-нодой (для последних возвращается FlowState владеющего флоу).
- * Идентичность для tracking: сам объект `FlowState` (ключ в хабе) — навигация
- * бампает его версию.
+ * Brand symbol of a flow proxy — returns the `FlowState` object (flow
+ * navigation state). Exposed by three proxies: the flow node, the steps proxy,
+ * and each step node (the latter return the owning flow's FlowState).
+ * Tracking identity: the `FlowState` object itself (hub key) — navigation
+ * bumps its version.
  */
 export const FLOW_STATE: unique symbol = Symbol("flowState");
 
 /**
- * Имя маркер-ключа flow-ноды: упорядоченный массив ключей шагов.
- * Проставляется defineFlow; входит в CONFIG_PROPS, поэтому все обходы
- * дерева (traversal, registerNodes, buildValuesCache, …) его пропускают.
+ * Marker key on a flow node: the ordered array of step keys.
+ * Set by defineFlow; included in CONFIG_PROPS so all tree walks
+ * (traversal, registerNodes, buildValuesCache, …) skip it.
  */
 export const FLOW_STEPS_PROP = "__flowSteps";
 
 /**
- * Единственный источник имён полей состояния (canonical tuple).
- * Из него выводятся {@link FIELD_STATE_PROPS} (Set) и {@link MAPPABLE_KEYS}.
+ * Single source of truth for field-state property names (canonical tuple).
+ * {@link FIELD_STATE_PROPS} (Set) and {@link MAPPABLE_KEYS} derive from it.
  */
 export const FIELD_STATE_KEYS = [
   "value",
@@ -73,29 +73,29 @@ export const FIELD_STATE_KEYS = [
 ] as const;
 
 /**
- * Свойства, относящиеся к состоянию поля. При обращении к ним прокси
- * возвращает значение из FieldState (вычисленное), а не из конфига.
+ * Field-state properties. When one of these is read, the proxy returns the
+ * computed value from FieldState rather than the raw config.
  */
 export const FIELD_STATE_PROPS = new Set<string>(FIELD_STATE_KEYS);
 
 /**
- * Ключи, которые можно переименовывать через `fieldMapping`:
- * поля состояния + функциональный сеттер `onValueChange`.
+ * Keys renamable via `fieldMapping`: field-state keys plus the
+ * functional setter `onValueChange`.
  */
 export const MAPPABLE_KEYS = [...FIELD_STATE_KEYS, "onValueChange"] as const;
 
-/** Имя internal-ключа, допустимое как источник переименования в `fieldMapping`. */
+/** Internal key name allowed as a rename source in `fieldMapping`. */
 export type MappableKey = (typeof MAPPABLE_KEYS)[number];
 
 /**
- * Подмножество mappable-ключей, которые являются ВХОДНЫМИ ключами конфига —
- * т.е. их пишет автор в конфиге узла. Только эти ключи нормализуются
- * external→internal при активном `fieldMapping` (см. {@link normalizeConfig}).
+ * Subset of mappable keys that are INPUT config keys — i.e. keys an author
+ * writes in a node config. Only these are normalized external→internal when
+ * `fieldMapping` is active (see {@link normalizeConfig}).
  *
- * Остальные mappable-ключи (`isInvalid`, `errorMessage`, `dirty`, `loading`,
- * `onValueChange`) — вычисляемые/выходные: в конфиге не пишутся, поэтому на
- * входе их нормализовать нечего (перевод для них происходит только на выходе
- * proxy). Попытка написать такой ключ в конфиге — ошибка (strict).
+ * The remaining mappable keys (`isInvalid`, `errorMessage`, `dirty`,
+ * `loading`, `onValueChange`) are computed/output-only: they never appear in
+ * a config, so there is nothing to normalize on input (they are translated
+ * only on proxy output). Writing such a key in a config is an error (strict).
  */
 export const MAPPABLE_CONFIG_KEYS_TUPLE = [
   "value",
@@ -110,13 +110,13 @@ export const MAPPABLE_CONFIG_KEYS_TUPLE = [
 
 export const MAPPABLE_CONFIG_KEYS = new Set<string>(MAPPABLE_CONFIG_KEYS_TUPLE);
 
-/** Тип-версия {@link MAPPABLE_CONFIG_KEYS} — internal-имена config-ключей,
- *  которые можно переименовывать через `fieldMapping` (для валидатора типов). */
+/** Type-level version of {@link MAPPABLE_CONFIG_KEYS} — internal config key
+ *  names renamable via `fieldMapping` (used by the type validator). */
 export type MappableConfigKey = (typeof MAPPABLE_CONFIG_KEYS_TUPLE)[number];
 
 /**
- * Полный набор «служебных» ключей узла конфига.
- * При обходе дерева (init, buildValuesCache) — пропускаются.
+ * Full set of "service" keys of a config node.
+ * Tree walks (init, buildValuesCache) skip them.
  */
 export const CONFIG_PROPS = new Set<string>([
   ...FIELD_STATE_PROPS,
@@ -153,9 +153,9 @@ export const SPREADABLE_FIELD_STATE_PROPS = [
 ].includes(k));
 
 /**
- * Статический набор ключей, которые включаются при spread группового узла:
- * состояние (submitting, dirty, revalidate, loading) и методы (submit, reset).
- * Дочерние узлы добавляются динамически в computeProxyKeys.
+ * Static keys included when spreading a group node: state (submitting, dirty,
+ * revalidate, loading) and methods (submit, reset).
+ * Child node keys are added dynamically in computeProxyKeys.
  */
 export const GROUP_SPREAD_KEYS: string[] = [
   "value",
@@ -169,8 +169,8 @@ export const GROUP_SPREAD_KEYS: string[] = [
 ];
 
 /**
- * Дополнительные ключи spread для flow-ноды (defineFlow) — добавляются
- * к GROUP_SPREAD_KEYS в computeProxyKeys, когда узел помечен FLOW_STEPS_PROP.
+ * Extra spread keys for a flow node (defineFlow) — appended to
+ * GROUP_SPREAD_KEYS in computeProxyKeys when the node carries FLOW_STEPS_PROP.
  */
 export const FLOW_SPREAD_KEYS: string[] = [
   "currentStepKey",
@@ -186,8 +186,8 @@ export const FLOW_SPREAD_KEYS: string[] = [
 ];
 
 /**
- * Статический набор ключей для proxy списка (ListNode).
- * Возвращается из computeProxyKeys вместо GROUP_SPREAD_KEYS, когда узел — массив.
+ * Static key set for a list proxy (ListNode).
+ * Returned from computeProxyKeys instead of GROUP_SPREAD_KEYS when the node is an array.
  */
 export const LIST_SPREAD_KEYS: string[] = [
   "items",

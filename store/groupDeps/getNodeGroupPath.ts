@@ -1,10 +1,10 @@
 import { isGroupNode } from "../traversal";
 
 /**
- * Определить путь группы, к которой принадлежит узел.
+ * Determine the path of the group a node belongs to.
  *
- * - Листовой узел (есть "value") → путь родительской группы
- * - Групповой узел → свой собственный путь
+ * - Leaf node (has "value") → the parent group's path
+ * - Group node → its own path
  * - Root → ""
  */
 export function getNodeGroupPath(
@@ -12,11 +12,11 @@ export function getNodeGroupPath(
   nodeParents: WeakMap<object, object>,
   nodePaths: WeakMap<object, string>,
 ): string {
-  // Групповой узел → его собственный путь
+  // Group node → its own path
   if (isGroupNode(node)) {
     return nodePaths.get(node) ?? "";
   }
-  // Листовой → путь родительской группы
+  // Leaf → the parent group's path
   const parent = nodeParents.get(node);
   if (!parent) return "";
   return nodePaths.get(parent) ?? "";

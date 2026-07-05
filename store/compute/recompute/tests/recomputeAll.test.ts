@@ -13,7 +13,7 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
 }
 
 describe("collectGroupComputeNodes + recomputeLeaves", () => {
-  it("возвращает пустой Set, если нет листьев", () => {
+  it("returns an empty Set when there are no leaves", () => {
     const root = {} as AnyConfigNode;
     const groupComputeMap: GroupComputeMap = new WeakMap();
     const leaves = collectGroupComputeNodes(root, groupComputeMap);
@@ -21,7 +21,7 @@ describe("collectGroupComputeNodes + recomputeLeaves", () => {
     expect(result.size).toBe(0);
   });
 
-  it("пересчитывает все листья начиная с rootConfig", () => {
+  it("recomputes all leaves starting from rootConfig", () => {
     const fieldA = {} as unknown as AnyConfigNode;
     const fieldB = {} as unknown as AnyConfigNode;
     const root = { a: fieldA, b: fieldB } as unknown as AnyConfigNode;
@@ -40,7 +40,7 @@ describe("collectGroupComputeNodes + recomputeLeaves", () => {
     expect(result.has(fieldB)).toBe(true);
   });
 
-  it("не включает узлы с неизменённым состоянием", () => {
+  it("excludes nodes with unchanged state", () => {
     const fieldNode = {} as unknown as AnyConfigNode;
     const root = { field: fieldNode } as unknown as AnyConfigNode;
     const groupComputeMap: GroupComputeMap = new WeakMap([

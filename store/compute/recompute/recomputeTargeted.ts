@@ -6,18 +6,18 @@ import {
 import type { RecomputeTargetedDeps } from "./types";
 import { recomputeLeaves } from "./recomputeLeaves";
 
-// ─── Таргетированный пересчёт ────────────────────────────────────────────────
+// ─── Targeted recompute ──────────────────────────────────────────────────────
 
 /**
- * Таргетированный пересчёт: вместо пересчёта ВСЕХ групп,
- * пересчитывает только затронутые группы + их реципиентов.
+ * Targeted recompute: instead of recomputing ALL groups,
+ * recomputes only the affected groups + their recipients.
  *
- * Алгоритм:
- * 1. Определить группы изменённых узлов (source groups).
- * 2. BFS по карте зависимостей: собрать все группы-реципиенты в топологическом порядке.
- * 3. Для каждой затронутой группы пересчитать только её OWN листья (не рекурсивно).
+ * Algorithm:
+ * 1. Determine the groups of the changed nodes (source groups).
+ * 2. BFS over the dependency map: collect all recipient groups in topological order.
+ * 3. For each affected group, recompute only its OWN leaves (non-recursively).
  *
- * @param changedNodes — узлы, чьи значения изменились (написанный узел + setter targets)
+ * @param changedNodes — nodes whose values changed (the written node + setter targets)
  */
 export function recomputeTargeted(
   changedNodes: Set<object>,
@@ -30,13 +30,13 @@ export function recomputeTargeted(
     groupDeps, valuesCache, translate,
   } = deps;
 
-  // 1. Находим группы-источники изменений
+  // 1. Find the source groups of the changes
   const sourceGroups = new Set<string>();
   for (const node of changedNodes) {
     sourceGroups.add(getNodeGroupPath(node, nodeParents, nodePaths));
   }
 
-  // 2. BFS — собираем все затронутые группы в порядке "сначала доноры, потом реципиенты"
+  // 2. BFS — collect all affected groups in "donors first, then recipients" order
   const orderedGroups: string[] = [...sourceGroups];
   const visited = new Set(sourceGroups);
 
@@ -44,7 +44,7 @@ export function recomputeTargeted(
   while (i < orderedGroups.length) {
     const current = orderedGroups[i++];
     const recipients = getRecipientGroups(groupDeps, current);
-    
+
     for (const r of recipients) {
       if (!visited.has(r)) {
         visited.add(r);
@@ -53,12 +53,12 @@ export function recomputeTargeted(
     }
   }
 
-  // 3. Пересчитываем каждую группу (только OWN листья, не рекурсивно)
+  // 3. Recompute each group (only its OWN leaves, non-recursively)
   const allChanged = new Set<object>();
 
   for (const groupPath of orderedGroups) {
     const groupNode = resolveGroupByPath(rootConfig, groupPath);
-    // Entity-группы (пути "_entity_.*") не существуют в rootConfig — пропускаем
+    // Entity groups ("_entity_.*" paths) don't exist in rootConfig — skip
     if (!groupNode) continue;
     const ownEntries = groupComputeMap.get(groupNode) ?? [];
     const changed = recomputeLeaves(ownEntries, nodeState, valuesCache, translate);

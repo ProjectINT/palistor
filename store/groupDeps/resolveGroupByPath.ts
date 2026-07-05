@@ -1,9 +1,9 @@
 import { type AnyConfigNode } from "../store/types";
 
 /**
- * Найти узел конфига группы по dot-пути.
- * "" → rootConfig, "passport" → rootConfig.passport, и т.д.
- * Возвращает undefined если путь не существует в дереве (например, entity-пути "_entity_.*").
+ * Find a group config node by dot-path.
+ * "" → rootConfig, "passport" → rootConfig.passport, etc.
+ * Returns undefined when the path doesn't exist in the tree (e.g. "_entity_.*" paths).
  */
 export function resolveGroupByPath(
   rootConfig: AnyConfigNode,

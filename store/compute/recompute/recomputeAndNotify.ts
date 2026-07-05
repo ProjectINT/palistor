@@ -1,8 +1,8 @@
 /**
- * Пересчитать все computed-свойства, объединить с ранее изменёнными узлами
- * и уведомить подписчиков.
+ * Recompute all computed props, merge with previously changed nodes
+ * and notify subscribers.
  *
- * Инкапсулирует паттерн: recomputeAll → merge changed → notifyChanged.
+ * Encapsulates the pattern: recomputeAll → merge changed → notifyChanged.
  */
 export function recomputeAndNotify(
   changed: Set<object>,

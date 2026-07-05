@@ -11,16 +11,16 @@ import { isLeafNode } from "../traversal";
 import { isListNode } from "../store/NodeRegistry/nodeUtils";
 
 /**
- * Вычисляет, какие ключи должны быть видны в прокси для данного узла.
+ * Computes which keys are visible on the proxy for a given node.
  *
- * Для листа:   все SPREADABLE_FIELD_STATE_PROPS + keys(componentProps).
- * Для списка:  LIST_SPREAD_KEYS (items, length, loading, add, remove, …).
- * Для группы:  GROUP_SPREAD_KEYS (submitting, dirty, loading, submit, reset, …).
+ * Leaf:  all SPREADABLE_FIELD_STATE_PROPS + keys(componentProps).
+ * List:  LIST_SPREAD_KEYS (items, length, loading, add, remove, …).
+ * Group: GROUP_SPREAD_KEYS (submitting, dirty, loading, submit, reset, …).
  *
- * `fwd` (internal → external) проецирует mappable-ключи в их external-имена.
- * `fwd[k] ?? k` сам разбирается, что переименовывать: `value`/`dirty`/`loading`
- * и т.д. спроецируются, если заданы; `submit`/`items`/`componentProps` — нет
- * (их в карте не бывает). Пустой `fwd` → identity → поведение без изменений.
+ * `fwd` (internal → external) projects mappable keys to their external names.
+ * `fwd[k] ?? k` decides what to rename by itself: `value`/`dirty`/`loading`
+ * etc. get projected when configured; `submit`/`items`/`componentProps` never
+ * appear in the map. Empty `fwd` → identity → unchanged behavior.
  */
 export function computeProxyKeys(node: unknown, fwd: FieldMapping = {}): string[] {
   const map = (keys: string[]): string[] => keys.map((k) => fwd[k as MappableKey] ?? k);
@@ -35,7 +35,7 @@ export function computeProxyKeys(node: unknown, fwd: FieldMapping = {}): string[
     ]);
   }
 
-  // Flow-нода (defineFlow): группа + навигационные ключи флоу.
+  // Flow node (defineFlow): group + flow navigation keys.
   if (Array.isArray((configNode as Record<string, unknown>)[FLOW_STEPS_PROP])) {
     return map([...GROUP_SPREAD_KEYS, ...FLOW_SPREAD_KEYS]);
   }

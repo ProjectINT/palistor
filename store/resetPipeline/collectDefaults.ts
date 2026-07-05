@@ -2,13 +2,13 @@ import { configKeys, isLeafNode, isListNode } from "../traversal";
 import type { AnyConfigNode } from "../store/types";
 
 /**
- * Рекурсивно собирает значения по умолчанию из конфига.
+ * Recursively collects default values from the config.
  *
- * Для листовых узлов:
- * - статическое значение → берётся как есть
- * - функция (computed) → "" как fallback
+ * For leaf nodes:
+ * - static value → taken as-is
+ * - function (computed) → "" as a fallback
  *
- * Останавливается на вложенных группах с собственным `reset` (reset boundary).
+ * Stops at nested groups with their own `reset` (reset boundary).
  */
 export function collectDefaults(node: AnyConfigNode): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -16,7 +16,7 @@ export function collectDefaults(node: AnyConfigNode): Record<string, unknown> {
   for (const key of configKeys(node as Record<string, unknown>)) {
     const child = node[key] as AnyConfigNode;
     if (!child || typeof child !== "object") continue;
-    if (isListNode(child)) continue; // ListNode — пропускаем, обрабатывается в фазе 2
+    if (isListNode(child)) continue; // ListNode — skipped, restored separately
 
     if (isLeafNode(child)) {
       const raw = child.value;

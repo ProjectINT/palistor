@@ -1,7 +1,7 @@
 import type { FieldState } from "./types";
 
 /**
- * Поверхностное сравнение двух FieldState.
+ * Shallow comparison of two FieldStates.
  */
 export function fieldStateChanged(a: FieldState, b: FieldState): boolean {
   return (

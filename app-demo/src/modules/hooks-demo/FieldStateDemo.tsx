@@ -24,7 +24,7 @@ export function FieldStateDemo({ fieldKey }: FieldStateDemoProps) {
   return (
     <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800">
       <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-2">
-        form.{fieldKey} — прокси
+        form.{fieldKey} — the proxy
       </h3>
       <pre className="text-xs text-zinc-600 dark:text-zinc-400 overflow-auto">
         {JSON.stringify(state, null, 2)}

@@ -1,13 +1,13 @@
 /**
- * Integration test — полный flow Palistor.
+ * Integration test — the full Palistor flow.
  *
- * Покрывает: init → write → recompute → notify → submit → reset → resolve.
- * Этот тест должен проходить без изменений на протяжении всего рефакторинга.
+ * Covers: init → write → recompute → notify → submit → reset → resolve.
+ * This test must pass unchanged throughout any refactoring.
  */
 import { describe, it, expect, vi } from "vitest";
 import { Palistor } from ".";
 
-// ─── Тестовый конфиг ─────────────────────────────────────────────────────────
+// ─── Test config ─────────────────────────────────────────────────────────────
 
 function makeConfig() {
   return {
@@ -50,19 +50,19 @@ function flushPromises() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-// ─── Тест ────────────────────────────────────────────────────────────────────
+// ─── Test ────────────────────────────────────────────────────────────────────
 
-describe("Integration: полный flow", () => {
+describe("Integration: the full flow", () => {
   // ─── Init ─────────────────────────────────────────────────────────────────
-  describe("init — начальное состояние", () => {
-    it("создаёт store и читает значения из конфига", () => {
+  describe("init — initial state", () => {
+    it("creates the store and reads values from the config", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.value).toBe("");
       expect(store.proxy.paymentType.value).toBe("card");
       expect(store.proxy.amount.value).toBe(0);
     });
 
-    it("применяет initialValues", () => {
+    it("applies initialValues", () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "user@test.com", amount: 500 } as any,
@@ -71,7 +71,7 @@ describe("Integration: полный flow", () => {
       expect(store.proxy.amount.value).toBe(500);
     });
 
-    it("вычисляет computed-свойства при init", () => {
+    it("computes computed props at init", () => {
       const store = new Palistor({ config: makeConfig() });
       // paymentType = "card" → cardNumber visible, passport invisible
       expect(store.proxy.cardNumber.isVisible).toBe(true);
@@ -79,27 +79,27 @@ describe("Integration: полный flow", () => {
       expect(store.proxy.cardNumber.isRequired).toBe(true);
     });
 
-    it("isInvalid = undefined до первого submit (revalidate=false)", () => {
+    it("isInvalid = undefined before the first submit (revalidate=false)", () => {
       const store = new Palistor({ config: makeConfig() });
       expect(store.proxy.email.isInvalid).toBeUndefined();
     });
   });
 
   // ─── Write ────────────────────────────────────────────────────────────────
-  describe("write — запись значений", () => {
-    it("записывает значение через proxy setter", () => {
+  describe("write — writing values", () => {
+    it("writes a value through the proxy setter", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "new@test.com";
       expect(store.proxy.email.value).toBe("new@test.com");
     });
 
-    it("применяет formatter при записи", () => {
+    it("applies the formatter on write", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.amount.value = "150" as any;
       expect(store.proxy.amount.value).toBe(150);
     });
 
-    it("setValues обновляет несколько полей", () => {
+    it("setValues updates several fields", () => {
       const store = new Palistor({ config: makeConfig() });
       store.setValues({ email: "bulk@test.com", amount: 999 } as any);
       expect(store.proxy.email.value).toBe("bulk@test.com");
@@ -108,8 +108,8 @@ describe("Integration: полный flow", () => {
   });
 
   // ─── Recompute ────────────────────────────────────────────────────────────
-  describe("recompute — пересчёт зависимостей", () => {
-    it("пересчитывает computed-свойства после write", () => {
+  describe("recompute — dependency recalculation", () => {
+    it("recomputes computed props after a write", () => {
       const store = new Palistor({ config: makeConfig() });
       // Initially card-mode
       expect(store.proxy.cardNumber.isVisible).toBe(true);
@@ -123,7 +123,7 @@ describe("Integration: полный flow", () => {
       expect(store.proxy.cardNumber.isRequired).toBe(false);
     });
 
-    it("пересчитывает validate после write (revalidate=true)", async () => {
+    it("re-runs validate after a write (revalidate=true)", async () => {
       const store = new Palistor({ config: makeConfig() });
       // Submit to set revalidate=true
       await store.submit();
@@ -136,8 +136,8 @@ describe("Integration: полный flow", () => {
   });
 
   // ─── Notify ───────────────────────────────────────────────────────────────
-  describe("notify — уведомления подписчиков", () => {
-    it("subscribeGlobal вызывается при изменении", () => {
+  describe("notify — subscriber notifications", () => {
+    it("subscribeGlobal fires on a change", () => {
       const store = new Palistor({ config: makeConfig() });
       const listener = vi.fn();
       store.subscribeGlobal(listener);
@@ -146,7 +146,7 @@ describe("Integration: полный flow", () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it("subscribe на узел вызывается только при изменении этого узла", () => {
+    it("a node subscription fires only when that node changes", () => {
       const config = makeConfig();
       const store = new Palistor({ config });
       const emailListener = vi.fn();
@@ -159,7 +159,7 @@ describe("Integration: полный flow", () => {
       expect(emailListener).toHaveBeenCalledTimes(1);
     });
 
-    it("подписчики НЕ вызываются если значение не изменилось", () => {
+    it("subscribers are NOT invoked when the value is unchanged", () => {
       const store = new Palistor({ config: makeConfig() });
       const listener = vi.fn();
       store.subscribeGlobal(listener);
@@ -168,7 +168,7 @@ describe("Integration: полный flow", () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it("getVersion увеличивается после изменения", () => {
+    it("getVersion grows after a change", () => {
       const store = new Palistor({ config: makeConfig() });
       const v0 = store.getVersion();
       store.proxy.email.value = "version@test.com";
@@ -177,15 +177,15 @@ describe("Integration: полный flow", () => {
   });
 
   // ─── Submit ───────────────────────────────────────────────────────────────
-  describe("submit — отправка формы", () => {
-    it("submit возвращает success=false если есть ошибки", async () => {
+  describe("submit — form submission", () => {
+    it("submit returns success=false when there are errors", async () => {
       const store = new Palistor({ config: makeConfig() });
       const result = await store.submit();
       expect(result.success).toBe(false);
     });
 
-    it("submit возвращает success=true если форма валидна", async () => {
-      // Используем простой конфиг без вложенных обязательных групп
+    it("submit returns success=true when the form is valid", async () => {
+      // Use a simple config without nested required groups
       const config = {
         email: {
           value: "",
@@ -201,14 +201,14 @@ describe("Integration: полный flow", () => {
       expect(result.success).toBe(true);
     });
 
-    it("после submit включает revalidate — ошибки видны", async () => {
+    it("submit turns revalidate on — errors are visible", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.submit();
       expect(store.proxy.email.isInvalid).toBe(true);
       expect(store.proxy.email.errorMessage).toBe("required");
     });
 
-    it("getValues возвращает текущий снапшот значений", () => {
+    it("getValues returns the current values snapshot", () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "snap@test.com" } as any,
@@ -219,8 +219,8 @@ describe("Integration: полный flow", () => {
   });
 
   // ─── Reset ────────────────────────────────────────────────────────────────
-  describe("reset — сброс значений", () => {
-    it("сбрасывает к начальным значениям", async () => {
+  describe("reset — resetting values", () => {
+    it("resets to the initial values", async () => {
       const store = new Palistor({
         config: makeConfig(),
         initialValues: { email: "initial@test.com" } as any,
@@ -232,7 +232,7 @@ describe("Integration: полный flow", () => {
       expect(store.proxy.email.value).toBe("initial@test.com");
     });
 
-    it("reset с патчем применяет новые значения", () => {
+    it("reset with a patch applies the new values", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "dirty@test.com";
 
@@ -240,7 +240,7 @@ describe("Integration: полный flow", () => {
       expect(store.proxy.email.value).toBe("fresh@test.com");
     });
 
-    it("после reset убирает revalidate и ошибки", async () => {
+    it("reset clears revalidate and errors", async () => {
       const store = new Palistor({ config: makeConfig() });
       await store.submit(); // set revalidate=true, show errors
       expect(store.proxy.email.isInvalid).toBe(true);
@@ -250,7 +250,7 @@ describe("Integration: полный flow", () => {
       expect(store.proxy.email.isInvalid).toBeUndefined();
     });
 
-    it("dirty флаг сбрасывается после reset", () => {
+    it("the dirty flag is cleared after reset", () => {
       const store = new Palistor({ config: makeConfig() });
       store.proxy.email.value = "dirty@test.com";
       expect(store.proxy.email.dirty).toBe(true);
@@ -261,8 +261,8 @@ describe("Integration: полный flow", () => {
   });
 
   // ─── Resolve ──────────────────────────────────────────────────────────────
-  describe("resolve — асинхронный резолвер", () => {
-    it("резолвер загружает данные в поля группы", async () => {
+  describe("resolve — the async resolver", () => {
+    it("the resolver loads data into the group fields", async () => {
       const config = {
         car: {
           resolve: {
@@ -275,7 +275,7 @@ describe("Integration: полный flow", () => {
       };
       const store = new Palistor({ config });
 
-      // Доступ через proxy запускает lazy-resolve (deferred via microtask)
+      // Proxy access triggers the lazy resolve (deferred via microtask)
       const carProxy = (store.proxy as any).car;
       const _brand = carProxy.brand.value;
 
@@ -291,7 +291,7 @@ describe("Integration: полный flow", () => {
       expect(carProxy.loading).toBe(false);
     });
 
-    it("lazy: false запускает резолвер сразу (eager)", async () => {
+    it("lazy: false launches the resolver immediately (eager)", async () => {
       const resolver = vi.fn(async () => ({ brand: "Honda" }));
       const config = {
         car: {
@@ -309,7 +309,7 @@ describe("Integration: полный flow", () => {
       expect(resolver).toHaveBeenCalledTimes(1);
     });
 
-    it("onError вызывается при ошибке резолвера", async () => {
+    it("onError is called when the resolver fails", async () => {
       const error = new Error("Network error");
       const onError = vi.fn();
       const config = {
@@ -322,7 +322,7 @@ describe("Integration: полный flow", () => {
         },
       };
       const store = new Palistor({ config });
-      // Lazy resolve: доступ через proxy запускает резолвер
+      // Lazy resolve: proxy access launches the resolver
       void (store.proxy as any).car.brand.value;
       await flushPromises();
 

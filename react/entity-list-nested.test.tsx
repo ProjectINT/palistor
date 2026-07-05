@@ -1,10 +1,10 @@
 /**
- * React-тесты nested-of-nested per-entity списков (вариант C, фаза C4).
+ * React tests for nested-of-nested per-entity lists.
  *
- *  - 3 уровня (`users → contacts → emails`) рендерятся через вложенные
- *    useForm(listProxy) и ре-рендерятся при мутации на глубине;
- *  - список внутри nested-группы (`profile.contacts`) рендерится корректно
- *    (закрытый блокер: раньше form.profile.contacts был undefined).
+ *  - 3 levels (`users → contacts → emails`) render through nested
+ *    useForm(listProxy) calls and re-render on a deep mutation;
+ *  - a list inside a nested group (`profile.contacts`) renders correctly
+ *    (a fixed blocker: form.profile.contacts used to be undefined).
  */
 
 import { describe, it, expect } from "vitest";
@@ -13,10 +13,10 @@ import { Palistor } from "../store/store";
 import { defineList } from "../store/defineList";
 import { useForm } from "./useForm";
 
-// ─── 3-уровневая вложенность ──────────────────────────────────────────────────
+// ─── 3-level nesting ──────────────────────────────────────────────────────────
 
-describe("nested-of-nested рендер (C4)", () => {
-  it("рендерит users → contacts → emails и ре-рендерится при add на глубине", () => {
+describe("nested-of-nested rendering", () => {
+  it("renders users → contacts → emails and re-renders on a deep add", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -88,7 +88,7 @@ describe("nested-of-nested рендер (C4)", () => {
     expect(screen.getByTestId("email-e1").textContent).toBe("a@x.io");
     expect(screen.getByTestId("contact-c1").querySelectorAll("li").length).toBe(1);
 
-    // Мутация на 3-м уровне → перерисовка вложенного компонента emails.
+    // A level-3 mutation → the nested emails component redraws.
     act(() => {
       contacts0.items[0].emails.add({ id: "e2", addr: "b@x.io" });
     });
@@ -97,7 +97,7 @@ describe("nested-of-nested рендер (C4)", () => {
     expect(screen.getByTestId("contact-c1").querySelectorAll("li").length).toBe(2);
   });
 
-  it("список внутри nested-группы (profile.contacts) рендерится через useForm", () => {
+  it("a list inside a nested group (profile.contacts) renders via useForm", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -134,7 +134,7 @@ describe("nested-of-nested рендер (C4)", () => {
 
     function User() {
       const form = useForm(store) as any;
-      // form.users.items[0].profile.contacts должен быть list proxy, не undefined.
+      // form.users.items[0].profile.contacts must be a list proxy, not undefined.
       return <Contacts contacts={form.users.items[0].profile.contacts} />;
     }
 

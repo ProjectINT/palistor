@@ -3,8 +3,8 @@
 import { MAPPING_ROWS } from "@/config/fieldMapping";
 
 /**
- * Таблица переименования: как внутренние имена Palistor видны наружу
- * после применения fieldMapping.
+ * The rename table: how Palistor's internal names are exposed externally
+ * once fieldMapping is applied.
  */
 export function MappingTable() {
   return (

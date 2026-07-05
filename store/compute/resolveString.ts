@@ -1,12 +1,12 @@
 import type { TranslateFn } from "../store/types";
 
 /**
- * Вычисляет строковое свойство (label, placeholder, description) из конфига.
- * Может быть строкой или функцией `(t: TranslateFn, values) => string`.
+ * Resolves a string property (label, placeholder, description) from the config.
+ * Can be a string or a `(t: TranslateFn, values) => string` function.
  *
- * Если translator зарегистрирован — реальный резолв происходит лениво
- * в proxy GET trap (buildProxy.ts). Здесь сохраняем fallback:
- * для функций — вызываем с identity → возвращаем ключ перевода.
+ * When a translator is registered, the real resolution happens lazily in the
+ * proxy GET trap (buildProxy.ts). Here we keep the fallback: functions are
+ * called with identity → the translation key is returned.
  */
 export function resolveString(
   configValue: string | ((t: TranslateFn, values: Record<string, any>) => string) | undefined,
@@ -14,7 +14,7 @@ export function resolveString(
 ): string | undefined {
   if (configValue === undefined) return undefined;
   if (typeof configValue === "function") {
-    // identity — вернёт ключ как есть (fallback до регистрации translator)
+    // identity — returns the key as-is (fallback until a translator is registered)
     return configValue((v: string) => v, values);
   }
   return configValue;

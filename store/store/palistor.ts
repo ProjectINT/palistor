@@ -44,8 +44,8 @@ import type { FieldState } from "../compute/index";
 // ─── Palistor ─────────────────────────────────────────────────────────────────
 
 /**
- * Публичный класс формы. Одновременно является DI-контейнером для всех
- * внутренних подсистем и реализует публичный интерфейс `ProxyStore`.
+ * The public form class. Acts as the DI container for all internal
+ * subsystems and implements the public `ProxyStore` interface.
  *
  * @example
  * const store = new Palistor({ config: myConfig, initialValues: {...} });
@@ -57,24 +57,24 @@ export class Palistor<
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   const TMapping extends FieldMapping = {},
 > implements ProxyStore<TConfig, TMapping> {
-  // ─── @internal подсистемы ─────────────────────────────────────────────────
+  // ─── @internal subsystems ─────────────────────────────────────────────────
 
-  /** @internal Реестр узлов: nodeState, nodePaths, nodeParents, computeNodes, groupComputeMap, proxyCache. */
+  /** @internal Node registry: nodeState, nodePaths, nodeParents, computeNodes, groupComputeMap, proxyCache. */
   readonly nodes: NodeRegistry;
 
-  /** @internal Глобальные сервисы: translator, notifier и их делегаты. */
+  /** @internal Global services: translator, notifier and their delegates. */
   readonly services: ServiceRegistry;
 
-  /** @internal Отслеживание dirty-флагов. */
+  /** @internal Dirty-flag tracking. */
   readonly dirty: DirtyTracker;
 
-  /** @internal Мутабельный кэш значений. */
+  /** @internal Mutable values cache. */
   readonly values: ValuesCache;
 
-  /** @internal Карта межгрупповых зависимостей. */
+  /** @internal Cross-group dependency map. */
   readonly groupDepsMap: GroupDepsMap;
 
-  /** @internal Реестр entity-объектов (Phase 1B+). */
+  /** @internal Registry of entity objects. */
   readonly entityRegistry: EntityRegistry;
 
   /**
@@ -84,13 +84,13 @@ export class Palistor<
    */
   readonly entityProjectionObjs: Map<string, Record<string, unknown>> = new Map();
 
-  /** @internal Система уведомлений: версии, подписки, post-notify hook. */
+  /** @internal Notification system: versions, subscriptions, post-notify hook. */
   readonly hub: NotificationHub;
 
-  /** @internal Менеджер resolve-подсистемы. */
+  /** @internal Resolve subsystem manager. */
   readonly resolveManager: ResolveManager;
 
-  // ─── @internal pipeline-классы ───────────────────────────────────────────
+  // ─── @internal pipeline classes ──────────────────────────────────────────
 
   /** @internal Write pipeline. */
   readonly writePipeline: WritePipeline;
@@ -107,20 +107,20 @@ export class Palistor<
   /** @internal ProxyBuilder. */
   readonly proxyBuilder: ProxyBuilder;
 
-  // ─── Приватные данные ─────────────────────────────────────────────────────
+  // ─── Private data ─────────────────────────────────────────────────────────
 
-  /** @internal Корневой конфиг, неизменяемый. */
+  /** @internal Root config, immutable. */
   readonly rootConfig: AnyConfigNode;
 
   /**
-   * @internal Карта переименования internal → external (sparse).
-   * Для проекции ключей на выходе proxy (ownKeys/spread).
+   * @internal internal → external rename map (sparse).
+   * Projects keys on proxy output (ownKeys/spread).
    */
   readonly fieldMapping: FieldMapping;
 
   /**
-   * @internal Обратная карта external → internal (sparse).
-   * Для перевода приходящего ключа на входе proxy (GET/SET/tracking).
+   * @internal Reverse map, external → internal (sparse).
+   * Translates incoming keys on proxy input (GET/SET/tracking).
    */
   readonly externalToInternal: Record<string, string>;
 
@@ -128,21 +128,21 @@ export class Palistor<
   private readonly _persist: PersistManager;
 
   /**
-   * Нереактивный контекст — произвольные данные, доступные через `store.context`.
-   * Устанавливается через `setContext()` или хук `useStoreContext()`.
+   * Non-reactive context — arbitrary data available via `store.context`.
+   * Set via `setContext()` or the `useStoreContext()` hook.
    */
   private _context: Record<string, unknown> = {};
 
-  // ─── Конструктор ──────────────────────────────────────────────────────────
+  // ─── Constructor ──────────────────────────────────────────────────────────
 
   constructor(options: ProxyStoreOptions<TConfig, TMapping>) {
     const { config, initialValues = {} } = options;
 
-    // ─── Field mapping (две проекции карты) ──────────────────────────────────
-    // fwd: internal → external (для ownKeys/spread).
-    // externalToInternal: external → internal (для GET/SET/tracking).
-    // Обе пусты, когда fieldMapping не передан → `?? key` возвращает ключ как есть
-    // → нулевой оверхед по умолчанию.
+    // ─── Field mapping (two projections of the map) ──────────────────────────
+    // fwd: internal → external (for ownKeys/spread).
+    // externalToInternal: external → internal (for GET/SET/tracking).
+    // Both are empty when fieldMapping is not provided → `?? key` returns the
+    // key as-is → zero overhead by default.
     const fwd: FieldMapping = options.fieldMapping ?? {};
     this.fieldMapping = fwd;
     this.externalToInternal = {};
@@ -151,15 +151,15 @@ export class Palistor<
       if (external !== undefined) this.externalToInternal[external] = internal;
     }
 
-    // ─── Нормализация конфига (external → internal) ───────────────────────────
-    // Конфиг пишется в ПУБЛИЧНЫХ (замапленных) именах. Один проход приводит его
-    // к internal-именам ДО init/compute/traversal — всё ядро ниже работает с
-    // internal-именами без изменений. Пустая карта → возвращается исходный
-    // config без копий (нулевой оверхед).
+    // ─── Config normalization (external → internal) ──────────────────────────
+    // The config is authored in PUBLIC (mapped) names. A single pass converts
+    // it to internal names BEFORE init/compute/traversal — everything below
+    // works with internal names unchanged. Empty map → the original config is
+    // returned without copying (zero overhead).
     const rootConfig = normalizeConfig(config, this.externalToInternal, fwd) as AnyConfigNode;
     this.rootConfig = rootConfig;
 
-    // ─── Сервисы ────────────────────────────────────────────────────────────
+    // ─── Services ────────────────────────────────────────────────────────────
 
     this.services = new ServiceRegistry();
     const { translate, notify } = this.services;
@@ -184,10 +184,10 @@ export class Palistor<
       this.entityRegistry.registerList(ls);
     }
 
-    // ─── GroupDepsMap + первый recompute ──────────────────────────────────────
+    // ─── GroupDepsMap + first recompute ──────────────────────────────────────
 
     this.groupDepsMap = new GroupDepsMap(rootConfig, nodePaths, nodeParents);
-    this.recompute(); // первый полный пересчёт — строит карту зависимостей
+    this.recompute(); // first full recompute — builds the dependency map
     this.dirty.capture(rootConfig, nodeState);
 
     // ─── NotificationHub ────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ export class Palistor<
       entityRegistry: this.entityRegistry,
     });
 
-    // ─── Pipeline классы ─────────────────────────────────────────────────────
+    // ─── Pipeline classes ─────────────────────────────────────────────────────
 
     this.writePipeline = new WritePipeline(this);
     this.resetPipeline = new ResetPipeline(this);
@@ -230,16 +230,16 @@ export class Palistor<
     const postNotifyHook = this.resolveManager.createPostNotifyHook();
     if (postNotifyHook) this.hub.setPostNotifyHook(postNotifyHook);
 
-    // ─── Начальный контекст (Phase 4) ────────────────────────────────────────
+    // ─── Initial context ─────────────────────────────────────────────────────
 
     if (options.context) {
       this._context = options.context;
     }
 
-    // ─── Flow: entry lifecycle первого шага ──────────────────────────────────
-    // Первый шаг каждого флоу «входится» при создании store:
-    // onEnter → resolve (eager) → onReady. До launchEager — чтобы флоу сам
-    // триггерил idle-resolve шага и корректно прикреплял onReady.
+    // ─── Flow: entry lifecycle of the first step ─────────────────────────────
+    // The first step of every flow is "entered" at store creation:
+    // onEnter → resolve (eager) → onReady. Runs before launchEager so the flow
+    // itself triggers the step's idle resolve and attaches onReady correctly.
 
     initFlows(this);
 
@@ -248,15 +248,15 @@ export class Palistor<
     this.resolveManager.launchEager();
   }
 
-  // ─── @internal методы-фасады ──────────────────────────────────────────────
+  // ─── @internal facade methods ─────────────────────────────────────────────
 
   /**
-   * Пересчитать состояние узлов.
+   * Recompute node state.
    *
-   * - `changedNodes` передан и не пуст → таргетированный пересчёт (быстро)
-   * - иначе → полный пересчёт всего дерева (init, reset, resolve-завершение)
+   * - `changedNodes` provided and non-empty → targeted recompute (fast)
+   * - otherwise → full recompute of the whole tree (init, reset, resolve completion)
    *
-   * При первом вызове без changedNodes строит карту групповых зависимостей.
+   * The first call without changedNodes builds the group dependency map.
    *
    * @internal
    */
@@ -290,8 +290,8 @@ export class Palistor<
   }
 
   /**
-   * Уведомить подписчиков об изменённых узлах.
-   * Пересчитывает dirty-флаги и инкрементирует версии.
+   * Notify subscribers about changed nodes.
+   * Recomputes dirty flags and bumps versions.
    *
    * @internal
    */
@@ -306,16 +306,16 @@ export class Palistor<
     });
   }
 
-  // ─── @internal pipeline-методы ────────────────────────────────────────────
+  // ─── @internal pipeline methods ───────────────────────────────────────────
 
-  /** @internal Применить bulk-патч к узлу (один recompute + notify). */
+  /** @internal Apply a bulk patch to a node (single recompute + notify). */
   setValuesNode(node: AnyConfigNode, patch: Record<string, unknown>): void {
     const formatted = formatPatch(node, patch, this.values.values);
     const changed = applyPatch(node, this.nodes.nodeState, formatted, new Set(), this.values);
     _recomputeAndNotify(changed, () => this.recompute(), (c) => this.notifyChanged(c));
   }
 
-  // ─── ProxyStore — публичный API ───────────────────────────────────────────
+  // ─── ProxyStore — public API ──────────────────────────────────────────────
 
   get proxy(): RawStoreProxy<TConfig, TMapping> {
     return this._proxy;
@@ -385,11 +385,11 @@ export class Palistor<
   }
 
   /**
-   * Создать или обновить entity (или массив entities) в реестре.
+   * Create or update an entity (or an array of entities) in the registry.
    *
-   * - Если entity с таким id не существует — создаётся и регистрируются leaf-ноды.
-   * - Если существует — рекурсивный merge; обновлённые leaf-ноды маркируются как изменённые.
-   * - Batch-режим: массив entities обрабатывается одним recompute + notifyChanged.
+   * - If no entity with the id exists — it is created and its leaf nodes registered.
+   * - If it exists — recursive merge; updated leaf nodes are marked as changed.
+   * - Batch mode: an array of entities is processed in one recompute + notifyChanged.
    */
   set(data: EntityData | EntityData[]): void {
     const items = Array.isArray(data) ? data : [data];
@@ -404,14 +404,14 @@ export class Palistor<
   }
 
   /**
-   * Переименовать entity: перенести с oldId на newId.
+   * Rename an entity: move it from oldId to newId.
    *
-   * - Обновляет EntityRegistry (entities Map, bindings, resolvedCache, id leaf value).
-   * - Обновляет itemIds во всех ListState-объектах.
-   * - Обновляет entityProjectionObjs (переносит POJO-зеркало).
-   * - Уведомляет подписчиков об изменении id leaf.
+   * - Updates EntityRegistry (entities Map, bindings, resolvedCache, id leaf value).
+   * - Updates itemIds in all ListState objects.
+   * - Updates entityProjectionObjs (moves the POJO mirror).
+   * - Notifies subscribers about the id leaf change.
    *
-   * No-op если entity с oldId не существует.
+   * No-op when no entity with oldId exists.
    */
   rekey(oldId: string, newId: string): void {
     const entity = this.entityRegistry.get(oldId);
@@ -442,20 +442,20 @@ export class Palistor<
   }
 
   /**
-   * Удалить entity из реестра по ID.
+   * Delete an entity from the registry by ID.
    *
-   * - Удаляет leaf-ноды entity из NodeRegistry (computeNodes, groupComputeMap).
-   * - Очищает bindings и resolvedCache.
-   * - Уведомляет подписчиков.
+   * - Removes the entity's leaf nodes from NodeRegistry (computeNodes, groupComputeMap).
+   * - Clears bindings and resolvedCache.
+   * - Notifies subscribers.
    *
-   * No-op если entity не существует.
+   * No-op when the entity does not exist.
    */
   delete(id: string): void {
     const entityNode = this.entityRegistry.get(id);
     if (!entityNode) return;
 
-    // C2: каскадное удаление child-entity, принадлежащих этой entity.
-    // Снимаем копию множества — childrenByOwner мутируется при рекурсивном delete.
+    // Cascade-delete child entities owned by this entity.
+    // Copy the set — childrenByOwner is mutated during the recursive delete.
     const childIds = this.entityRegistry.getChildrenByOwner(id);
     if (childIds && childIds.size > 0) {
       for (const childId of [...childIds]) {
@@ -463,43 +463,42 @@ export class Palistor<
       }
     }
 
-    // Собрать все leaf-ноды entity
+    // Collect all leaf nodes of the entity
     const deletedLeaves = new Set<object>();
     this.collectEntityLeaves(entityNode, deletedLeaves);
 
-    // Удалить leaf-ноды из NodeRegistry (предотвращает утечку памяти)
+    // Remove leaf nodes from NodeRegistry (prevents a memory leak)
     for (const leaf of deletedLeaves) {
       this.nodes.unregisterLeaf(leaf);
     }
 
-    // Phase 4: cleanup per-entity field resolve states
+    // Cleanup per-entity field resolve states
     this.resolveManager.cleanupEntityResolveStates(id);
 
-    // Удалить entity из реестра (очищает bindings + resolvedCache)
+    // Remove the entity from the registry (clears bindings + resolvedCache)
     this.entityRegistry.delete(id);
 
-    // Уведомить подписчиков
     this.notifyChanged(deletedLeaves);
   }
 
   /**
-   * Сбросить resolved-кэш для entity (все template или конкретный).
+   * Clear the resolved cache for an entity (all templates or a specific one).
    *
-   * - `invalidate(id)` — очистить весь кэш для entity
-   * - `invalidate(id, templateNode)` — очистить только для конкретной пары
+   * - `invalidate(id)` — clear the whole cache for the entity
+   * - `invalidate(id, templateNode)` — clear only for that specific pair
    *
-   * При следующем mount useForm(entity, template) resolve будет перезапущен.
+   * On the next mount of useForm(entity, template) the resolve re-runs.
    */
   invalidate(id: string, templateNode?: object): void {
     this.entityRegistry.clearResolved(id, templateNode);
   }
 
   /**
-   * Submit entity через template.
-   * Вызывается из EntityProjectionProxy.submit().
+   * Submit an entity through a template.
+   * Called from EntityProjectionProxy.submit().
    *
    * 1. submitting: true → notify
-   * 2. Валидация через template field rules (validate)
+   * 2. Validation via template field rules (validate)
    * 3. templateNode.onSubmit(entityProxy, store)
    * 4. templateNode.afterSubmit(result, { reset })
    * 5. submitting: false → notify
@@ -511,7 +510,6 @@ export class Palistor<
     templateNode: AnyConfigNode,
     entityProxy: object,
   ): Promise<SubmitResult> {
-    // Шаг 1: Найти entity в реестре. Если не найдена — ранний выход с ошибкой.
     const entityNode = this.entityRegistry.get(entityId);
     if (!entityNode) {
       return {
@@ -520,21 +518,17 @@ export class Palistor<
       };
     }
 
-    // Шаг 2: Получить (или создать) объект состояния привязки { loading, submitting }
-    // для пары (entityId, templateNode). Используется EntityProjectionProxy
-    // для отображения спиннера в UI.
+    // Binding state { loading, submitting } for the (entityId, templateNode)
+    // pair — read by EntityProjectionProxy to render a spinner in the UI.
     const bindingState = this.resolveManager.entityStates.getOrCreate(entityId, templateNode as object);
     const entityNodeObj = entityNode as unknown as object;
 
-    // Шаг 3: Поднять флаг submitting и уведомить подписчиков (React перерендерит
-    // компоненты, привязанные к этой entity — например, кнопка покажет спиннер).
     bindingState.submitting = true;
     this.notifyChanged(new Set<object>([entityNodeObj]));
 
     try {
-      // Шаг 4: Валидация — рекурсивно обойти template-поля и вызвать validate()
-      // для каждого leaf-поля, у которого есть валидатор. Текущие значения
-      // берутся из nodeState entity.
+      // Validation — recursively walk template fields and call validate() on
+      // every leaf that has one. Current values come from the entity's nodeState.
       const errors: Array<{ path: string; message: string }> = [];
       this.collectEntityTemplateErrors(
         templateNode,
@@ -543,14 +537,11 @@ export class Palistor<
         "",
       );
 
-      // Если есть ошибки валидации — вернуть их, не вызывая onSubmit.
       if (errors.length > 0) {
         return { success: false, errors };
       }
 
-      // Шаг 5: Вызвать пользовательский onSubmit(entityProxy, store).
-      // entityProxy — это Proxy entity с template-правилами, store — сам Palistor.
-      // Обычно здесь выполняется API-запрос на сервер.
+      // User onSubmit(entityProxy, store) — typically the API call.
       let result: unknown;
       if (typeof templateNode.onSubmit === "function") {
         result = await (
@@ -561,8 +552,6 @@ export class Palistor<
         )(entityProxy, this);
       }
 
-      // Шаг 6: Вызвать afterSubmit(result, { reset }) — хук после успешного submit.
-      // reset для entity template — no-op (у entity нет встроенного сброса, в отличие от form).
       if (typeof templateNode.afterSubmit === "function") {
         const reset = () => void 0; // entity template has no built-in reset
         await (
@@ -575,14 +564,13 @@ export class Palistor<
 
       return { success: true, result };
     } finally {
-      // Шаг 7 (always): Снять флаг submitting и уведомить подписчиков.
-      // finally гарантирует сброс даже при ошибке в onSubmit/afterSubmit.
+      // Always clear submitting, even when onSubmit/afterSubmit throws.
       bindingState.submitting = false;
       this.notifyChanged(new Set<object>([entityNodeObj]));
     }
   }
 
-  // ─── Приватные helpers для entity ────────────────────────────────────────
+  // ─── Private entity helpers ──────────────────────────────────────────────
 
   /**
    * Upsert entities in EntityRegistry and register/update their leaf nodes.
@@ -591,7 +579,7 @@ export class Palistor<
    * Used internally by `set()` and by `executeListResolve` via the
    * `setEntitiesRaw` callback in ResolveManagerDeps.
    *
-   * Phase 4: when `listNode` is provided, triggers entity field resolves for
+   * When `listNode` is provided, triggers entity field resolves for
    * each template field entry belonging to that list.
    *
    * @internal
@@ -600,24 +588,24 @@ export class Palistor<
     const changed = new Set<object>();
 
     for (const item of items) {
-      // Создать новый EntityNode или обновить существующий (рекурсивный merge).
-      // Если item.id отсутствует — EntityRegistry сгенерирует временный _tmp_* id.
+      // Create a new EntityNode or update the existing one (recursive merge).
+      // When item.id is missing, EntityRegistry generates a temporary _tmp_* id.
       const entityNode = this.entityRegistry.upsert(item);
       const entityId = entityNode.id.value as string;
-      // Все entity-ноды живут в namespace "_entity_." для изоляции от config-нод формы.
+      // All entity nodes live in the "_entity_." namespace, isolated from form config nodes.
       const entityPrefix = `_entity_.${entityId}`;
 
-      // projectionObj — «зеркало» entity в виде plain POJO { id, field1, field2 }.
-      // Используется в valuesCache.values как элемент массива списка.
-      // Ссылочная идентичность POJO сохраняется между upsert-ами, меняются только значения.
+      // projectionObj — the entity's plain-POJO mirror { id, field1, field2 }.
+      // Used in valuesCache.values as a list array element.
+      // The POJO's referential identity survives upserts; only values change.
       let projectionObj = this.entityProjectionObjs.get(entityId);
       if (!projectionObj) {
         projectionObj = {};
         this.entityProjectionObjs.set(entityId, projectionObj);
       }
 
-      // DFS-обход entity-дерева: зарегистрировать новые leaf-ноды
-      // или обнаружить изменения в существующих.
+      // DFS over the entity tree: register new leaf nodes
+      // or detect changes in existing ones.
       this.walkAndSyncEntityNode(entityNode, entityPrefix, entityNode, changed, projectionObj);
 
       // Entity field resolves are lazy-only: triggered when a component first reads
@@ -629,19 +617,19 @@ export class Palistor<
   }
 
   /**
-   * Синхронизировать valuesCache с составом списка — ЕДИНЫЙ метод (root + per-entity).
+   * Sync valuesCache with list membership — a SINGLE method (root + per-entity).
    *
-   * Ветвится по `listState.ownerEntity`:
-   *   - `null`  → root: пишем массив POJO-зеркал в `nodeSlot` config-узла
-   *     (`valuesCache.values.users = [{id:"u1",…}, …]` — тот же массив, что читает
-   *     `proxy.users.value`, поэтому React видит обновление);
-   *   - entity  → per-entity (вариант C, C3/C4): материализуем состав в projectionObj
-   *     владельца по пути списка (`["contacts"]` или `["profile","contacts"]`). Это
-   *     включает вложенный список в `store.getValues()` — projectionObj владельца
-   *     входит в массив корневого списка по ссылке, а child-projectionObj-ы
-   *     рекурсивно материализуют свои списки.
+   * Branches on `listState.ownerEntity`:
+   *   - `null`  → root: write the array of POJO mirrors into the config node's
+   *     `nodeSlot` (`valuesCache.values.users = [{id:"u1",…}, …]` — the same
+   *     array that `proxy.users.value` reads, so React sees the update);
+   *   - entity  → per-entity: materialize the membership into the owner's
+   *     projectionObj at the list path (`["contacts"]` or `["profile","contacts"]`).
+   *     This includes the nested list in `store.getValues()` — the owner's
+   *     projectionObj is referenced by the root list array, and child
+   *     projectionObjs materialize their lists recursively.
    *
-   * No-op, если слот/путь/projectionObj владельца отсутствуют.
+   * No-op when the slot/path/owner projectionObj is missing.
    *
    * @internal
    */
@@ -651,14 +639,14 @@ export class Palistor<
       .filter((obj): obj is Record<string, unknown> => obj !== undefined);
 
     if (listState.ownerEntity === null) {
-      // Root: слот в valuesCache (пара { parent, key }) по config-узлу.
+      // Root: the valuesCache slot ({ parent, key } pair) keyed by config node.
       const slot = this.values.nodeSlot.get(listState.listConfigNode);
       if (!slot) return;
       slot.parent[slot.key] = materialized;
       return;
     }
 
-    // Per-entity: спускаемся к родительскому POJO по пути и пишем состав.
+    // Per-entity: descend to the parent POJO along the path and write the membership.
     const listConfigNode = listState.listConfigNode;
     const path = this.nodes.listFieldKeys.get(listConfigNode);
     if (!path || path.length === 0) return;
@@ -680,7 +668,7 @@ export class Palistor<
     target[path[path.length - 1]] = materialized;
   }
 
-  /** @internal Текущий id entity (учитывает rekey через nodeState). */
+  /** @internal Current entity id (accounts for rekey via nodeState). */
   private _entityId(entity: EntityNode): string {
     const idLeaf = entity.id as object;
     return (
@@ -691,15 +679,15 @@ export class Palistor<
 
 
   /**
-   * Восстановить состав корневых И per-entity списков из снимка значений
-   * (вариант C, C3 — persist hydrate).
+   * Restore the membership of root AND per-entity lists from a values
+   * snapshot (persist hydrate).
    *
-   * `applyPatch` пропускает list-узлы, поэтому состав списков восстанавливается
-   * отдельным проходом: для каждого list-поля создаём child-entity, проставляем
-   * owner-ссылку (для вложенных), заполняем `itemIds`/`initialItemIds` и
-   * синхронизируем valuesCache. Рекурсивно обрабатывает nested-of-nested.
+   * `applyPatch` skips list nodes, so list membership is restored in a
+   * separate pass: for every list field we create child entities, set the
+   * owner reference (for nested ones), fill `itemIds`/`initialItemIds` and
+   * sync valuesCache. Handles nested-of-nested recursively.
    *
-   * Возвращает множество изменённых узлов для последующего notify.
+   * Returns the set of changed nodes for a subsequent notify.
    *
    * @internal
    */
@@ -719,7 +707,7 @@ export class Palistor<
       const child = (configNode as Record<string, unknown>)[key];
       if (!child || typeof child !== "object") continue;
 
-      // Вложенная группа (не список): рекурсия, чтобы достать списки внутри неё.
+      // Nested group (not a list): recurse to reach the lists inside it.
       if (!Array.isArray(child)) {
         if (isGroupNode(child as object)) {
           const nested = valueObj?.[key];
@@ -766,7 +754,7 @@ export class Palistor<
               listConfigNode,
             );
           }
-          // Рекурсия во вложенные списки этого item.
+          // Recurse into this item's nested lists.
           this._restoreListsRec(
             template,
             itemObj as Record<string, unknown>,
@@ -788,7 +776,7 @@ export class Palistor<
           listState.itemIds = ids;
           listState.initialItemIds = [...ids];
           this.syncListValuesCache(listState);
-          // U2: ListState — ключ трекинга; listConfigNode — мост обратной совместимости.
+          // ListState is the tracking key; listConfigNode is the backward-compat bridge.
           changed.add(listState as unknown as object);
           changed.add(listConfigNode);
         }
@@ -797,9 +785,9 @@ export class Palistor<
   }
 
   /**
-   * Вернуть поверхностную копию объекта данных entity без list-полей
-   * (их состав восстанавливается отдельно через EntityListState). Иначе
-   * `createEntityNode` затянул бы массив как обычный leaf-value.
+   * Return a shallow copy of an entity data object without list fields
+   * (their membership is restored separately via EntityListState). Otherwise
+   * `createEntityNode` would ingest the array as a regular leaf value.
    */
   private _stripListFields(
     itemObj: Record<string, unknown>,
@@ -808,24 +796,24 @@ export class Palistor<
     const result: Record<string, unknown> = {};
     for (const key of Object.keys(itemObj)) {
       const tField = (template as Record<string, unknown> | undefined)?.[key];
-      if (Array.isArray(tField)) continue; // list-поле — пропускаем
+      if (Array.isArray(tField)) continue; // skip list fields
       result[key] = itemObj[key];
     }
     return result as EntityData;
   }
 
   /**
-   * Рекурсивный обход entity node: регистрирует новые leaf-ноды через
-   * `registerDynamicLeaf` и собирает изменённые в `changed`.
+   * Recursive walk over an entity node: registers new leaf nodes via
+   * `registerDynamicLeaf` and accumulates changed ones in `changed`.
    *
-   * Также поддерживает entity projection POJO (projectionObj):
-   * - Новые leaf-ноды: регистрируют nodeSlot → projectionObj
-   * - Существующие leaf-ноды: обновляют через updateValuesCacheEntry
+   * Also maintains the entity projection POJO (projectionObj):
+   * - New leaf nodes: register nodeSlot → projectionObj
+   * - Existing leaf nodes: updated via updateValuesCacheEntry
    *
-   * @param node          Текущий узел entity для обхода
-   * @param prefix        Dot-путь текущего узла (e.g. "_entity_.u1")
-   * @param parent        Родительский объект (для регистрации leaf-нод)
-   * @param changed       Множество изменённых узлов (накапливается)
+   * @param node          Current entity node being walked
+   * @param prefix        Dot-path of the current node (e.g. "_entity_.u1")
+   * @param parent        Parent object (for leaf registration)
+   * @param changed       Accumulated set of changed nodes
    * @param projectionObj Plain POJO at the current nesting level for valuesCache
    */
   private walkAndSyncEntityNode(
@@ -835,30 +823,30 @@ export class Palistor<
     changed: Set<object>,
     projectionObj?: Record<string, unknown>,
   ): void {
-    // Зарегистрировать dot-path группового узла (e.g. "_entity_.u1", "_entity_.u1.address").
-    // nodePaths используется в compute-подсистеме для определения «группы» листа
-    // (getNodeGroupPath) и при таргетированном recompute.
+    // Register the group node's dot-path (e.g. "_entity_.u1", "_entity_.u1.address").
+    // nodePaths is used by the compute subsystem to determine a leaf's "group"
+    // (getNodeGroupPath) and during targeted recompute.
     if (!this.nodes.nodePaths.has(parent)) {
       this.nodes.nodePaths.set(parent, prefix);
     }
 
     for (const key of Object.keys(node)) {
       const child = node[key];
-      // Пропускаем примитивы (не часть entity-дерева)
+      // Skip primitives (not part of the entity tree)
       if (!child || typeof child !== "object") continue;
 
       const childObj = child as object;
       const childPath = `${prefix}.${key}`;
 
       if (isLeafNode(childObj)) {
-        // ── Листовой узел (EntityLeafNode): { value: <текущее значение> } ──
+        // ── Leaf node (EntityLeafNode): { value: <current value> } ──
         const leaf = childObj as { value: unknown };
         if (!this.nodes.nodeState.has(childObj)) {
-          // Первая встреча с этим leaf — зарегистрировать в NodeRegistry:
-          // - nodeState: хранит FieldState (value, isVisible, dirty, etc.)
-          // - nodePaths: маппинг node → dot-path
-          // - nodeParents: маппинг node → parent group
-          // Все entity leaf-ы всегда visible, не обязательны, не disabled.
+          // First encounter of this leaf — register in NodeRegistry:
+          // - nodeState: holds FieldState (value, isVisible, dirty, etc.)
+          // - nodePaths: node → dot-path mapping
+          // - nodeParents: node → parent group mapping
+          // Entity leaves are always visible, never required/disabled.
           this.nodes.registerDynamicLeaf(childObj, childPath, parent, {
             value: leaf.value,
             isVisible: true,
@@ -871,32 +859,30 @@ export class Palistor<
           // Seed initialValueMap so recomputeDirtyTargeted compares against the entity's
           // loaded value instead of `undefined` — prevents spurious dirty=true on first load.
           this.dirty.initialValueMap.set(childObj, leaf.value);
-          // Привязать leaf к POJO-зеркалу через nodeSlot.
-          // При следующих updateValuesCacheEntry(node, newValue)
-          // значение в projectionObj обновится автоматически за O(1).
+          // Bind the leaf to the POJO mirror via nodeSlot. Subsequent
+          // updateValuesCacheEntry(node, newValue) calls update the
+          // projectionObj value automatically in O(1).
           if (projectionObj !== undefined) {
             this.values.nodeSlot.set(childObj, { parent: projectionObj, key });
             projectionObj[key] = leaf.value;
           }
           changed.add(childObj);
         } else {
-          // Leaf уже зарегистрирован — проверяем, изменилось ли значение.
-          // Это происходит при повторном upsert (обновление entity с сервера).
+          // Leaf already registered — check whether the value changed.
+          // Happens on repeated upserts (entity refresh from the server).
           const state = this.nodes.nodeState.get(childObj)!;
           if (state.value !== leaf.value) {
-            // Обновляем nodeState напрямую (без writePipeline — это raw-запись)
+            // Raw write to nodeState (bypasses writePipeline on purpose)
             state.value = leaf.value;
-            // Обновить projectionObj через nodeSlot: O(1), не нужно искать POJO.
             updateValuesCacheEntry(this.values, childObj, leaf.value);
             changed.add(childObj);
           }
-          // Если значение не изменилось — leaf не попадёт в changed,
-          // подписчики не будут уведомлены (оптимизация).
+          // Unchanged values stay out of `changed` — subscribers are not notified.
         }
       } else {
-        // ── Групповой узел (EntityGroupNode): вложенный объект без "value" ──
-        // Например: address: { city: { value: "Moscow" } }
-        // Создаём вложенный POJO в projectionObj (если нужно) и рекурсируем.
+        // ── Group node (EntityGroupNode): nested object without "value" ──
+        // e.g. address: { city: { value: "Moscow" } }
+        // Create a nested POJO in projectionObj (if needed) and recurse.
         let nestedProjectionObj: Record<string, unknown> | undefined;
         if (projectionObj !== undefined) {
           if (!projectionObj[key] || typeof projectionObj[key] !== "object") {
@@ -916,8 +902,8 @@ export class Palistor<
   }
 
   /**
-   * Рекурсивно собрать все leaf-ноды из entity node tree.
-   * Используется в `delete()` для очистки NodeRegistry.
+   * Recursively collect all leaf nodes from an entity node tree.
+   * Used by `delete()` to clean up NodeRegistry.
    */
   private collectEntityLeaves(
     node: Record<string, unknown>,
@@ -927,10 +913,8 @@ export class Palistor<
       const child = node[key];
       if (!child || typeof child !== "object") continue;
       if (isLeafNode(child as object)) {
-        // Leaf-нода: объект с полем "value" → добавить в результат
         result.add(child as object);
       } else {
-        // Группа — рекурсивно обойти вложенные узлы
         this.collectEntityLeaves(child as Record<string, unknown>, result);
       }
     }
@@ -950,24 +934,22 @@ export class Palistor<
     parentPath: string,
   ): void {
     const translate = this.services.translate;
-    // Построить plain-объект значений entity — передаётся вторым аргументом
-    // в каждый validate(), чтобы валидатор мог проверять зависимости между полями.
-    // Пример: validate: (v, vals) => vals.password !== vals.confirmPassword ? "Mismatch" : undefined
+    // Plain values object passed as the second argument to every validate(),
+    // so validators can check cross-field dependencies, e.g.:
+    // validate: (v, vals) => vals.password !== vals.confirmPassword ? "Mismatch" : undefined
     const entityValues = this.buildEntityValuesForTemplate(entityNode);
 
     for (const key of configKeys(templateNode as Record<string, unknown>)) {
       const templateField = (templateNode as Record<string, unknown>)[key];
       if (!templateField || typeof templateField !== "object") continue;
 
-      // Формируем dot-path для сообщения об ошибке (e.g. "address.city")
+      // Dot-path for the error message (e.g. "address.city")
       const path = parentPath ? `${parentPath}.${key}` : key;
 
       if (isLeafNode(templateField as object)) {
-        // Leaf-поле template — проверяем, есть ли validate() функция
         if (typeof (templateField as Record<string, unknown>).validate === "function") {
-          // Извлечь текущее значение из entity. Приоритет:
-          // 1. nodeState (актуальное значение после write pipeline)
-          // 2. fallback на entityField.value (если node ещё не зарегистрирован)
+          // Current value: nodeState first (post write-pipeline), falling back
+          // to entityField.value when the node is not registered yet.
           const entityField = entityNode[key];
           const currentValue =
             entityField && typeof entityField === "object"
@@ -978,9 +960,8 @@ export class Palistor<
                 )?.value ?? (entityField as { value: unknown }).value
               : undefined;
 
-          // Вызвать validate(currentValue, allEntityValues, translateFn).
-          // Если возвращает строку — это сообщение об ошибке.
-          // undefined / false = поле валидно.
+          // validate(currentValue, allEntityValues, translateFn):
+          // a string is an error message; undefined/false means valid.
           const result = (
             (templateField as Record<string, unknown>).validate as (
               v: unknown,
@@ -992,8 +973,8 @@ export class Palistor<
           if (result) errors.push({ path, message: result });
         }
       } else {
-        // Группа template — рекурсия в соответствующий вложенный узел entity.
-        // Template и entity должны иметь одинаковую структуру вложенности.
+        // Template group — recurse into the matching nested entity node.
+        // Template and entity share the same nesting structure.
         const entityField = entityNode[key];
         if (entityField && typeof entityField === "object") {
           this.collectEntityTemplateErrors(
@@ -1016,18 +997,17 @@ export class Palistor<
   private buildEntityValuesForTemplate(
     entityNode: Record<string, unknown>,
   ): Record<string, unknown> {
-    // Результат: plain-объект вида { id: "u1", name: "Alice", address: { city: "Moscow" } }
+    // Result shape: { id: "u1", name: "Alice", address: { city: "Moscow" } }
     const values: Record<string, unknown> = {};
     for (const key of Object.keys(entityNode)) {
       const field = entityNode[key];
       if (field && typeof field === "object") {
         if (isLeafNode(field as object)) {
-          // Leaf: читаем value из nodeState (актуальное), fallback на field.value
+          // Leaf: read value from nodeState (current), fall back to field.value
           values[key] =
             (this.nodes.nodeState.get(field as object) as { value: unknown } | undefined)?.value ??
             (field as { value: unknown }).value;
         } else {
-          // Группа: рекурсивно собрать вложенный объект
           values[key] = this.buildEntityValuesForTemplate(field as Record<string, unknown>);
         }
       }

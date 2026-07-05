@@ -1,17 +1,17 @@
 /**
- * Тесты для defineList.
+ * Tests for defineList.
  *
- * Покрывает:
- *  1. Структура результата (unit — без Palistor store)
- *  2. Интеграция со store: async resolver загружает список
- *  3. Деdup — повторный доступ не вызывает лишний resolver
- *  4. loading flag во время выполнения resolver
- *  5. deps — повторный запуск при изменении зависимостей
- *  6. onError — вызов при сбое resolver
- *  7. defineList без resolver — список управляется вручную
- *  8. Вложенный defineList внутри группы
- *  9. Несколько defineList в одном конфиге
- * 10. Типизация — компилируется без ошибок
+ * Covers:
+ *  1. Result structure (unit — without a Palistor store)
+ *  2. Store integration: the async resolver loads the list
+ *  3. Dedup — repeated access doesn't trigger an extra resolver
+ *  4. The loading flag while the resolver runs
+ *  5. deps — re-runs on dependency changes
+ *  6. onError — invoked on resolver failure
+ *  7. defineList without a resolver — a manually managed list
+ *  8. Nested defineList inside a group
+ *  9. Multiple defineLists in one config
+ * 10. Typing — compiles without errors
  */
 import { describe, it, expect, vi } from "vitest";
 import { defineList } from "./defineList";
@@ -28,10 +28,10 @@ function delay(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
-// ─── 1. Структура результата ──────────────────────────────────────────────────
+// ─── 1. Result structure ──────────────────────────────────────────────────────
 
-describe("defineList — структура результата", () => {
-  it("без resolver → массив длиной 1, element[0] = template", () => {
+describe("defineList — result structure", () => {
+  it("without a resolver → an array of length 1, element[0] = template", () => {
     const template = { id: { value: "" }, name: { value: "" } };
     const node = defineList({ template });
 
@@ -40,7 +40,7 @@ describe("defineList — структура результата", () => {
     expect((node as unknown as any[])[0]).toBe(template);
   });
 
-  it("с resolver → массив длиной 2, element[1].resolve содержит resolver", () => {
+  it("with a resolver → an array of length 2, element[1].resolve holds the resolver", () => {
     const template = { id: { value: "" }, name: { value: "" } };
     const resolver = vi.fn(async () => []);
     const node = defineList<{ id: string; name: string }>({ template, resolve: { resolver } });
@@ -53,7 +53,7 @@ describe("defineList — структура результата", () => {
     expect(arr[1].resolve.resolver).toBe(resolver);
   });
 
-  it("deps передаётся в resolve config", () => {
+  it("deps is passed into the resolve config", () => {
     const template = { id: { value: "" } };
     const resolver = vi.fn(async () => []);
     const node = defineList<{ id: string }>({
@@ -65,7 +65,7 @@ describe("defineList — структура результата", () => {
     expect(resolveConfig.deps).toEqual(["filter", "page"]);
   });
 
-  it("onError передаётся в resolve config", () => {
+  it("onError is passed into the resolve config", () => {
     const template = { id: { value: "" } };
     const resolver = vi.fn(async () => []);
     const onError = vi.fn();
@@ -75,7 +75,7 @@ describe("defineList — структура результата", () => {
     expect(resolveConfig.onError).toBe(onError);
   });
 
-  it("без resolve — element[1] отсутствует", () => {
+  it("without resolve — element[1] is absent", () => {
     const template = { id: { value: "" } };
     const node = defineList({ template });
 
@@ -84,10 +84,10 @@ describe("defineList — структура результата", () => {
   });
 });
 
-// ─── 2. Интеграция: resolver загружает список ─────────────────────────────────
+// ─── 2. Integration: the resolver loads the list ──────────────────────────────
 
-describe("defineList + Palistor — async resolver загружает список", () => {
-  it("resolver вызывается после первого доступа к items (lazy)", async () => {
+describe("defineList + Palistor — the async resolver loads the list", () => {
+  it("the resolver runs after the first items access (lazy)", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -102,7 +102,7 @@ describe("defineList + Palistor — async resolver загружает списо
       } as any,
     });
 
-    // До доступа resolver не вызван (lazy по умолчанию)
+    // Before access the resolver was not called (lazy by default)
     expect(resolver).not.toHaveBeenCalled();
 
     void (store.proxy as any).users.items;
@@ -113,7 +113,7 @@ describe("defineList + Palistor — async resolver загружает списо
     expect((store.proxy as any).users.length).toBe(2);
   });
 
-  it("resolver загружает данные → items содержат правильные значения", async () => {
+  it("the resolver loads data → items hold the right values", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -136,7 +136,7 @@ describe("defineList + Palistor — async resolver загружает списо
     expect(users.items[1].name.value).toBe("Bob");
   });
 
-  it("resolver загружает данные → entities зарегистрированы в registry", async () => {
+  it("the resolver loads data → entities are registered in the registry", async () => {
     const resolver = vi.fn(async () => [
       { id: "u1", name: "Alice" },
       { id: "u2", name: "Bob" },
@@ -158,7 +158,7 @@ describe("defineList + Palistor — async resolver загружает списо
     expect(store.entityRegistry.get("u2")).toBeDefined();
   });
 
-  it("resolver с пустым массивом → список пуст", async () => {
+  it("a resolver returning an empty array → the list is empty", async () => {
     const resolver = vi.fn(async (): Promise<{ id: string; name: string }[]> => []);
 
     const store = new Palistor({
@@ -177,7 +177,7 @@ describe("defineList + Palistor — async resolver загружает списо
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 
-  it("resolver вызывается с текущими значениями формы", async () => {
+  it("the resolver receives the current form values", async () => {
     const resolver = vi.fn(async (_values: any): Promise<{ id: string; name: string }[]> => []);
 
     const store = new Palistor({
@@ -198,10 +198,10 @@ describe("defineList + Palistor — async resolver загружает списо
   });
 });
 
-// ─── 3. Деdup — повторный доступ не запускает лишний resolver ─────────────────
+// ─── 3. Dedup — repeated access doesn't trigger an extra resolver ─────────────
 
-describe("defineList — deduplication resolver", () => {
-  it("повторные доступы пока pending → resolver вызывается ровно 1 раз", async () => {
+describe("defineList — resolver deduplication", () => {
+  it("repeated accesses while pending → the resolver runs exactly once", async () => {
     let resolvePromise!: (v: any) => void;
     const resolver = vi.fn(() => new Promise<any[]>((r) => { resolvePromise = r; }));
 
@@ -229,10 +229,10 @@ describe("defineList — deduplication resolver", () => {
   });
 });
 
-// ─── 4. loading flag ──────────────────────────────────────────────────────────
+// ─── 4. The loading flag ──────────────────────────────────────────────────────
 
 describe("defineList — loading flag", () => {
-  it("loading = false до первого доступа", () => {
+  it("loading = false before the first access", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -245,7 +245,7 @@ describe("defineList — loading flag", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("loading = true пока resolver выполняется", async () => {
+  it("loading = true while the resolver runs", async () => {
     let resolvePromise!: (v: any) => void;
     const resolver = vi.fn(() => new Promise<any[]>((r) => { resolvePromise = r; }));
 
@@ -269,7 +269,7 @@ describe("defineList — loading flag", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("loading = false для defineList без resolver", () => {
+  it("loading = false for a defineList without a resolver", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -281,7 +281,7 @@ describe("defineList — loading flag", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("loading = false после ошибки resolver", async () => {
+  it("loading = false after a resolver error", async () => {
     const resolver = vi.fn(async () => { throw new Error("fail"); });
 
     const store = new Palistor({
@@ -299,7 +299,7 @@ describe("defineList — loading flag", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("уведомляет глобальных подписчиков когда loading меняется", async () => {
+  it("notifies global subscribers when loading changes", async () => {
     let resolvePromise!: (v: any) => void;
     const resolver = vi.fn(() => new Promise<any[]>((r) => { resolvePromise = r; }));
 
@@ -331,10 +331,10 @@ describe("defineList — loading flag", () => {
   });
 });
 
-// ─── 5. deps — повторный запуск при изменении зависимостей ───────────────────
+// ─── 5. deps — re-runs on dependency changes ─────────────────────────────────
 
 describe("defineList — deps retrigger", () => {
-  it("resolver перезапускается при изменении поля из deps", async () => {
+  it("the resolver re-runs when a deps field changes", async () => {
     const resolver = vi.fn(async (values: any) => {
       if (values.filter === "active") return [{ id: "u1", name: "Alice" }];
       return [{ id: "u2", name: "Bob" }];
@@ -357,7 +357,7 @@ describe("defineList — deps retrigger", () => {
     expect((store.proxy as any).users.length).toBe(1);
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
 
-    // Меняем зависимость
+    // Change the dependency
     (store.proxy as any).filter.value = "inactive";
     await flushPromises();
 
@@ -366,7 +366,7 @@ describe("defineList — deps retrigger", () => {
     expect((store.proxy as any).users.items[0].name.value).toBe("Bob");
   });
 
-  it("resolver не перезапускается при изменении поля НЕ из deps", async () => {
+  it("the resolver does NOT re-run when a non-deps field changes", async () => {
     const resolver = vi.fn(async () => [{ id: "u1", name: "Alice" }]);
 
     const store = new Palistor({
@@ -392,7 +392,7 @@ describe("defineList — deps retrigger", () => {
     expect(resolver).toHaveBeenCalledTimes(1);
   });
 
-  it("при deps=[] resolver не перезапускается при изменениях", async () => {
+  it("with deps=[] the resolver never re-runs on changes", async () => {
     const resolver = vi.fn(async () => [{ id: "u1", name: "Alice" }]);
 
     const store = new Palistor({
@@ -414,7 +414,7 @@ describe("defineList — deps retrigger", () => {
     expect(resolver).toHaveBeenCalledTimes(1);
   });
 
-  it("resolver перезапускается по нескольким deps независимо", async () => {
+  it("the resolver re-runs on each of several deps independently", async () => {
     let callCount = 0;
     const resolver = vi.fn(async () => {
       callCount++;
@@ -446,10 +446,10 @@ describe("defineList — deps retrigger", () => {
   });
 });
 
-// ─── 6. onError — обработка ошибок resolver ───────────────────────────────────
+// ─── 6. onError — resolver error handling ─────────────────────────────────────
 
 describe("defineList — onError", () => {
-  it("onError вызывается при ошибке resolver", async () => {
+  it("onError is called when the resolver throws", async () => {
     const error = new Error("network failure");
     const onError = vi.fn();
     const resolver = vi.fn(async () => { throw error; });
@@ -473,10 +473,10 @@ describe("defineList — onError", () => {
     );
   });
 
-  it("onError получает notify из store.setNotifier", async () => {
+  it("onError receives notify from store.setNotifier", async () => {
     const notifyFn = vi.fn();
     const onError = vi.fn((_err: unknown, ctx: { notify: (msg: string) => void }) => {
-      ctx.notify("Ошибка загрузки");
+      ctx.notify("Loading failed");
     });
 
     const store = new Palistor({
@@ -496,10 +496,10 @@ describe("defineList — onError", () => {
     void (store.proxy as any).users.items;
     await flushPromises();
 
-    expect(notifyFn).toHaveBeenCalledWith("Ошибка загрузки");
+    expect(notifyFn).toHaveBeenCalledWith("Loading failed");
   });
 
-  it("список остаётся пустым после ошибки resolver", async () => {
+  it("the list stays empty after a resolver error", async () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -519,7 +519,7 @@ describe("defineList — onError", () => {
     expect((store.proxy as any).users.loading).toBe(false);
   });
 
-  it("после ошибки можно вручную добавить items", async () => {
+  it("items can be added manually after an error", async () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -543,10 +543,10 @@ describe("defineList — onError", () => {
   });
 });
 
-// ─── 7. defineList без resolver — ручное управление ──────────────────────────
+// ─── 7. defineList without a resolver — manual management ────────────────────
 
-describe("defineList без resolver", () => {
-  it("список пуст при инициализации", () => {
+describe("defineList without a resolver", () => {
+  it("the list is empty at initialization", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -560,7 +560,7 @@ describe("defineList без resolver", () => {
     expect((store.proxy as any).users.dirty).toBe(false);
   });
 
-  it("add + значения из store.set", () => {
+  it("add + values from store.set", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -577,7 +577,7 @@ describe("defineList без resolver", () => {
     expect((store.proxy as any).users.dirty).toBe(true);
   });
 
-  it("add с объектом создаёт entity и добавляет в список", () => {
+  it("add with an object creates the entity and adds it to the list", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -592,7 +592,7 @@ describe("defineList без resolver", () => {
     expect((store.proxy as any).users.items[0].name.value).toBe("Alice");
   });
 
-  it("remove удаляет item из списка", () => {
+  it("remove deletes the item from the list", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -612,7 +612,7 @@ describe("defineList без resolver", () => {
     expect((store.proxy as any).users.items[0].name.value).toBe("Bob");
   });
 
-  it("getById возвращает нужный item", () => {
+  it("getById returns the right item", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -631,7 +631,7 @@ describe("defineList без resolver", () => {
     expect(item.name.value).toBe("Bob");
   });
 
-  it("getById возвращает undefined для несуществующего id", () => {
+  it("getById returns undefined for a missing id", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -644,7 +644,7 @@ describe("defineList без resolver", () => {
     expect(item).toBeUndefined();
   });
 
-  it("setItems заменяет весь список", () => {
+  it("setItems replaces the whole list", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -665,10 +665,10 @@ describe("defineList без resolver", () => {
   });
 });
 
-// ─── 8. Вложенный defineList внутри группы ───────────────────────────────────
+// ─── 8. Nested defineList inside a group ─────────────────────────────────────
 
-describe("defineList — вложенный в группу", () => {
-  it("defineList внутри group node работает корректно", async () => {
+describe("defineList — nested inside a group", () => {
+  it("a defineList inside a group node works correctly", async () => {
     const resolver = vi.fn(async () => [
       { id: "p1", title: "Item A" },
     ]);
@@ -694,10 +694,10 @@ describe("defineList — вложенный в группу", () => {
   });
 });
 
-// ─── 9. Несколько defineList в одном конфиге ─────────────────────────────────
+// ─── 9. Multiple defineLists in one config ───────────────────────────────────
 
-describe("defineList — несколько списков в конфиге", () => {
-  it("два defineList с resolver работают независимо", async () => {
+describe("defineList — several lists in a config", () => {
+  it("two defineLists with resolvers work independently", async () => {
     const usersResolver = vi.fn(async () => [{ id: "u1", name: "Alice" }]);
     const rolesResolver = vi.fn(async () => [{ id: "r1", code: "admin" }]);
 
@@ -727,7 +727,7 @@ describe("defineList — несколько списков в конфиге", (
     expect((store.proxy as any).roles.items[0].code.value).toBe("admin");
   });
 
-  it("resolvers двух списков не влияют друг на друга", async () => {
+  it("the two lists' resolvers do not affect each other", async () => {
     const errResolver = vi.fn(async () => { throw new Error("fail"); });
     const okResolver = vi.fn(async () => [{ id: "u1", name: "Alice" }]);
 
@@ -754,17 +754,17 @@ describe("defineList — несколько списков в конфиге", (
   });
 });
 
-// ─── 10. Типизация (compile-time) ─────────────────────────────────────────────
+// ─── 10. Typing (compile-time) ─────────────────────────────────────────────────
 
-describe("defineList — типизация компилируется", () => {
-  it("TypedListNode принимается в конфиге Palistor", () => {
+describe("defineList — typing compiles", () => {
+  it("TypedListNode is accepted in a Palistor config", () => {
     interface User {
       id: string;
       name: string;
       email: string;
     }
 
-    // Полностью типизированный defineList
+    // A fully typed defineList
     const usersNode = defineList<User>({
       template: {
         id: { value: "" },
@@ -778,12 +778,12 @@ describe("defineList — типизация компилируется", () => {
       },
     });
 
-    // Тип TypedListNode<User>
+    // The TypedListNode<User> type
     const check: TypedListNode<User> = usersNode;
     expect(check).toBeDefined();
   });
 
-  it("defineList без resolve принимается в качестве TypedListNode", () => {
+  it("defineList without resolve is accepted as a TypedListNode", () => {
     interface Product {
       id: string;
       title: string;
@@ -799,14 +799,14 @@ describe("defineList — типизация компилируется", () => {
     expect(arr[1]).toBeUndefined();
   });
 
-  it("ListResolver<TEntity> имеет правильную сигнатуру", () => {
+  it("ListResolver<TEntity> has the right signature", () => {
     type Resolver = ListResolver<{ id: string; name: string }>;
 
     const resolver: Resolver = async () => [{ id: "u1", name: "Alice" }];
     expect(typeof resolver).toBe("function");
   });
 
-  it("TemplateConfig<TEntity> типизирует template корректно", () => {
+  it("TemplateConfig<TEntity> types the template correctly", () => {
     interface Item {
       id: string;
       count: number;

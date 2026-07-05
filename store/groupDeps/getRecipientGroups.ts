@@ -1,7 +1,7 @@
 import { parsePairKey } from "./pairKey";
 
 /**
- * Получить все группы-реципиенты для данного донора (исключая self-зависимость).
+ * Get all recipient groups for a given donor (excluding the self-dependency).
  */
 export function getRecipientGroups(deps: Set<string>, donorPath: string): string[] {
   const recipients: string[] = [];

@@ -13,12 +13,12 @@ function makeCache(values: Record<string, unknown> = {}): ValuesCache {
 }
 
 describe("recomputeLeaves", () => {
-  it("возвращает пустой Set для пустого списка листьев", () => {
+  it("returns an empty Set for an empty leaf list", () => {
     const result = recomputeLeaves([], new WeakMap(), makeCache(), translate);
     expect(result.size).toBe(0);
   });
 
-  it("добавляет новый узел (без prev-состояния) в changed", () => {
+  it("adds a new node (no prev state) into changed", () => {
     const node = {} as unknown as AnyConfigNode;
     const leaf: ComputeEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
@@ -29,11 +29,11 @@ describe("recomputeLeaves", () => {
     expect(nodeState.get(node)).toBeDefined();
   });
 
-  it("не добавляет узел в changed, если состояние не изменилось", () => {
+  it("does not add a node into changed when its state is unchanged", () => {
     const node = {} as unknown as AnyConfigNode;
     const leaf: ComputeEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
-    // Состояние уже соответствует тому, что вернёт computeFieldState
+    // The state already matches what computeFieldState will return
     const prevState: FieldState = {
       value: "",
       isVisible: true,
@@ -48,7 +48,7 @@ describe("recomputeLeaves", () => {
     expect(result.has(node)).toBe(false);
   });
 
-  it("computed-узел: изменение вычисленного значения добавляет в changed и обновляет nodeState", () => {
+  it("computed node: a computed-value change adds it into changed and updates nodeState", () => {
     const computedNode = {
       value: () => 99,
     } as unknown as AnyConfigNode;
@@ -69,11 +69,11 @@ describe("recomputeLeaves", () => {
     expect((nodeState.get(computedNode) as FieldState).value).toBe(99);
   });
 
-  it("сохраняет флаги submitting, dirty, revalidate из prev-состояния", () => {
+  it("preserves the submitting, dirty, revalidate flags from the prev state", () => {
     const node = {} as unknown as AnyConfigNode;
     const leaf: ComputeEntry = { node, path: "field" };
     const nodeState = new WeakMap<object, FieldState>();
-    // Ставим isRequired=true и revalidate=true → это вызовет isInvalid
+    // Set isRequired=true and revalidate=true → this triggers isInvalid
     const prevState: FieldState = {
       value: "",
       isVisible: true,
@@ -86,12 +86,12 @@ describe("recomputeLeaves", () => {
     };
     nodeState.set(node, prevState);
 
-    // Изменим isVisible, чтобы вызвать пересчёт (используем узел с isVisible=false)
+    // Change isVisible to trigger a recompute (use a node with isVisible=false)
     const visibleNode = { isVisible: false } as unknown as AnyConfigNode;
     const visibleLeaf: ComputeEntry = { node: visibleNode, path: "hidden" };
     const visibleState: FieldState = {
       value: "",
-      isVisible: true, // было true, станет false → изменится
+      isVisible: true, // was true, becomes false → will change
       isRequired: false,
       isDisabled: false,
       isReadOnly: false,

@@ -3,8 +3,9 @@
 import { Input } from "@/components/Input";
 
 /**
- * Шаг 1 — данные аккаунта. Презентационный компонент: поля спредятся из
- * step-proxy (`{...step.fullName}`), навигация и submit живут в контейнере.
+ * Step 1 — the account details. A presentational component: fields spread
+ * from the step proxy (`{...step.fullName}`); navigation and submit live in
+ * the container.
  */
 export function AccountStep({ step }: { step: any }) {
   return (

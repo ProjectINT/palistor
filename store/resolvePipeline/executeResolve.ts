@@ -11,26 +11,26 @@ import { applyPendingWrites } from "./applyPendingWrites";
 // ─── Core execution ──────────────────────────────────────────────────────────
 
 /**
- * Запустить resolve для заданного узла.
+ * Run resolve for a given node.
  *
- * Пайплайн:
- * 1. Проверить статус → если pending, вернуть существующий промис (дедупликация)
- * 2. Установить status = pending, loading = true
- * 3. Если есть optimisticResolver → запустить, применить патч (без notify, батчем)
- * 4. Обернуть values в tracking write-proxy
- * 5. Вызвать resolver(trackedValues)
- * 6. Логика повторов: при ошибке повторять до retry.attempts раз
- * 7. При успехе:
- *    - applyPatch(result) к поддереву узла
- *    - сбросить буферизованные записи (сайд-эффекты)
+ * Pipeline:
+ * 1. Check status → if pending, return the existing promise (deduplication)
+ * 2. Set status = pending, loading = true
+ * 3. If there's an optimisticResolver → run it, apply the patch (no notify, batched)
+ * 4. Wrap values in a tracking write-proxy
+ * 5. Call resolver(trackedValues)
+ * 6. Retry logic: on error retry up to retry.attempts times
+ * 7. On success:
+ *    - applyPatch(result) to the node's subtree
+ *    - flush buffered writes (side effects)
  *    - loading = false, status = resolved
- *    - recomputeAll (однократно)
- *    - notifyChanged (однократно)
- * 8. При ошибке (после всех повторов):
+ *    - recomputeAll (once)
+ *    - notifyChanged (once)
+ * 8. On error (after all retries):
  *    - onError(error, { notify })
  *    - loading = false, status = error
  *    - recomputeAll + notifyChanged
- * 9. Сохранить accessedPaths для авто-зависимостей
+ * 9. Store accessedPaths for auto-dependencies
  */
 export function executeResolve(
   node: AnyConfigNode,
@@ -49,17 +49,17 @@ export function executeResolve(
 
   if (!state) return Promise.resolve();
 
-  // Дедупликация: если уже в pending, вернуть тот же промис
+  // Deduplication: if already pending, return the same promise
   if (state.status === "pending" && state.promise) {
     return state.promise;
   }
 
-  // ── Устанавливаем состояние загрузки ───────────────────────────────────────
+  // ── Set loading state ──────────────────────────────────────────────────────
   state.status = "pending";
   state.attempt = 0;
   state.error = null;
 
-  // Обновляем loading в FieldState
+  // Update loading in FieldState
   const nodeSt = nodeState.get(node);
   if (nodeSt) {
     nodeState.set(node, { ...nodeSt, loading: true });
@@ -74,9 +74,9 @@ export function executeResolve(
     });
   }
 
-  // ── Оптимистичный resolver (синхронный) ────────────────────────────────────
+  // ── Optimistic resolver (synchronous) ──────────────────────────────────────
   const allChanged = new Set<object>();
-  allChanged.add(node); // узел сам изменился (loading: true)
+  allChanged.add(node); // the node itself changed (loading: true)
 
   if (resolve.optimisticResolver) {
     try {
@@ -86,15 +86,15 @@ export function executeResolve(
         applyPatch(node, nodeState, optimisticResult as Record<string, unknown>, allChanged, valuesCache);
       }
     } catch (error) {
-      // Ошибка optimistic resolver не критична — продолжаем с async resolver
+      // An optimistic resolver error is non-critical — continue with the async resolver
       console.warn('Error in optimistic resolver:', error);
     }
   }
 
-  // Уведомляем об изменении loading: true (и оптимистичных данных)
+  // Notify about loading: true (and any optimistic data)
   recomputeAndNotify(allChanged, recompute, notifyChanged);
 
-  // ── Выполнение async resolver ────────────────────────────────────────────
+  // ── Async resolver execution ─────────────────────────────────────────────
   const retryOpts = resolve.options?.retry ?? { attempts: 0, delay: 1000 };
   const maxAttempts = retryOpts.attempts;
   const retryDelay = retryOpts.delay ?? 1000;
@@ -107,19 +107,19 @@ export function executeResolve(
     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
       state.attempt = attempt;
 
-      // Ждём перед повтором (кроме первой попытки)
+      // Wait before retrying (except the first attempt)
       if (attempt > 0) {
         await new Promise<void>((r) => setTimeout(r, retryDelay));
-        // Повторная проверка: если статус изменился (например, произошёл reset) — прерываем
+        // Re-check: if the status changed meanwhile (e.g. a reset happened) — abort
         if (state.status !== "pending") return;
       }
 
       try {
-        // Создаём tracking proxy для свежего снимка values
+        // Create a tracking proxy over a fresh values snapshot
         const freshValues = getValues();
         const tracking = createValuesTrackingProxy(freshValues);
 
-        // Оборачиваем store.context в tracking proxy для автоматических контекстных зависимостей
+        // Wrap store.context in a tracking proxy for automatic context dependencies
         contextTracking = createContextTrackingProxy(store.context);
 
         const storeProxy = new Proxy(store, {
@@ -131,21 +131,21 @@ export function executeResolve(
 
         const result = await resolve.resolver(tracking.proxy, storeProxy);
 
-        // Повторная проверка: если статус изменился во время ожидания — прерываем
+        // Re-check: if the status changed while awaiting — abort
         if (state.status !== "pending") return result;
 
-        // ── Успешный путь ────────────────────────────────────────────────
+        // ── Success path ─────────────────────────────────────────────────
         const changed = new Set<object>();
         changed.add(node);
 
-        // 1. Применяем результат resolver к поддереву узла
+        // 1. Apply the resolver result to the node's subtree
         if (result && typeof result === "object") {
           applyPatch(node, nodeState, result as Record<string, unknown>, changed, valuesCache);
-          // Обновляем начальный снимок для затронутых листьев (данные resolver = начальное состояние)
+          // Update the initial snapshot for the affected leaves (resolver data = initial state)
           mergeInitialValues(node, nodeState, initialValueMap, result as Record<string, unknown>);
         }
 
-        // 2. Сбрасываем буферизованные сайд-эффекты
+        // 2. Flush buffered side effects
         const writes = tracking.getPendingWrites();
 
         if (writes.length > 0) {
@@ -153,7 +153,7 @@ export function executeResolve(
           for (const n of writeChanged) changed.add(n);
         }
 
-        // 3. Обновляем loading / status
+        // 3. Update loading / status
         const updatedState = nodeState.get(node);
         if (updatedState) {
           nodeState.set(node, { ...updatedState, loading: false });
@@ -161,20 +161,20 @@ export function executeResolve(
         state.status = "resolved";
         state.error = null;
 
-        // 4. Сохраняем авто-зависимости (объединяем с явными deps)
+        // 4. Store auto-dependencies (merged with explicit deps)
         const accessedPaths = tracking.getAccessedPaths();
         const mergedDeps = new Set<string>(resolve.deps ?? []);
         for (const p of accessedPaths) mergedDeps.add(p);
-        // Добавляем контекстные зависимости с префиксом $context.
+        // Add context dependencies with the $context. prefix
         for (const key of contextTracking!.getAccessedKeys()) {
           mergedDeps.add(`$context.${key}`);
         }
         state.dependencies = mergedDeps;
 
-        // 5. Recompute + notify (однократно)
+        // 5. Recompute + notify (once)
         recomputeAndNotify(changed, recompute, notifyChanged);
 
-        // 6. Если зависимость изменилась пока были в pending — перезапускаем немедленно
+        // 6. If a dependency changed while pending — re-run immediately
         if (state.pendingRetrigger) {
           state.pendingRetrigger = false;
           state.status = "idle";
@@ -185,18 +185,18 @@ export function executeResolve(
         return result;
       } catch (err) {
         lastError = err;
-        // Переходим к следующей попытке (если есть)
+        // Move on to the next attempt (if any)
       }
     }
 
-    // ── Путь ошибки (все попытки исчерпаны) ─────────────────────────────────
-    if (state.status !== "pending") return; // прерван
+    // ── Error path (all attempts exhausted) ──────────────────────────────────
+    if (state.status !== "pending") return; // aborted
 
     const changed = new Set<object>();
 
     changed.add(node);
 
-    // Обновляем loading / status / error
+    // Update loading / status / error
     const updatedState = nodeState.get(node);
     if (updatedState) {
       nodeState.set(node, { ...updatedState, loading: false });
@@ -204,8 +204,8 @@ export function executeResolve(
     state.status = "error";
     state.error = lastError;
 
-    // Сохраняем контекстные зависимости даже в случае ошибки
-    // (чтобы setContext мог ретриггерить резолверы со статусом "error")
+    // Store context dependencies even on the error path
+    // (so setContext can re-trigger resolvers in the "error" status)
     if (contextTracking && contextTracking.getAccessedKeys().size > 0) {
       const mergedDeps = new Set<string>(resolve.deps ?? []);
       for (const key of contextTracking.getAccessedKeys()) {
@@ -214,17 +214,17 @@ export function executeResolve(
       state.dependencies = mergedDeps;
     }
 
-    // Вызываем обработчик onError
+    // Invoke the onError handler
     try {
       resolve.onError(lastError, { notify });
     } catch {
-      // onError не должен бросать исключения, но если бросил — подавляем
+      // onError should not throw, but if it does — swallow
     }
 
     // Recompute + notify
     recomputeAndNotify(changed, recompute, notifyChanged);
 
-    // Если зависимость изменилась пока были в pending — перезапускаем немедленно
+    // If a dependency changed while pending — re-run immediately
     if (state.pendingRetrigger) {
       state.pendingRetrigger = false;
       state.status = "idle";

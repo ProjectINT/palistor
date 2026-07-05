@@ -1,9 +1,9 @@
 /**
- * Объединить все источники изменений в один Set.
+ * Merge all change sources into a single Set.
  *
- * — currentNode: всегда считается изменённым (пользователь явно туда писал)
- * — patchedNodes: узлы, обновлённые setter-патчем
- * — recomputedNodes: узлы, пересчитанные recomputeAll
+ * — currentNode: always considered changed (the user explicitly wrote to it)
+ * — patchedNodes: nodes updated by a setter patch
+ * — recomputedNodes: nodes recomputed by recomputeAll
  */
 export function mergeChanged(
   currentNode: object,

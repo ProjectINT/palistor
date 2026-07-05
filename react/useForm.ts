@@ -1,8 +1,8 @@
 /**
- * useForm — React хук для подключения к ProxyStore
+ * useForm — the React hook that connects a component to a ProxyStore.
  *
- * Возвращает реактивный прокси. Доступ к полям через точку — это и есть
- * подписка: компонент перерендерится только при изменении прочитанных полей.
+ * Returns a reactive proxy. Dot access to fields IS the subscription: the
+ * component re-renders only when a field it actually read changes.
  *
  * @example
  * ```tsx
@@ -22,31 +22,31 @@
  *   );
  * }
  *
- * // Дочерний компонент с useForm для независимой подписки:
+ * // Child component with its own useForm for an independent subscription:
  * function PassportSection({ passport }) {
- *   const p = useForm(passport); // ← принимает поддерево!
+ *   const p = useForm(passport); // ← accepts a subtree!
  *   if (!p.isVisible) return null;
  *   return <NumberField field={p.number} />;
  * }
  * ```
  *
- * Как работает:
- *   1. useSyncExternalStore подписывается на глобальные изменения store.
- *   2. getSnapshot сравнивает версии только прочитанных узлов →
- *      re-render происходит только если изменилось то, что читалось.
- *   3. store.proxy оборачивается в tracking proxy. Каждый GET записывает
- *      config-ноду в tracked set. getSnapshot проверяет только эти ноды.
- *   4. Запись `form.email.value = "X"` → store.proxy.email.value = "X" →
+ * How it works:
+ *   1. useSyncExternalStore subscribes to global store changes.
+ *   2. getSnapshot compares versions of only the nodes that were read →
+ *      a re-render happens only when something that was read changed.
+ *   3. store.proxy is wrapped in a tracking proxy. Every GET records the
+ *      config node into a tracked set. getSnapshot checks only those nodes.
+ *   4. A write `form.email.value = "X"` → store.proxy.email.value = "X" →
  *      SET trap → formatter → validate → recompute → notify → re-render
- *      (только компонентов, которые читали изменившиеся ноды).
+ *      (only of components that read the changed nodes).
  *
- * Перегрузки:
- *   - useForm(store)        — основной вариант, передаём ProxyStore
- *   - useForm(proxySubtree) — принимает tracking proxy поддерево (из пропса),
- *     создаёт **независимый** tracking для этого компонента
- *   - useForm(entityProxy, templateSelector) — привязка entity к template.
- *     entityProxy из list.items/list.getById. templateSelector = (s) => s.editForm.
- *     Вызывает entityRegistry.bind на mount, unbind на unmount.
+ * Overloads:
+ *   - useForm(store)        — the main form, pass the ProxyStore
+ *   - useForm(proxySubtree) — accepts a tracking-proxy subtree (from a prop),
+ *     creating an **independent** tracking scope for this component
+ *   - useForm(entityProxy, templateSelector) — binds an entity to a template.
+ *     entityProxy comes from list.items/list.getById. templateSelector = (s) => s.editForm.
+ *     Calls entityRegistry.bind on mount, unbind on unmount.
  */
 
 import { useSyncExternalStore, useCallback, useRef, useMemo, useEffect } from "react";
@@ -63,57 +63,56 @@ import type { Palistor as PalistorClass } from "../store/store/palistor";
 import type { AnyConfigNode } from "../store/store/types";
 
 /**
- * Извлечь store и sourceProxy из аргумента useForm.
- * Поддерживает ProxyStore напрямую и tracking proxy поддеревья.
+ * Extract the store and sourceProxy from the useForm argument.
+ * Supports a ProxyStore directly and tracking-proxy subtrees.
  */
 function resolveInput<TConfig extends Record<string, any>>(
   input: ProxyStore<TConfig> | any,
 ): { store: ProxyStore<TConfig>; sourceProxy: any } {
-  // Если это tracking proxy (поддерево переданное пропсом)
+  // A tracking proxy (a subtree passed as a prop)
   const unwrapped = unwrapTrackingProxy<TConfig>(input);
   if (unwrapped) return unwrapped;
 
-  // Сырой GroupProxyNode из store.proxy.someGroup — НЕ подходит.
-  // Пользователь должен передавать либо ProxyStore (new Palistor()),
-  // либо tracking proxy (из пропса родительского useForm).
+  // A raw GroupProxyNode from store.proxy.someGroup is NOT acceptable.
+  // The user must pass either a ProxyStore (new Palistor()) or a tracking
+  // proxy (from a parent useForm's prop).
   if (input != null && typeof input === "object" && (input as any)[CONFIG_NODE]) {
     throw new Error(
-      "useForm: получен сырой proxy-узел стора (store.proxy.someGroup). " +
-      "Это не допустимо.\n\n" +
-      "Правильный способ:\n" +
-      "  1. Получите tracking proxy через useForm(store):\n" +
+      "useForm: received a raw store proxy node (store.proxy.someGroup). " +
+      "This is not allowed.\n\n" +
+      "The correct way:\n" +
+      "  1. Get a tracking proxy via useForm(store):\n" +
       "       const form = useForm(store);\n" +
-      "  2. Передайте поддерево как проп дочернему компоненту:\n" +
+      "  2. Pass the subtree as a prop to the child component:\n" +
       "       <Child section={form.someGroup} />\n" +
-      "  3. В дочернем компоненте вызовите useForm(props.section).\n\n" +
-      "Нельзя передавать store.proxy или его дочерние узлы напрямую в useForm.",
+      "  3. In the child component call useForm(props.section).\n\n" +
+      "Never pass store.proxy or its child nodes directly into useForm.",
     );
   }
 
-  // Иначе это ProxyStore — берём store.proxy как sourceProxy
+  // Otherwise it's a ProxyStore — use store.proxy as the sourceProxy
   return { store: input, sourceProxy: input.proxy };
 }
 
 /**
- * Подключает React-компонент к ProxyStore.
+ * Connects a React component to a ProxyStore.
  *
- * Компонент перерендерится только при изменении полей, которые он читал
- * во время предыдущего рендера. Tracking proxy автоматически записывает
- * обращения к FIELD_STATE_PROPS (value, label, isVisible, error…) и
- * getSnapshot проверяет версии только этих нод.
+ * The component re-renders only when fields it read during the previous
+ * render change. The tracking proxy automatically records accesses to
+ * FIELD_STATE_PROPS (value, label, isVisible, error…) and getSnapshot
+ * checks the versions of only those nodes.
  *
- * На первом рендере tracked set пуст → используется глобальная версия
- * (fallback). После первого рендера tracking работает точечно.
+ * On the first render the tracked set is empty → the global version is used
+ * (fallback). After the first render tracking is fully targeted.
  *
- * @param input — ProxyStore, созданный через new Palistor(), ИЛИ
- *                tracking proxy поддерево (из пропса другого useForm)
- * @returns tracking proxy — типизированный по конфигу (или поддереву)
+ * @param input — a ProxyStore created via new Palistor(), OR a tracking-proxy
+ *                subtree (from another useForm's prop)
+ * @returns a tracking proxy — typed by the config (or subtree)
  */
 /**
- * Тип-«ошибка», который TypeScript показывает в диагностике, если в
- * `useForm` передали сырой `store.proxy` или его поддерево. Имя интерфейса
- * специально длинное и описательное — оно появится в тексте ошибки и
- * подскажет, что делать.
+ * An "error" type TypeScript surfaces in diagnostics when a raw `store.proxy`
+ * or its subtree is passed into `useForm`. The interface name is deliberately
+ * long and descriptive — it appears in the error text and explains the fix.
  *
  * @see {@link RawStoreProxyMarker}
  */
@@ -123,9 +122,9 @@ export interface _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__ca
 }
 
 /**
- * Превращает T в тип-ошибку, если T помечен {@link RawStoreProxyMarker}.
- * Применяется к параметру subtree-перегрузки `useForm`, чтобы сделать
- * `useForm(store.proxy.subtree)` ошибкой компиляции.
+ * Turns T into the error type when T carries {@link RawStoreProxyMarker}.
+ * Applied to the subtree overload's parameter to make
+ * `useForm(store.proxy.subtree)` a compile-time error.
  */
 type ForbidRawStoreProxy<T> = T extends RawStoreProxyMarker
   ? _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first
@@ -148,18 +147,18 @@ export function useForm<
 ): ConfigProxy<TConfig, TMapping>;
 
 /**
- * Перегрузка: привязка entity к template для отображения/редактирования.
+ * Overload: bind an entity to a template for display/editing.
  *
- * @param entity           — EntityProjectionProxy из list.items или list.getById
- * @param templateSelector — функция выбора template: (store) => store.editUserForm
- * @returns tracking proxy entity через template (поля template + значения entity)
+ * @param entity           — an EntityProjectionProxy from list.items or list.getById
+ * @param templateSelector — template selector function: (store) => store.editUserForm
+ * @returns a tracking proxy of the entity through the template (template fields + entity values)
  *
  * Lifecycle:
  *   - mount: entityRegistry.bind(entityId, templateNode)
  *   - unmount: entityRegistry.unbind(entityId, templateNode)
  *
- * Resolved cache (3A.4): при повторном открытии той же entity+template
- * `isResolved` возвращает true → resolve будет пропущен (Phase 3B).
+ * Resolved cache: when the same entity+template is opened again,
+ * `isResolved` returns true → the resolve is skipped.
  */
 export function useForm(
   entity: object,
@@ -240,7 +239,7 @@ export function useForm(
     ? entityMetaRef.current!.entityProxy
     : stdSourceProxy;
 
-  // ─── Tracking state (per-component, стабильные ref-ы) ────────────────────
+  // ─── Tracking state (per-component, stable refs) ─────────────────────────
 
   const refsRef = useRef<TrackingRefs | null>(null);
   if (!refsRef.current) {
@@ -272,10 +271,10 @@ export function useForm(
     const meta = entityMetaRef.current;
     if (!meta) return;
 
-    // Привязываем entity к template — регистрируем, что этот шаблон сейчас отображает данную entity
+    // Bind the entity to the template — register that this template is currently displaying it
     meta.entityStore.entityRegistry.bind(meta.entityId, meta.templateNode);
 
-    // Запускаем resolve на уровне template, если он ещё не выполнялся для этой entity+template пары
+    // Run the template-level resolve unless it already ran for this entity+template pair
     if (!meta.entityStore.entityRegistry.isResolved(meta.entityId, meta.templateNode)) {
       meta.entityStore.resolveManager.triggerEntityTemplateResolve(
         meta.entityId,
@@ -288,7 +287,7 @@ export function useForm(
     // (on first access to .value or .loading) — no eager loop needed here.
 
     return () => {
-      // При размонтировании отвязываем entity от template — шаблон больше не отображает эту entity
+      // On unmount unbind the entity from the template — it no longer displays this entity
       meta.entityStore.entityRegistry.unbind(meta.entityId, meta.templateNode);
     };
   }, []); // bind once on mount, unbind on unmount
@@ -330,4 +329,3 @@ export function useForm(
 
   return trackingProxy;
 }
-

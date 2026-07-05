@@ -3,7 +3,7 @@ import { fetchUsers, fetchProducts, fetchUnreliableData } from "./mockApi";
 
 export const catalog = {
   // --------------------------------------------------------------------------
-  // Фильтры каталога
+  // Catalog filters
   // --------------------------------------------------------------------------
   categoryFilter: {
     value: "",
@@ -18,7 +18,7 @@ export const catalog = {
   },
 
   // --------------------------------------------------------------------------
-  // Списки — демонстрация ListNode ([template, listConfig])
+  // Lists — demonstrates ListNode ([template, listConfig])
   // --------------------------------------------------------------------------
   users: [
     {
@@ -73,7 +73,7 @@ export const catalog = {
   ],
 
   // --------------------------------------------------------------------------
-  // Группа с async resolve — демонстрация retry-стратегии
+  // A group with an async resolve — demonstrates the retry strategy
   // --------------------------------------------------------------------------
   serverStatus: {
     nested: true,
@@ -97,7 +97,7 @@ export const catalog = {
   },
 
   // --------------------------------------------------------------------------
-  // Редактирование сущности — демонстрация nested-группы
+  // Entity editing — demonstrates a nested group
   // --------------------------------------------------------------------------
   editUser: {
     nested: true,

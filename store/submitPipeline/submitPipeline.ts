@@ -22,17 +22,17 @@ export interface EntityLeafSubmitOptions {
 // ─── Submit pipeline ─────────────────────────────────────────────────────────
 
 /**
- * SubmitPipeline — submit flow для групповых и листовых узлов.
+ * SubmitPipeline — the submit flow for group and leaf nodes.
  *
  * Lifecycle:
  *   1. submitting = true + revalidate = true → recompute → notify
- *   2. Собрать значения (поддерево для group, одно значение для leaf)
- *   3. Применить beforeSubmit
- *   4. (group only) Применить group-level beforeSubmit
- *   5. Валидация — если ошибки → return { success: false }
- *   6. Вызвать onSubmit(value, store, parent)
- *   7. Вызвать afterSubmit с результатом и reset-экшеном
- *   8. (group only) Очистка persist
+ *   2. Collect values (subtree for a group, a single value for a leaf)
+ *   3. Apply beforeSubmit
+ *   4. (group only) Apply group-level beforeSubmit
+ *   5. Validate — on errors → return { success: false }
+ *   6. Call onSubmit(value, store, parent)
+ *   7. Call afterSubmit with the result and a reset action
+ *   8. (group only) Clear persist
  *   9. submitting = false → recompute → notify
  */
 export class SubmitPipeline {
@@ -86,7 +86,7 @@ export class SubmitPipeline {
         value = values;
       }
 
-      // 5. Валидация
+      // 5. Validation
       if (isLeaf) {
         if (entityOpts?.via) {
           // Entity leaf: validate directly via template rules — not covered by the recompute system
@@ -117,8 +117,8 @@ export class SubmitPipeline {
             errors.push({ path, message: state.errorMessage });
           }
         }
-        // Flow: листья под СКРЫТЫМИ шагами не блокируют submit — иначе
-        // невзятая ветка с isRequired-полями сделала бы финализацию невозможной.
+        // Flow: leaves under HIDDEN steps don't block submit — otherwise an
+        // untaken branch with isRequired fields would make finalization impossible.
         errors = filterHiddenFlowStepErrors(this.kernel, errors, view.storage);
         if (errors.length > 0) return { success: false, errors };
       }
@@ -142,7 +142,7 @@ export class SubmitPipeline {
         )(result, { reset });
       }
 
-      // 8. Очистка persist после успешного submit (group only)
+      // 8. Clear persist after a successful submit (group only)
       if (!isLeaf) {
         await this.kernel.persist.clear();
       }

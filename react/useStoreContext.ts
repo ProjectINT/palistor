@@ -1,12 +1,12 @@
 /**
- * useStoreContext — регистрирует нереактивный контекст в ProxyStore.
+ * useStoreContext — registers non-reactive context with a ProxyStore.
  *
- * Контекст доступен во всех callback-ах (resolve.resolver, onSubmit, onChange, …)
- * через `store.context`. Не является частью формы — не попадает в
+ * The context is available in all callbacks (resolve.resolver, onSubmit,
+ * onChange, …) via `store.context`. Not part of the form — excluded from
  * getValues(), submit, persist.
  *
- * Используется для глобальных переменных (accountId, tenant, …),
- * которые нужны в запросах, но не являются полями формы.
+ * Used for global variables (accountId, tenant, …) that requests need but
+ * that are not form fields.
  *
  * @example
  * ```tsx
@@ -14,13 +14,13 @@
  * import { paymentStore } from './config/appConfig';
  *
  * function Layout({ children }: { children: React.ReactNode }) {
- *   const accountId = useAccountId(); // из auth-провайдера
+ *   const accountId = useAccountId(); // from the auth provider
  *   useStoreContext(paymentStore, { accountId });
  *   return <>{children}</>;
  * }
  * ```
  *
- * В конфиге:
+ * In the config:
  * ```ts
  * resolve: {
  *   resolver: async (values, store) => {
@@ -34,12 +34,12 @@ import { useEffect } from "react";
 import type { ProxyStore } from "../store/store";
 
 /**
- * Регистрирует нереактивный контекст в ProxyStore.
+ * Registers non-reactive context with a ProxyStore.
  *
- * При изменении `ctx` — мержит новые ключи в существующий контекст.
+ * When `ctx` changes — merges the new keys into the existing context.
  *
- * @param store — ProxyStore, созданный через new Palistor()
- * @param ctx   — объект с произвольными данными (accountId, tenant, …)
+ * @param store — a ProxyStore created via new Palistor()
+ * @param ctx   — an object with arbitrary data (accountId, tenant, …)
  */
 export function useStoreContext<TConfig extends Record<string, any>>(
   store: ProxyStore<TConfig>,

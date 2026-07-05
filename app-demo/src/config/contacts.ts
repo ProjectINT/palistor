@@ -32,7 +32,7 @@ export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | '
     placeholder: (t: TranslateFn) => t("form.phonePlaceholder"),
     dependencies: [],
     formatter: (value) => {
-      // Простой форматтер для телефона
+      // A simple phone formatter
       const digits = String(value).replace(/\D/g, "").slice(0, 11);
       if (digits.length === 0) return "";
       if (digits.length <= 1) return `+${digits}`;

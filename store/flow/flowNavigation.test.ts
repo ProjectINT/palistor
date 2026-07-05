@@ -1,16 +1,16 @@
 /**
- * Тесты навигационной модели defineFlow.
+ * Tests for the defineFlow navigation model.
  *
- * Покрывает:
- *  1. nextStep / back / goTo — переходы, стек, статусы, history
- *  2. Ветвление через isVisible — скрытые шаги пропускаются
- *  3. onSubmit шага: 3-й аргумент — flow-proxy (навигация деструктуризацией)
- *  4. Lifecycle: onEnter → resolve (eager) → onReady; кэш resolve при back()
- *  5. Финализация nextStep(): submit всех шагов; скрытая ветка не блокирует;
- *     ошибки валидации → flow.errors, onSubmit не вызывается
+ * Covers:
+ *  1. nextStep / back / goTo — transitions, the stack, statuses, history
+ *  2. Branching via isVisible — hidden steps are skipped
+ *  3. A step's onSubmit: the 3rd argument is the flow proxy (navigation via destructuring)
+ *  4. Lifecycle: onEnter → resolve (eager) → onReady; resolve cache on back()
+ *  5. nextStep() finalization: submit of all steps; a hidden branch doesn't block;
+ *     validation errors → flow.errors, onSubmit is not called
  *  6. flow.validate() / flow.errors / flow.isInvalid / step.isInvalid
- *  7. Композитный flow.loading
- *  8. reset: навигация + значения + resolve + повторный lifecycle
+ *  7. Composite flow.loading
+ *  8. reset: navigation + values + resolve + repeated lifecycle
  */
 import { describe, it, expect, vi } from "vitest";
 import { defineFlow, defineStep } from "./defineFlow";
@@ -20,9 +20,9 @@ function flushPromises() {
   return new Promise<void>((r) => setTimeout(r, 0));
 }
 
-// ─── 1. Навигация ────────────────────────────────────────────────────────────
+// ─── 1. Navigation ───────────────────────────────────────────────────────────
 
-describe("flow — навигация", () => {
+describe("flow — navigation", () => {
   function makeStore() {
     return new Palistor({
       config: {
@@ -37,7 +37,7 @@ describe("flow — навигация", () => {
     });
   }
 
-  it("nextStep: переход к следующему шагу, статусы и history обновляются", () => {
+  it("nextStep: moves to the next step, statuses and history update", () => {
     const flow = (makeStore().proxy as any).wizard;
 
     flow.nextStep();
@@ -52,7 +52,7 @@ describe("flow — навигация", () => {
     expect(flow.steps.current).toBe(flow.steps.two);
   });
 
-  it("back: возврат по стеку; покинутый шаг — completed", () => {
+  it("back: returns along the stack; the left step is completed", () => {
     const flow = (makeStore().proxy as any).wizard;
 
     flow.nextStep();
@@ -61,7 +61,7 @@ describe("flow — навигация", () => {
 
     flow.back();
     expect(flow.currentStepKey).toBe("two");
-    expect(flow.steps.three.status).toBe("completed"); // был посещён
+    expect(flow.steps.three.status).toBe("completed"); // was visited
     expect(flow.history).toEqual(["one", "two"]);
 
     flow.back();
@@ -69,13 +69,13 @@ describe("flow — навигация", () => {
     expect(flow.canGoBack).toBe(false);
   });
 
-  it("back при пустом стеке — no-op", () => {
+  it("back on an empty stack — no-op", () => {
     const flow = (makeStore().proxy as any).wizard;
     flow.back();
     expect(flow.currentStepKey).toBe("one");
   });
 
-  it("goTo по ключу и индексу; пуш в стек", () => {
+  it("goTo by key and index; pushes onto the stack", () => {
     const flow = (makeStore().proxy as any).wizard;
 
     flow.goTo("three");
@@ -84,7 +84,7 @@ describe("flow — навигация", () => {
 
     flow.goTo(0);
     expect(flow.currentStepKey).toBe("one");
-    // после goTo(0) индекс 0, но стек непуст — canGoBack остаётся true
+    // after goTo(0) the index is 0, but the stack is non-empty — canGoBack stays true
     expect(flow.currentStepIndex).toBe(0);
     expect(flow.canGoBack).toBe(true);
 
@@ -92,13 +92,13 @@ describe("flow — навигация", () => {
     expect(flow.currentStepKey).toBe("three");
   });
 
-  it("goTo бросает на неизвестном ключе и выходе за диапазон", () => {
+  it("goTo throws on an unknown key and an out-of-range index", () => {
     const flow = (makeStore().proxy as any).wizard;
     expect(() => flow.goTo("nope")).toThrow(/unknown step key/);
     expect(() => flow.goTo(99)).toThrow(/out of range/);
   });
 
-  it("goTo в текущий шаг — no-op (стек не растёт)", () => {
+  it("goTo to the current step — no-op (the stack does not grow)", () => {
     const flow = (makeStore().proxy as any).wizard;
     flow.goTo("one");
     expect(flow.canGoBack).toBe(false);
@@ -106,9 +106,9 @@ describe("flow — навигация", () => {
   });
 });
 
-// ─── 2. Ветвление через isVisible ────────────────────────────────────────────
+// ─── 2. Branching via isVisible ──────────────────────────────────────────────
 
-describe("flow — ветвление через isVisible", () => {
+describe("flow — branching via isVisible", () => {
   function makeBranchingStore(onSubmit = vi.fn(async () => undefined)) {
     return new Palistor({
       config: {
@@ -131,7 +131,7 @@ describe("flow — ветвление через isVisible", () => {
     });
   }
 
-  it("nextStep пропускает скрытые шаги (goal=save → мимо riskAssessment)", () => {
+  it("nextStep skips hidden steps (goal=save → past riskAssessment)", () => {
     const flow = (makeBranchingStore().proxy as any).onboarding;
 
     flow.steps.goalSelection.goal.value = "save";
@@ -141,7 +141,7 @@ describe("flow — ветвление через isVisible", () => {
     expect(flow.history).toEqual(["goalSelection", "savingsPlan"]);
   });
 
-  it("goal=invest → riskAssessment виден и достигается", () => {
+  it("goal=invest → riskAssessment is visible and reached", () => {
     const flow = (makeBranchingStore().proxy as any).onboarding;
 
     flow.steps.goalSelection.goal.value = "invest";
@@ -150,7 +150,7 @@ describe("flow — ветвление через isVisible", () => {
     expect(flow.currentStepKey).toBe("riskAssessment");
   });
 
-  it("скрытые шаги сохраняют значения и остаются в flow.values", () => {
+  it("hidden steps keep their values and stay in flow.values", () => {
     const flow = (makeBranchingStore().proxy as any).onboarding;
 
     flow.steps.goalSelection.goal.value = "save";
@@ -158,10 +158,10 @@ describe("flow — ветвление через isVisible", () => {
   });
 });
 
-// ─── 3. onSubmit шага: 3-й аргумент — flow proxy ─────────────────────────────
+// ─── 3. A step's onSubmit: the 3rd argument is the flow proxy──────────────────────────
 
-describe("flow — onSubmit шага получает flow proxy", () => {
-  it("step.submit() → onSubmit(values, store, flow); деструктуризация nextStep работает", async () => {
+describe("flow — a step's onSubmit receives the flow proxy", () => {
+  it("step.submit() → onSubmit(values, store, flow); destructured nextStep works", async () => {
     const seen: any = {};
     const store = new Palistor({
       config: {
@@ -192,7 +192,7 @@ describe("flow — onSubmit шага получает flow proxy", () => {
     expect(flow.currentStepKey).toBe("second");
   });
 
-  it("onSubmit шага может ветвиться через goTo", async () => {
+  it("a step's onSubmit can branch via goTo", async () => {
     const store = new Palistor({
       config: {
         wizard: defineFlow({
@@ -216,10 +216,10 @@ describe("flow — onSubmit шага получает flow proxy", () => {
   });
 });
 
-// ─── 4. Lifecycle: onEnter → resolve → onReady ───────────────────────────────
+// ─── 4. Lifecycle: onEnter → resolve → onReady ──────────────────────────────
 
-describe("flow — lifecycle шага", () => {
-  it("инициализация: первый шаг входится при создании store (onEnter → onReady)", () => {
+describe("flow — step lifecycle", () => {
+  it("initialization: the first step is entered at store creation (onEnter → onReady)", () => {
     const order: string[] = [];
     new Palistor({
       config: {
@@ -237,7 +237,7 @@ describe("flow — lifecycle шага", () => {
     expect(order).toEqual(["enter", "ready"]);
   });
 
-  it("onEnter получает flow-scoped values (все шаги по ключам)", () => {
+  it("onEnter receives flow-scoped values (all steps by key)", () => {
     let seen: any = null;
     const store = new Palistor({
       config: {
@@ -257,11 +257,11 @@ describe("flow — lifecycle шага", () => {
     expect(seen.b).toEqual({ y: 2 });
   });
 
-  it("вход в шаг с resolve: eager-запуск, loading, onReady после завершения", async () => {
+  it("entering a step with resolve: eager launch, loading, onReady after completion", async () => {
     const order: string[] = [];
     const resolver = vi.fn(async (values: any) => {
       order.push("resolve");
-      // resolver получает ROOT-values: путь от корня store
+      // the resolver receives ROOT values: the path starts from the store root
       expect(values.wizard.a.x).toBe("seed");
       return { data: "loaded" };
     });
@@ -283,12 +283,12 @@ describe("flow — lifecycle шага", () => {
     });
     const flow = (store.proxy as any).wizard;
 
-    expect(resolver).not.toHaveBeenCalled(); // до входа resolve не запускается
+    expect(resolver).not.toHaveBeenCalled(); // resolve does not launch before entry
 
     flow.nextStep();
-    expect(order).toEqual(["enter", "resolve"]); // onEnter до завершения resolve
+    expect(order).toEqual(["enter", "resolve"]); // onEnter before the resolve completes
     expect(flow.steps.b.loading).toBe(true);
-    expect(flow.loading).toBe(true); // композитный
+    expect(flow.loading).toBe(true); // composite
 
     await flushPromises();
 
@@ -297,7 +297,7 @@ describe("flow — lifecycle шага", () => {
     expect(flow.loading).toBe(false);
   });
 
-  it("back к шагу с кэшированным resolve: resolver и onReady не перезапускаются, onEnter — да", async () => {
+  it("back to a step with a cached resolve: the resolver and onReady don't re-run, onEnter does", async () => {
     const onEnter = vi.fn();
     const onReady = vi.fn();
     const resolver = vi.fn(async () => ({ data: "x" }));
@@ -323,19 +323,19 @@ describe("flow — lifecycle шага", () => {
     flow.nextStep(); // → b, resolve
     await flushPromises();
     flow.nextStep(); // → c
-    flow.back();     // → b, resolve закэширован
+    flow.back();     // → b, resolve is cached
     await flushPromises();
 
     expect(resolver).toHaveBeenCalledTimes(1);
     expect(onReady).toHaveBeenCalledTimes(1);
-    expect(onEnter).toHaveBeenCalledTimes(2); // каждый вход
+    expect(onEnter).toHaveBeenCalledTimes(2); // every entry
   });
 });
 
-// ─── 5. Финализация через nextStep ───────────────────────────────────────────
+// ─── 5. Finalization via nextStep ────────────────────────────────────────────
 
-describe("flow — финализация", () => {
-  it("nextStep на последнем видимом шаге → flow onSubmit со всеми значениями", async () => {
+describe("flow — finalization", () => {
+  it("nextStep on the last visible step → flow onSubmit with all values", async () => {
     const onSubmit = vi.fn(async () => undefined);
     const store = new Palistor({
       config: {
@@ -351,16 +351,16 @@ describe("flow — финализация", () => {
     const flow = (store.proxy as any).wizard;
 
     flow.nextStep(); // a → b
-    flow.nextStep(); // финализация
+    flow.nextStep(); // finalization
     await flushPromises();
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit.mock.calls[0][0]).toEqual({ a: { x: "1" }, b: { y: "2" } });
-    expect(flow.currentStepKey).toBe("b"); // навигация не меняется
+    expect(flow.currentStepKey).toBe("b"); // navigation is unchanged
     expect(flow.errors).toEqual([]);
   });
 
-  it("скрытая ветка с isRequired не блокирует финализацию", async () => {
+  it("a hidden branch with isRequired does not block finalization", async () => {
     const onSubmit = vi.fn(async () => undefined);
     const store = new Palistor({
       config: {
@@ -379,17 +379,17 @@ describe("flow — финализация", () => {
     });
     const flow = (store.proxy as any).onboarding;
 
-    flow.nextStep(); // goal → summary (risk скрыт)
+    flow.nextStep(); // goal → summary (risk is hidden)
     expect(flow.currentStepKey).toBe("summary");
 
-    flow.nextStep(); // финализация
+    flow.nextStep(); // finalization
     await flushPromises();
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(flow.errors).toEqual([]);
   });
 
-  it("ошибка валидации ВИДИМОГО шага: onSubmit не вызывается, ошибки в flow.errors", async () => {
+  it("a validation error on a VISIBLE step: onSubmit is not called, errors land in flow.errors", async () => {
     const onSubmit = vi.fn(async () => undefined);
     const store = new Palistor({
       config: {
@@ -405,19 +405,19 @@ describe("flow — финализация", () => {
     const flow = (store.proxy as any).wizard;
 
     flow.nextStep(); // a → b
-    flow.nextStep(); // финализация — name пуст
+    flow.nextStep(); // finalization — name is empty
     await flushPromises();
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(flow.currentStepKey).toBe("b");
-    // пути ошибок относительны flow-ноды (как в SubmitResult при flow.submit())
+    // error paths are relative to the flow node (like SubmitResult on flow.submit())
     expect(flow.errors).toEqual([{ path: "a.name", message: "required" }]);
   });
 });
 
 // ─── 6. validate / errors / isInvalid ────────────────────────────────────────
 
-describe("flow — validate и агрегатная валидность", () => {
+describe("flow — validate and aggregate validity", () => {
   function makeStore() {
     return new Palistor({
       config: {
@@ -435,20 +435,20 @@ describe("flow — validate и агрегатная валидность", () =>
     });
   }
 
-  it("validate() охватывает только посещённые шаги", () => {
+  it("validate() covers only the visited steps", () => {
     const flow = (makeStore().proxy as any).wizard;
 
-    // посещён только "a"
+    // only "a" has been visited
     expect(flow.validate()).toEqual([{ path: "a.name", message: "required" }]);
 
-    flow.nextStep(); // b посещён
+    flow.nextStep(); // b is visited
     expect(flow.validate()).toEqual([
       { path: "a.name", message: "required" },
       { path: "b.email", message: "required" },
     ]);
   });
 
-  it("errors реактивно хранит результат последнего validate()", () => {
+  it("errors reactively stores the last validate() result", () => {
     const flow = (makeStore().proxy as any).wizard;
     expect(flow.errors).toEqual([]);
     flow.validate();
@@ -459,29 +459,29 @@ describe("flow — validate и агрегатная валидность", () =>
     expect(flow.errors).toEqual([]);
   });
 
-  it("скрытый шаг не участвует в validate(), даже будучи посещённым", () => {
+  it("a hidden step does not participate in validate(), even when visited", () => {
     const flow = (makeStore().proxy as any).wizard;
     flow.goTo("hidden");
     expect(flow.validate().map((e: any) => e.path)).not.toContain("hidden.secret");
   });
 
-  it("flow.isInvalid — агрегат посещённых шагов; step.isInvalid — по шагу", () => {
+  it("flow.isInvalid aggregates visited steps; step.isInvalid is per-step", () => {
     const flow = (makeStore().proxy as any).wizard;
 
-    expect(flow.isInvalid).toBe(true); // a посещён и невалиден
+    expect(flow.isInvalid).toBe(true); // a is visited and invalid
     expect(flow.steps.a.isInvalid).toBe(true);
-    expect(flow.steps.b.isInvalid).toBe(true); // step-level не зависит от посещения
+    expect(flow.steps.b.isInvalid).toBe(true); // step-level doesn't depend on visits
 
     flow.steps.a.name.value = "ok";
     expect(flow.steps.a.isInvalid).toBe(false);
-    expect(flow.isInvalid).toBe(false); // b ещё не посещён
+    expect(flow.isInvalid).toBe(false); // b hasn't been visited yet
   });
 });
 
 // ─── 7. Reset ────────────────────────────────────────────────────────────────
 
 describe("flow — reset", () => {
-  it("flow.reset(): навигация и значения к initial, lifecycle первого шага заново", async () => {
+  it("flow.reset(): navigation and values back to initial, the first step's lifecycle re-runs", async () => {
     const onEnter = vi.fn();
     const resolver = vi.fn(async () => ({ data: "loaded" }));
     const store = new Palistor({
@@ -510,11 +510,11 @@ describe("flow — reset", () => {
     expect(flow.canGoBack).toBe(false);
     expect(flow.steps.b.status).toBe(null);
     expect(onEnter).toHaveBeenCalledTimes(2);
-    expect(resolver).toHaveBeenCalledTimes(2); // resolve-состояние сброшено
+    expect(resolver).toHaveBeenCalledTimes(2); // resolve state was reset
     expect(flow.errors).toEqual([]);
   });
 
-  it("store.reset() сбрасывает навигацию вложенных флоу", () => {
+  it("store.reset() resets the navigation of nested flows", () => {
     const store = new Palistor({
       config: {
         wizard: defineFlow({

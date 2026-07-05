@@ -1,17 +1,17 @@
 import { pairKey } from "./pairKey";
 
 /**
- * Обёртка для valuesCache.values, которая перехватывает READ-доступы
- * и записывает кросс-групповые зависимости в Set.
+ * Wrapper for valuesCache.values that intercepts READ accesses
+ * and records cross-group dependencies into a Set.
  *
- * При чтении leaf-значения определяется группа-донор (по текущему уровню вложенности).
- * Если донор ≠ реципиент → записываем пару donor→recipient.
+ * When a leaf value is read, the donor group is determined by the current
+ * nesting level. If donor ≠ recipient → the donor→recipient pair is recorded.
  *
- * @param values             — плоский объект значений из valuesCache.values
- * @param recipientGroupPath — путь группы, для которой сейчас идёт вычисление
- * @param deps               — Set для записи обнаруженных зависимостей
- * @param currentGroupPath   — текущий уровень вложенности в дереве значений (начинается с "")
- * @param subProxyCache      — WeakMap для мемоизации суб-прокси в рамках одного вызова
+ * @param values             — flat values object from valuesCache.values
+ * @param recipientGroupPath — path of the group currently being computed
+ * @param deps               — Set that collects discovered dependencies
+ * @param currentGroupPath   — current nesting level in the values tree (starts as "")
+ * @param subProxyCache      — WeakMap memoizing sub-proxies within one call
  */
 export function createTrackingValues(
   values: Record<string, unknown>,
@@ -26,7 +26,7 @@ export function createTrackingValues(
 
       const val = (target as Record<string, unknown>)[key];
 
-      // Вложенный объект (группа) — рекурсивный proxy с мемоизацией
+      // Nested object (group) — recursive proxy with memoization
       if (val && typeof val === "object" && !Array.isArray(val)) {
         const cached = subProxyCache.get(val as object);
         if (cached) return cached;
@@ -42,7 +42,7 @@ export function createTrackingValues(
         return childProxy;
       }
 
-      // Чтение leaf-значения: донор = currentGroupPath
+      // Leaf value read: donor = currentGroupPath
       if (currentGroupPath !== recipientGroupPath) {
         deps.add(pairKey(currentGroupPath, recipientGroupPath));
       }
