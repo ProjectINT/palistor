@@ -24,4 +24,11 @@ export interface RecomputeTargetedDeps {
   groupDeps: Set<string>;
   valuesCache: ValuesCache;
   translate: TranslateFn;
+  /**
+   * Optional wrapper that records cross-group dependencies discovered while
+   * recomputing. Passing it keeps dependency tracking active during targeted
+   * recomputes, so edges from conditional branches that only run after init
+   * get recorded the first time the branch executes.
+   */
+  trackingWrap?: TrackingWrap;
 }

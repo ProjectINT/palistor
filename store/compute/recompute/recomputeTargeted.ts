@@ -27,7 +27,7 @@ export function recomputeTargeted(
   const {
     rootConfig, groupComputeMap,
     nodeState, nodeParents, nodePaths,
-    groupDeps, valuesCache, translate,
+    groupDeps, valuesCache, translate, trackingWrap,
   } = deps;
 
   // 1. Find the source groups of the changes
@@ -61,7 +61,7 @@ export function recomputeTargeted(
     // Entity groups ("_entity_.*" paths) don't exist in rootConfig — skip
     if (!groupNode) continue;
     const ownEntries = groupComputeMap.get(groupNode) ?? [];
-    const changed = recomputeLeaves(ownEntries, nodeState, valuesCache, translate);
+    const changed = recomputeLeaves(ownEntries, nodeState, valuesCache, translate, trackingWrap);
     for (const n of changed) allChanged.add(n);
   }
 
