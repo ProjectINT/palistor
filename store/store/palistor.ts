@@ -264,6 +264,15 @@ export class Palistor<
     const { nodeState, nodePaths, nodeParents, groupComputeMap } = this.nodes;
     const { translate } = this.services;
 
+    // Tracking must stay active on EVERY recompute, not only the first full
+    // one. A cross-group read that lives inside a conditional branch which is
+    // inactive at init (e.g. isVisible reads another group's field only in the
+    // "courier" branch) is not observed during the first recomputeAll, so its
+    // donor→recipient edge is missing. It can only be discovered later, when
+    // the branch first runs during a targeted recompute — hence the wrap is
+    // passed to both paths. The dependency set (`groupDeps`) grows monotonically.
+    const trackingWrap = this.groupDepsMap.getTrackingWrap();
+
     if (changedNodes && changedNodes.size > 0) {
       return recomputeTargeted(changedNodes, {
         rootConfig: this.rootConfig,
@@ -274,19 +283,14 @@ export class Palistor<
         groupDeps: this.groupDepsMap.deps,
         valuesCache: this.values,
         translate,
+        trackingWrap,
       });
     }
 
     const computeNodes = collectGroupComputeNodes(this.rootConfig, groupComputeMap);
-
-    if (!this.groupDepsMap.isBuilt) {
-      const trackingWrap = this.groupDepsMap.getTrackingWrap();
-      const result = recomputeLeaves(computeNodes, nodeState, this.values, translate, trackingWrap);
-      this.groupDepsMap.markBuilt();
-      return result;
-    }
-
-    return recomputeLeaves(computeNodes, nodeState, this.values, translate);
+    const result = recomputeLeaves(computeNodes, nodeState, this.values, translate, trackingWrap);
+    this.groupDepsMap.markBuilt();
+    return result;
   }
 
   /**
