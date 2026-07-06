@@ -1,0 +1,27 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      # Typechecks (and emits) via tsc, mirroring the publish workflow.
+      - run: npm run build
+
+      - run: npm test
+        env:
+          # jsdom + full suite in one process needs more headroom than the default.
+          NODE_OPTIONS: --max-old-space-size=4096
