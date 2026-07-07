@@ -21,7 +21,12 @@ jobs:
       # Typechecks (and emits) via tsc, mirroring the publish workflow.
       - run: npm run build
 
+      # A runaway loop — e.g. a resolver that re-triggers itself — surfaces as a
+      # heap OOM / "worker exited". Locally that's easy to miss: the summary can
+      # still read "passed" above the crash. In CI the exit code is
+      # authoritative — a worker OOM makes `npm test` exit non-zero and fails the
+      # job, so such regressions fail loudly. The heap cap gives the jsdom suite
+      # headroom while still letting a genuine loop die in bounded time.
       - run: npm test
         env:
-          # jsdom + full suite in one process needs more headroom than the default.
           NODE_OPTIONS: --max-old-space-size=4096
