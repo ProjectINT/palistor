@@ -1,7 +1,7 @@
 {
   "name": "palistor",
-  "version": "0.0.28",
-  "description": "Declarative framework for data-driven React UIs — splits behavior, data and view into three layers; forms, wizards, async lists, granular per-field re-renders",
+  "version": "0.0.29",
+  "description": "Declarative MVVM-style state framework for React — forms, lists & wizards, batteries included",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -53,16 +53,15 @@
     "publish:github": "npm pkg set name=@projectint/palistor && npm publish --registry=https://npm.pkg.github.com; npm pkg set name=palistor"
   },
   "keywords": [
-    "react",
-    "form",
-    "forms",
-    "state",
+    "mvvm",
     "state-management",
+    "ai-friendly",
+    "forms",
+    "wizard",
+    "react",
+    "state",
     "form-state",
-    "validation",
-    "proxy",
-    "reactive",
-    "wizard"
+    "reactive"
   ],
   "author": "Yuri Palienko",
   "license": "MIT",
