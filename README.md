@@ -1,6 +1,6 @@
 # Palistor
 
-> A declarative framework for data-driven React interfaces — behavior, data and view as three separate layers
+> A declarative MVVM-like framework for React — AI-friendly, forms, lists and step wizards.
 
 **English** | [Русский](./README.ru.md)
 
@@ -8,61 +8,107 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![react](https://img.shields.io/badge/react-%5E19-61dafb.svg)](https://react.dev)
 
-**Palistor is a declarative framework for stateful, data-driven React interfaces.** It treats a screen as three independent layers — **configuration** (how it behaves), **data** (where its values come from) and **view** (how it renders) — and keeps them from leaking into each other. A two-layer proxy is the seam that binds them: reads become fine-grained subscriptions, writes run the behavior you declared. A component re-renders **only** for the exact fields it read.
+**Palistor is a declarative MVVM-like framework for stateful, data-driven React interfaces.**
 
+Palistor splits the frontend into three layers:
+
+1. The view layer. This is the JSX layer, stripped of everything except the actual rendering. By rendering here we mean markup, layout and styles.
+
+A markup example (View in MVVM terms):
 ```tsx
-const store = new Palistor({
-  config: {
-    email: { value: "", isRequired: true },
-    phone: { value: "", isVisible: (v) => v.email !== "" },
-  },
-});
-
 function Form() {
   const form = useForm(store);
+
   return (
-    <input
-      value={form.email.value}
-      onChange={(e) => (form.email.value = e.target.value)}
+    <Input
+      {...form.email}
     />
+    {form.phone.isVisible && (
+      <Input
+        {...form.phone}
+      />
+    )}
   );
 }
 ```
 
+2. The configuration layer.
+
+A configuration example (ViewModel declaration in MVVM terms):
+
+```ts
+const store = new Palistor({
+  config: {
+    id: { value: "" },
+    email: {
+      value: "",
+      isRequired: true,
+    },
+    phone: {
+      value: "",
+      isVisible: (v) => v.email !== "",
+      resolve: {
+        resolver: async (v) => { return await getPhone(v.id) } // getPhone is already the data layer.
+      }
+    },
+  },
+});
+```
+
+3. The data layer (Model). This is the layer responsible for fetching and sending data. The data layer can be anything — a plain resolver, or a complex caching layer implementing offline functionality. Palistor doesn't impose a data-layer implementation; it only provides the interface to integrate one.
+Palistor's state also caches data so it isn't re-fetched from the data layer unnecessarily.
+
 ---
 
-## The idea — three layers, not one store
+## The MVVM idea (Model-View-ViewModel)
 
-Most React screens tangle three unrelated concerns inside components: how the screen **behaves** (validation, conditional fields, cross-field rules), where its **data** comes from (loading, caching, mutation) and how it **looks** (JSX). As the screen grows, the three braid together until every change touches everything. On top of that, the tangle of dependencies, useEffects, custom hooks and contexts keeps growing — and the screen ends up monolithic, unpredictable and hard to test.
+### Classic MVVM, but by data flow it's more accurate to read it as a pipeline: Model → ViewModel → View
 
-Palistor pulls them apart:
+Most React screens tangle three unrelated concerns inside components:
+ - how the screen **behaves** (validation, conditional fields, cross-field rules),
+ - where its **data** comes from (loading, caching, mutations),
+ - and how it **looks** (JSX).
+As the screen grows, these three parts braid together until any change touches everything. On top of that, the complexity of dependencies, useEffects, custom hooks and contexts keeps growing — and the screen ends up monolithic, unpredictable and hard to test.
 
-```
-┌── Configuration — behavior ──────────────┐   declarative · framework-agnostic
-│  fields · validation · visibility ·      │   isVisible / isRequired / validate
-│  cross-field rules · dependencies ·      │   formatter / setter / onSubmit
-│  lifecycle                               │   fully testable without React
-└─────────────────────┬────────────────────┘
-                      │   proxy — the seam:
-                      │   read  → subscribe to a field
-                      │   write → run the declared pipeline
-┌── Data — values & entities ──────────────┐   normalized entity registry
-│  values cache · normalized registry ·    │   resolvers with auto-tracked deps
-│  async resolvers                         │   retry · optimistic · Suspense
-└─────────────────────┬────────────────────┘
-                      │
-┌── View — rendering ──────────────────────┐   useForm(store) → tracking proxy
-│  read state · assign values · no logic   │   granular, per-field re-renders
-└──────────────────────────────────────────┘
-```
+This all worked fine as long as we wrote the code by hand — we'd learned to write reasonably good React, and even though sometimes a single button took 3 components and a couple of hooks, we had the time and the means to decompose the complexity and manage it effectively.
 
-- **Configuration — behavior.** One declarative tree describes fields, validation, visibility, cross-field rules, dependencies and lifecycle (`onSubmit`, `resolve`). Pure and framework-agnostic — fully testable without React.
-- **Data — values & entities.** Values flow through a normalized entity registry and async resolvers with automatically tracked dependencies, retry, optimistic updates and Suspense.
-- **View — rendering.** Components only read reactive state and assign values. They carry no logic and re-render only for the fields they actually read.
+But today we increasingly don't want to read the code we get from AI — we're losing control. In some systems that loss of control is acceptable enough: "well, it works", e2e tests to the rescue.
 
-The proxy is the seam between the layers: a **read** (`form.email.value`) subscribes the component to that field; a **write** (`form.email.value = x`) runs the pipeline you declared in the config — formatter → setter → recompute → notify. Nothing is wired by hand.
+AI is bad at architecture, but it's great at filling declarative slots. Palistor removes the architecture task itself — all that's left is filling in the config by the rules. That's why generated code can't fall apart: there's nowhere to go wrong, and reviewing it means reviewing one flat object instead of a tree of useEffects.
 
-The payoff is that complexity grows **per layer**, not per component. A form, a wizard, a data table and an admin panel are the same three layers at different scale — which is why async loading, normalized lists, multi-step flows, persistence and i18n are part of the framework, not add-ons you bolt on later.
+If you look at Palistor's code examples, you'll notice the complexity is decomposed in such a way that it doesn't exist anywhere else. More precisely, there's no excessive complexity — all the necessary complexity is pulled into the config.
+  - The View is so primitive there's nowhere to make a mistake.
+  - The ViewModel (or, more precisely, the ViewModel declaration) is just an object with behavior, expressing the logic in the simplest, most compact way possible.
+  - The Model is outside Palistor's responsibility: any data source (a plain `fetch`, a caching layer, or an offline layer) that you plug in via `resolve`. Palistor only defines the interface to it, not the implementation.
+
+We can generate any frontend by Palistor's rules without losing control.
+As a bonus, we get:
+ - instant reconfiguration for different modes. In today's world we'll have to configure apps for different regions, laws and rules, and easily adding new modes and contexts becomes a real advantage.
+ - simple state debugging. Thanks to this separation, all the relationships between data are visible at a glance. There's simply nowhere to get lost.
+ - React becomes a thin rendering layer — no more useEffect and no more complex rules and subtleties tied to React's core and its rendering model.
+ - State is computed in the store, outside React's render cycle; a component only gets a signal for the fields it actually read → targeted re-renders instead of cascading ones.
+ - Better code organization, and more natural reuse of things like validators, formatters, and other helpers.
+
+All of this lets us grow the complexity of every layer and add new functionality without sacrificing stability or predictability. And, most importantly, move toward generating frontends for enterprise systems.
+
+## Use cases for Palistor
+
+Admin panels, SaaS platforms, consoles, personal dashboards — anything built mostly from forms, step wizards, dynamic widgets and tables:
+ - Onboarding / KYC / verification / questionnaires — branching multi-step wizards, conditional fields, step-by-step validation (`defineFlow`).
+ - Checkouts and payment forms — conditional payment methods, cross-field rules, async loading.
+ - Configurators / calculators / CPQ — computed fields and dependencies (price×quantity→tax→total) without a single useEffect.
+ - Reference-data-driven forms — dependent selects (country→city), options via `resolve`.
+ - CRUD entity editors and tables with inline editing — a normalized registry, list proxy, per-entity templates.
+ - Schema-driven / backend-driven forms — since the config is data, it can be generated or served from the backend. Plus the multi-region angle: context for regions/laws.
+ - Dashboards with form-like filters — a filter panel as a reactive data source.
+
+## What Palistor is not for
+
+Landing pages with no complex logic, where the main goal is to ship a simple page fast.
+ - Content sites: blogs, docs, marketing, SSG — SEO-first, static, almost no behavior.
+ - Graphics / canvas / realtime rendering — games, editors (rich text, diagrams, maps), video players, heavy visualizations. Here the complexity lives in rendering, and the model doesn't split into layers.
+ - Trivial UI — a single search box, one button, a form with a couple of fields: the three-layer split is overhead that doesn't pay off.
+ - Embeddable widgets where bundle size is critical — the library isn't small, which is a downside for an embeddable script on someone else's page.
 
 ---
 
@@ -87,6 +133,10 @@ The payoff is that complexity grows **per layer**, not per component. A form, a 
 ---
 
 ## Features
+
+The feature set aims to cover every typical need of a modern frontend — forms, lists, step wizards.
+
+Palistor's philosophy is to provide a complete toolkit for generating any frontend, using all the best and most traditional practices.
 
 | | |
 |---|---|
@@ -203,12 +253,7 @@ function PaymentForm() {
 
       {form.cardNumber.isVisible && (
         <Input
-          value={form.cardNumber.value}
-          onChange={(e) => (form.cardNumber.value = e.target.value)}
-          label={form.cardNumber.label}
-          isRequired={form.cardNumber.isRequired}
-          isInvalid={form.cardNumber.isInvalid}
-          errorMessage={form.cardNumber.errorMessage}
+          {...form.cardNumber} // The config knows the Input's interface thanks to an adapter (fieldMapping)
         />
       )}
 
@@ -231,8 +276,8 @@ function PassportSection({ passport }) {
 
   return (
     <>
-      <Input value={p.number.value}    onChange={(e) => (p.number.value = e.target.value)}    label={p.number.label} />
-      <Input value={p.issueDate.value} onChange={(e) => (p.issueDate.value = e.target.value)} label={p.issueDate.label} />
+      <Input {...p.number} />
+      <Input {...p.issueDate} />
     </>
   );
 }
