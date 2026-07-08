@@ -4,6 +4,8 @@ import { recomputeAndNotify } from "../compute/recompute";
 import { createContextTrackingProxy } from "./createContextTrackingProxy";
 import type { ContextTrackingResult } from "./createContextTrackingProxy";
 import { createValuesTrackingProxy } from "./createValuesTrackingProxy";
+import { getByPath } from "./getByPath";
+import { deepEqual } from "./deepEqual";
 import type { ResolveDeps } from "./types";
 
 // ─── List-specific deps ──────────────────────────────────────────────────────
@@ -101,8 +103,12 @@ export function executeListResolve(
       const freshValues = getValues();
       valuesTracking = createValuesTrackingProxy(freshValues);
 
-      // Wrap store.context in a tracking proxy for automatic context dependencies
-      contextTracking = createContextTrackingProxy(store.context);
+      // Wrap store.context in a tracking proxy for automatic context dependencies.
+      // Capture the context object this attempt runs against: `setContext`
+      // replaces `store.context` with a new object, so comparing this snapshot
+      // to the live context after the resolver returns detects a mid-flight change.
+      const startContext = store.context;
+      contextTracking = createContextTrackingProxy(startContext);
       const storeProxy = new Proxy(store, {
         get(target, key) {
           if (key === "context") return contextTracking!.proxy;
@@ -114,6 +120,12 @@ export function executeListResolve(
 
       // Abort when the status changed while awaiting (e.g. a reset)
       if (state.status !== "pending") return result;
+
+      // Snapshot values BEFORE applying this resolver's own result, so the
+      // in-flight-change check below sees only EXTERNAL mutations during the
+      // await — not this resolver's own output (a resolver reading a field it
+      // also writes, e.g. via `{...values}`, must not loop).
+      const valuesAfterAwait = getValues();
 
       // ── Success path ────────────────────────────────────────────────────
       // ListState is the tracking key; listNode is the backward-compat bridge.
@@ -159,6 +171,28 @@ export function executeListResolve(
       state.error = null;
 
       recomputeAndNotify(changed, recompute, notifyChanged);
+
+      // A dependency this resolver read may have changed WHILE it was in flight.
+      // On the first run its auto-deps aren't known yet, so the notification hook
+      // can't mark it and the setContext path (retriggerByPaths) skips pending
+      // resolvers — the change would be lost and the resolved list left stale.
+      // Compare the start snapshot against the live state for everything the
+      // resolver read (values + context) and re-run if anything differs.
+      for (const path of valuesTracking.getAccessedPaths()) {
+        if (!deepEqual(getByPath(freshValues, path), getByPath(valuesAfterAwait, path))) {
+          state.pendingRetrigger = true;
+          break;
+        }
+      }
+      if (!state.pendingRetrigger && contextTracking) {
+        const currentContext = store.context;
+        for (const key of contextTracking.getAccessedKeys()) {
+          if (startContext[key] !== currentContext[key]) {
+            state.pendingRetrigger = true;
+            break;
+          }
+        }
+      }
 
       // If a dependency changed while pending — re-run immediately
       if (state.pendingRetrigger) {

@@ -7,6 +7,8 @@ import { mergeInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../compute/recompute";
 import type { Resolve, ResolveDeps } from "./types";
 import { applyPendingWrites } from "./applyPendingWrites";
+import { getByPath } from "./getByPath";
+import { deepEqual } from "./deepEqual";
 
 // ─── Core execution ──────────────────────────────────────────────────────────
 
@@ -119,8 +121,12 @@ export function executeResolve(
         const freshValues = getValues();
         const tracking = createValuesTrackingProxy(freshValues);
 
-        // Wrap store.context in a tracking proxy for automatic context dependencies
-        contextTracking = createContextTrackingProxy(store.context);
+        // Wrap store.context in a tracking proxy for automatic context dependencies.
+        // Capture the context object this attempt runs against: `setContext`
+        // replaces `store.context` with a new object, so comparing this snapshot
+        // to the live context after the resolver returns detects a mid-flight change.
+        const startContext = store.context;
+        contextTracking = createContextTrackingProxy(startContext);
 
         const storeProxy = new Proxy(store, {
           get(target, key) {
@@ -133,6 +139,12 @@ export function executeResolve(
 
         // Re-check: if the status changed while awaiting — abort
         if (state.status !== "pending") return result;
+
+        // Snapshot values BEFORE applying this resolver's own result, so the
+        // in-flight-change check below sees only EXTERNAL mutations (writes /
+        // other resolves) that happened during the await — not this resolver's
+        // own output (a resolver reading a field it also writes must not loop).
+        const valuesAfterAwait = getValues();
 
         // ── Success path ─────────────────────────────────────────────────
         const changed = new Set<object>();
@@ -170,6 +182,29 @@ export function executeResolve(
           mergedDeps.add(`$context.${key}`);
         }
         state.dependencies = mergedDeps;
+
+        // A dependency this resolver read may have changed WHILE it was in
+        // flight. On the first run its auto-deps aren't known yet, so the
+        // notification hook can't mark it (empty state.dependencies) and the
+        // setContext path (retriggerByPaths) skips pending resolvers outright —
+        // the change would be lost and the resolved data left stale. Compare the
+        // start snapshot against the live state for everything the resolver read
+        // (values + context) and re-run if anything differs.
+        for (const path of accessedPaths) {
+          if (!deepEqual(getByPath(freshValues, path), getByPath(valuesAfterAwait, path))) {
+            state.pendingRetrigger = true;
+            break;
+          }
+        }
+        if (!state.pendingRetrigger) {
+          const currentContext = store.context;
+          for (const key of contextTracking!.getAccessedKeys()) {
+            if (startContext[key] !== currentContext[key]) {
+              state.pendingRetrigger = true;
+              break;
+            }
+          }
+        }
 
         // 5. Recompute + notify (once)
         recomputeAndNotify(changed, recompute, notifyChanged);
