@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: |
             package-lock.json
@@ -56,6 +56,15 @@ jobs:
 
       # GitHub Pages must not run Jekyll over the Next.js `_next` output.
       - run: touch out/.nojekyll
+
+      # Turn on Pages (source = GitHub Actions) via the API if it isn't already,
+      # so the deploy job's create-deployment call doesn't 404. Requires that
+      # Pages is permitted for the repo/org; if the org blocks API enablement,
+      # enable it once manually under Settings -> Pages -> Source: GitHub Actions.
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
