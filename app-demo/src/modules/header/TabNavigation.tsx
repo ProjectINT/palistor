@@ -9,7 +9,7 @@ interface TabNavigationProps {
   onTabChange: (tab: TabType) => void;
 }
 
-const TABS: TabType[] = ["form", "flow", "lists", "async", "hooks", "mapping", "debug"];
+export const TABS: TabType[] = ["form", "flow", "lists", "async", "hooks", "mapping", "debug"];
 
 const TAB_LABELS: Record<TabType, string> = {
   form: "demo.tabs.payment",

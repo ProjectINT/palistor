@@ -7,7 +7,7 @@ import { useNotifier } from "@palistor/react/useNotifier";
 import { paymentStore } from "@/config/appConfig";
 import { catalogStore } from "@/config/catalog/catalogConfig";
 
-import { DemoHeader, type TabType } from "@/modules/header";
+import { DemoHeader, useTabRouting } from "@/modules/header";
 import { PaymentForm } from "@/modules/payment-form";
 import { HooksDemo } from "@/modules/hooks-demo";
 import { DebugPanel } from "@/modules/debug-panel";
@@ -35,7 +35,7 @@ export default function DemoPage() {
   }, []);
   useNotifier(catalogStore, addToast);
 
-  const [activeTab, setActiveTab] = useState<TabType>("form");
+  const [activeTab, setActiveTab] = useTabRouting();
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8 px-4">

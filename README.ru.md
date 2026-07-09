@@ -60,9 +60,33 @@ const store = new Palistor({
 
 ---
 
-## Идея MVVM (Model-View-ViewModel)
+## Содержание
 
-### Классический MVVM, но по потоку данных правильнее читать его как конвейер: Model → ViewModel → View
+- [Идея](#идея)
+- [Демо](#демо)
+- [Возможности](#возможности)
+- [Установка](#установка)
+- [Быстрый старт](#быстрый-старт)
+- [Концепции](#концепции)
+- [API Reference](#api-reference)
+- [Async-резолверы](#async-резолверы)
+- [Списки и сущности](#списки-и-сущности)
+- [Flows (пошаговые мастера)](#flows-пошаговые-мастера)
+- [Field mapping](#field-mapping)
+- [Persist](#persist)
+- [i18n](#i18n)
+- [Уведомления](#уведомления)
+- [Контекст store](#контекст-store)
+- [TypeScript](#typescript)
+- [Лицензия](#лицензия)
+
+---
+
+## Идея
+
+### Идея MVVM (Model-View-ViewModel)
+
+#### Классический MVVM, но по потоку данных правильнее читать его как конвейер: Model → ViewModel → View
 
 Большинство React-экранов сплетают внутри компонентов три несвязанные заботы: 
  - как экран **себя ведёт** (валидация, условные поля, кросс-полевые правила),
@@ -91,7 +115,7 @@ const store = new Palistor({
 
 Все это позволит нам нарастить сложность всех слоев и добавить новый функционал без ущерба для стабильности и предсказуемости. А главное перейти к генерации фронтенда для корпоративных систем.
 
-## Задачи для Palistor
+### Задачи для Palistor
 Админки, саас платформы, консоли, личные кабинеты, состоящие в основном из форм и шаговых мастеров, динамических виджетов и таблиц:
  - Онбординг / KYC / верификация / анкеты — ветвящиеся многошаговые мастера, условные поля, пошаговая валидация (defineFlow).
  - Чек-ауты и платёжные формы — условные способы оплаты, кросс-полевые правила, async-подгрузка.
@@ -101,7 +125,7 @@ const store = new Palistor({
  - Schema-driven / бэкенд-управляемые формы — раз конфиг это данные, его можно генерить/отдавать с сервера. Плюс твой козырь про мультирегиональность (context под регионы/законы).
  - Дашборды с формо-подобными фильтрами — панель фильтров как реактивный источник для данных.
 
-## Для чего не подходит Palistor
+### Для чего не подходит Palistor
 Сайты лендинги где нет сложной логики и главная задача быстрее отдать простую страницу.
  - Контент-сайты: блоги, документация, маркетинг, SSG — SEO-first, статика, поведения почти нет.
  - Графика / canvas / realtime-рендер — игры, редакторы (rich-text, диаграммы, карты), видеоплееры, тяжёлые визуализации. Тут сложность в рендере, а модель не расщепляется на слои.
@@ -109,23 +133,19 @@ const store = new Palistor({
  - Встраиваемые виджеты, где критичен вес бандла — ты сам признал «библиотека не маленькая»; для embeddable-скрипта на чужой странице это минус.
 ---
 
-## Содержание
+## Демо
 
-- [Возможности](#возможности)
-- [Установка](#установка)
-- [Быстрый старт](#быстрый-старт)
-- [Концепции](#концепции)
-- [API Reference](#api-reference)
-- [Async-резолверы](#async-резолверы)
-- [Списки и сущности](#списки-и-сущности)
-- [Flows (пошаговые мастера)](#flows-пошаговые-мастера)
-- [Field mapping](#field-mapping)
-- [Persist](#persist)
-- [i18n](#i18n)
-- [Уведомления](#уведомления)
-- [Контекст store](#контекст-store)
-- [TypeScript](#typescript)
-- [Лицензия](#лицензия)
+Живой стенд со всеми примерами из этого README: **[projectint.github.io/palistor](https://projectint.github.io/palistor/)**
+
+Каждый таб — отдельная возможность фреймворка, на каждый ведёт прямая deep-ссылка:
+
+- [Быстрый старт](https://projectint.github.io/palistor/#form) — условные поля, submit-pipeline, persist
+- [Flows](https://projectint.github.io/palistor/#flow) — пошаговый мастер с ветвлением
+- [Списки и сущности](https://projectint.github.io/palistor/#lists) — нормализованный реестр, list-proxy, контекст store
+- [Async-резолверы](https://projectint.github.io/palistor/#async) — загрузка данных, retry, уведомления
+- [Field mapping](https://projectint.github.io/palistor/#mapping) — переименование пропсов под UI-кит
+
+Исходники стенда — в [`app-demo/`](https://github.com/ProjectINT/palistor/tree/main/app-demo). Под каждым разделом ниже — ссылки на конкретный код примера и соответствующий таб.
 
 ---
 
@@ -195,6 +215,8 @@ import {
 ---
 
 ## Быстрый старт
+
+> 🔗 **Код:** [config/payment.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/payment.ts), [modules/payment-form/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/payment-form) · **Живой результат:** [Демо → Форма оплаты](https://projectint.github.io/palistor/#form)
 
 ### 1. Опишите форму
 
@@ -541,6 +563,8 @@ company: {
 
 ## Async-резолверы
 
+> 🔗 **Код:** [config/catalog/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/config/catalog), [modules/async-demo/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/async-demo) · **Живой результат:** [Демо → Async-резолверы](https://projectint.github.io/palistor/#async)
+
 Резолвер конфигурируется на групповом узле. Загружает данные асинхронно — с авто-трекингом зависимостей, retry и поддержкой React Suspense.
 
 ```typescript
@@ -599,6 +623,8 @@ if (form.userInfo.loading) return <Spinner />;
 ---
 
 ## Списки и сущности
+
+> 🔗 **Код:** [modules/lists-demo/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/lists-demo) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
 
 Списки объявляются через `defineList` (предпочтительно — полная типизация) или сырым массивом длиной 1–2, где `[0]` — шаблон элемента.
 
@@ -701,6 +727,8 @@ store.delete("u1");
 
 ## Flows (пошаговые мастера)
 
+> 🔗 **Код:** [config/flow.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/flow.ts), [modules/flow-demo/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/flow-demo) · **Живой результат:** [Демо → Flows](https://projectint.github.io/palistor/#flow)
+
 `defineFlow` / `defineStep` строят пошаговый мастер поверх обычных групповых узлов: навигационное состояние, статусы шагов, ветвление и валидация по шагам.
 
 ```typescript
@@ -795,6 +823,8 @@ defineStep("details", {
 
 ## Field mapping
 
+> 🔗 **Код:** [config/fieldMapping.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/fieldMapping.ts), [modules/field-mapping/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/field-mapping) · **Живой результат:** [Демо → Field mapping](https://projectint.github.io/palistor/#mapping)
+
 `fieldMapping` переименовывает пропсы состояния поля **на границе proxy** — GET, SET, tracking и spread, — так что `{...form.email}` можно спредить напрямую в компонент MUI, Ant Design или нативный HTML без адаптеров. Внутреннее ядро не меняется.
 
 ```typescript
@@ -839,6 +869,8 @@ function EmailField() {
 ---
 
 ## Persist
+
+> 🔗 **Код:** [modules/payment-form/PersistControls.tsx](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/modules/payment-form/PersistControls.tsx) · **Живой результат:** [Демо → Форма оплаты](https://projectint.github.io/palistor/#form)
 
 Автосохранение состояния формы в любое хранилище.
 
@@ -934,6 +966,8 @@ cardNumber: {
 
 ## Уведомления
 
+> 🔗 **Код:** [config/catalog/catalog.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/catalog/catalog.ts) · **Живой результат:** [Демо → Async-резолверы](https://projectint.github.io/palistor/#async)
+
 Зарегистрируйте функцию toast/alert один раз; резолверы получат её в `onError` через `ctx.notify`:
 
 ```tsx
@@ -953,6 +987,8 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 ---
 
 ## Контекст store
+
+> 🔗 **Код:** [modules/lists-demo/StoreContextSection.tsx](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/modules/lists-demo/StoreContextSection.tsx) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
 
 Нереактивные данные (id аккаунта, tenant, токены…), доступные во всех колбэках через `store.context`. Не является частью формы — не попадает в `getValues()`, submit-payload и persist.
 

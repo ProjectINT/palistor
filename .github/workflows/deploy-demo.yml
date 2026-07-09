@@ -1,0 +1,61 @@
+name: Deploy demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app-demo/**"
+      - "react/**"
+      - "store/**"
+      - "index.ts"
+      - ".github/workflows/deploy-demo.yml"
+  workflow_dispatch:
+
+# Permissions required to deploy to GitHub Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; don't cancel an in-progress publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app-demo/package-lock.json
+
+      # The demo resolves the library from the parent source via tsconfig paths
+      # (@palistor/* -> ../*), so only app-demo's own deps need installing.
+      - run: npm ci
+
+      - run: npm run build
+
+      # GitHub Pages must not run Jekyll over the Next.js `_next` output.
+      - run: touch out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app-demo/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

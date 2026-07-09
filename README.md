@@ -60,9 +60,33 @@ Palistor's state also caches data so it isn't re-fetched from the data layer unn
 
 ---
 
-## The MVVM idea (Model-View-ViewModel)
+## Table of contents
 
-### Classic MVVM, but by data flow it's more accurate to read it as a pipeline: Model → ViewModel → View
+- [Idea](#idea)
+- [Demo](#demo)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Concepts](#concepts)
+- [API reference](#api-reference)
+- [Async resolvers](#async-resolvers)
+- [Lists & entities](#lists--entities)
+- [Flows (step wizards)](#flows-step-wizards)
+- [Field mapping](#field-mapping)
+- [Persist](#persist)
+- [i18n](#i18n)
+- [Notifications](#notifications)
+- [Store context](#store-context)
+- [TypeScript](#typescript)
+- [License](#license)
+
+---
+
+## Idea
+
+### The MVVM idea (Model-View-ViewModel)
+
+#### Classic MVVM, but by data flow it's more accurate to read it as a pipeline: Model → ViewModel → View
 
 Most React screens tangle three unrelated concerns inside components:
  - how the screen **behaves** (validation, conditional fields, cross-field rules),
@@ -91,7 +115,7 @@ As a bonus, we get:
 
 All of this lets us grow the complexity of every layer and add new functionality without sacrificing stability or predictability. And, most importantly, move toward generating frontends for enterprise systems.
 
-## Use cases for Palistor
+### Use cases for Palistor
 
 Admin panels, SaaS platforms, consoles, personal dashboards — anything built mostly from forms, step wizards, dynamic widgets and tables:
  - Onboarding / KYC / verification / questionnaires — branching multi-step wizards, conditional fields, step-by-step validation (`defineFlow`).
@@ -102,7 +126,7 @@ Admin panels, SaaS platforms, consoles, personal dashboards — anything built m
  - Schema-driven / backend-driven forms — since the config is data, it can be generated or served from the backend. Plus the multi-region angle: context for regions/laws.
  - Dashboards with form-like filters — a filter panel as a reactive data source.
 
-## What Palistor is not for
+### What Palistor is not for
 
 Landing pages with no complex logic, where the main goal is to ship a simple page fast.
  - Content sites: blogs, docs, marketing, SSG — SEO-first, static, almost no behavior.
@@ -112,23 +136,19 @@ Landing pages with no complex logic, where the main goal is to ship a simple pag
 
 ---
 
-## Table of contents
+## Demo
 
-- [Features](#features)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Concepts](#concepts)
-- [API reference](#api-reference)
-- [Async resolvers](#async-resolvers)
-- [Lists & entities](#lists--entities)
-- [Flows (step wizards)](#flows-step-wizards)
-- [Field mapping](#field-mapping)
-- [Persist](#persist)
-- [i18n](#i18n)
-- [Notifications](#notifications)
-- [Store context](#store-context)
-- [TypeScript](#typescript)
-- [License](#license)
+A live playground with every example from this README: **[projectint.github.io/palistor](https://projectint.github.io/palistor/)**
+
+Each tab is a separate framework feature, and every one has a direct deep link:
+
+- [Quick start](https://projectint.github.io/palistor/#form) — conditional fields, submit pipeline, persist
+- [Flows](https://projectint.github.io/palistor/#flow) — a step wizard with branching
+- [Lists & entities](https://projectint.github.io/palistor/#lists) — normalized registry, list proxy, store context
+- [Async resolvers](https://projectint.github.io/palistor/#async) — data loading, retry, notifications
+- [Field mapping](https://projectint.github.io/palistor/#mapping) — rename props to your UI kit
+
+The playground sources live in [`app-demo/`](https://github.com/ProjectINT/palistor/tree/main/app-demo). Each section below links to the specific example code and its live tab.
 
 ---
 
@@ -198,6 +218,8 @@ import {
 ---
 
 ## Quick start
+
+> 🔗 **Source:** [config/payment.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/payment.ts), [modules/payment-form/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/payment-form) · **Live result:** [Demo → Payment Form](https://projectint.github.io/palistor/#form)
 
 ### 1. Describe the form
 
@@ -544,6 +566,8 @@ company: {
 
 ## Async resolvers
 
+> 🔗 **Source:** [config/catalog/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/config/catalog), [modules/async-demo/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/async-demo) · **Live result:** [Demo → Async resolvers](https://projectint.github.io/palistor/#async)
+
 A resolver is configured on a group node. It loads data asynchronously with auto-tracked dependencies, retry and React Suspense support.
 
 ```typescript
@@ -602,6 +626,8 @@ When a dependency changes, the resolve state resets, `optimisticResolver` applie
 ---
 
 ## Lists & entities
+
+> 🔗 **Source:** [modules/lists-demo/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/lists-demo) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
 
 Lists are declared with `defineList` (preferred — fully typed) or as a raw array of length 1–2 where `[0]` is the item template.
 
@@ -704,6 +730,8 @@ store.delete("u1");
 
 ## Flows (step wizards)
 
+> 🔗 **Source:** [config/flow.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/flow.ts), [modules/flow-demo/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/flow-demo) · **Live result:** [Demo → Flows](https://projectint.github.io/palistor/#flow)
+
 `defineFlow` / `defineStep` build a step wizard on top of regular group nodes: navigation state, step statuses, branching and per-step validation.
 
 ```typescript
@@ -798,6 +826,8 @@ Flow navigation (current step, history) is included in [persist](#persist) snaps
 
 ## Field mapping
 
+> 🔗 **Source:** [config/fieldMapping.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/fieldMapping.ts), [modules/field-mapping/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/field-mapping) · **Live result:** [Demo → Field mapping](https://projectint.github.io/palistor/#mapping)
+
 `fieldMapping` renames field-state props **at the proxy boundary** — GET, SET, tracking and spread — so `{...form.email}` can be spread directly into a component from MUI, Ant Design or plain HTML without adapters. The internal engine is unchanged.
 
 ```typescript
@@ -842,6 +872,8 @@ Mappable keys: `value`, `label`, `placeholder`, `description`, `isRequired`, `is
 ---
 
 ## Persist
+
+> 🔗 **Source:** [modules/payment-form/PersistControls.tsx](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/modules/payment-form/PersistControls.tsx) · **Live result:** [Demo → Payment Form](https://projectint.github.io/palistor/#form)
 
 Autosave form state to any storage.
 
@@ -937,6 +969,8 @@ The `validate` callback also receives `t` as its third argument. Without a regis
 
 ## Notifications
 
+> 🔗 **Source:** [config/catalog/catalog.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/config/catalog/catalog.ts) · **Live result:** [Demo → Async resolvers](https://projectint.github.io/palistor/#async)
+
 Register a toast/alert function once; resolvers receive it in `onError` via `ctx.notify`:
 
 ```tsx
@@ -956,6 +990,8 @@ function RootLayout({ children }: { children: React.ReactNode }) {
 ---
 
 ## Store context
+
+> 🔗 **Source:** [modules/lists-demo/StoreContextSection.tsx](https://github.com/ProjectINT/palistor/blob/main/app-demo/src/modules/lists-demo/StoreContextSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
 
 Non-reactive data (account id, tenant, tokens…) available to every callback via `store.context`. It is not part of the form — it does not appear in `getValues()`, submit payloads or persisted state.
 
