@@ -35,11 +35,22 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: app-demo/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            app-demo/package-lock.json
 
-      # The demo resolves the library from the parent source via tsconfig paths
-      # (@palistor/* -> ../*), so only app-demo's own deps need installing.
-      - run: npm ci
+      # The demo consumes the library from its parent source via tsconfig paths
+      # (@palistor/* -> ../*). That source (e.g. react/useForm.ts) does
+      # `import ... from "react"`, which Node resolves by walking UP from the
+      # file's location — so it checks the repo-root node_modules, never
+      # app-demo's. Install the library's own deps at the root so its source can
+      # type-check during `next build`.
+      - name: Install library deps (repo root)
+        working-directory: ${{ github.workspace }}
+        run: npm ci
+
+      - name: Install demo deps
+        run: npm ci
 
       - run: npm run build
 
