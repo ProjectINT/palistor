@@ -140,7 +140,21 @@ export function registerNodes<TNode extends AnyConfigNode>(
       const rawSlice = initialSlice as Record<string, unknown> | undefined;
       const sliceValues = (rawSlice ?? {}) as Record<string, unknown>;
       const rawValue = child.value;
-      const configValue = typeof rawValue === "function" ? rawValue(sliceValues) : rawValue;
+      // Guarded like safeResolveFlag: at registration a computed value runs
+      // against the initialValues slice (often {}), not its group scope, so a
+      // method call on a sibling value (v.first.trim()) would throw. The
+      // registration value is transient — the constructor's first full
+      // recompute re-evaluates it against the complete valuesCache.
+      let configValue: unknown;
+      if (typeof rawValue === "function") {
+        try {
+          configValue = rawValue(sliceValues);
+        } catch {
+          configValue = undefined;
+        }
+      } else {
+        configValue = rawValue;
+      }
       const initialValue = rawSlice?.[key] ?? configValue ?? "";
       nodeState.set(child, {
         value: initialValue,
