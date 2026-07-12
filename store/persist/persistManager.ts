@@ -90,6 +90,14 @@ export class PersistManager {
   /** Flag preventing saves during hydration. */
   private isHydrating = false;
 
+  /**
+   * Hydration generation. Bumped by enable()/disable(); an in-flight
+   * hydrateFromStorage run applies its result only if the generation it
+   * captured at start is still current (guards against a superseded enable()'s
+   * slow hydration landing over a newer one).
+   */
+  private hydrationGeneration = 0;
+
   constructor(kernel: Palistor<any, any>) {
     this.kernel = kernel;
   }
@@ -150,20 +158,21 @@ export class PersistManager {
   private async hydrateFromStorage(): Promise<void> {
     if (!this.currentKey || !this.currentDriver) return;
 
+    // Capture the generation this run belongs to. enable()/disable() bump it,
+    // so a hydration that was superseded while awaiting getItem must NOT apply
+    // its (now stale, possibly other-key) payload — otherwise a slower driver
+    // wins over a newer enable() and the next autosave writes the old key's
+    // data into the new key.
+    const gen = this.hydrationGeneration;
     this.isHydrating = true;
 
     try {
       const raw = await Promise.resolve(this.currentDriver.getItem(this.currentKey));
-      if (raw === null) {
-        this.isHydrating = false;
-        return;
-      }
+      if (gen !== this.hydrationGeneration) return; // superseded while awaiting
+      if (raw === null) return;
 
       const values = this.deserialize(raw);
-      if (!values || typeof values !== "object") {
-        this.isHydrating = false;
-        return;
-      }
+      if (!values || typeof values !== "object") return;
 
       // Flow: extract the navigation snapshot before applying the values patch.
       const flowSnapshots = (values as Record<string, unknown>)[FLOWS_PERSIST_KEY] as
@@ -211,7 +220,9 @@ export class PersistManager {
     } catch {
       // Deserialization errors are silenced
     } finally {
-      this.isHydrating = false;
+      // Only the CURRENT run may clear the flag — a superseded run finishing
+      // late must not unmark a newer hydration that is still in flight.
+      if (gen === this.hydrationGeneration) this.isHydrating = false;
     }
   }
 
@@ -226,6 +237,9 @@ export class PersistManager {
   enable(options: PersistOptions): Promise<void> {
     // Already active — disable the previous one
     if (this.active) this.disable();
+
+    // Invalidate any hydration still in flight from a previous enable()
+    this.hydrationGeneration++;
 
     // Store the settings
     this.currentKey = options.key;
@@ -249,6 +263,11 @@ export class PersistManager {
     this.active = false;
     this.cancelDebounce();
 
+    // Abort an in-flight hydration (it checks the generation before applying)
+    // and clear the flag it would otherwise leave dangling.
+    this.hydrationGeneration++;
+    this.isHydrating = false;
+
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
@@ -260,6 +279,10 @@ export class PersistManager {
 
   /** Force-save the current values to storage (no debounce). */
   async flush(): Promise<void> {
+    // Nothing meaningful to save before hydration completed — saving here
+    // would overwrite the stored snapshot with the not-yet-hydrated (empty)
+    // values. isHydrating guards the debounced scheduleSave; guard flush too.
+    if (this.isHydrating) return;
     this.cancelDebounce();
     await this.saveToStorage();
   }
