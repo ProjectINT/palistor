@@ -467,6 +467,33 @@ export class Palistor<
       }
     }
 
+    // Remove the id from every list membership that still references it —
+    // root/config lists plus the owner's per-entity list — mirroring the
+    // itemIds maintenance rekey() already does. Without this the id stays in
+    // itemIds while syncListValuesCache silently drops it from getValues(),
+    // so length/items/dirty disagree. Captured BEFORE entityRegistry.delete()
+    // clears the owner pointer.
+    const affectedLists = new Set<ListState>();
+    for (const ls of this.nodes.allListStates) {
+      const idx = ls.itemIds.indexOf(id);
+      if (idx >= 0) {
+        ls.itemIds.splice(idx, 1);
+        affectedLists.add(ls);
+      }
+    }
+    const owner = entityNode.owner;
+    if (owner) {
+      const ownerNode = this.entityRegistry.get(owner.ownerId);
+      const ownerList = ownerNode?.lists?.get(owner.ownerListNode);
+      if (ownerList) {
+        const idx = ownerList.itemIds.indexOf(id);
+        if (idx >= 0) {
+          ownerList.itemIds.splice(idx, 1);
+          affectedLists.add(ownerList);
+        }
+      }
+    }
+
     // Collect all leaf nodes of the entity
     const deletedLeaves = new Set<object>();
     this.collectEntityLeaves(entityNode, deletedLeaves);
@@ -481,6 +508,19 @@ export class Palistor<
 
     // Remove the entity from the registry (clears bindings + resolvedCache)
     this.entityRegistry.delete(id);
+
+    // Drop the plain projection object (rekey() cleans its old key the same
+    // way; without this the Map grows unboundedly under entity churn)
+    this.entityProjectionObjs.delete(id);
+
+    // Re-sync affected lists and include them in the notification, keyed the
+    // same way list mutations notify: the ListState (tracking key) + the
+    // listConfigNode (backward-compat bridge)
+    for (const ls of affectedLists) {
+      this.syncListValuesCache(ls);
+      deletedLeaves.add(ls as unknown as object);
+      deletedLeaves.add(ls.listConfigNode as object);
+    }
 
     this.notifyChanged(deletedLeaves);
   }
