@@ -48,4 +48,26 @@ describe("collectGroupComputeNodes", () => {
     const result = collectGroupComputeNodes(root, map);
     expect(result).toEqual([]);
   });
+
+  it("skips ListNodes — a template is not a compute target", () => {
+    // registerNodes stamps __kind="group" on the list array (configKeys of an
+    // array yields its numeric keys), so isLeafNode does not stop the walk.
+    // Without an Array.isArray guard the template's entries get pulled in and
+    // recomputed against the ROOT values, where the item's fields don't exist.
+    const template = {} as AnyConfigNode;
+    const templateLeaf = makeLeaf("users.first");
+    const list = [template] as unknown as AnyConfigNode;
+    (list as any).__kind = "group";
+
+    const root = { users: list } as unknown as AnyConfigNode;
+    const rootLeaf = makeLeaf("title");
+    const map: GroupComputeMap = new WeakMap<object, ReturnType<typeof makeLeaf>[]>([
+      [root, [rootLeaf]],
+      [template, [templateLeaf]],
+    ]);
+
+    const result = collectGroupComputeNodes(root, map);
+    expect(result).toEqual([rootLeaf]);
+    expect(result).not.toContain(templateLeaf);
+  });
 });
