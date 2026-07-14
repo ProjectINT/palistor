@@ -197,17 +197,21 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
   };
 
   const setItemsFn = (ids: string[]): void => {
+    // Dedupe, keeping first-occurrence order: add() already forbids duplicate
+    // membership (.includes() guard), so setItems must uphold the same
+    // invariant — duplicates collide React keys and break remove/dirty diffs.
+    const uniqueIds = [...new Set(ids)];
     if (owner) {
       const ownerId = getOwnerId();
-      for (const id of ids) {
+      for (const id of uniqueIds) {
         if (!kernel.entityRegistry.has(id)) {
           throw new Error(
             `[palistor] per-entity list setItems: entity "${id}" not found in registry.`,
           );
         }
       }
-      listState.itemIds = [...ids];
-      for (const id of ids) {
+      listState.itemIds = uniqueIds;
+      for (const id of uniqueIds) {
         const childNode = kernel.entityRegistry.get(id);
         if (childNode) {
           kernel.entityRegistry.setEntityOwner(childNode, ownerId, listConfigNode as object);
@@ -216,7 +220,7 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       notifyListChanged();
     } else {
       listState.itemIds.length = 0;
-      for (const id of ids) listState.itemIds.push(id);
+      for (const id of uniqueIds) listState.itemIds.push(id);
       notifyListChanged();
     }
   };
