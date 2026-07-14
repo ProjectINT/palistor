@@ -538,6 +538,11 @@ total: { value: (v) => v.price * v.quantity, isReadOnly: true },
 tax:   { value: (v) => v.price * 0.2,   dependencies: ["price"] },
 total: { value: (v) => v.price + v.tax, dependencies: ["price", "tax"] },
 
+// NB: a computed `value` inside a list template is not implemented yet — it
+// throws at construction rather than silently never running. Template
+// `label`/`isVisible`/`validate` DO work: they are evaluated on every read,
+// against that item's own values.
+
 // formatter — normalize on write
 email: { value: "", formatter: (v) => String(v).trim().toLowerCase() },
 

@@ -88,6 +88,53 @@ function safeResolveFlag(
   }
 }
 
+/**
+ * TEMPORARY STUB — reject a computed `value` inside a list template.
+ *
+ * Per-item computed values are simply not implemented in the entity path: an
+ * item's value comes from its entity leaf, and `rules.value` is never invoked as
+ * a function (buildProxy `_buildEntityLeafProxy`, `case "value"`) — unlike
+ * label/isVisible/validate, which do run per item at read time.
+ *
+ * Evaluating the rule at read time is the easy half. The missing half is node
+ * identity: a computed template field has no per-item node, so `item1.full` and
+ * `item2.full` both resolve to the SHARED template config node. A write to an
+ * entity leaf bumps that leaf's version, never the template node's — the value
+ * would be right on read and never re-render. Giving it per-item identity is a
+ * design call (an entity is projectable through several templates), so it lives
+ * in its own feature task.
+ *
+ * Until then, fail loudly at construction with the field's path rather than
+ * leaking the raw function onto `item.field.value`.
+ */
+function assertNoComputedValues(
+  template: AnyConfigNode,
+  listPath: string,
+  innerPath = "",
+): void {
+  for (const key of configKeys(template as Record<string, unknown>)) {
+    const child = (template as Record<string, unknown>)[key];
+    if (!child || typeof child !== "object" || Array.isArray(child)) continue;
+
+    const childPath = innerPath ? `${innerPath}.${key}` : key;
+
+    if ("value" in child) {
+      if (typeof (child as { value: unknown }).value === "function") {
+        throw new Error(
+          `[palistor] a computed "value" is not supported inside a list template yet ` +
+            `("${listPath}[].${childPath}"). An item's value comes from its entity, and ` +
+            `nothing recomputes it per item, so the rule would never run. For now derive ` +
+            `the value in the component, or use a computed "label" on the template field ` +
+            `— those do run per item.`,
+        );
+      }
+      continue;
+    }
+
+    assertNoComputedValues(child as AnyConfigNode, listPath, childPath);
+  }
+}
+
 export function registerNodes<TNode extends AnyConfigNode>(
   node: TNode,
   initialSlice: InitialSlice<TNode> | undefined,
@@ -113,6 +160,7 @@ export function registerNodes<TNode extends AnyConfigNode>(
       // ListNode: create a ListState + register the template as a regular group
       if (isListNode(child) && listStates) {
         const template = child[0] as AnyConfigNode;
+        assertNoComputedValues(template, path);
         const listConfig = child.length > 1 ? (child[1] as ListConfig) : undefined;
         const listState: ListState = {
           listConfigNode: child,
@@ -140,21 +188,14 @@ export function registerNodes<TNode extends AnyConfigNode>(
       const rawSlice = initialSlice as Record<string, unknown> | undefined;
       const sliceValues = (rawSlice ?? {}) as Record<string, unknown>;
       const rawValue = child.value;
-      // Guarded like safeResolveFlag: at registration a computed value runs
-      // against the initialValues slice (often {}), not its group scope, so a
-      // method call on a sibling value (v.first.trim()) would throw. The
-      // registration value is transient — the constructor's first full
-      // recompute re-evaluates it against the complete valuesCache.
-      let configValue: unknown;
-      if (typeof rawValue === "function") {
-        try {
-          configValue = rawValue(sliceValues);
-        } catch {
-          configValue = undefined;
-        }
-      } else {
-        configValue = rawValue;
-      }
+      // A computed value is NOT evaluated here. At registration the only scope
+      // available is the initialValues slice (often `{}`) — a different shape
+      // than the group-scoped values the function is written against, so
+      // `v.first.trim()` would throw and `v.price * v.qty` would silently yield
+      // NaN. The value is transient anyway: the constructor's first full
+      // recompute evaluates every computed leaf against the complete
+      // valuesCache in topological order, before the dirty baseline is captured.
+      const configValue = typeof rawValue === "function" ? undefined : rawValue;
       const initialValue = rawSlice?.[key] ?? configValue ?? "";
       nodeState.set(child, {
         value: initialValue,

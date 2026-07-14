@@ -535,6 +535,11 @@ total: { value: (v) => v.price * v.quantity, isReadOnly: true },
 tax:   { value: (v) => v.price * 0.2,   dependencies: ["price"] },
 total: { value: (v) => v.price + v.tax, dependencies: ["price", "tax"] },
 
+// NB: computed `value` внутри шаблона списка пока не реализован — падает на
+// конструкторе, вместо того чтобы молча никогда не вызваться. А
+// `label`/`isVisible`/`validate` у поля шаблона работают: вычисляются на
+// каждом чтении по значениям своего элемента.
+
 // formatter — нормализация при записи
 email: { value: "", formatter: (v) => String(v).trim().toLowerCase() },
 
