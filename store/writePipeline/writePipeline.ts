@@ -44,17 +44,17 @@ export class WritePipeline {
     const nodeState = this.kernel.nodes.nodeState;
     const valuesCache = this.kernel.values;
 
-    // Phase 1: format (entity: parentValues from the view; config: from valuesCache)
+    // Format (entity: parentValues from the view; config: from valuesCache)
     const allValues = isEntityMode ? view.parent.getValues() : valuesCache.values;
     const processedValue = formatValue(rawValue, view.rules, allValues);
 
-    // Phase 1.5: fast exit — value unchanged
+    // Fast exit — value unchanged
     const currentState = nodeState.get(view.storage);
     if (currentState && Object.is(processedValue, currentState.value)) {
       return { changed: new Set<object>(), skipped: true };
     }
 
-    // Phase 2: direct value write
+    // Direct value write
     const stored = storeValue(view.storage, processedValue, nodeState, valuesCache);
     if (!stored) return null;
 
@@ -64,7 +64,7 @@ export class WritePipeline {
       (view.storage as unknown as { value: unknown }).value = processedValue;
     }
 
-    // Phase 2.5: setter branch — patch dependent fields
+    // Setter branch — patch dependent fields
     let patchedNodes: Set<object>;
     if (typeof view.rules.setter === "function") {
       if (isEntityMode) {
@@ -92,12 +92,12 @@ export class WritePipeline {
       patchedNodes = new Set<object>();
     }
 
-    // Phase 3: targeted recompute of the affected groups
+    // Targeted recompute of the affected groups
     const changedSoFar = new Set<object>([view.storage]);
     for (const n of patchedNodes) changedSoFar.add(n);
     const recomputedNodes = this.kernel.recompute(changedSoFar);
 
-    // Phase 4: merge all changed nodes
+    // Merge all changed nodes
     return { changed: mergeChanged(view.storage, patchedNodes, recomputedNodes) };
   }
 

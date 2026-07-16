@@ -3,7 +3,7 @@ import type { FieldState } from "../compute/index";
 import { updateValuesCacheEntry, type ValuesCache } from "../valuesCache/valuesCache";
 
 /**
- * Phase 2: store the value in nodeState.
+ * Store the value in nodeState.
  *
  * Updates FieldState immutably: creates a new object with the new value.
  * Returns true when stored, false when the node is not registered.

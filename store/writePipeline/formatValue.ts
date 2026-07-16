@@ -1,7 +1,7 @@
 import type { AnyConfigNode } from "../store/types";
 
 /**
- * Phase 1: format the incoming value.
+ * Format the incoming value.
  *
  * If the node has a formatter — calls it with the raw value and the current
  * snapshot of all form values.
