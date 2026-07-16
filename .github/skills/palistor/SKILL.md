@@ -379,11 +379,23 @@ const store = new Palistor({
 > already-raw subtree would subscribe to nothing and never re-render — so
 > the type brand + runtime guard reject it.
 
+> **Rendering convention (used in every example below).** The preferred way to
+> render a field is to **spread it into a thin adapter component you write once** —
+> `<Input {...form.email} />`. A field spread carries **both** `value` and
+> `onValueChange` (plus `label`, `isRequired`, `isInvalid`, `errorMessage`,
+> `isVisible`, …), so one adapter both **displays and edits** with no per-field
+> wiring. Write the adapter once per input kind — recipe in
+> [Field Name Mapping → The Adapter Pattern](#the-adapter-pattern-write-once-spread-everywhere).
+> The manual `value={…} onChange={…}` form is the **escape hatch** (no adapter, or
+> you need full control), shown once below.
+
 ```tsx
 // Root — pass the store
 function OrderForm() {
   const form = useForm(store);
-  return <input value={form.email.value} onChange={e => { form.email.value = e.target.value }} />;
+  return <Input {...form.email} type="email" />;    // preferred — spread into an adapter
+  // Escape hatch (no adapter / need full control) — bind by hand:
+  // <input value={form.email.value} onChange={(e) => { form.email.value = e.target.value; }} />
 }
 
 // Child — pass a proxy subtree (independent re-renders)
@@ -397,7 +409,7 @@ function Parent() {
 function PassportSection({ passport }: { passport: PalistorProxy<{ number: string }> }) {
   const p = useForm(passport);
   if (!p.isVisible) return null;
-  return <input value={p.number.value} onChange={e => { p.number.value = e.target.value }} />;
+  return <Input {...p.number} />;
 }
 
 // Entity mode — TWO forms. Choose based on your needs:
@@ -407,7 +419,7 @@ function PassportSection({ passport }: { passport: PalistorProxy<{ number: strin
 //    Most common case — just read/write what the list already defines.
 function EditUserSimple({ userProxy }: { userProxy: PalistorRef<UserData> }) {
   const u = useForm(userProxy); // uses list's own template fields
-  return <input value={u.name.value} onChange={e => { u.name.value = e.target.value }} />;
+  return <Input {...u.name} />;
 }
 
 // 2. useForm(entityProxy, (s) => s.editUserForm)  — use ONLY when the edit form needs
@@ -419,7 +431,7 @@ function EditUserSimple({ userProxy }: { userProxy: PalistorRef<UserData> }) {
 //    On unmount: unbind (resolved cache survives — next open is instant).
 function EditUserDetailed({ userProxy }: { userProxy: PalistorRef<UserData> }) {
   const u = useForm(userProxy, (s) => s.editUserForm); // different template with extra fields
-  return <input value={u.name.value} onChange={e => { u.name.value = e.target.value }} />;
+  return <Input {...u.name} />;
 }
 ```
 
@@ -503,7 +515,20 @@ Accessing `form.email` returns a `FieldProxyNode`:
 | `submit()` | `Promise<SubmitResult>` | R | Run submit pipeline for this leaf field |
 | `onValueChange` | `(v) => void` | R | Callback form of value setter |
 
-**Spread-safe:** `{...form.email}` yields only these properties (config internals hidden).
+**Spread-safe — and this is the primary rendering mechanism.** `{...form.email}`
+yields exactly the properties above (config internals hidden), so it drops straight
+into a thin adapter component: `<Input {...form.email} />`. The spread carries **both**
+sides of the binding:
+
+- **`value`** — the current value (display), and
+- **`onValueChange(v)`** — a **stable** functional setter (`v => { field.value = v }`).
+
+That's why a single spread both **displays and edits** — the adapter never has to wire
+the change handler by hand. If your input's change prop is literally named
+`onValueChange` (e.g. HeroUI), the binding is automatic; otherwise the adapter converts
+it once (`onChange={(e) => onValueChange(e.target.value)}`). The adapter should also
+**consume `isVisible`** (early `return null`) so it doesn't leak to the DOM. Full recipe:
+[Field Name Mapping → The Adapter Pattern](#the-adapter-pattern-write-once-spread-everywhere).
 
 > **Renamable:** every property name above (plus `onValueChange`) can be projected
 > to a different name via the store's `fieldMapping` option — e.g. `isRequired → required`.
@@ -549,12 +574,21 @@ Plus all child fields as proxy sub-properties.
 
 ## Field Name Mapping (fieldMapping)
 
-Palistor's built-in prop names (`isRequired`, `isInvalid`, `errorMessage`, …) don't
-match what UI libraries expect (`required`, `error`/`status`, `helperText`, …).
-`fieldMapping` renames how internal props are exposed **through the proxy** (GET +
-spread/`ownKeys` + tracking) so you can spread a field straight into a component.
-Internal state, compute, and pipelines are untouched — it's a pure projection at
-the proxy boundary.
+**The recommended way to render every field is to spread it into a thin adapter you
+write once per input kind** — `<Input {...form.email} />`. A field spread carries the
+whole proxy (`value` + `onValueChange` + `label` + `isRequired` + `isInvalid` +
+`errorMessage` + `isVisible` + …), so the adapter both **displays and edits** with no
+per-field wiring. This is the default style throughout this document; the recipe is
+[The Adapter Pattern](#the-adapter-pattern-write-once-spread-everywhere) below.
+
+`fieldMapping` is the piece that makes the spread land cleanly when your UI kit's prop
+names differ from Palistor's (`isRequired → required`, `errorMessage → helperText`, …).
+It renames how internal props are exposed **through the proxy** (GET + spread/`ownKeys`
++ tracking); internal state, compute, and pipelines are untouched — a pure projection at
+the proxy boundary. Set it **once** and author your config **and** render in that one
+vocabulary (normalized to internal names once, in the Palistor constructor). If your kit already uses Palistor's
+names (e.g. HeroUI: `value` / `onValueChange` / `isRequired` / `isInvalid`), you don't
+need `fieldMapping` at all — just spread into the adapter.
 
 ```tsx
 const store = new Palistor({
@@ -570,12 +604,104 @@ const store = new Palistor({
   },
 });
 
-// Spread directly — no per-field adapter
+// Spread straight into your (per-kind) adapter — the renamed names match the UI kit:
 <Input {...form.email} />
 // form.email.required   === true
 // form.email.helperText === "Email is required"
 // form.email.value      === ""      (unmapped → unchanged)
 ```
+
+### The Adapter Pattern (write once, spread everywhere)
+
+Write **one adapter component per input _kind_** (Input, Select, Checkbox, DatePicker…),
+not per field. Type its props as **`FieldProxyNode<T> & Partial<Extra>`** so the spread
+type-checks and you can still pass extra props (`type`, `options`, …). Two flavors,
+depending on whether your UI kit's prop names already match Palistor's.
+
+**Flavor A — kit names already match (no `fieldMapping`).** HeroUI already uses `value` /
+`onValueChange` / `isRequired` / `isReadOnly` / `isDisabled` / `isInvalid`, so the adapter
+is almost a pass-through — it only consumes `isVisible` and coerces `isInvalid` to a
+strict boolean:
+
+```tsx
+import { Input as HeroUIInput } from "@heroui/react";
+import type { FieldProxyNode } from "palistor";
+
+// Extra = the input's own props that are NOT field-proxy props (type, size, …)
+type Extra = Omit<React.ComponentProps<typeof HeroUIInput>, keyof FieldProxyNode<string>>;
+
+export function Input(props: FieldProxyNode<string> & Partial<Extra>) {
+  const { isVisible, ...rest } = props;               // consume isVisible — don't leak to the DOM
+  if (!isVisible) return null;
+  return <HeroUIInput {...rest} isInvalid={!!rest.isInvalid} />; // boolean|undefined → boolean
+}
+
+// Everywhere, editing works from the spread alone (value + onValueChange ride along):
+<Input {...form.name} />
+<Input {...form.email} type="email" />                // extra props merge with the spread
+```
+
+**Flavor B — kit uses different names (`fieldMapping` + adapter).** MUI / Ant / native HTML
+want `required` / `disabled` / `error` / `helperText`. Set `fieldMapping` once, author the
+config in that same vocabulary, and the adapter converts the change event → value:
+
+```tsx
+const fieldMapping = defineFieldMapping({
+  isRequired: "required", isDisabled: "disabled", isReadOnly: "readOnly",
+  isInvalid: "error", errorMessage: "helperText", description: "helpText",
+});
+const store = new Palistor({ config, fieldMapping });
+
+export function Field({
+  label, value = "", placeholder, onValueChange, isVisible = true,
+  required, disabled, readOnly, error, helperText,          // renamed names from fieldMapping
+}: FieldProps) {
+  if (!isVisible) return null;
+  return (
+    <label>
+      {label}{required && <span>*</span>}
+      <input
+        value={value} placeholder={placeholder} disabled={disabled} readOnly={readOnly}
+        aria-invalid={error || undefined}
+        onChange={(e) => onValueChange?.(e.target.value)}    // event → value (kit takes onChange)
+      />
+      {error && helperText ? <em>{helperText}</em> : null}
+    </label>
+  );
+}
+
+<Field {...form.email} />                                    // spread in the single vocabulary
+```
+
+**Value-shape / transform / many-to-one → inside the adapter.** `fieldMapping` only renames
+1:1. Anything else lives in the adapter, which already receives the whole spread. A boolean
+field is the classic case — the `value → isSelected/checked` conversion is hidden inside so
+the call site stays a **clean spread**:
+
+```tsx
+export function Checkbox(props: FieldProxyNode<boolean> & Partial<Extra>) {
+  const { isVisible, value, onValueChange, label, description, errorMessage, ...rest } = props;
+  if (!isVisible) return null;
+  const helperText = errorMessage ?? description;            // many-to-one — done here, not in fieldMapping
+  return (
+    <div className="flex flex-col gap-1">
+      {/* boolean field: value → isSelected lives INSIDE the adapter (native: checked={value}) */}
+      <HeroUICheckbox {...rest} isSelected={value} onValueChange={onValueChange}>{label}</HeroUICheckbox>
+      {helperText && <p className={errorMessage ? "text-danger" : "text-default-500"}>{helperText}</p>}
+    </div>
+  );
+}
+
+<Checkbox {...form.agreeTerms} />                            // no isSelected/onChange at the call site
+```
+
+**Rules of thumb**
+
+- One adapter per input **kind**, never per field.
+- **Always consume `isVisible`** in the adapter (early `return null`) — hidden fields cost nothing and don't leak to the DOM. Same for props you transform (`value`, `errorMessage`): destructure them out so they don't reach the DOM element.
+- Kit names already match (HeroUI)? **Skip `fieldMapping`.** Different vocabulary (MUI/Ant/native)? Set `fieldMapping` once and speak that one vocabulary in config **and** JSX.
+- Value-shape mismatches (checkbox `value → isSelected/checked`), value transforms (Ant `error → status:'error'`), and many-to-one (`helperText = errorMessage ?? description`) all live **inside** the adapter.
+- Extra, non-field props (`type`, `options`, `renderLabel`) merge with the spread — type them as `Partial<Extra>`.
 
 ### Declaring the map (keep literal types!)
 
@@ -937,13 +1063,14 @@ function EditUserModal({ user }: { user: PalistorRef<User> }) {
 
   return (
     <form onSubmit={async (e) => { e.preventDefault(); await form.submit(); }}>
-      <input value={form.name.value} onChange={e => { form.name.value = e.target.value }} />
-      <input value={form.email.value} onChange={e => { form.email.value = e.target.value }} />
+      <Input {...form.name} />
+      <Input {...form.email} type="email" />
 
-      {/* Per-field loading (bio has its own resolver — lazy, triggers on first read) */}
+      {/* Per-field loading (bio has its own resolver — lazy, triggers on first read).
+          Textarea is the same adapter recipe as Input — spread straight in. */}
       {form.bio.loading
         ? <Spinner />
-        : <textarea value={form.bio.value} onChange={e => { form.bio.value = e.target.value }} />
+        : <Textarea {...form.bio} />
       }
 
       <button type="submit" disabled={form.submitting}>
@@ -1388,6 +1515,9 @@ function StepIndicator({ flow }: { flow: FlowProxyNode<Steps> }) {
 | `new Palistor<typeof config>({..., fieldMapping})` loses mapping types | An explicit first type arg disables `TMapping` inference (falls back to `{}`). Use bare `new Palistor({...})` or specify both type args |
 | Expecting `fieldMapping` to transform values (Ant `status`, MUI `helperText`) | It only renames 1:1. Use a per-component adapter over the renamed spread (see Field Name Mapping → Scope) |
 | Mapping two internal keys to the same external name | Not allowed — `fieldMapping` must be a bijection (one internal ↔ one external) |
+| Hand-wiring `value={f.value} onChange={…}` for every field | Prefer a spread into a thin adapter: `<Input {...form.x} />` — the spread carries `value` **and** `onValueChange`, so one adapter both displays and edits. Manual binding is the escape hatch (no adapter / full control) |
+| Spread leaks `isVisible` / `errorMessage` / `value` to the DOM element | Destructure props the adapter handles specially (`isVisible` → early `return null`; transformed/derived props) **out** before spreading the rest onto the DOM node |
+| Writing a fresh adapter per field | Write **one adapter per input _kind_** (Input, Select, Checkbox…), typed `FieldProxyNode<T> & Partial<Extra>`; reuse it everywhere via spread |
 | Passing a raw group object as a flow step | Each `steps` entry MUST be a `defineStep(key, config)` result — a bare group throws at `defineFlow` |
 | Giving a step a top-level `value` or a `status` field | A step is a **group** — a `value` key makes it a leaf (throws); `status` is reserved for the computed step property (throws) |
 | Expecting `nextStep()` to visit a hidden step | `nextStep()` skips steps whose `isVisible` is `false` — that's the branching mechanism. Their values stay in `flow.values` but are excluded from finalize validation |
