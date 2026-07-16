@@ -516,9 +516,9 @@ Accessing `form.email` returns a `FieldProxyNode`:
 | `onValueChange` | `(v) => void` | R | Callback form of value setter |
 
 **Spread-safe — and this is the primary rendering mechanism.** `{...form.email}`
-yields exactly the properties above (config internals hidden), so it drops straight
-into a thin adapter component: `<Input {...form.email} />`. The spread carries **both**
-sides of the binding:
+yields the field-state props above **except `dirty` / `submitting` / `submit()`**
+(config internals hidden), so it drops straight into a thin adapter component:
+`<Input {...form.email} />`. The spread carries **both** sides of the binding:
 
 - **`value`** — the current value (display), and
 - **`onValueChange(v)`** — a **stable** functional setter (`v => { field.value = v }`).
@@ -652,6 +652,9 @@ const fieldMapping = defineFieldMapping({
 });
 const store = new Palistor({ config, fieldMapping });
 
+// FieldProps = the single mapped field's proxy type (renamed names — see "Typing behavior"):
+type FieldProps = ApplyFieldMapping<FieldProxyNode<string>, typeof fieldMapping>;
+
 export function Field({
   label, value = "", placeholder, onValueChange, isVisible = true,
   required, disabled, readOnly, error, helperText,          // renamed names from fieldMapping
@@ -679,7 +682,11 @@ field is the classic case — the `value → isSelected/checked` conversion is h
 the call site stays a **clean spread**:
 
 ```tsx
-export function Checkbox(props: FieldProxyNode<boolean> & Partial<Extra>) {
+import { Checkbox as HeroUICheckbox } from "@heroui/react";
+
+type CheckboxExtra = Omit<React.ComponentProps<typeof HeroUICheckbox>, keyof FieldProxyNode<boolean>>;
+
+export function Checkbox(props: FieldProxyNode<boolean> & Partial<CheckboxExtra>) {
   const { isVisible, value, onValueChange, label, description, errorMessage, ...rest } = props;
   if (!isVisible) return null;
   const helperText = errorMessage ?? description;            // many-to-one — done here, not in fieldMapping
@@ -756,10 +763,21 @@ does NOT cover (use a thin per-component adapter over the already-renamed spread
 | Many-to-one | MUI `helperText = isInvalid ? errorMessage : description` | two internal sources → one name |
 | Extra props | derive `aria-invalid` from `isInvalid` | creates new keys, not a rename |
 
+These all belong **inside the adapter** (see [The Adapter Pattern](#the-adapter-pattern-write-once-spread-everywhere)) — the call site stays a clean spread. Example: an Ant-style `Input` that turns `error → status` internally, so `<Input {...form.email} />` never needs a per-call override:
+
 ```tsx
-// Escape hatch for a value transform, on top of the renamed spread:
-const status = form.email.error ? "error" : undefined;
-<Input {...form.email} status={status} />
+import { Input as AntInput } from "antd";
+
+type AntExtra = Omit<React.ComponentProps<typeof AntInput>, keyof FieldProxyNode<string>>;
+
+// `error` here is the fieldMapping-renamed `isInvalid`
+export function Input(props: FieldProxyNode<string> & Partial<AntExtra>) {
+  const { isVisible, error, ...rest } = props;
+  if (!isVisible) return null;
+  return <AntInput {...rest} status={error ? "error" : undefined} />;  // value transform, inside
+}
+
+<Input {...form.email} />   // clean spread — the transform is hidden in the adapter
 ```
 
 ## Store Public Methods
@@ -1549,5 +1567,5 @@ function StepIndicator({ flow }: { flow: FlowProxyNode<Steps> }) {
 
 - `useForm(subtree)` in child components creates independent tracking — child re-renders don't cascade to parent
 - Parent passing `form.passport` as prop does NOT re-render when passport's fields change (no field state read = no tracking)
-- Spread `{...form.email}` reads all field props — component re-renders on any prop change of that field
-- Reading only `form.email.value` — re-renders only on value change, not on visibility/validation changes
+- Spread `{...form.email}` reads all field props — component re-renders on any prop change of that field. This is exactly what you want for an **editable input**: it must react to `isRequired` / `errorMessage` / `isVisible` changes, so the spread-into-adapter default is correct there.
+- Reading only `form.email.value` — re-renders only on value change, not on visibility/validation changes. Use this narrow read for **display-only** usages (e.g. `<span>{u.name.value}</span>`, a read-only table cell) where you don't need the other props.
