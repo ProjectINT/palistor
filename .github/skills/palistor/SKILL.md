@@ -13,6 +13,7 @@ description: "Build forms with the Palistor reactive form state manager. Use whe
 - Working with entity lists (add/remove/edit items)
 - Building multi-step wizards/flows with `defineFlow` / `defineStep` (linear or branching)
 - Configuring async resolve, persist, submit/reset pipelines
+- Handling a failed list load — `list.error` / `list.resolveStatus` / `list.reload()`
 - Remapping field prop names for a UI library (`fieldMapping` — e.g. `isRequired → required`)
 - Debugging re-render or dirty tracking issues
 
@@ -49,7 +50,7 @@ import type {
   TypedListNode, ListResolver, TemplateConfig,
   FieldMapping, ApplyFieldMapping,
   PersistDriver, PersistOptions, PersistManager,
-  Resolve, NotifyFn, ResolveErrorContext,
+  Resolve, NotifyFn, ResolveErrorContext, ResolveStatus,
   // Flows (defineFlow / defineStep)
   FlowProxyNode, FlowStepsProxy, FlowStepProxy,
   FlowNode, FlowStep, AnyFlowStep, FlowValues, FlowError,
@@ -130,6 +131,7 @@ const users = defineList<User>({
 | `InferEntity<T>` | Extract entity type from `PalistorRef<TEntity>` |
 | `TemplateConfig<TEntity>` | Typed template — keys of entity mapped to `ConfigNode<TEntity[K]>` |
 | `ListResolver<TEntity>` | Typed resolver — `(values) => Promise<TEntity[]>` |
+| `ResolveStatus` | `"idle" \| "pending" \| "resolved" \| "error"` — type of `list.resolveStatus` |
 | `FieldMapping` | Rename map `internal → external` for the `fieldMapping` option (keys = mappable field props, values = your names) |
 | `ApplyFieldMapping<T, M>` | Applies a mapping to a proxy-node type (renames keys) — for manual prop typing |
 | `FlowNode<S>` | Config-node type returned by `defineFlow` (branded group carrying the step tuple) |
@@ -562,7 +564,10 @@ Plus all child fields as proxy sub-properties.
 | `items` | `ReadonlyArray<EntityProxy>` | All entities in order |
 | `length` | `number` | Item count |
 | `loading` | `boolean` | List resolver running |
+| `error` | `unknown \| null` | Error thrown by the last resolve; `null` on success or before any run |
+| `resolveStatus` | `ResolveStatus` | `"idle" \| "pending" \| "resolved" \| "error"` |
 | `dirty` | `boolean` | Item IDs differ from initial |
+| `reload()` | `void` | Force a resolver re-run (ignores the resolved-state dedup); no-op without a resolver |
 | `map(fn)` | `R[]` | `(item, index, id) => R` — iterate for rendering |
 | `add(id: string)` | `void` | Add existing entity by ID |
 | `add(values: Record)` | `TItem` | Add from values object — **returns created entity proxy** |
@@ -571,6 +576,12 @@ Plus all child fields as proxy sub-properties.
 | `setItems(ids)` | `void` | Bulk replace list contents |
 | `getValues()` | `Array<Record<string, unknown>>` | Plain values snapshot of all items — use for `console.log`, serialization, or comparison |
 | `[Symbol.iterator]` | | Iterable |
+
+`loading` / `error` / `resolveStatus` are three projections of one resolve state, so they are always
+coherent. Reading `error` in a component makes it re-render when the error appears **and** when it
+clears. `error` / `resolveStatus` / `reload` are **list-only**: group and flow nodes do not expose
+them yet (a group resolver's failure is still reachable only via its `onError`), and they are never
+renamed by `fieldMapping` — see [Resolve state on lists](#resolve-state-loading--error--reload).
 
 ## Field Name Mapping (fieldMapping)
 
@@ -743,6 +754,10 @@ external names, any string):
 
 - Group nodes project their `value`/`dirty`/`loading` (and `isRequired`/`isInvalid`/… on GET); `submit`/`reset`/`values` are never renamed.
 - List nodes project `loading`/`dirty`; `items`/`add`/`map`/… are never renamed.
+- **`error` / `resolveStatus` / `reload` on a list are matched *before* the mapping is applied**, so a
+  mapping such as `{ isInvalid: "error" }` does not shadow them. Consequence, and it is intentional:
+  on a **field** `.error` is the renamed validation flag, on a **list** `.error` is the resolve error.
+  The two never coexist on one node.
 - `componentProps` keys are never renamed.
 
 ### Typing behavior
@@ -910,8 +925,8 @@ const config = { filter: { value: "" }, users };
 2. **Deferred via queueMicrotask**: Safe to call from React render (no "Cannot update during render" error)
 3. **Deduplication**: Multiple accesses while resolver is pending → resolver called only once
 4. **Auto-deps**: Resolver accesses to `values.filter` are tracked; future changes auto-retrigger
-5. **Success**: Resolver returns `Array<{ id, ...fields }>` → entities upserted via `store.set()` → `itemIds` updated → `initialItemIds` saved (dirty = false) → `loading = false` → notify
-6. **Error**: `onError` called → `loading = false` → notify
+5. **Success**: Resolver returns `Array<{ id, ...fields }>` → entities upserted via `store.set()` → `itemIds` updated → `initialItemIds` saved (dirty = false) → `loading = false`, `error = null`, `resolveStatus = "resolved"` → notify
+6. **Error**: `onError` called → `loading = false`, `error = <thrown value>`, `resolveStatus = "error"` → notify (items are left untouched)
 7. **Pending retrigger**: If a dep changes WHILE resolver is pending, resolver re-runs automatically after completion with fresh values
 
 ```tsx
@@ -929,6 +944,36 @@ function UserList() {
   );
 }
 ```
+
+### Resolve state: loading / error / reload
+
+A failed list resolve is **not** an empty list — read `list.error` to tell them apart. `loading`,
+`error` and `resolveStatus` are projections of one resolve state (no separate error state exists),
+and all three are reactive: a component reading `error` re-renders on both its appearance and its
+disappearance. Works identically for root lists and per-entity nested lists.
+
+```tsx
+function Users() {
+  const form = useForm(store);
+  const users = form.users;
+
+  if (users.error) return <LoadError onRetry={() => users.reload()} />;
+  if (users.loading) return <Spinner />;
+
+  return <ul>{users.map((u, i, id) => <li key={id}>{u.name.value}</li>)}</ul>;
+}
+```
+
+- `reload()` re-runs the resolver **even after a successful load** (unlike a plain re-read, which is
+  deduped once resolved), but never spawns a parallel run while one is in flight.
+- Its identity is stable across renders — safe in a deps array or an `onRetry` prop.
+- No resolver on the list → `reload()` is a no-op and `resolveStatus` stays `"idle"`.
+- `onError` / `notify` are unchanged and independent: the toast channel still fires, `error` is just
+  the state that survives it.
+- `error` stays `unknown` — a resolver can throw anything; normalize it at the consumer.
+
+> **Lists only for now.** Group and flow nodes store the same resolve error internally but expose no
+> `error` / `resolveStatus` / `reload` — use their `onError` callback there.
 
 ### Manual list (no resolver)
 
@@ -956,6 +1001,8 @@ const form = useForm(store);
 form.users.items;              // ReadonlyArray<EntityProxy>
 form.users.length;             // number
 form.users.loading;            // boolean — resolver running?
+form.users.error;              // unknown | null — last resolve error
+form.users.resolveStatus;      // "idle" | "pending" | "resolved" | "error"
 form.users.dirty;              // boolean — itemIds differ from initial?
 form.users.getById("u1");     // EntityProxy | undefined
 form.users.map((user, i, id) => <Row key={id} user={user} />);
@@ -966,6 +1013,9 @@ form.users.add("u1");                    // add existing entity by ID
 form.users.add({ id: "u2", name: "Bob" }); // upsert entity + add to list
 form.users.remove("u1");                 // remove from list (entity STAYS in registry)
 form.users.setItems(["u1", "u2", "u3"]); // bulk replace
+
+// ─── Resolve control ─────────────────────────────────────
+form.users.reload();                     // force a resolver re-run (retry / refresh)
 
 // ─── Plain values snapshot ───────────────────────────────
 // getValues() returns a plain Array<Record<string, unknown>> — safe to log/serialize.
@@ -1126,7 +1176,7 @@ function UsersPage() {
 
 | Level | Trigger | Config location | What it does |
 |-------|---------|-----------------|--------------|
-| **List resolver** | First access to `list.items` / `list.length` / `list.map` (lazy) | `users[1].resolve.resolver` | Loads the entity list — returns `Array<{ id, ...fields }>`. After completion, automatically triggers all template field resolvers for all returned entities. |
+| **List resolver** | First access to `list.items` / `list.length` / `list.map` (lazy), or `list.reload()` (forced re-run) | `users[1].resolve.resolver` | Loads the entity list — returns `Array<{ id, ...fields }>`. After completion, automatically triggers all template field resolvers for all returned entities. |
 | **Template field resolve (in list template)** | Automatically after list resolver completes **or** first access to `field.value` / `field.loading` (lazy) | `users[0].isActive.resolve.resolver` | Loads a single field value per entity. Each entity resolves independently. Triggered automatically for all entities after list load, or lazily on first field access. |
 | **Template resolve (edit form)** | `useForm(entity, template)` mount, if not already resolved | `editUserForm.resolve.resolver` | Loads all entity data at once (e.g., user details API). Runs eagerly on mount. |
 
@@ -1521,7 +1571,10 @@ function StepIndicator({ flow }: { flow: FlowProxyNode<Steps> }) {
 | Expecting `store.delete(id)` to remove from lists | `delete` removes from registry; use `list.remove(id)` for list, then `store.delete(id)` if you also want to clear registry |
 | Array config with >2 elements | List node is `[template]` or `[template, listConfig]` — max 2 elements |
 | Ignoring `add(values)` return | `add(values)` returns the created `TItem` proxy — use it |
-| Omitting `resolve.onError` | Required (type-enforced) on **group/field** resolve; optional on **list** resolve config but still recommended — always handle errors |
+| Omitting `resolve.onError` | Required (type-enforced) on **group/field** resolve; optional on **list** resolve config but still recommended — `onError` is the toast channel, `list.error` is the render-time state; they are independent |
+| Treating an empty list as "no data" after a resolve failure | A failed list resolve leaves `loading === false` and `items` empty — check `list.error` (or `list.resolveStatus === "error"`) before rendering an empty state |
+| Reaching into `store.resolveManager` / `store.subscribe` to detect a list error | `@internal`, no stability promise. Use the public `list.error` / `list.resolveStatus` / `list.reload()` |
+| Expecting a re-read of `list.items` to refetch after a successful load | It is deduped once `resolveStatus === "resolved"` — call `list.reload()` for a retry/refresh |
 | `useForm(store, (s) => s.subForm)` — passing store as first arg with selector | Not valid. Use `useForm(store)` then access `.subForm` from the returned proxy. Two-arg form is entity-only: `useForm(entityProxy, selector)` where `entityProxy` comes from `list.items`/`list.getById` |
 | Using `list.items[0]` as React key | Use the `id` argument from `list.map((item, i, id) => ...)` — entity proxy references may change |
 | Reading entity fields outside `useForm` | Always wrap entity proxy in `useForm(entity)` or `useForm(entity, template)` for reactivity |
@@ -1553,7 +1606,7 @@ function StepIndicator({ flow }: { flow: FlowProxyNode<Steps> }) {
 | **Entity Submit** | `entityForm.submit()` | submitting=true → validate template fields → `onSubmit(entityProxy, store)` → `afterSubmit` → submitting=false |
 | **Reset** | `form.reset(vals?)` | build reset patch → apply → capture initial → recompute → notify |
 | **Resolve** | GET on idle group with resolver | optimistic → loading=true → resolver (+ retry) → apply patch → merge initial → loading=false → notify |
-| **List Resolve** | GET on `list.items`/`length`/`map` | queueMicrotask → loading=true → resolver → upsert entities → update itemIds → save initialItemIds → **auto-trigger template field resolves for all entities** → loading=false → notify |
+| **List Resolve** | GET on `list.items`/`length`/`map` (lazy, once) **or** `list.reload()` (forced) | queueMicrotask → status="pending", error=null → resolver → upsert entities → update itemIds → save initialItemIds → **auto-trigger template field resolves for all entities** → status="resolved" → notify. On throw: `onError` → status="error", `error`=thrown value → notify |
 | **Template Field Resolve (auto)** | After List Resolve completes | For each entity × each template field with `resolve`: `triggerEntityFieldResolve(entityId, fieldNode)` (parallel per entity, independent) |
 | **Entity Template Resolve** | `useForm(entity, template)` mount | check isResolved → loading=true → resolver(entityProxy, store) → upsert result → markResolved → loading=false → notify |
 | **Entity Field Resolve (lazy)** | GET on `field.value`/`field.loading` | queueMicrotask → check skipIfResolved → loading=true → resolver(entityValues, store) → write value → loading=false → notify |

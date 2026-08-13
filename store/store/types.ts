@@ -29,7 +29,7 @@ export type TranslateFn = (...args: any[]) => string;
  * Form config type: an object where every key is a config node typed over TValues.
  */
 export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
-import type { NotifyFn, Resolve } from "../resolvePipeline";
+import type { NotifyFn, Resolve, ResolveStatus } from "../resolvePipeline";
 import type { SubmitResult } from "../submitPipeline/submitPipeline";
 
 // ─── Utility types ───────────────────────────────────────────────────────────
@@ -355,6 +355,16 @@ export interface ListProxyNode<TItem> {
   readonly loading: boolean;
   /** true when list membership changed since init/last resolve. */
   readonly dirty: boolean;
+  /**
+   * Error thrown by the last list resolve; `null` on success or before any run.
+   * Stays `unknown` — a resolver can throw anything, normalization is the
+   * consumer's job.
+   */
+  readonly error: unknown | null;
+  /** Raw resolve status: "idle" | "pending" | "resolved" | "error". */
+  readonly resolveStatus: ResolveStatus;
+  /** Force a resolver re-run, ignoring the resolved-state dedup. No-op without a resolver. */
+  reload(): void;
   add(id: string): void;
   add(values: Record<string, unknown>): TItem;
   remove(id: string): void;

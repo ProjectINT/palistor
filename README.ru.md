@@ -658,11 +658,16 @@ const store = new Palistor({
 const form = useForm(store);
 
 // Чтение
-form.users.items       // ReadonlyArray<entity proxy>
-form.users.length      // number
-form.users.loading     // boolean
-form.users.dirty       // boolean — состав списка изменился vs. baseline
-form.users.getValues() // Array<plain object>
+form.users.items         // ReadonlyArray<entity proxy>
+form.users.length        // number
+form.users.loading       // boolean
+form.users.dirty         // boolean — состав списка изменился vs. baseline
+form.users.error         // unknown | null — ошибка последнего resolve
+form.users.resolveStatus // "idle" | "pending" | "resolved" | "error"
+form.users.getValues()   // Array<plain object>
+
+// Перезапуск резолвера (игнорирует дедуп по resolved; no-op без резолвера)
+form.users.reload();
 
 // Итерация
 form.users.map((item, index, id) => <Row key={id} item={item} />)
@@ -675,6 +680,35 @@ form.users.remove("user-id");
 form.users.setItems(["id1", "id2", "id3"]);               // bulk-замена
 form.users.getById("user-id");                            // → прокси элемента | undefined
 ```
+
+### Состояние resolve: loading / error / reload
+
+`loading`, `error` и `resolveStatus` — проекции одного состояния resolve, поэтому они всегда
+согласованы и реактивны: компонент, читающий `error`, перерисуется и при появлении ошибки, и при её
+исчезновении.
+
+```tsx
+function Users() {
+  const form = useForm(store);
+  const users = form.users;
+
+  if (users.error) return <LoadError onRetry={() => users.reload()} />;
+  if (users.loading) return <Spinner />;
+
+  return <ul>{users.map((u, i, id) => <li key={id}>{u.name.value}</li>)}</ul>;
+}
+```
+
+`reload()` перезапускает резолвер даже после успешной загрузки, но никогда не запускает параллельный
+прогон поверх текущего. Идентичность функции стабильна — её можно класть в массив зависимостей или в
+проп `onRetry`. Работает одинаково для корневых и вложенных (per-entity) списков.
+
+> **У групп `error` пока нет.** Ошибка резолвера группы/флоу по-прежнему доступна только через
+> колбэк `onError`; `error` / `resolveStatus` / `reload()` — пока только для списков.
+
+> **Эти три ключа не переименовываются через `fieldMapping`.** Они сопоставляются до применения
+> маппинга, поэтому маппинг вида `{ isInvalid: "error" }` их не перекрывает: у **поля** `.error`
+> остаётся флагом валидации, у **списка** `.error` — ошибка resolve. На одном узле они не встречаются.
 
 ### Элемент списка — свойства прокси
 

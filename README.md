@@ -661,11 +661,16 @@ Items are stored in a **normalized entity registry**: the same entity can appear
 const form = useForm(store);
 
 // Read
-form.users.items       // ReadonlyArray<entity proxy>
-form.users.length      // number
-form.users.loading     // boolean
-form.users.dirty       // boolean — list membership changed vs. baseline
-form.users.getValues() // Array<plain object>
+form.users.items         // ReadonlyArray<entity proxy>
+form.users.length        // number
+form.users.loading       // boolean
+form.users.dirty         // boolean — list membership changed vs. baseline
+form.users.error         // unknown | null — error thrown by the last resolve
+form.users.resolveStatus // "idle" | "pending" | "resolved" | "error"
+form.users.getValues()   // Array<plain object>
+
+// Re-run the resolver (ignores the resolved-state dedup; no-op without a resolver)
+form.users.reload();
 
 // Iterate
 form.users.map((item, index, id) => <Row key={id} item={item} />)
@@ -678,6 +683,35 @@ form.users.remove("user-id");
 form.users.setItems(["id1", "id2", "id3"]);               // bulk replace
 form.users.getById("user-id");                            // → item proxy | undefined
 ```
+
+### Resolve state: loading / error / reload
+
+`loading`, `error` and `resolveStatus` are projections of one resolve state, so they are always
+coherent — and reactive: a component reading `error` re-renders when it appears and when it clears.
+
+```tsx
+function Users() {
+  const form = useForm(store);
+  const users = form.users;
+
+  if (users.error) return <LoadError onRetry={() => users.reload()} />;
+  if (users.loading) return <Spinner />;
+
+  return <ul>{users.map((u, i, id) => <li key={id}>{u.name.value}</li>)}</ul>;
+}
+```
+
+`reload()` re-runs the resolver even after a successful load, but never spawns a parallel run while
+one is in flight. Its identity is stable, so it is safe in a deps array or an `onRetry` prop. Works
+the same for root lists and per-entity nested lists.
+
+> **Groups don't expose `error` yet.** A group/flow resolver's failure is still reachable only
+> through its `onError` callback; `error` / `resolveStatus` / `reload()` are list-only for now.
+
+> **These three keys are not `fieldMapping`-mappable.** They are matched before the mapping is
+> applied, so a mapping such as `{ isInvalid: "error" }` does not shadow them: on a **field** `.error`
+> stays the validation flag, on a **list** `.error` is the resolve error. The two never coexist on
+> one node.
 
 ### List item — proxy properties
 

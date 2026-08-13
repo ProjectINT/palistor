@@ -320,11 +320,16 @@ export class ResolveManager {
    *   owner reference → update `EntityListState.itemIds` → notify (bump the
    *   entityListState version).
    * - On error: onError → status `error`.
+   *
+   * @param force — ignore the `resolved` dedup and re-run (used by
+   *   `list.reload()`). `pending` still dedups on the forced path: a reload
+   *   during an in-flight run must not spawn a parallel one.
    */
   triggerEntityListResolve(
     ownerId: string,
     listConfigNode: AnyConfigNode,
     ownerEntity: EntityNode,
+    force = false,
   ): void {
     const listConfig = Array.isArray(listConfigNode)
       ? (listConfigNode[1] as { resolve?: { resolver?: (...a: unknown[]) => unknown; onError?: (...a: unknown[]) => void; deps?: string[] } } | undefined)
@@ -342,10 +347,16 @@ export class ResolveManager {
       listConfigNode as object,
       new Set(resolve.deps ?? []),
     );
-    // Deduplication: already running or completed (no deps-driven re-resolve here).
-    if (state.status === "pending" || state.status === "resolved") return;
+    // Deduplication: already running (never bypassed — a forced reload must
+    // not spawn a parallel run) or completed (bypassed by `force`; there is no
+    // deps-driven re-resolve on this path).
+    if (state.status === "pending") return;
+    if (!force && state.status === "resolved") return;
 
     state.status = "pending";
+    // Cleared alongside the status so `list.error`/`list.resolveStatus` stay a
+    // coherent pair while the re-run is in flight.
+    state.error = null;
     this.resolveDeps.notifyChanged(new Set<object>([entityListState]));
 
     void (async () => {
@@ -399,6 +410,9 @@ export class ResolveManager {
         this.resolveDeps.notifyChanged(recomputed);
       } catch (err) {
         state.status = "error";
+        // Mirrors executeListResolve: the public `list.error` projection reads
+        // this field for root and per-entity lists alike.
+        state.error = err;
         try {
           (resolve.onError as ((e: unknown, ctx: { notify: NotifyFn }) => void) | undefined)?.(
             err,
@@ -443,8 +457,13 @@ export class ResolveManager {
    * Single trigger point for a list resolve (root + per-entity).
    * Dispatches by `ownerEntity` onto the existing bodies
    * ({@link triggerResolve} → executeListResolve / {@link triggerEntityListResolve}).
+   *
+   * @param force — bypass the `resolved` dedup (see
+   *   {@link triggerEntityListResolve}). The root path needs no flag:
+   *   `executeListResolve` dedups on `pending` only, so it already re-runs from
+   *   `resolved`/`error`.
    */
-  triggerListResolve(listState: ListState): void {
+  triggerListResolve(listState: ListState, force = false): void {
     if (listState.ownerEntity === null) {
       this.triggerResolve(listState.listConfigNode as AnyConfigNode);
       return;
@@ -454,6 +473,7 @@ export class ResolveManager {
       ownerId,
       listState.listConfigNode as AnyConfigNode,
       listState.ownerEntity,
+      force,
     );
   }
 

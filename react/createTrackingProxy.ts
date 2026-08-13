@@ -9,11 +9,12 @@
  * Tracking is node-level: reading ANY property (value, label, isVisible…)
  * adds the whole node to the tracked set.
  *
- * Lists: `items`, `map`, `length`, `loading`, `dirty` on a list proxy add the
- * `ListState` object (the LIST_STATE brand, shared by root and per-entity) to
- * the tracked set. A mutation/resolve bumps that ListState's version →
- * getSnapshot detects the change → only the list re-renders. `map` → entity
- * proxies are wrapped in tracking proxies for per-leaf row tracking.
+ * Lists: `items`, `map`, `length`, `loading`, `dirty`, `error`, `resolveStatus`
+ * on a list proxy add the `ListState` object (the LIST_STATE brand, shared by
+ * root and per-entity) to the tracked set. A mutation/resolve bumps that
+ * ListState's version → getSnapshot detects the change → only the list
+ * re-renders. `map` → entity proxies are wrapped in tracking proxies for
+ * per-leaf row tracking.
  */
 
 import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, LIST_STATE, FLOW_STATE } from "../store/constants";
@@ -116,7 +117,17 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       // a list they must be tracked by ListState, not CONFIG_NODE.
       const listState = (target as any)[LIST_STATE] as object | undefined;
       if (listState) {
-        if (ikey === "length" || ikey === "loading" || ikey === "dirty") {
+        // `error`/`resolveStatus` are matched on the RAW key (LIST_ONLY_KEYS in
+        // store/constants.ts): they are not mappable, and a fieldMapping of
+        // `isInvalid → "error"` would rewrite them into `isInvalid` here and
+        // skip the tracking registration.
+        if (
+          ikey === "length" ||
+          ikey === "loading" ||
+          ikey === "dirty" ||
+          key === "error" ||
+          key === "resolveStatus"
+        ) {
           if (!refs.accessed.has(listState)) {
             refs.accessed.add(listState);
             refs.lastVersions.set(listState, store.getNodeVersion(listState));
@@ -146,7 +157,8 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
               fn(createTrackingProxy(item, refs, store, cache), index, id),
             );
         }
-        // add/remove/setItems/getById — forwarded without tracking.
+        // add/remove/setItems/getById/reload — forwarded without tracking
+        // (calling them does not read reactive state).
         return (target as any)[key];
       }
 

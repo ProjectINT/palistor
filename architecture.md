@@ -277,6 +277,22 @@ Differs from a group resolve — a ListNode's resolver returns `Array<EntityData
 - `listState.version++` → React notices the change
 - `syncListValuesCache(listNode)` → the valuesCache syncs up
 
+#### Public projection of the resolve state
+
+`ResolveState.error` / `.status` have a public projection on the list proxy — `list.error`,
+`list.resolveStatus`, plus `list.reload()` which re-triggers the resolver. No new state is stored:
+all three read the single `ResolveState` returned by `ResolveManager.getListResolveState(listState)`,
+which serves root (`this.states`) and per-entity (`this.entityStates`) lists alike.
+
+- Reactivity: the tracking key is the `ListState` object (the same one `loading`/`dirty` use), so a
+  resolve that flips the status bumps the version a component reading `error` subscribed to.
+- `reload()` ⇒ `triggerListResolve(listState, force = true)`: the forced path bypasses the
+  `resolved` dedup of `triggerEntityListResolve`, never the `pending` one.
+- `error`, `resolveStatus` and `reload` are **not** in `MAPPABLE_KEYS` and are matched against the raw
+  key before `externalToInternal` — see `LIST_ONLY_KEYS` in `store/constants.ts`.
+- Groups/flows keep this state internal for now (`GROUP_SPREAD_KEYS` exposes `loading` only, sourced
+  from `nodeState`, not from the resolve state).
+
 ---
 
 ## Tracking — granular re-renders
@@ -307,8 +323,10 @@ store/
                               setter, componentProps, types, dependencies, onSubmit, beforeSubmit,
                               afterSubmit, reset, onChange, resolve, deps
                             GROUP_SPREAD_KEYS (6): submitting, dirty, revalidate, loading, submit, reset
-                            LIST_SPREAD_KEYS (9): items, length, loading, dirty, add, remove,
-                              getById, setItems, map
+                            LIST_SPREAD_KEYS (13): items, length, loading, dirty, error,
+                              resolveStatus, add, remove, getById, setItems, map, getValues, reload
+                            LIST_ONLY_KEYS (3): error, resolveStatus, reload — list-scoped, NOT
+                              mappable, matched before the externalToInternal translation
   traversal/
     nodeClassifier.ts       Layer 1: isLeaf, isGroup, isListNode, configKeys
     walkFull.ts             Layer 2: walkFull + the TreeVisitor interface
@@ -833,8 +851,11 @@ The proxy exposes the `LIST_SPREAD_KEYS`:
 |---|---|---|
 | `items` | `ReadonlyArray<EntityProjectionProxy>` | Maps `listState.itemIds` → `buildEntityProjectionProxy(…)`. Triggers the lazy resolve. |
 | `length` | `number` | `listState.itemIds.length`. Triggers the lazy resolve. |
-| `loading` | `boolean` | From `nodeState` for the list node |
+| `loading` | `boolean` | `getListResolveState(listState)?.status === "pending"` |
 | `dirty` | `boolean` | `!arraysEqual(listState.itemIds, listState.initialItemIds)` |
+| `error` | `unknown \| null` | `getListResolveState(listState)?.error ?? null` — the last resolve's error |
+| `resolveStatus` | `ResolveStatus` | `getListResolveState(listState)?.status ?? "idle"` |
+| `reload()` | `fn` | `triggerListResolve(listState, force = true)` — stable identity, no-op without a resolver |
 | `add(id \| values)` | `fn` | A string → adds an existing entity by ID; an object → `kernel.set(values)` + add |
 | `remove(id)` | `fn` | Removes from `itemIds` (the entity stays in the registry) |
 | `getById(id)` | `fn` | Finds the EntityProjectionProxy in the current list |

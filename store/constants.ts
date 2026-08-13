@@ -157,6 +157,12 @@ export const SPREADABLE_FIELD_STATE_PROPS = [
  * revalidate, loading) and methods (submit, reset).
  * Child node keys are added dynamically in computeProxyKeys.
  */
+// TODO(list-error-parity): group/flow resolves store `error`/`status` in their
+// ResolveState too, but expose neither — `loading` here comes from
+// `nodeState[node]`, not from the resolve state, and flow nodes override it with
+// a composite over their step nodes. Adding `error`/`resolveStatus` means
+// picking one source of truth across plain group / flow / step plus a matching
+// FLOW_TRACKED_KEYS decision. Deferred; see ListErrorPlan.md §3.
 export const GROUP_SPREAD_KEYS: string[] = [
   "value",
   "submitting",
@@ -194,10 +200,29 @@ export const LIST_SPREAD_KEYS: string[] = [
   "length",
   "loading",
   "dirty",
+  "error",
+  "resolveStatus",
   "add",
   "remove",
   "getById",
   "setItems",
   "map",
   "getValues",
+  "reload",
 ];
+
+/**
+ * List-scoped keys that are deliberately NOT in {@link MAPPABLE_KEYS} and must
+ * be matched against the RAW key, before the `externalToInternal` translation.
+ *
+ * Why: `externalToInternal` is a single global map, not scoped per node kind.
+ * A `fieldMapping` of `{ isInvalid: "error" }` (the very example in
+ * `defineFieldMapping`'s doc-comment) makes
+ * `externalToInternal["error"] === "isInvalid"`, so translating first would turn
+ * `list.error` into `isInvalid`, miss every branch and return `undefined`.
+ *
+ * Consequence, and it is intentional: under such a mapping a FIELD `.error` is
+ * the validation flag while a LIST `.error` is the resolve error. The two never
+ * coexist on one node.
+ */
+export const LIST_ONLY_KEYS = new Set<string>(["error", "resolveStatus", "reload"]);

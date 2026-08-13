@@ -80,7 +80,7 @@ export { Palistor } from "./store/store";
 // Resolve — types and hooks
 // ============================================================================
 
-export type { Resolve, NotifyFn, ResolveErrorContext } from "./store/resolvePipeline/";
+export type { Resolve, NotifyFn, ResolveErrorContext, ResolveStatus } from "./store/resolvePipeline/";
 export { useNotifier } from "./react/useNotifier";
 
 // ============================================================================

@@ -1,4 +1,4 @@
-import { CONFIG_NODE, LIST_STATE, LIST_SPREAD_KEYS } from "../constants";
+import { CONFIG_NODE, LIST_STATE, LIST_ONLY_KEYS, LIST_SPREAD_KEYS } from "../constants";
 import type { MappableKey } from "../constants";
 import type { AnyConfigNode, ListState } from "../store/types";
 import type { EntityData, EntityLeafNode } from "../entityRegistry/types";
@@ -29,12 +29,15 @@ const ENTITY_LIST_SPREAD_KEYS: string[] = [
   "length",
   "loading",
   "dirty",
+  "error",
+  "resolveStatus",
   "map",
   "getById",
   "add",
   "remove",
   "setItems",
   "getValues",
+  "reload",
 ];
 
 // ─── buildListProxy ──────────────────────────────────────────────────────────
@@ -56,6 +59,9 @@ const ENTITY_LIST_SPREAD_KEYS: string[] = [
  *   length      — number of items
  *   loading     — async resolver in progress
  *   dirty       — itemIds differ from the initial snapshot
+ *   error       — error thrown by the last resolve run (null otherwise)
+ *   resolveStatus — raw resolve status ("idle" | "pending" | "resolved" | "error")
+ *   reload()    — force a resolver re-run
  *   add(id)     — add existing entity by ID
  *   add(values) — upsert entity + add to list
  *   remove(id)  — remove entity from list (entity stays in registry)
@@ -245,6 +251,16 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       })
       .filter((v): v is Record<string, unknown> => v !== undefined);
 
+  /**
+   * Force a resolver re-run, ignoring the resolved-state dedup.
+   * Declared once per list proxy: the identity is stable, so it can sit in a
+   * React deps array or an `onRetry` prop without re-triggering effects.
+   * A no-op by construction when the list has no resolver.
+   */
+  const reloadFn = (): void => {
+    kernel.resolveManager.triggerListResolve(listState, true);
+  };
+
   // ─── Proxy object ──────────────────────────────────────────────────────────
 
   // internal → external projection of spread keys (mappable: loading, dirty).
@@ -273,7 +289,10 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       }
 
       // Reverse mapping on input: external → internal (affects loading/dirty).
-      const ikey = kernel.externalToInternal[key] ?? key;
+      // LIST_ONLY_KEYS are matched raw, before the translation: a fieldMapping
+      // of `isInvalid → "error"` would otherwise rewrite `list.error` into
+      // `isInvalid`, miss every case and silently return undefined.
+      const ikey = LIST_ONLY_KEYS.has(key) ? key : (kernel.externalToInternal[key] ?? key);
 
       switch (ikey) {
         case "items":
@@ -291,6 +310,18 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
           return (
             kernel.resolveManager.getListResolveState(listState)?.status === "pending"
           );
+
+        case "error":
+          // Projection of the existing ResolveState — no separate error state.
+          return kernel.resolveManager.getListResolveState(listState)?.error ?? null;
+
+        case "resolveStatus":
+          // No resolve state yet (per-entity list before its first run) reads
+          // as "idle", the same value initResolveStates gives a root list.
+          return kernel.resolveManager.getListResolveState(listState)?.status ?? "idle";
+
+        case "reload":
+          return reloadFn;
 
         case "dirty":
           // dirty by composition: current itemIds differ from initial snapshot
