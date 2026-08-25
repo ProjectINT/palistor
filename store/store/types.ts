@@ -290,13 +290,106 @@ export interface GroupProxyNode {
 // ─── List types ──────────────────────────────────────────────────────────────
 
 /**
+ * Context object passed as the THIRD resolver argument — shared with the
+ * pagination plan (two plans cannot each own arg 3). Passed ALWAYS (never
+ * `undefined`): a list with no filter block gets `filter.values = {}` /
+ * `filter.params = undefined`, so a resolver never needs an existence check.
+ *
+ * `values` (arg 1) keeps its meaning — form values with `$filters` stripped;
+ * the filter is reachable only through `ctx`.
+ */
+export interface ListResolveContext {
+  filter: {
+    /** Full non-derived-included snapshot of the filter's own values (server AND client fields). */
+    values: Record<string, unknown>;
+    /** Built from SERVER fields only (per-field `param` renames, or `$toParams`). */
+    params: unknown;
+    /** The serverKey — the request identity. */
+    key: string;
+  };
+  /** Reserved seam — PaginationPlan (PageRequest). */
+  page?: unknown;
+  /** Reserved seam — the future `sort` block. */
+  sort?: unknown;
+  queryKey: string;
+  /** Reserved seam — resolver cancellation. */
+  signal?: AbortSignal;
+}
+
+/**
+ * One field of a list's `filter` block, in the full leaf vocabulary plus three
+ * filter-specific keys. The 90% case is the literal shorthand instead
+ * (`filter: { search: "" }` — a non-config default expands to `{ value: literal }`).
+ */
+export type FilterFieldConfig<TEntity = Record<string, unknown>> = ConfigNode<any, any> & {
+  /**
+   * Client predicate: keep `item` iff it returns true. Declaring `where` makes
+   * this a CLIENT field: excluded from serverKey, params and resolver deps.
+   * Skipped automatically while the field's value is empty.
+   */
+  where?: (item: TEntity, value: any) => boolean;
+  /** Server param name for this field's value (default: the field key). */
+  param?: string;
+  /** ms to debounce the INVALIDATION this field's changes cause (never the value). */
+  debounce?: number;
+};
+
+/**
+ * A list's `filter` block: fields (literal defaults or {@link FilterFieldConfig})
+ * plus `$`-prefixed block-level options — in a filter block, a `$` key is block
+ * config, everything else is a field.
+ */
+export type FilterBlock<TEntity = Record<string, unknown>> = {
+  [field: string]: unknown;
+} & {
+  /** Cross-field client rule, ANDed after the per-field `where`s. Always runs. */
+  $all?: (item: TEntity, filterValues: Record<string, unknown>) => boolean;
+  /** Escape hatch: shape ALL server params at once (overrides per-field `param`). */
+  $toParams?: (filterValues: Record<string, unknown>, context: Record<string, unknown>) => unknown;
+  /** Persist filter values (opt-in — filters are view state). Default false. Phase 2. */
+  $persist?: boolean;
+};
+
+/**
+ * The `list.filter` proxy: CONTROLS only — no list row is ever reachable here
+ * (rows are read from the list: `list.values` / `list.length`). Field keys are
+ * full field proxies bindable to inputs, exactly like `form.name`.
+ */
+export interface FilterProxyNode {
+  /** Plain snapshot of the FILTER's own values (derived fields included) — never list rows. */
+  readonly values: Record<string, unknown>;
+  /** Bulk write; one notify, one invalidation (flushes any pending debounce). */
+  readonly set: (patch: Record<string, unknown>) => void;
+  /** Back to declared defaults. */
+  readonly reset: () => void;
+  /** Clear one field (or all) to its EMPTY value, not its default. */
+  readonly clear: (field?: string) => void;
+  /** Any non-derived field is non-empty — replaces hand-written hasActiveFilters. */
+  readonly isActive: boolean;
+  /** How many such fields — the badge on a "Filters" button. */
+  readonly activeCount: number;
+  /** A debounced invalidation is queued but not yet issued. */
+  readonly isPending: boolean;
+  /** Filter field proxies by the author's field names. */
+  readonly [field: string]: any;
+}
+
+/**
  * Resolver configuration for a ListNode (like Resolve for a group, but returns
  * an array of entity records). Minimal interface that avoids importing Resolve
  * from resolvePipeline (prevents circular dependencies).
  */
 export interface ListResolveConfig {
-  /** Async data loader — returns array of entity records. */
-  resolver: (values: any, store: ProxyStore<any>) => Promise<Array<Record<string, unknown>>>;
+  /**
+   * Async data loader — returns array of entity records.
+   * `ctx` carries the filter snapshot/params/key (and, later, page/sort) — see
+   * {@link ListResolveContext}. Two-argument resolvers keep working unchanged.
+   */
+  resolver: (
+    values: any,
+    store: ProxyStore<any>,
+    ctx: ListResolveContext,
+  ) => Promise<Array<Record<string, unknown>>>;
   /**
    * Error handler called when resolver throws.
    * ctx.notify — notification function from useNotifier.
@@ -318,6 +411,11 @@ export interface ListResolveConfig {
  */
 export interface ListConfig {
   resolve?: ListResolveConfig;
+  /**
+   * Declared filter block — top-level, NOT inside `resolve`: a list with no
+   * resolver can still be filtered client-side (an all-`where` block).
+   */
+  filter?: FilterBlock<any>;
 }
 
 /**
@@ -343,6 +441,11 @@ export interface ListState {
   itemIds: string[];
   /** Captured at init/resolve — used for membership dirty-tracking. */
   initialItemIds: string[];
+  /**
+   * Optional filter sidecar (root lists with a `filter` block only).
+   * Mutated in place — the ListState identity is never recreated.
+   */
+  filter?: import("../filtering/types").FilterState;
 }
 
 /**
@@ -352,6 +455,19 @@ export interface ListState {
 export interface ListProxyNode<TItem> {
   readonly items: ReadonlyArray<TItem>;
   readonly length: number;
+  /**
+   * Filter controls (lists with a `filter` block only). Rows never appear
+   * here — `list.filter` carries controls, the list carries data.
+   */
+  readonly filter?: FilterProxyNode;
+  /**
+   * VISIBLE item proxies — the render entry point under an active client
+   * filter (an alias of `items`, and what `map` iterates). Present only on a
+   * list with a `filter` block.
+   */
+  readonly values?: ReadonlyArray<TItem>;
+  /** Size of the FULL loaded membership (`length` is the visible set). */
+  readonly fullLength?: number;
   readonly loading: boolean;
   /** true when list membership changed since init/last resolve. */
   readonly dirty: boolean;
@@ -394,7 +510,7 @@ export type TypedListNode<TEntity extends Record<string, any>> =
 
 /** Typed list resolver. */
 export type ListResolver<TEntity extends Record<string, any>> =
-  (values: any, store: ProxyStore<any>) => Promise<TEntity[]>;
+  (values: any, store: ProxyStore<any>, ctx: ListResolveContext) => Promise<TEntity[]>;
 
 /** Typed template: each Entity key → ConfigNode with the matching value type. */
 export type TemplateConfig<TEntity extends Record<string, any>> = {

@@ -1,5 +1,10 @@
 import type { EntityData } from "../entityRegistry";
-import type { ListResolveConfig, ListState } from "../store/types";
+import type { ListResolveConfig, ListResolveContext, ListState } from "../store/types";
+import {
+  buildFilterParams,
+  computeServerKey,
+  getFilterValues,
+} from "../filtering/filterController";
 import { recomputeAndNotify } from "../compute/recompute";
 import { createContextTrackingProxy } from "./createContextTrackingProxy";
 import type { ContextTrackingResult } from "./createContextTrackingProxy";
@@ -116,10 +121,36 @@ export function executeListResolve(
         },
       });
 
-      const result = await resolve.resolver(valuesTracking.proxy, storeProxy);
+      // ── Resolver context (filter snapshot / params / request identity) ──
+      // ctx is ALWAYS passed (filter.values = {} without a filter block), so a
+      // resolver never needs an existence check. The serverKey computed at
+      // launch is stamped as issuedKey; a completion whose key no longer
+      // matches the live issuedKey is dropped (same family as the
+      // status/generation aborts below).
+      const fs = listState.filter;
+      const launchFilterValues = fs ? getFilterValues(fs, nodeState) : {};
+      const launchServerKey = fs ? computeServerKey(fs, nodeState) : "";
+      if (fs) {
+        fs.serverKey = launchServerKey;
+        fs.issuedKey = launchServerKey;
+      }
+      const ctx: ListResolveContext = {
+        filter: {
+          values: launchFilterValues,
+          params: fs
+            ? buildFilterParams(fs, launchFilterValues, (store.context ?? {}) as Record<string, unknown>)
+            : undefined,
+          key: launchServerKey,
+        },
+        queryKey: launchServerKey,
+      };
+
+      const result = await resolve.resolver(valuesTracking.proxy, storeProxy, ctx);
 
       // Abort when the status changed while awaiting (e.g. a reset)
       if (state.status !== "pending") return result;
+      // Drop a completion whose request identity is no longer the live one.
+      if (fs && fs.issuedKey !== launchServerKey) return result;
 
       // Snapshot values BEFORE applying this resolver's own result, so the
       // in-flight-change check below sees only EXTERNAL mutations during the
@@ -162,6 +193,10 @@ export function executeListResolve(
           mergedDeps.add(`$context.${key}`);
         }
       }
+      // Server filter paths are declared, not discovered: the resolver reads
+      // them via ctx (never via the tracked values proxy), so re-union them
+      // after every run or a re-run would lose the dep set.
+      if (fs) for (const p of fs.serverPaths) mergedDeps.add(p);
       state.dependencies = mergedDeps;
 
       // Update loading = false, status = resolved
@@ -222,6 +257,11 @@ export function executeListResolve(
           for (const key of contextTracking.getAccessedKeys()) {
             mergedDeps.add(`$context.${key}`);
           }
+        }
+        // Declared server filter paths survive the error path too — a filter
+        // change after a failed run must still re-trigger the resolver.
+        if (listState.filter) {
+          for (const p of listState.filter.serverPaths) mergedDeps.add(p);
         }
         state.dependencies = mergedDeps;
       }

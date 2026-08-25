@@ -1,9 +1,18 @@
-import { CONFIG_NODE, LIST_STATE, LIST_ONLY_KEYS, LIST_SPREAD_KEYS } from "../constants";
+import {
+  CONFIG_NODE,
+  FILTER_SPREAD_KEYS,
+  FILTER_STATE,
+  LIST_STATE,
+  LIST_ONLY_KEYS,
+  LIST_SPREAD_KEYS,
+} from "../constants";
 import type { MappableKey } from "../constants";
 import type { AnyConfigNode, ListState } from "../store/types";
 import type { EntityData, EntityLeafNode } from "../entityRegistry/types";
 import type { Palistor } from "../store/palistor";
 import { generateTmpId } from "../entityRegistry";
+import { applyClientFilter } from "../filtering/filterController";
+import { buildFilterProxy } from "./buildFilterProxy";
 import {
   buildEntityProjectionProxy,
   buildEntityValuesWithLists,
@@ -127,6 +136,16 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
     }
   };
 
+  /**
+   * VISIBLE membership: the read-time client-filter projection when the list
+   * has active `where` fields, the full `itemIds` otherwise. `itemIds` itself
+   * is never rewritten — filtering is a projection, not a mutation.
+   */
+  const visibleIds = (): string[] =>
+    listState.filter?.hasClientFields
+      ? applyClientFilter(listState, kernel)
+      : listState.itemIds;
+
   /** Trigger lazy list resolve on first access (root + per-entity, single path). */
   const triggerLazyResolveIfNeeded = (): void => {
     if (!listConfig?.resolve) return;
@@ -234,7 +253,7 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
   const mapFn = <R>(
     fn: (item: object, index: number, id: string) => R,
   ): R[] => {
-    return listState.itemIds
+    return visibleIds()
       .map((id, index) => {
         const proxy = buildItemProxy(id);
         if (!proxy) return undefined;
@@ -263,11 +282,23 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
 
   // ─── Proxy object ──────────────────────────────────────────────────────────
 
+  // Lazily built, stable filter proxy (lists with a `filter` block only).
+  let filterProxy: object | null = null;
+  const getFilterProxy = (): object => {
+    if (!filterProxy) filterProxy = buildFilterProxy(listState, kernel);
+    return filterProxy;
+  };
+
   // internal → external projection of spread keys (mappable: loading, dirty).
+  // FILTER_SPREAD_KEYS are appended raw and only for a list WITH a filter
+  // block — a list without one keeps its key set byte-for-byte identical.
   const fwd = kernel.fieldMapping;
-  const spreadKeys = (owner ? ENTITY_LIST_SPREAD_KEYS : LIST_SPREAD_KEYS).map(
-    (k) => fwd[k as MappableKey] ?? k,
-  );
+  const spreadKeys = [
+    ...(owner ? ENTITY_LIST_SPREAD_KEYS : LIST_SPREAD_KEYS).map(
+      (k) => fwd[k as MappableKey] ?? k,
+    ),
+    ...(listState.filter ? FILTER_SPREAD_KEYS : []),
+  ];
 
   const proxy = new Proxy(listConfigNode as unknown as Record<string, unknown>, {
     get(_target, key: string | symbol) {
@@ -275,11 +306,14 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       if (key === CONFIG_NODE) return listConfigNode;
       // The list identity brand — the tracking key (uniform for root and per-entity).
       if (key === LIST_STATE) return listState;
+      // The filter sidecar brand — lets the tracking proxy subscribe visible
+      // reads to the client filter fields. undefined without a filter block.
+      if (key === FILTER_STATE) return listState.filter;
 
       if (typeof key === "symbol") {
         if (key === Symbol.iterator) {
           return function* () {
-            for (const id of listState.itemIds) {
+            for (const id of visibleIds()) {
               const itemProxy = buildItemProxy(id);
               if (itemProxy) yield itemProxy;
             }
@@ -295,15 +329,32 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       const ikey = LIST_ONLY_KEYS.has(key) ? key : (kernel.externalToInternal[key] ?? key);
 
       switch (ikey) {
+        // ── Filter surface (raw-matched via LIST_ONLY_KEYS) ────────────────
+        case "filter":
+          return listState.filter ? getFilterProxy() : undefined;
+
+        case "values":
+          // VISIBLE item proxies — the render entry point (alias of `items`).
+          if (!listState.filter) return undefined;
+          triggerLazyResolveIfNeeded();
+          return visibleIds()
+            .map(buildItemProxy)
+            .filter((item): item is object => item !== undefined);
+
+        case "fullLength":
+          if (!listState.filter) return undefined;
+          triggerLazyResolveIfNeeded();
+          return listState.itemIds.length;
+
         case "items":
           triggerLazyResolveIfNeeded();
-          return listState.itemIds
+          return visibleIds()
             .map(buildItemProxy)
             .filter((item): item is object => item !== undefined);
 
         case "length":
           triggerLazyResolveIfNeeded();
-          return listState.itemIds.length;
+          return visibleIds().length;
 
         case "loading":
           // Single source for root and per-entity: the resolve-state status.
@@ -366,7 +417,7 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       // Array targets have a non-configurable `length` property.
       // The proxy invariant requires that we mirror this exactly.
       if (key === "length") {
-        return { configurable: false, enumerable: false, writable: true, value: listState.itemIds.length };
+        return { configurable: false, enumerable: false, writable: true, value: visibleIds().length };
       }
       return { configurable: true, enumerable: true, writable: false };
     },

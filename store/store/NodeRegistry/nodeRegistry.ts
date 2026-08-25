@@ -91,6 +91,19 @@ export class NodeRegistry {
     // materialize per-entity lists into projectionObj (getValues).
     collectListFieldKeys(rootConfig, this.listFieldKeys);
 
+    // Phase 4.5: filter nodes live OUTSIDE the config tree ($filters.<listPath>),
+    // so buildNodeMaps never reaches them — assign their dot-paths/parents here.
+    // The paths feed notifications (changedPaths) and resolver dep matching.
+    for (const ls of this.allListStates) {
+      const fs = ls.filter;
+      if (!fs) continue;
+      this.nodePaths.set(fs.groupNode, `$filters.${fs.listPath}`);
+      for (const rt of fs.fields.values()) {
+        this.nodePaths.set(rt.node, rt.path);
+        this.nodeParents.set(rt.node, fs.groupNode);
+      }
+    }
+
     // Phase 5 (defineFlow): register FlowState for nodes carrying the
     // __flowSteps marker. Runs after buildNodeMaps — flow node paths are
     // already assigned (needed for the persist snapshot and reset scope).

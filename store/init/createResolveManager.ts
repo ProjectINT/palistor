@@ -25,6 +25,7 @@ import {
   resetResolveState,
 } from "../resolvePipeline/index";
 import { isLeafNode } from "../traversal";
+import { computeServerKey } from "../filtering/filterController";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ export interface ResolveManagerDeps {
   // ─── List specifics ──────────────────────────────────────────────────────
   /** All ListState objects from NodeRegistry (for list-resolve dispatch). */
   listStates: WeakMap<object, ListState>;
+  /** All root ListStates in registration order (filter dep seeding / the invalidation gate). */
+  allListStates?: ListState[];
   /**
    * Upserts entities and registers their leaves without calling notify.
    * Called from executeListResolve after a successful list resolver.
@@ -117,12 +120,18 @@ export class ResolveManager {
   private readonly entityRegistry: EntityRegistry;
   /** Entries waiting for their contextDeps to be satisfied before launching. */
   private readonly pendingContextQueue = new Set<AnyResolveEntry>();
+  /**
+   * SERVER filter-field dep path → owning root ListState. A filter is owned by
+   * exactly one list, so a server-field change invalidates its own list
+   * directly (through the debounce gate) instead of by generic path matching.
+   */
+  private readonly filterServerPathIndex = new Map<string, ListState>();
 
   constructor(deps: ResolveManagerDeps) {
     const {
       rootConfig, nodeState, recompute, notifyChanged, notify,
       initialValueMap, valuesCache, store,
-      listStates, setEntitiesRaw, syncListValuesCache, entityRegistry,
+      listStates, allListStates = [], setEntitiesRaw, syncListValuesCache, entityRegistry,
     } = deps;
 
     this.listStates = listStates;
@@ -149,6 +158,19 @@ export class ResolveManager {
       arr.push(entry);
     }
 
+    // Declared filters: seed SERVER field paths into the list's resolver deps
+    // BEFORE run 1 (filters have no auto-dep bootstrap gap) and index them for
+    // the invalidation gate in the post-notify hook.
+    for (const ls of allListStates) {
+      const fs = ls.filter;
+      if (!fs || fs.serverPaths.size === 0) continue;
+      const state = this.states.get(ls.listConfigNode);
+      if (state) {
+        for (const p of fs.serverPaths) state.dependencies.add(p);
+      }
+      for (const p of fs.serverPaths) this.filterServerPathIndex.set(p, ls);
+    }
+
     this.resolveDeps = {
       rootConfig,
       nodeState,
@@ -156,7 +178,12 @@ export class ResolveManager {
       recompute,
       notifyChanged,
       notify,
-      getValues: () => structuredClone(valuesCache.values) as Record<string, unknown>,
+      getValues: () => {
+        const clone = structuredClone(valuesCache.values) as Record<string, unknown>;
+        // The resolver's `values` argument never sees filters — ctx.filter is the one way in.
+        delete clone["$filters"];
+        return clone;
+      },
       initialValueMap,
       valuesCache,
       store,
@@ -495,8 +522,34 @@ export class ResolveManager {
     if (this.resolveEntries.length === 0 && this.templateFieldEntries.length === 0) return null;
 
     return (changedPaths: Set<string>) => {
+      // ── Filter invalidation gate ─────────────────────────────────────────
+      // Server filter-field changes are routed to their owning list directly,
+      // ahead of (and excluded from) the generic dep matching — otherwise the
+      // seeded serverPaths would re-trigger the list immediately and bypass
+      // the per-field debounce. Client-field paths appear in no dep set at
+      // all, by construction.
+      let effectivePaths = changedPaths;
+      if (this.filterServerPathIndex.size > 0) {
+        let touched: Map<ListState, string[]> | null = null;
+        for (const p of changedPaths) {
+          const ls = this.filterServerPathIndex.get(p);
+          if (!ls) continue;
+          touched ??= new Map();
+          const arr = touched.get(ls);
+          if (arr) arr.push(p);
+          else touched.set(ls, [p]);
+        }
+        if (touched) {
+          effectivePaths = new Set(changedPaths);
+          for (const [ls, paths] of touched) {
+            for (const p of paths) effectivePaths.delete(p);
+            this._scheduleFilterInvalidation(ls, paths);
+          }
+        }
+      }
+
       const toRetrigger = findResolvesToRetrigger(
-        changedPaths,
+        effectivePaths,
         this.states,
         this.resolveEntries,
       );
@@ -523,13 +576,15 @@ export class ResolveManager {
       }
 
       // Mark resolvers that were ALREADY pending (not just triggered) whose
-      // dependencies changed — they re-run after the current resolution completes.
+      // dependencies changed — they re-run after the current resolution
+      // completes. Filter paths are excluded here too: the gate owns them
+      // (it marks pendingRetrigger itself when the debounce flushes).
       for (const entry of this.resolveEntries) {
         if (justTriggeredNodes.has(entry.node as object)) continue;
         const state = this.states.get(entry.node as object);
         if (!state || state.status !== "pending") continue;
         for (const dep of state.dependencies) {
-          if (changedPaths.has(dep)) {
+          if (effectivePaths.has(dep)) {
             state.pendingRetrigger = true;
             break;
           }
@@ -541,6 +596,114 @@ export class ResolveManager {
         this._retriggerEntityFieldResolves(changedPaths);
       }
     };
+  }
+
+  // ─── Filter invalidation gate ──────────────────────────────────────────────
+
+  /**
+   * Debounce gate for server filter-field changes. The field value has ALREADY
+   * updated synchronously (inputs never lag; computed props and the client
+   * projection see it immediately) — what is delayed is the ISSUE.
+   *
+   * - The timer is armed with the max `debounce` of the changed fields; an
+   *   undebounced change (or `set`/`reset`/`clear` via `forceImmediate`)
+   *   flushes immediately, carrying every debounced field's CURRENT value.
+   * - The trailing edge re-reads the current serverKey — never a value
+   *   captured at arm time — and issues iff it differs from `issuedKey`.
+   * - The first resolve is never debounced: it goes through the normal
+   *   lazy/eager trigger, not through this gate.
+   */
+  private _scheduleFilterInvalidation(listState: ListState, changedPaths: string[]): void {
+    const fs = listState.filter;
+    if (!fs) return;
+    // Without a resolver there is nothing to issue (an all-client or
+    // resolver-less list) — and nothing to debounce.
+    if (!this.resolveEntryMap.has(listState.listConfigNode as AnyConfigNode)) return;
+
+    let delay = 0;
+    if (!fs.forceImmediate) {
+      let sawUndebounced = false;
+      for (const p of changedPaths) {
+        const rt = fs.fieldsByPath.get(p);
+        if (!rt || rt.isClient || rt.isDerived) continue;
+        if (rt.debounce && rt.debounce > 0) delay = Math.max(delay, rt.debounce);
+        else sawUndebounced = true;
+      }
+      // One request per list, carrying the whole params object: an undebounced
+      // change flushes NOW and includes the debounced fields' current values.
+      if (sawUndebounced) delay = 0;
+    }
+
+    if (delay > 0) {
+      const wasPending = fs.pendingTimer !== null;
+      if (fs.pendingTimer) clearTimeout(fs.pendingTimer);
+      fs.pendingTimer = setTimeout(() => {
+        fs.pendingTimer = null;
+        this._notifyFilterState(listState);
+        this._flushFilterInvalidation(listState);
+      }, delay);
+      // isPending flipped false → true: bump the list's version for tracking.
+      if (!wasPending) this._notifyFilterState(listState);
+      return;
+    }
+
+    if (fs.pendingTimer) {
+      clearTimeout(fs.pendingTimer);
+      fs.pendingTimer = null;
+      this._notifyFilterState(listState);
+    }
+    this._flushFilterInvalidation(listState);
+  }
+
+  /**
+   * Issue the invalidation iff the current serverKey differs from the last
+   * issued one (`serverKey === issuedKey` is the whole arbitration: reverted
+   * values, mixed debounces and already-flushed patches all decline here).
+   *
+   * Public for `filter.set()/reset()/clear()`: they flush any pending timer
+   * and must not lose a queued debounced change.
+   */
+  flushFilterInvalidation(listState: ListState): void {
+    this._flushFilterInvalidation(listState);
+  }
+
+  private _flushFilterInvalidation(listState: ListState): void {
+    const fs = listState.filter;
+    if (!fs) return;
+    const entry = this.resolveEntryMap.get(listState.listConfigNode as AnyConfigNode);
+    const state = this.states.get(listState.listConfigNode);
+    if (!entry || !state) return;
+
+    const currentKey = computeServerKey(fs, this.resolveDeps.nodeState);
+    fs.serverKey = currentKey;
+    if (currentKey === fs.issuedKey) return;
+
+    // idle = lazy resolve never started — the first run reads current values anyway.
+    if (state.status === "idle") return;
+    if (state.status === "pending") {
+      // Re-run after the in-flight resolution completes (existing mechanism);
+      // that re-run recomputes the serverKey at its own launch.
+      state.pendingRetrigger = true;
+      return;
+    }
+
+    // Same auto-retrigger cap the generic dep path applies.
+    const count = (state.autoRetriggerCount ?? 0) + 1;
+    if (count > MAX_AUTO_RETRIGGERS) {
+      console.warn(
+        `Palistor: resolver auto-retrigger cap (${MAX_AUTO_RETRIGGERS}) reached ` +
+          `for filtered list. Possible circular dependency.`,
+      );
+      return;
+    }
+    state.autoRetriggerCount = count;
+    resetResolveState(entry.node as AnyConfigNode, this.states);
+    this._executeEntry(entry);
+  }
+
+  /** Bump the list's version (isPending and friends) — reentrancy-safe via the hub. */
+  private _notifyFilterState(listState: ListState): void {
+    this.resolveDeps.notifyChanged(new Set<object>([listState as unknown as object]));
   }
 
   /**

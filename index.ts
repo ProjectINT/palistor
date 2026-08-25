@@ -72,6 +72,11 @@ export type {
   ListResolver,
   TemplateConfig,
   InferEntity,
+  ListProxyNode,
+  ListResolveContext,
+  FilterBlock,
+  FilterFieldConfig,
+  FilterProxyNode,
 } from "./store/store/types";
 export type { Palistor as PalistorProxy } from "./store/store/types";
 export { Palistor } from "./store/store";

@@ -66,7 +66,9 @@ export function recomputeLeaves(
 
   for (const { node } of computeNodes) {
     const prev = nodeState.get(node);
-    const currentValue = prev?.value ?? "";
+    // `prev.value` is taken verbatim (null included — a filter field declared
+    // as `brand: null` must stay null); "" is only the no-state fallback.
+    const currentValue = prev === undefined ? "" : prev.value;
     // Preserve revalidate flag: skip validation when revalidate is false
     const revalidate = prev?.revalidate ?? false;
     // Group-scoped values: config functions see their own group's values, not

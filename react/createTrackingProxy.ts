@@ -17,8 +17,9 @@
  * per-leaf row tracking.
  */
 
-import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, LIST_STATE, FLOW_STATE } from "../store/constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, FILTER_STATE, LIST_STATE, FLOW_STATE } from "../store/constants";
 import type { ProxyStore } from "../store/store";
+import type { FilterState } from "../store/filtering/types";
 
 /**
  * Flow-/step-proxy keys that are reactive through the FlowState object's
@@ -117,38 +118,54 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
       // a list they must be tracked by ListState, not CONFIG_NODE.
       const listState = (target as any)[LIST_STATE] as object | undefined;
       if (listState) {
-        // `error`/`resolveStatus` are matched on the RAW key (LIST_ONLY_KEYS in
+        const trackNode = (node: object): void => {
+          if (!refs.accessed.has(node)) {
+            refs.accessed.add(node);
+            refs.lastVersions.set(node, store.getNodeVersion(node));
+          }
+        };
+        // A VISIBLE read is a function of the ListState AND the client filter
+        // fields: a component rendering `list.values` must re-render on a
+        // keystroke in a `where` field without ever reading the filter.
+        // (Server fields reach the visible set through resolve → ListState.)
+        const trackClientFilterFields = (): void => {
+          const fState = (target as any)[FILTER_STATE] as FilterState | undefined;
+          if (!fState || !fState.hasClientFields) return;
+          for (const rt of fState.fields.values()) {
+            if (rt.isClient) trackNode(rt.node as object);
+          }
+        };
+        // `error`/`resolveStatus` (and the filter surface `values`/`fullLength`/
+        // `filter`) are matched on the RAW key (LIST_ONLY_KEYS in
         // store/constants.ts): they are not mappable, and a fieldMapping of
         // `isInvalid → "error"` would rewrite them into `isInvalid` here and
         // skip the tracking registration.
         if (
-          ikey === "length" ||
           ikey === "loading" ||
           ikey === "dirty" ||
           key === "error" ||
-          key === "resolveStatus"
+          key === "resolveStatus" ||
+          key === "fullLength"
         ) {
-          if (!refs.accessed.has(listState)) {
-            refs.accessed.add(listState);
-            refs.lastVersions.set(listState, store.getNodeVersion(listState));
-          }
+          trackNode(listState);
           return (target as any)[key];
         }
-        if (ikey === "items") {
-          if (!refs.accessed.has(listState)) {
-            refs.accessed.add(listState);
-            refs.lastVersions.set(listState, store.getNodeVersion(listState));
-          }
+        if (ikey === "length") {
+          trackNode(listState);
+          trackClientFilterFields();
+          return (target as any)[key];
+        }
+        if (ikey === "items" || (key === "values" && (target as any)[FILTER_STATE])) {
+          trackNode(listState);
+          trackClientFilterFields();
           const rawItems = (target as any)[key] as object[];
           return rawItems.map((item: object) =>
             createTrackingProxy(item, refs, store, cache),
           );
         }
         if (ikey === "map") {
-          if (!refs.accessed.has(listState)) {
-            refs.accessed.add(listState);
-            refs.lastVersions.set(listState, store.getNodeVersion(listState));
-          }
+          trackNode(listState);
+          trackClientFilterFields();
           const origMap = (target as any)[key] as (
             fn: (item: object, index: number, id: string) => unknown,
           ) => unknown[];
@@ -157,9 +174,45 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
               fn(createTrackingProxy(item, refs, store, cache), index, id),
             );
         }
+        if (key === "filter") {
+          // Navigation into the filter controls — wrap so field/aggregate
+          // reads on it register their own subscriptions.
+          const result = (target as any)[key];
+          if (result && typeof result === "object") {
+            refs.hasNavigated = true;
+            return createTrackingProxy(result, refs, store, cache);
+          }
+          return result;
+        }
         // add/remove/setItems/getById/reload — forwarded without tracking
         // (calling them does not read reactive state).
         return (target as any)[key];
+      }
+
+      // ── Filter proxy (list.filter) ─────────────────────────────────────────
+      // Carries FILTER_STATE without LIST_STATE. Aggregates subscribe by what
+      // they derive from: isActive/activeCount/values read the field VALUES
+      // (leaf versions bump on writes); isPending reads the debounce timer
+      // (the gate bumps the owning ListState's version on arm/clear).
+      const filterOnly = (target as any)[FILTER_STATE] as FilterState | undefined;
+      if (filterOnly && !(target as any)[LIST_STATE]) {
+        const trackNode = (node: object): void => {
+          if (!refs.accessed.has(node)) {
+            refs.accessed.add(node);
+            refs.lastVersions.set(node, store.getNodeVersion(node));
+          }
+        };
+        if (key === "isActive" || key === "activeCount" || key === "values") {
+          for (const rt of filterOnly.fields.values()) trackNode(rt.node as object);
+          return (target as any)[key];
+        }
+        if (key === "isPending") {
+          trackNode(filterOnly.listState as unknown as object);
+          return (target as any)[key];
+        }
+        // Fields fall through to the generic navigation below (their proxies
+        // are wrapped, so .value reads register the leaf subscription);
+        // set/reset/clear are methods and stay untracked.
       }
 
       // ── Flow proxy / step proxy (defineFlow) ────────────────────────────────

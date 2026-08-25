@@ -39,6 +39,7 @@ import type {
   Unsubscribe,
 } from "./types";
 import type { MappableKey } from "../constants";
+import { FILTER_SPREAD_KEYS, SORT_SPREAD_KEYS } from "../constants";
 import type { FieldState } from "../compute/index";
 
 // ─── Palistor ─────────────────────────────────────────────────────────────────
@@ -151,6 +152,18 @@ export class Palistor<
       if (external !== undefined) this.externalToInternal[external] = internal;
     }
 
+    // Reserved list-proxy keys (filter surface + the future sort block): these
+    // are matched RAW on the list proxy, so a fieldMapping renaming anything TO
+    // one of them would silently rewrite the read into a miss — throw instead.
+    for (const external of Object.keys(this.externalToInternal)) {
+      if (FILTER_SPREAD_KEYS.includes(external) || SORT_SPREAD_KEYS.includes(external)) {
+        throw new Error(
+          `[palistor] fieldMapping renames "${this.externalToInternal[external]}" to "${external}", ` +
+            `which is a reserved list key (${[...FILTER_SPREAD_KEYS, ...SORT_SPREAD_KEYS].join(", ")}).`,
+        );
+      }
+    }
+
     // ─── Config normalization (external → internal) ──────────────────────────
     // The config is authored in PUBLIC (mapped) names. A single pass converts
     // it to internal names BEFORE init/compute/traversal — everything below
@@ -173,7 +186,7 @@ export class Palistor<
     // ─── DirtyTracker + ValuesCache ──────────────────────────────────────────
 
     this.dirty = new DirtyTracker();
-    this.values = buildValuesCache(rootConfig, nodeState);
+    this.values = buildValuesCache(rootConfig, nodeState, this.nodes.listStates);
 
     // ─── EntityRegistry ──────────────────────────────────────────────────────
 
@@ -189,6 +202,16 @@ export class Palistor<
     this.groupDepsMap = new GroupDepsMap(rootConfig, nodePaths, nodeParents);
     this.recompute(); // first full recompute — builds the dependency map
     this.dirty.capture(rootConfig, nodeState);
+
+    // Filter fields live outside rootConfig — seed their dirty baseline
+    // explicitly (dirty.capture walks the config tree only).
+    for (const ls of this.nodes.allListStates) {
+      const fs = ls.filter;
+      if (!fs) continue;
+      for (const rt of fs.fields.values()) {
+        this.dirty.initialValueMap.set(rt.node, nodeState.get(rt.node)?.value);
+      }
+    }
 
     // ─── NotificationHub ────────────────────────────────────────────────────
 
@@ -206,6 +229,7 @@ export class Palistor<
       valuesCache: this.values,
       store: this,
       listStates: this.nodes.listStates,
+      allListStates: this.nodes.allListStates,
       setEntitiesRaw: (items, listNode) => this._setEntitiesRaw(items, listNode),
       syncListValuesCache: (listState) => this.syncListValuesCache(listState),
       entityRegistry: this.entityRegistry,
@@ -274,7 +298,7 @@ export class Palistor<
     const trackingWrap = this.groupDepsMap.getTrackingWrap();
 
     if (changedNodes && changedNodes.size > 0) {
-      return recomputeTargeted(changedNodes, {
+      const result = recomputeTargeted(changedNodes, {
         rootConfig: this.rootConfig,
         groupComputeMap,
         nodeState,
@@ -285,9 +309,33 @@ export class Palistor<
         translate,
         trackingWrap,
       });
+      // Filter groups live outside rootConfig ($filters.*), so the targeted
+      // path's resolveGroupByPath can't reach them — recompute a filter group
+      // directly when one of its own fields changed (derived fields update).
+      for (const ls of this.nodes.allListStates) {
+        const fs = ls.filter;
+        if (!fs) continue;
+        let touched = false;
+        for (const n of changedNodes) {
+          if (fs.nodeSet.has(n)) { touched = true; break; }
+        }
+        if (!touched) continue;
+        const entries = groupComputeMap.get(fs.groupNode) ?? [];
+        const filterChanged = recomputeLeaves(entries, nodeState, this.values, translate, trackingWrap);
+        for (const n of filterChanged) result.add(n);
+      }
+      return result;
     }
 
     const computeNodes = collectGroupComputeNodes(this.rootConfig, groupComputeMap);
+    // Filter groups are outside the rootConfig walk — append their entries so
+    // a full recompute (init, reset, resolve completion) covers derived filter fields.
+    for (const ls of this.nodes.allListStates) {
+      const fs = ls.filter;
+      if (!fs) continue;
+      const entries = groupComputeMap.get(fs.groupNode);
+      if (entries) computeNodes.push(...entries);
+    }
     const result = recomputeLeaves(computeNodes, nodeState, this.values, translate, trackingWrap);
     this.groupDepsMap.markBuilt();
     return result;
@@ -365,7 +413,10 @@ export class Palistor<
   }
 
   getValues(): ExtractValues<TConfig> {
-    return structuredClone(this.values.values) as ExtractValues<TConfig>;
+    const clone = structuredClone(this.values.values) as Record<string, unknown>;
+    // $filters is view state, not form data — never part of getValues/submit/persist.
+    delete clone["$filters"];
+    return clone as ExtractValues<TConfig>;
   }
 
   setTranslator(t: TranslateFn | null): void {

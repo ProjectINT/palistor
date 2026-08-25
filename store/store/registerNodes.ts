@@ -3,6 +3,8 @@ import { TranslateFn, type AnyConfigNode, type ListState, type ListConfig } from
 import { configKeys, hasChildren } from "../traversal";
 import { hasComputedProps } from "./hasComputedProps";
 import { isListNode } from "./NodeRegistry/nodeUtils";
+import { normalizeFilterBlock } from "../filtering/normalizeFilterBlock";
+import { registerFilterNodes } from "../filtering/registerFilterNodes";
 
 /**
  * Service keys of a config node that tree walks skip.
@@ -139,6 +141,8 @@ export function registerNodes<TNode extends AnyConfigNode>(
   translate: TranslateFn,
   listStates?: WeakMap<object, ListState>,
   allListStates?: ListState[],
+  /** true while walking a list template — per-entity lists get no FilterState in Phase 1. */
+  inTemplate = false,
 ) {
   for (const key of configKeys(node as Record<string, unknown>)) {
 
@@ -166,8 +170,33 @@ export function registerNodes<TNode extends AnyConfigNode>(
         };
         listStates.set(child, listState);
         if (allListStates) allListStates.push(listState);
+
+        // Declared filter block: register its fields as ordinary leaf nodes in
+        // the reserved `$filters.<listPath>` namespace and attach the sidecar.
+        // Per-entity (nested) lists are Phase 3 — dev warning, no FilterState.
+        const filterBlock = (listConfig as { filter?: Record<string, unknown> } | undefined)?.filter;
+        if (filterBlock) {
+          if (inTemplate) {
+            console.warn(
+              `[palistor] filter on nested list "${path}" is not supported yet — ignored ` +
+                `(per-entity list filters are a later phase).`,
+            );
+          } else {
+            const normalized = normalizeFilterBlock(filterBlock, path);
+            listState.filter = registerFilterNodes(
+              normalized,
+              listState,
+              path,
+              computeNodes,
+              nodeState,
+              groupComputeMap,
+              translate,
+            );
+          }
+        }
+
         // Register template fields as a regular group (path = the list key)
-        registerNodes(template, undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates);
+        registerNodes(template, undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates, true);
       }
       continue;
     }
@@ -224,6 +253,6 @@ export function registerNodes<TNode extends AnyConfigNode>(
     }
 
     // Recurse into children
-    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates);
+    registerNodes(child, (initialSlice as Record<string, unknown> | undefined)?.[key] as InitialSlice<AnyConfigNode> | undefined, computeNodes, nodeState, path, groupComputeMap, translate, listStates, allListStates, inTemplate);
   }
 }

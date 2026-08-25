@@ -4,6 +4,13 @@ import type { ValuesCache } from "../valuesCache/valuesCache";
 
 // ─── Public Types ────────────────────────────────────────────────────────────
 
+/**
+ * Context object passed as the third list-resolver argument (filter snapshot,
+ * params, request key; reserved seams for page/sort/signal).
+ * Defined in store/types to avoid an import cycle — re-exported here.
+ */
+export type { ListResolveContext } from "../store/types";
+
 /** Notification function registered via useNotifier. User defines the signature. */
 export type NotifyFn = (...args: any[]) => void;
 

@@ -37,13 +37,25 @@ export interface PaginationConfig {
 }
 
 export interface ListResolveConfig {
-  resolver: (values: any, store: ProxyStore<any>, page?: PageRequest)
+  // Arg 3 is the SHARED ListResolveContext (amended per FilteringPlan.md —
+  // two plans cannot each own the third argument). `page` rides inside it.
+  resolver: (values: any, store: ProxyStore<any>, ctx: ListResolveContext)
     => Promise<Array<Record<string, unknown>> | PagedResult>;
   onError?: (error: unknown, ctx: { notify: (...a: any[]) => void }) => void;
   deps?: string[];
   pagination?: PaginationConfig;   // ← presence is the opt-in
   options?: { lazy?: boolean; suspense?: boolean };
 }
+
+// Already shipped by the filtering implementation (store/store/types.ts):
+//   interface ListResolveContext {
+//     filter: { values; params; key };   // filtering (implemented)
+//     page?: PageRequest;                // THIS plan fills the reserved seam
+//     sort?: SortRequest;                // reserved
+//     queryKey: string;
+//     signal?: AbortSignal;              // reserved
+//   }
+// ctx is always passed; `page` is present iff the list declares `pagination`.
 ```
 
 `store/defineList.ts` gains a `pagination?: PaginationConfig` passthrough on its `resolve` block and threads it verbatim into `listConfig.resolve.pagination`. The list node shape `[template, { resolve }]` is unchanged, so `TypedListNode` / `ConfigNodeToProxy` / `isListNode` detection is untouched.
@@ -56,12 +68,13 @@ users: defineList<User>({
   resolve: {
     deps: ["search"],                          // seeds the bootstrap queryKey before auto-deps exist
     pagination: { pageSize: 20, mode: "paged" },
-    resolver: async (values, store, page) => {
+    resolver: async (values, store, ctx) => {
       const r = await api.users({
         q: values.search,
         tenant: store.context.tenantId,        // auto-tracked $context dep
-        offset: page!.offset,
-        limit: page!.pageSize,
+        ...ctx.filter.params,                  // declared filter params (FilteringPlan)
+        offset: ctx.page!.offset,
+        limit: ctx.page!.pageSize,
       });
       return { items: r.rows, total: r.count }; // PagedResult
     },
@@ -80,6 +93,13 @@ export interface PageRequest {
   cursor?: string | null;  // cursor mode
   queryKey: string;        // current queryKeyHash (logging / manual caches)
 }
+// Delivered as `ctx.page` on the shared ListResolveContext (see Author-facing
+// API). Filtering already ships the ctx plumbing; this plan only fills the
+// reserved `page` seam. One extra joint rule from FilteringPlan.md: a list's
+// declared SERVER filter paths (`FilterState.serverPaths`) are seeded into the
+// bootstrap `QueryFamily.dependencies`, so the very first `computeQueryKey`
+// already includes the filter values and the re-key-in-place dance is never
+// entered for a filter field.
 export interface PagedResult<T = Record<string, unknown>> {
   items: T[];
   total?: number;              // → family.total → pageCount / hasNextPage
@@ -311,7 +331,7 @@ _retriggerPaginatedList(ls) {
 1. Compute `queryKeyHash` from live values/context **before** issuing; `fam = getOrCreateFamily(p, hash)`; **set `p.currentQueryKey = hash` at issue time** (so `projectWindow` never reads `families.get(null)` on the bootstrap fetch). Capture in the closure: `issuedKey`, `issuedOrdinal`, `issuedGeneration`, **eager per-path value snapshots of the known dep set** (`resolve.deps ∪ fam.dependencies` — cheap: it is the settled dep set, not the tree), and (infinite+offset) **`expectedOffset`** = the `Σ fetchedCount` continuation counter at issue.
 2. **Per-family, per-page dedup — implicit issuance only.** If `fam.inFlight.has(ordinal)` return that promise. (Never the status-based dedup — `setPage(2)` while page 1 loads must not dedup against page 1.) **Explicit issuance (`refetch()`/`invalidate()`) passes `force` and bypasses this branch**, bumps `generation`, and *overwrites* `fam.inFlight.set(ordinal, newPromise)`. Without the exemption the one API that means "give me fresh data now" is a guaranteed no-op whenever a fetch for that ordinal happens to be in flight — it would return the older promise and resolve success-looking with pre-refresh data, while that older completion consumes the `stale` marker the refetch just set.
 3. Set root `ResolveState.status = 'pending'` + nodeState loading; notify `{ listNode, listState }`.
-4. **No `structuredClone`.** Wrap the **live** `valuesCache.values` in the copy-on-read snapshot proxy (see "Resolver snapshot without structuredClone" below); wrap context via `createContextTrackingProxy` (reused verbatim). Build the `PageRequest`, run the resolver.
+4. **No `structuredClone`.** Wrap the **live** `valuesCache.values` in the copy-on-read snapshot proxy (see "Resolver snapshot without structuredClone" below); wrap context via `createContextTrackingProxy` (reused verbatim). Build the shared `ListResolveContext` (the filter block exactly as the shipped `executeListResolve` does, plus `ctx.page` = the `PageRequest`), run the resolver.
 5. `const norm = normalize(await resolver(vProxy, storeProxy, req));`
 6. **Abort / drift guards — drift is per-accessed-path VALUE equality, never queryKey-string equality, sampled PRE-own-write (before step 7 applies this run's output).** In order: **(a)** `issuedGeneration !== p.generation` → release `inFlight`, no-op. **(b)** over every accessed path (eager dep snapshots ∪ the proxy's copy-on-first-access snapshots), `deepEqual(snapshotValue, getByPath(liveValues, path))` — **excluding self-referential list-slot paths** (a sibling page's projection mid-flight must not read as drift); over `contextTracking.getAccessedKeys()`, `startContext[k] !== liveContext[k]`. **(c) Completion-key gate:** recompute the queryKey from live values over the now-known accessed set; `!== issuedKey` → treat as drift. This closes the **bootstrap race**: a dep edited during run 1 *before* the resolver's first read of it leaves no snapshot delta (the copy was taken post-edit) and no external retrigger fires (auto-deps aren't in `state.dependencies` yet) — without this gate the result would be filed under the stale issue-time key, poisoning the family with another query's rows. **(d)** (infinite+offset) recompute the continuation counter; `!== expectedOffset` (a delete landed mid-flight — invisible to path drift, since `page`/offset is deliberately never a values path) → discard, reissue at the corrected offset. Any confirmed drift: discard and `_retriggerPaginatedList` under the fresh key (the paged analog of `pendingRetrigger`, so a change landing mid-flight is never lost).
 7. **Success:** fold accessed paths (and accessed context keys, `$context.`-prefixed) into `fam.dependencies`, and set `state.dependencies = union of all live families' dependencies` (the SELECTION key — see the authoritative statement). Then `setEntitiesRaw(norm.items, listNode)` (reused — upsert bodies + register leaves). **Drop any returned id already present in another fresh page of the same family** (server-driven cross-page dedup) — but **scoped to pages not being replaced by this run**: an ordinal marked `refetching` is excluded from the dedup source. On a reordering feed (the `updated_at desc` default) a row that moved from page 5 to page 2 would otherwise be dropped from the incoming page 2 because the *old* page-5 entry still holds it, and then vanish entirely when page 5 is replaced — silent row loss with every entry reading `fresh`. **A page with un-flushed edits (`ids !== initialIds`) is RECONCILED, never skipped:** `newIds = fetchedIds ⧺ (oldIds ∖ oldInitialIds ∖ fetchedIds)` (locally-added rows re-appended, minus dupes), `initialIds = fetchedIds`, and the **fresh** `nextCursor` always wins. ("Skip" is removed from the design: it would strand an add-before-first-fetch page rendering one optimistic row forever — the page stays guard-dirty, and the refetch that would re-baseline it is the very thing the guard blocks; in cursor mode a skipped page would additionally feed a stale cursor into the chain.) Otherwise `fam.pages.set(issuedOrdinal, { ids, initialIds: [...ids], status: 'fresh', fetchedAt: now, nextCursor })`. Update `fam.serverTotal`; LRU-evict beyond `maxCachedPages` **skipping pinned window ordinals**. **(infinite) `issuedOrdinal` joins `loadedOrdinals` here — on success, never at issue** (a failed fetch must not leave a hole; a retry re-targets the same ordinal).

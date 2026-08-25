@@ -47,6 +47,14 @@ export const LIST_STATE: unique symbol = Symbol("listState");
 export const FLOW_STATE: unique symbol = Symbol("flowState");
 
 /**
+ * Brand symbol of a filter — returns the `FilterState` object (the optional
+ * sidecar on `ListState`). Exposed by two proxies: the list proxy (so the
+ * tracking proxy can subscribe visible reads to client filter fields) and the
+ * `list.filter` proxy (so aggregate reads know which nodes to track).
+ */
+export const FILTER_STATE: unique symbol = Symbol("filterState");
+
+/**
  * Marker key on a flow node: the ordered array of step keys.
  * Set by defineFlow; included in CONFIG_PROPS so all tree walks
  * (traversal, registerNodes, buildValuesCache, …) skip it.
@@ -212,6 +220,27 @@ export const LIST_SPREAD_KEYS: string[] = [
 ];
 
 /**
+ * Extra spread keys for a list WITH a `filter` block — appended to
+ * LIST_SPREAD_KEYS / ENTITY_LIST_SPREAD_KEYS in buildListProxy, gated on
+ * `listState.filter` (a list without one keeps its key set byte-for-byte).
+ *
+ * `values` is the VISIBLE item proxies (what `map` iterates), `fullLength`
+ * the size of the full loaded membership — short names mean "what the list
+ * is showing", the full membership is spelled out.
+ *
+ * Reserved against `fieldMapping` collisions in the Palistor constructor
+ * (construction throw) together with {@link SORT_SPREAD_KEYS}.
+ */
+export const FILTER_SPREAD_KEYS: string[] = ["filter", "values", "fullLength"];
+
+/**
+ * Reserved for the future `sort` block (same family as `filter`: list-owned
+ * state that reaches the resolver and invalidates). Reserving the key against
+ * `fieldMapping` now makes adding the block later additive, not breaking.
+ */
+export const SORT_SPREAD_KEYS: string[] = ["sort"];
+
+/**
  * List-scoped keys that are deliberately NOT in {@link MAPPABLE_KEYS} and must
  * be matched against the RAW key, before the `externalToInternal` translation.
  *
@@ -224,5 +253,18 @@ export const LIST_SPREAD_KEYS: string[] = [
  * Consequence, and it is intentional: under such a mapping a FIELD `.error` is
  * the validation flag while a LIST `.error` is the resolve error. The two never
  * coexist on one node.
+ *
+ * `filter` / `values` / `fullLength` (filter surface) sit here for the same
+ * reason: `value` is a mappable key, so a `fieldMapping` renaming anything TO
+ * `values` would rewrite `list.values` into a miss returning `undefined` — the
+ * exact trap documented for `error` above. (The constructor additionally
+ * throws on such a mapping — see FILTER_SPREAD_KEYS.)
  */
-export const LIST_ONLY_KEYS = new Set<string>(["error", "resolveStatus", "reload"]);
+export const LIST_ONLY_KEYS = new Set<string>([
+  "error",
+  "resolveStatus",
+  "reload",
+  "filter",
+  "values",
+  "fullLength",
+]);
