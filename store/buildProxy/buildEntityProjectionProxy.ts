@@ -294,6 +294,7 @@ export function buildEntityProjectionProxy(
         const listState = kernel.entityRegistry.getOrCreateEntityListState(
           listOwnerEntity,
           templateField as unknown as object,
+          kernel.nodes.listFieldKeys.get(templateField as unknown as object)?.join(".") ?? String(key),
         );
         return buildListProxy(listState, kernel);
       }

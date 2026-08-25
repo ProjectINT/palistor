@@ -2,6 +2,7 @@ import type { EntityNode, EntityGroupNode, EntityData } from "./types";
 import type { ListConfig, ListState } from "../store/types";
 import { generateTmpId } from "./generateId";
 import { isLeafNode, isGroupNode } from "../traversal/nodeClassifier";
+import { createPaginationState } from "../pagination/paginationController";
 
 /**
  * Create a new EntityNode from a flat data object.
@@ -215,8 +216,19 @@ export class EntityRegistry {
    *
    * `entity.lists` is created on first access as a **non-enumerable** field,
    * so it never leaks into flat values via `Object.keys`.
+   *
+   * A nested list declared with `resolve.pagination` gets its OWN pagination
+   * sidecar per instance — one page cache per `(owner, listConfigNode)` pair,
+   * driven by the shared paged executor exactly like a root list.
+   *
+   * @param fieldPath — the list's dot-path inside its template (diagnostics
+   *   only: it names the instance in dev warnings as `<ownerId>.<fieldPath>`).
    */
-  getOrCreateEntityListState(entity: EntityNode, listConfigNode: object): ListState {
+  getOrCreateEntityListState(
+    entity: EntityNode,
+    listConfigNode: object,
+    fieldPath?: string,
+  ): ListState {
     let lists = entity.lists;
     if (!lists) {
       lists = new Map<object, ListState>();
@@ -230,17 +242,35 @@ export class EntityRegistry {
     let state = lists.get(listConfigNode);
     if (!state) {
       const arr = listConfigNode as unknown[];
+      const listConfig = arr.length > 1 ? (arr[1] as ListConfig) : undefined;
       state = {
         listConfigNode,
         template: arr[0] as object,
-        listConfig: arr.length > 1 ? (arr[1] as ListConfig) : undefined,
+        listConfig,
         ownerEntity: entity,
         itemIds: [],
         initialItemIds: [],
       };
+      const paginationBlock = listConfig?.resolve?.pagination;
+      if (paginationBlock) {
+        const ownerId = String(entity.id.value ?? "");
+        state.pagination = createPaginationState(
+          paginationBlock,
+          `${ownerId}.${fieldPath ?? "list"}`,
+        );
+      }
       lists.set(listConfigNode, state);
     }
     return state;
+  }
+
+  /** Visit every per-entity ListState of every registered entity. */
+  forEachEntityList(cb: (owner: EntityNode, state: ListState) => void): void {
+    for (const entity of this.entities.values()) {
+      const lists = entity.lists;
+      if (!lists) continue;
+      for (const state of lists.values()) cb(entity, state);
+    }
   }
 
   /**
@@ -281,7 +311,9 @@ export class EntityRegistry {
    *
    * Returns the affected `{ owner, state }` pairs so the caller (resetPipeline)
    * bumps node versions in the hub → React redraws the lists — and re-syncs
-   * the owner's projectionObj for getValues.
+   * the owner's projectionObj for getValues. A PAGINATED instance is returned
+   * untouched: its rollback is per cached page (the caller runs
+   * `resetPagination`), never a window rewrite.
    */
   resetEntityListStates(): Array<{ owner: EntityNode; state: ListState }> {
     const affected: Array<{ owner: EntityNode; state: ListState }> = [];
@@ -289,7 +321,7 @@ export class EntityRegistry {
       const lists = entity.lists;
       if (!lists) continue;
       for (const state of lists.values()) {
-        state.itemIds = [...state.initialItemIds];
+        if (!state.pagination) state.itemIds = [...state.initialItemIds];
         affected.push({ owner: entity, state });
       }
     }

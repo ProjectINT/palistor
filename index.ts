@@ -77,6 +77,10 @@ export type {
   FilterBlock,
   FilterFieldConfig,
   FilterProxyNode,
+  PaginationConfig,
+  PageMode,
+  PageRequest,
+  PagedResult,
 } from "./store/store/types";
 export type { Palistor as PalistorProxy } from "./store/store/types";
 export { Palistor } from "./store/store";

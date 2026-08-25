@@ -17,7 +17,7 @@
  * per-leaf row tracking.
  */
 
-import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, FILTER_STATE, LIST_STATE, FLOW_STATE } from "../store/constants";
+import { FIELD_STATE_PROPS, CONFIG_NODE, SOURCE_PROXY, STORE_REF, ENTITY_ID_LEAF, FILTER_STATE, LIST_STATE, FLOW_STATE, PAGINATION_TRACKED_KEYS } from "../store/constants";
 import type { ProxyStore } from "../store/store";
 import type { FilterState } from "../store/filtering/types";
 
@@ -173,6 +173,14 @@ export function createTrackingProxy<TConfig extends Record<string, any>>(
             origMap((item: object, index: number, id: string) =>
               fn(createTrackingProxy(item, refs, store, cache), index, id),
             );
+        }
+        // Pagination getters (page/pageCount/total/…): reactive through the
+        // ListState version that navigation and page completion bump — a Pager
+        // reading only `page`/`pageCount` must re-render on setPage. Methods
+        // (setPage/nextPage/…) fall through to the untracked forward below.
+        if (PAGINATION_TRACKED_KEYS.has(key as string) && (listState as { pagination?: unknown }).pagination) {
+          trackNode(listState);
+          return (target as any)[key];
         }
         if (key === "filter") {
           // Navigation into the filter controls — wrap so field/aggregate

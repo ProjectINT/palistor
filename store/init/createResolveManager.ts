@@ -13,6 +13,7 @@ import {
   type ResolveState,
   type ResolveDeps,
   type ListResolveDeps,
+  type PagedListResolveDeps,
   type AnyResolveEntry,
   type TemplateFieldResolveEntry,
   type EntityFieldResolveDeps,
@@ -20,12 +21,30 @@ import {
   initResolveStates,
   executeResolve,
   executeListResolve,
+  executePagedListResolve,
   executeEntityFieldResolve,
   findResolvesToRetrigger,
   resetResolveState,
 } from "../resolvePipeline/index";
 import { isLeafNode } from "../traversal";
 import { computeServerKey } from "../filtering/filterController";
+import {
+  appendLoadedOrdinal,
+  applyPageSize,
+  currentFamily,
+  cursorFor,
+  hasNextPageOf,
+  currentPageOf,
+  ensureCurrentFamily,
+  isEntryFresh,
+  isTruncatedOrdinal,
+  markFamilyStale,
+  nextOrdinalOf,
+  projectWindow,
+  truncateChain,
+  warnOnce,
+} from "../pagination/paginationController";
+import type { ListResolveConfig } from "../store/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -116,6 +135,7 @@ export class ResolveManager {
   readonly listNodeToTemplateFieldEntries: Map<AnyConfigNode, TemplateFieldResolveEntry[]>;
   private readonly resolveDeps: ResolveDeps;
   private readonly listResolveDeps: ListResolveDeps;
+  private readonly pagedListResolveDeps: PagedListResolveDeps;
   private readonly listStates: WeakMap<object, ListState>;
   private readonly entityRegistry: EntityRegistry;
   /** Entries waiting for their contextDeps to be satisfied before launching. */
@@ -126,6 +146,12 @@ export class ResolveManager {
    * directly (through the debounce gate) instead of by generic path matching.
    */
   private readonly filterServerPathIndex = new Map<string, ListState>();
+  /**
+   * The config declares at least one PAGINATED NESTED list (a template-level
+   * placeholder carrying `resolve.pagination` but no sidecar of its own).
+   * Gates the per-owner retrigger scans, which are otherwise pure cost.
+   */
+  private readonly hasNestedPaginated: boolean;
 
   constructor(deps: ResolveManagerDeps) {
     const {
@@ -136,6 +162,9 @@ export class ResolveManager {
 
     this.listStates = listStates;
     this.entityRegistry = entityRegistry;
+    this.hasNestedPaginated = allListStates.some(
+      (ls) => !!ls.listConfig?.resolve?.pagination && !ls.pagination,
+    );
     const allEntries = initResolveStates(rootConfig, this.states);
     this.templateFieldEntries = allEntries.filter(
       (e): e is TemplateFieldResolveEntry => (e as TemplateFieldResolveEntry).isTemplateField === true,
@@ -194,6 +223,66 @@ export class ResolveManager {
       setEntitiesRaw,
       syncListValuesCache,
     };
+
+    this.pagedListResolveDeps = {
+      ...this.listResolveDeps,
+      retriggerPaginatedList: (ls) => this._retriggerPaginatedListGuarded(ls),
+      reissuePagedFetch: (ls, ordinal) => {
+        void this._issuePagedFetch(ls, ordinal, true);
+      },
+      onContinuationFailure: (ls, ordinal) => {
+        void this._rebuildContinuation(ls, ordinal);
+      },
+      recomputeScoped: (changed) =>
+        (this.resolveDeps.store as unknown as {
+          recompute: (c?: Set<object>) => Set<object>;
+        }).recompute(changed),
+      pagedStateOf: (ls) => this.getOrCreateListResolveState(ls),
+      pagedLiveValues: (ls) => this.pagedLiveValues(ls),
+      entityRegistry,
+      ownerIdOf: (owner) => this._listOwnerId(owner),
+    };
+  }
+
+  // ─── Paginated-list plumbing (root + nested) ───────────────────────────────
+
+  /**
+   * The tree a paginated list's resolver reads and its queryKey / drift check
+   * are evaluated against — root: the live values tree; nested: the OWNER's
+   * flat snapshot (scalars + groups, never its lists — the legacy nested
+   * resolver contract, so a resolver written for a plain nested list keeps
+   * working when `pagination` is added).
+   */
+  pagedLiveValues(listState: ListState): Record<string, unknown> {
+    if (listState.ownerEntity === null) {
+      return this.resolveDeps.valuesCache.values as Record<string, unknown>;
+    }
+    return buildEntityValues(
+      listState.ownerEntity,
+      this.resolveDeps.nodeState as WeakMap<object, { value: unknown }>,
+    );
+  }
+
+  /**
+   * {@link getListResolveState} that also CREATES the per-owner entry of a
+   * nested list (root entries always exist from `initResolveStates`).
+   */
+  getOrCreateListResolveState(listState: ListState): ResolveState | undefined {
+    if (listState.ownerEntity === null) return this.states.get(listState.listConfigNode);
+    const ownerId = this._listOwnerId(listState.ownerEntity);
+    return this.entityStates.getOrCreate(
+      ownerId,
+      listState.listConfigNode,
+      new Set(listState.listConfig?.resolve?.deps ?? []),
+    );
+  }
+
+  /** Every per-entity ListState with a pagination sidecar (nested instances). */
+  private _forEachNestedPaginated(cb: (ls: ListState, ownerId: string) => void): void {
+    if (!this.hasNestedPaginated) return;
+    this.entityRegistry.forEachEntityList((owner, ls) => {
+      if (ls.pagination) cb(ls, this._listOwnerId(owner));
+    });
   }
 
   // ─── Public API ────────────────────────────────────────────────────────────
@@ -364,10 +453,42 @@ export class ResolveManager {
     const resolve = listConfig?.resolve;
     if (!resolve || typeof resolve.resolver !== "function") return;
 
-    const entityListState = this.entityRegistry.getOrCreateEntityListState(
+    const els = this.entityRegistry.getOrCreateEntityListState(
       ownerEntity,
       listConfigNode as object,
-    ) as unknown as object;
+      this._listFieldPath(listConfigNode as object),
+    );
+    const entityListState = els as unknown as object;
+
+    // Paginated nested instance: the shared paged executor owns dedup (per
+    // family, per ordinal), the queryKey retrigger and the cache — a plain
+    // trigger fetches the current page (a cache hit is a no-op), a forced
+    // reload is `refetch()`.
+    if (els.pagination) {
+      if (force) {
+        void this.refetchPaginated(els);
+        return;
+      }
+      // A window whose ordinals are all cached fresh is served as is (the
+      // resolve state may have been dropped while the cache survived).
+      const p = els.pagination;
+      const fam = currentFamily(p);
+      const window = p.mode === "infinite" ? p.loadedOrdinals : [currentPageOf(p)];
+      const cached =
+        !!fam &&
+        window.length > 0 &&
+        window.every((o) => {
+          const e = fam.pages.get(o);
+          return !!e && isEntryFresh(e, p, Date.now());
+        });
+      if (cached) {
+        const state = this.getOrCreateListResolveState(els);
+        if (state && state.status === "idle") state.status = "resolved";
+        return;
+      }
+      void this._issuePagedFetch(els, currentPageOf(p), false);
+      return;
+    }
 
     const state = this.entityStates.getOrCreate(
       ownerId,
@@ -386,7 +507,9 @@ export class ResolveManager {
     state.error = null;
     this.resolveDeps.notifyChanged(new Set<object>([entityListState]));
 
-    void (async () => {
+    // The promise is kept on the state for `options.suspense` (a suspended
+    // read throws it) — the legacy dedup above still keys on `status`.
+    state.promise = (async () => {
       try {
         // The resolver receives a flat snapshot of the OWNER (not a projection proxy).
         const parentValues = buildEntityValues(
@@ -460,6 +583,13 @@ export class ResolveManager {
     return ((ns.get(idLeaf)?.value) ?? ownerEntity.id.value) as string;
   }
 
+  /** Dot-path of a nested list's field inside its template (diagnostics). */
+  private _listFieldPath(listConfigNode: object): string | undefined {
+    const nodes = (this.resolveDeps.store as { nodes?: { listFieldKeys?: WeakMap<object, string[]> } })
+      .nodes;
+    return nodes?.listFieldKeys?.get(listConfigNode)?.join(".");
+  }
+
   /**
    * Single read point for a list's resolve state (root + per-entity).
    *
@@ -492,6 +622,12 @@ export class ResolveManager {
    */
   triggerListResolve(listState: ListState, force = false): void {
     if (listState.ownerEntity === null) {
+      // Paginated: a forced reload is `refetch()` (whole family stale, exactly
+      // one request); a plain trigger fetches the current page.
+      if (listState.pagination && force) {
+        void this.refetchPaginated(listState);
+        return;
+      }
       this.triggerResolve(listState.listConfigNode as AnyConfigNode);
       return;
     }
@@ -519,7 +655,13 @@ export class ResolveManager {
    * Returns `null` when there are no resolve entries.
    */
   createPostNotifyHook(): ((changedPaths: Set<string>) => void) | null {
-    if (this.resolveEntries.length === 0 && this.templateFieldEntries.length === 0) return null;
+    if (
+      this.resolveEntries.length === 0 &&
+      this.templateFieldEntries.length === 0 &&
+      !this.hasNestedPaginated
+    ) {
+      return null;
+    }
 
     return (changedPaths: Set<string>) => {
       // ── Filter invalidation gate ─────────────────────────────────────────
@@ -571,6 +713,13 @@ export class ResolveManager {
           }
           state.autoRetriggerCount = count;
         }
+        // Paginated list: diverted AFTER the cycle-guard bump — a queryKey
+        // recompute decides between no-op / cached-page projection / one fetch.
+        const pagedLs = this._paginatedListOf(entry);
+        if (pagedLs) {
+          this._retriggerPaginatedList(pagedLs);
+          continue;
+        }
         resetResolveState(entry.node as AnyConfigNode, this.states);
         this._executeEntry(entry);
       }
@@ -579,8 +728,11 @@ export class ResolveManager {
       // dependencies changed — they re-run after the current resolution
       // completes. Filter paths are excluded here too: the gate owns them
       // (it marks pendingRetrigger itself when the debounce flushes).
+      // Paginated entries are skipped: `pendingRetrigger` is consumed only by
+      // the legacy executors; the paged executor owns its own drift check.
       for (const entry of this.resolveEntries) {
         if (justTriggeredNodes.has(entry.node as object)) continue;
+        if (this._paginatedListOf(entry)) continue;
         const state = this.states.get(entry.node as object);
         if (!state || state.status !== "pending") continue;
         for (const dep of state.dependencies) {
@@ -591,8 +743,9 @@ export class ResolveManager {
         }
       }
 
-      // Re-trigger entity field resolves when entity paths change.
-      if (this.templateFieldEntries.length > 0) {
+      // Re-trigger entity field resolves (and the paginated nested lists
+      // keyed on the owner's fields) when entity paths change.
+      if (this.templateFieldEntries.length > 0 || this.hasNestedPaginated) {
         this._retriggerEntityFieldResolves(changedPaths);
       }
     };
@@ -680,6 +833,24 @@ export class ResolveManager {
 
     // idle = lazy resolve never started — the first run reads current values anyway.
     if (state.status === "idle") return;
+
+    // Paginated: the server filter values are part of the queryKey, so the
+    // flush is a queryKey re-evaluation (evict + page 1, exactly one fetch);
+    // an in-flight run is superseded by the generation bump, never marked.
+    if (listState.pagination) {
+      const count = (state.autoRetriggerCount ?? 0) + 1;
+      if (count > MAX_AUTO_RETRIGGERS) {
+        console.warn(
+          `Palistor: resolver auto-retrigger cap (${MAX_AUTO_RETRIGGERS}) reached ` +
+            `for filtered list. Possible circular dependency.`,
+        );
+        return;
+      }
+      state.autoRetriggerCount = count;
+      this._retriggerPaginatedList(listState);
+      return;
+    }
+
     if (state.status === "pending") {
       // Re-run after the in-flight resolution completes (existing mechanism);
       // that re-run recomputes the serverKey at its own launch.
@@ -733,6 +904,27 @@ export class ResolveManager {
     }
 
     if (entityChanges.size === 0) return;
+
+    // Paginated nested lists keyed on the OWNER's fields: a changed owner
+    // field that the family's dep set contains is a queryKey re-evaluation
+    // (no-op on an unchanged value / evict + page 1 on a changed one), under
+    // the same auto-retrigger cap as every other dep-driven re-run.
+    if (this.hasNestedPaginated) {
+      for (const [entityId, changedFields] of entityChanges) {
+        const lists = this.entityRegistry.get(entityId)?.lists;
+        if (!lists) continue;
+        for (const ls of lists.values()) {
+          if (!ls.pagination) continue;
+          const state = this.entityStates.get(entityId, ls.listConfigNode);
+          if (!state || state.status === "idle") continue;
+          let hit = false;
+          for (const dep of state.dependencies) {
+            if (changedFields.has(dep)) { hit = true; break; }
+          }
+          if (hit) this._retriggerPaginatedListGuarded(ls);
+        }
+      }
+    }
 
     for (const [entityId, changedFields] of entityChanges) {
       for (const entry of this.templateFieldEntries) {
@@ -796,9 +988,28 @@ export class ResolveManager {
       // setContext is an explicit external change — reset the auto-retrigger counter
       const state = this.states.get(entry.node as object);
       if (state) state.autoRetriggerCount = 0;
+      const pagedLs = this._paginatedListOf(entry);
+      if (pagedLs) {
+        this._retriggerPaginatedList(pagedLs);
+        continue;
+      }
       resetResolveState(entry.node as AnyConfigNode, this.states);
       this._executeEntry(entry);
     }
+
+    // Paginated nested lists are not resolve entries: match their per-owner
+    // dep sets (`$context.*` from the tracking proxy) here.
+    this._forEachNestedPaginated((ls, ownerId) => {
+      const state = this.entityStates.get(ownerId, ls.listConfigNode);
+      if (!state || state.status === "idle") return;
+      for (const dep of state.dependencies) {
+        if (changedPaths.has(dep)) {
+          state.autoRetriggerCount = 0;
+          this._retriggerPaginatedList(ls);
+          return;
+        }
+      }
+    });
 
     // Flush the deferred queue: launch entries whose contextDeps are now satisfied
     for (const entry of this.pendingContextQueue) {
@@ -824,6 +1035,18 @@ export class ResolveManager {
     if (entry.isListNode) {
       const listState = this.listStates.get(entry.node as object);
       if (listState && entry.resolve) {
+        // Config-driven dispatch (never shape-sniffed): a `pagination` block
+        // routes to the paged executor for the current page.
+        if (listState.pagination) {
+          executePagedListResolve(
+            entry.node as object,
+            entry.resolve as import("../store/types").ListResolveConfig,
+            listState,
+            currentPageOf(listState.pagination),
+            this.pagedListResolveDeps,
+          );
+          return;
+        }
         executeListResolve(
           entry.node as object,
           entry.resolve as import("../store/types").ListResolveConfig,
@@ -838,6 +1061,357 @@ export class ResolveManager {
         this.resolveDeps,
       );
     }
+  }
+
+  // ─── Pagination ────────────────────────────────────────────────────────────
+
+  /** The paginated root ListState behind a list entry, if any. */
+  private _paginatedListOf(entry: AnyResolveEntry): ListState | undefined {
+    if (!entry.isListNode) return undefined;
+    const ls = this.listStates.get(entry.node as object);
+    return ls?.pagination ? ls : undefined;
+  }
+
+  /**
+   * Fetch ordinal `n` of a paginated root list (a cache miss / stale page /
+   * explicit issue). `force` bypasses the in-flight dedup and supersedes the
+   * running fetch of that ordinal (refetch / invalidate).
+   */
+  triggerPagedFetch(listState: ListState, ordinal: number, force = false): Promise<unknown> {
+    // An explicit page visit is a user action, like a manual trigger. (The
+    // internal retrigger path must NOT reset the counter — that is what makes
+    // the cycle guard hold for a self-retriggering paginated resolver.)
+    const state = this.getOrCreateListResolveState(listState);
+    if (state) state.autoRetriggerCount = 0;
+    return this._issuePagedFetch(listState, ordinal, force);
+  }
+
+  private _issuePagedFetch(
+    listState: ListState,
+    ordinal: number,
+    force: boolean,
+    prefetch = false,
+  ): Promise<unknown> {
+    if (!listState.pagination) return Promise.resolve();
+    let resolve: ListResolveConfig | undefined;
+    if (listState.ownerEntity === null) {
+      const entry = this.resolveEntryMap.get(listState.listConfigNode as AnyConfigNode);
+      if (!entry || !entry.isListNode) return Promise.resolve();
+      resolve = entry.resolve as ListResolveConfig | undefined;
+    } else {
+      // Nested instance: the config comes off the ListState (nested lists are
+      // not resolve entries — their state is per owner).
+      resolve = listState.listConfig?.resolve;
+    }
+    if (!resolve || typeof resolve.resolver !== "function") return Promise.resolve();
+    return executePagedListResolve(
+      listState.listConfigNode,
+      resolve,
+      listState,
+      ordinal,
+      this.pagedListResolveDeps,
+      force,
+      prefetch,
+    );
+  }
+
+  /**
+   * `refetch()` — exactly ONE request, in every mode.
+   *
+   * - **paged:** the whole current family goes stale (siblings refetch lazily
+   *   on visit — a server-side head insert shifts earlier pages too) and the
+   *   current page is re-issued with `force`;
+   * - **infinite / cursor:** pull-to-refresh — truncate to `initialPage`
+   *   (harvesting local-only rows off the dropped pages so a refresh never
+   *   destroys un-flushed input) and fetch that one ordinal.
+   *
+   * The returned promise settles on the effective run and never rejects.
+   */
+  refetchPaginated(listState: ListState): Promise<unknown> {
+    const p = listState.pagination;
+    if (!p) return Promise.resolve();
+    const fam = currentFamily(p);
+    if (p.mode === "paged") {
+      if (fam) markFamilyStale(fam);
+      return this.triggerPagedFetch(listState, p.currentPage, true).catch(() => undefined);
+    }
+    const initial = p.config.initialPage;
+    if (fam) {
+      truncateChain(listState, initial);
+      const head = fam.pages.get(initial);
+      if (head && head.status === "fresh") head.status = "stale";
+      fam.continuationLost = false;
+      fam.continuationTrust = "live";
+    }
+    p.currentPage = initial;
+    this._notifyPaginated(listState);
+    return this.triggerPagedFetch(listState, initial, true).catch(() => undefined);
+  }
+
+  /**
+   * `invalidate(scope?)`.
+   *
+   * - **paged:** mark one page (or the whole family) stale; a stale CURRENT
+   *   page is re-issued now (forced), reconciling any un-flushed local adds;
+   * - **cursor / infinite:** TRUNCATING — ordinal k+1's cursor is minted by
+   *   k's response, so a refetched k orphans every cached ordinal after it.
+   *   Dropping them atomically (with a `generation` bump) is what stops an
+   *   in-flight continuation fetched off a now-dropped cursor from filing a
+   *   gap into the window.
+   */
+  invalidatePaginated(listState: ListState, page?: number): void {
+    const p = listState.pagination;
+    if (!p) return;
+    const fam = currentFamily(p);
+    if (!fam) return;
+
+    if (p.mode === "paged") {
+      if (page === undefined) {
+        markFamilyStale(fam);
+      } else {
+        const e = fam.pages.get(page);
+        if (e && e.status === "fresh") e.status = "stale";
+      }
+      if (page === undefined || page === p.currentPage) {
+        void this.triggerPagedFetch(listState, p.currentPage, true);
+      }
+      return;
+    }
+
+    const from = page === undefined ? p.config.initialPage : page;
+    truncateChain(listState, from);
+    const e = fam.pages.get(from);
+    if (e && e.status === "fresh") e.status = "stale";
+    if (p.mode === "cursor") p.currentPage = Math.min(p.currentPage, from);
+    this._notifyPaginated(listState);
+    // cursor: the visible page must be current again right away. infinite:
+    // the truncated window is already on screen — a background refetch would
+    // reflow under the user's scroll, so the stale head refetches on demand.
+    if (p.mode === "cursor" && from === p.currentPage) {
+      void this.triggerPagedFetch(listState, from, true);
+    }
+  }
+
+  /**
+   * `loadMore()` (infinite) — the target is ALWAYS `max(loadedOrdinals) + 1`,
+   * never a stored `currentPage++`: increment-then-fail would leave the
+   * pointer past a page that never loaded and the next tap would skip it
+   * permanently. A cached fresh target appends without a fetch; a `loadMore`
+   * while one is in flight is a no-op (the UI disables via
+   * `isFetchingNextPage`).
+   */
+  loadMorePaginated(listState: ListState): void {
+    const p = listState.pagination;
+    if (!p || p.mode !== "infinite") return;
+    const fam = currentFamily(p);
+    if (!fam) {
+      void this.triggerPagedFetch(listState, p.config.initialPage);
+      return;
+    }
+    if (fam.continuationLost) return;
+    const target = nextOrdinalOf(p);
+    if (fam.inFlight.has(target)) return;
+    if (p.loadedOrdinals.length > 0 && !hasNextPageOf(p, fam)) return;
+
+    const entry = fam.pages.get(target);
+    if (entry && isEntryFresh(entry, p, Date.now())) {
+      appendLoadedOrdinal(p, target);
+      projectWindow(listState);
+      this._notifyPaginated(listState);
+      return;
+    }
+    void this.triggerPagedFetch(listState, target);
+  }
+
+  /**
+   * `prefetch(n)` — fill the cache without moving the pointer (the executor's
+   * projection gate keeps an off-window completion invisible). A no-op when
+   * the ordinal is already fresh, and for cursor chains whose cursor for `n`
+   * is not known yet (a cursor page is only reachable sequentially).
+   */
+  prefetchPaginated(listState: ListState, ordinal: number): Promise<unknown> {
+    const p = listState.pagination;
+    if (!p || !Number.isInteger(ordinal) || ordinal < p.base) return Promise.resolve();
+    const fam = currentFamily(p);
+    if (!fam) return Promise.resolve();
+    const entry = fam.pages.get(ordinal);
+    if (entry && isEntryFresh(entry, p, Date.now())) return Promise.resolve();
+    if (isTruncatedOrdinal(p, fam, ordinal)) return Promise.resolve();
+    if (fam.inFlight.has(ordinal)) return fam.inFlight.get(ordinal)!;
+    // Reachability. A cursor chain reaches an ordinal only through its
+    // predecessor's cursor; an infinite OFFSET feed only knows the
+    // continuation offset of `max(loadedOrdinals) + 1` — prefetching past it
+    // would issue the offset of the ordinal in between and file duplicate rows.
+    const chained = p.mode === "cursor" || fam.cursors.size > 0 || fam.nextCursor != null;
+    const unreachable = chained
+      ? cursorFor(fam, ordinal, p.base) === undefined
+      : p.mode === "infinite" && ordinal > nextOrdinalOf(p);
+    if (unreachable) {
+      warnOnce(
+        p,
+        `prefetch-unreachable`,
+        `[palistor] prefetch(${ordinal}) on list "${p.listPath}" is unreachable: a ` +
+          `${p.mode} list reaches an ordinal only through its predecessor.`,
+      );
+      return Promise.resolve();
+    }
+    return this._issuePagedFetch(listState, ordinal, false, true).catch(() => undefined);
+  }
+
+  /**
+   * Background revalidation of one ordinal (a `staleTime` expiry that was
+   * SERVED, or `revalidateOnHydrate`). Never blocks the projection — the
+   * cached rows stay on screen and the reconcile recipe merges the result.
+   */
+  revalidatePaginated(listState: ListState, ordinal: number): void {
+    const p = listState.pagination;
+    if (!p) return;
+    const fam = currentFamily(p);
+    if (!fam || fam.inFlight.has(ordinal)) return;
+    void this._issuePagedFetch(listState, ordinal, false).catch(() => undefined);
+  }
+
+  /** `setPageSize(n)` — every cached page describes the OLD size: clear + fetch once. */
+  setPageSizePaginated(listState: ListState, pageSize: number): void {
+    const p = listState.pagination;
+    if (!p || !applyPageSize(listState, pageSize)) return;
+    this._notifyPaginated(listState);
+    void this.triggerPagedFetch(listState, p.config.initialPage);
+  }
+
+  /**
+   * A continuation off a HYDRATED cursor failed. A persisted cursor is older
+   * than the storage round-trip by definition, so this is not an error state:
+   * re-fetch the predecessor (its own cursor is live once it is the chain
+   * head) to mint a fresh cursor and retry once. If that cannot be done the
+   * chain is reported `continuationLost`, so the UI offers "Reload feed"
+   * rather than a Load-more button that fails forever.
+   */
+  private async _rebuildContinuation(listState: ListState, ordinal: number): Promise<void> {
+    const p = listState.pagination;
+    if (!p) return;
+    const fam = currentFamily(p);
+    if (!fam) return;
+    const prev = ordinal - 1;
+    const errored = (): boolean => this.getListResolveState(listState)?.status === "error";
+
+    if (prev >= p.base && fam.pages.has(prev)) {
+      await this._issuePagedFetch(listState, prev, true).catch(() => undefined);
+      if (!errored() && currentFamily(p) === fam) {
+        const cursor = cursorFor(fam, ordinal, p.base);
+        // A cursor-only resolver with no fresh cursor cannot be continued.
+        if (cursor !== undefined) {
+          await this._issuePagedFetch(listState, ordinal, true).catch(() => undefined);
+          if (!errored()) return;
+        }
+      }
+    }
+    fam.continuationLost = true;
+    fam.continuationTrust = "live";
+    this._notifyPaginated(listState);
+  }
+
+  /**
+   * Project-and-notify for a pagination change with no fetch behind it
+   * (navigation, truncation, discardPendingAdds). Targeted recompute: a root
+   * list sources to group path "" and the groupDeps edges cover cross-group
+   * readers of its slot, so a full-tree recompute per `loadMore` is waste.
+   */
+  private _notifyPaginated(listState: ListState): void {
+    const store = this.resolveDeps.store as unknown as {
+      recompute: (changed?: Set<object>) => Set<object>;
+      syncListValuesCache: (ls: ListState) => void;
+    };
+    store.syncListValuesCache(listState);
+    // Root: the listConfigNode is the backward-compat bridge. Nested: the
+    // node is shared across owners — the owner entity is the second key
+    // (`entity.values` / `entity.dirty` observers).
+    const changed = new Set<object>([listState as unknown as object]);
+    if (listState.ownerEntity) changed.add(listState.ownerEntity as unknown as object);
+    else changed.add(listState.listConfigNode as object);
+    const recomputed = store.recompute(changed);
+    for (const n of changed) recomputed.add(n);
+    this.resolveDeps.notifyChanged(recomputed);
+  }
+
+  /**
+   * The executor's drift path: an automatic re-run, so it counts against
+   * `MAX_AUTO_RETRIGGERS` exactly like the hook path (a resolver that writes
+   * the dep it reads would otherwise spin forever through drift → re-key).
+   */
+  private _retriggerPaginatedListGuarded(listState: ListState): void {
+    const state = this.getOrCreateListResolveState(listState);
+    if (state) {
+      const count = (state.autoRetriggerCount ?? 0) + 1;
+      if (count > MAX_AUTO_RETRIGGERS) {
+        console.warn(
+          `Palistor: resolver auto-retrigger cap (${MAX_AUTO_RETRIGGERS}) reached ` +
+            `for paginated list. Possible circular dependency. Node deps: [${[...state.dependencies].join(", ")}]`,
+        );
+        return;
+      }
+      state.autoRetriggerCount = count;
+    }
+    this._retriggerPaginatedList(listState);
+  }
+
+  /**
+   * queryKey re-evaluation for a paginated list (the divert target of both
+   * postNotifyHook loops, `retriggerByPaths`, the filter gate and the
+   * executor's drift path):
+   *   - key unchanged ⇒ strict no-op (a dep PATH fired but the VALUE is the
+   *     same — the fresh cached page is still valid, `staleTime` respected);
+   *   - key changed ⇒ the old family is superseded (generation bump) and
+   *     evicted per `maxCachedQueries`, the pointer resets to `initialPage`,
+   *     and page 1 is served from cache if still fresh — else fetched once.
+   */
+  private _retriggerPaginatedList(listState: ListState): void {
+    const p = listState.pagination;
+    if (!p) return;
+    const store = this.resolveDeps.store as unknown as {
+      context: Record<string, unknown>;
+      recompute: () => Set<object>;
+      syncListValuesCache: (ls: ListState) => void;
+    };
+    const { fam, keyChanged } = ensureCurrentFamily(
+      listState,
+      this.pagedLiveValues(listState),
+      store.context,
+      Date.now(),
+    );
+    if (!keyChanged) return;
+
+    const first = fam.pages.get(p.config.initialPage);
+    if (first && isEntryFresh(first, p, Date.now())) {
+      // Flipped back to a still-cached query (`maxCachedQueries > 1`) — NO
+      // resolver. The retained family may hold a whole infinite window: every
+      // contiguous fresh ordinal from the head comes back with it.
+      if (p.mode === "infinite") {
+        p.loadedOrdinals = [];
+        for (let o = p.config.initialPage; ; o++) {
+          const e = fam.pages.get(o);
+          if (!e || !isEntryFresh(e, p, Date.now())) break;
+          p.loadedOrdinals.push(o);
+        }
+      }
+      p.isPreviousData = false;
+      projectWindow(listState);
+      const state = this.getOrCreateListResolveState(listState);
+      if (state && fam.inFlight.size === 0 && state.status === "pending") state.status = "resolved";
+      this._notifyPaginated(listState);
+      return;
+    }
+    if (p.config.keepPreviousData) {
+      // Opt-in: the previous query's window stays on screen (flagged as such)
+      // until the new key's first page lands.
+      p.isPreviousData = true;
+    } else {
+      // A different result set: the old window must not render under the new
+      // key (the executor's pending notify follows and `isInitialLoading` reads true).
+      projectWindow(listState);
+      store.syncListValuesCache(listState);
+    }
+    void this._issuePagedFetch(listState, p.config.initialPage, false);
   }
 
   /**

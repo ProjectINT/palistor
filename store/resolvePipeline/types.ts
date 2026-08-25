@@ -161,6 +161,16 @@ export class EntityResolveStateMap {
     return state;
   }
 
+  /** Install (or replace) the state of one (entityId, node) pair. */
+  set(entityId: string, node: object, state: ResolveState): void {
+    let byNode = this._map.get(entityId);
+    if (!byNode) {
+      byNode = new Map();
+      this._map.set(entityId, byNode);
+    }
+    byNode.set(node, state);
+  }
+
   /**
    * Delete resolve state(s) for an entity.
    * - If `node` is provided: delete only that specific (entityId, node) entry.

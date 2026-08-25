@@ -164,6 +164,7 @@ const store = new Palistor({
 | **Dirty tracking** | Per-field и per-group флаги изменений; baseline обновляется после resolve и reset |
 | **Async-резолверы** | Загрузка данных с авто-трекингом зависимостей, retry, optimistic updates и React Suspense |
 | **Списки и сущности** | Нормализованный реестр сущностей, list proxy с `add / remove / setItems`, per-entity шаблоны |
+| **Пагинация** | Кэш уровня страниц — переход на закэшированную страницу не вызывает резолвер; режимы `paged` / `infinite` / `cursor`, persist окна, вложенные списки |
 | **Flows** | Пошаговые мастера через `defineFlow` / `defineStep`: навигация, ветвление, валидация по шагам |
 | **Field mapping** | Переименование пропсов состояния поля под конвенцию вашего UI-кита (`isRequired` → `required`, …) |
 | **Persist** | Автосохранение в `localStorage`, `sessionStorage` или любой кастомный драйвер — вместе с навигацией флоу |
@@ -709,6 +710,134 @@ function Users() {
 > **Эти три ключа не переименовываются через `fieldMapping`.** Они сопоставляются до применения
 > маппинга, поэтому маппинг вида `{ isInvalid: "error" }` их не перекрывает: у **поля** `.error`
 > остаётся флагом валидации, у **списка** `.error` — ошибка resolve. На одном узле они не встречаются.
+
+### Пагинация
+
+> 🔗 **Исходник:** [modules/lists-demo/OrdersPagedSection.tsx](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/lists-demo/OrdersPagedSection.tsx) · **Живой результат:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
+
+Список загружает **по одной странице** и кэширует каждую увиденную. Добавьте блок `pagination` в
+`resolve` — его наличие и есть единственный переключатель. Резолвер получает запрос страницы как
+`ctx.page` и возвращает `{ items, total }` (голый массив тоже работает — тогда `total` выводится из
+загруженных страниц).
+
+```typescript
+const orders = defineList<Order>({
+  template: { id: { value: "" }, title: { value: "" }, amount: { value: 0 } },
+  resolve: {
+    deps: ["search"],                       // задаёт ключ запроса до первого прогона
+    pagination: { pageSize: 20 },           // mode: "paged" (по умолчанию) | "infinite" | "cursor"
+    resolver: async (values, store, ctx) => {
+      const r = await api.orders({
+        q: values.search,                   // каждое чтение values / context — авто-зависимость
+        tenant: store.context.tenantId,
+        offset: ctx.page!.offset,           // (page − base) × pageSize
+        limit: ctx.page!.pageSize,
+        cursor: ctx.page!.cursor,           // режимы cursor / infinite
+      });
+      return { items: r.rows, total: r.count, nextCursor: r.next }; // PagedResult
+    },
+  },
+});
+```
+
+**Переход на уже закэшированную страницу никогда не вызывает резолвер** — это синхронная проекция.
+Резолвер вызывается только при промахе, устаревшей странице или изменении того, что он прочитал
+(поиск, фильтры, `store.context`, …): это новый *ключ запроса*, старые страницы инвалидируются и
+страница 1 запрашивается ровно один раз. Запись тех же значений без изменения — строгий no-op.
+
+```typescript
+const list = form.orders;
+
+// Реактивные геттеры (пейджер, читающий только page / pageCount, перерисуется на setPage)
+list.page            // текущая страница (с учётом `base`, по умолчанию 1)
+list.pageSize
+list.pageCount       // из серверного total, иначе — число подряд закэшированных страниц
+list.total           // ОТОБРАЖАЕМЫЙ total: серверный ± локальные оптимистичные add/remove
+list.serverTotal     // сырой серверный total — меняется только на fetch / delete / подтверждённый add
+list.hasNextPage     // оптимистичный add его не обманывает
+list.hasPrevPage
+list.isFetching      // любой запрос страницы в полёте (`loading` читает тот же сигнал)
+list.isInitialLoading // грузим, а в кэше ещё ничего — скелетон vs. спиннер
+list.isPreviousData  // `keepPreviousData`: строки на экране принадлежат предыдущему запросу
+list.pendingAdds     // id не отправленных на сервер оптимистичных добавлений
+
+// Навигация
+list.setPage(n);     // закэширована и свежа → синхронно; иначе один запрос
+list.nextPage();  list.prevPage();
+list.prefetch(n);    // прогреть кэш, не двигая указатель (hover)
+list.setPageSize(n); // очистить кэш, один запрос страницы 1
+
+// Свежесть — всегда не больше ОДНОГО запроса
+await list.refetch();   // paged: весь запрос устаревает, текущая страница перезапрашивается сейчас;
+                        // infinite / cursor: pull-to-refresh — назад к первой странице
+list.invalidate();      // пометить все страницы устаревшими; текущая перезапрашивается сейчас
+list.invalidate(3);     // одну страницу (cursor / infinite: всё после неё тоже сбрасывается)
+list.discardPendingAdds(); // выбросить неотправленные строки (выход из «вечно dirty»)
+
+// только infinite
+list.loadMore();            // дозагрузить следующую страницу (кэш ⇒ без запроса; no-op пока грузится)
+list.isFetchingNextPage     // спиннер в футере, не путать с isInitialLoading
+list.loadedPages            // [{ ordinal, ids }] — для UI с заголовками секций
+list.continuationLost       // цепочку курсоров не восстановить → предложите «Обновить ленту»
+```
+
+```tsx
+function Orders() {
+  const form = useForm(store);
+  const orders = form.orders;
+  return (
+    <>
+      {orders.isInitialLoading ? <Skeleton /> : orders.map((o, i, id) => <Row key={id} order={o} />)}
+      <button disabled={!orders.hasPrevPage} onClick={orders.prevPage}>Назад</button>
+      <span>Страница {orders.page} из {orders.pageCount}{orders.isFetching && " …"}</span>
+      <button disabled={!orders.hasNextPage} onClick={orders.nextPage}>Вперёд</button>
+    </>
+  );
+}
+```
+
+**Режимы.** `paged` — одна страница на экране, произвольный доступ. `infinite` — окно накапливается
+(`loadMore`); продолжение идёт по `nextCursor`, если резолвер его вернул, иначе по offset. `cursor` —
+одна страница на экране, последовательный доступ через `nextCursor` (`prevPage` бесплатен,
+`setPage(n)` достигает только следующую страницу).
+
+**Локальные правки и кэш.** `add / remove / setItems` меняют закэшированную страницу, на которую
+попадают; видимое окно — всегда проекция страниц. `dirty` — агрегат по всем закэшированным страницам,
+так что неотправленный add на невидимой странице держит список грязным. `reset()` откатывает правки
+каждой страницы и сохраняет навигацию (без запроса). `store.rekey(tmp, real)` доходит до каждой
+страницы и переводит подтверждённую строку в серверную правду; `store.delete(id)` вырезает её из всех
+страниц и помечает последующие устаревшими. Удалённая строка в режиме `paged` на экране замещается
+головой следующей закэшированной страницы, пока та не перезапрошена.
+
+| Опция `pagination` | По умолчанию | Смысл |
+|---|---|---|
+| `pageSize` | — | обязательна |
+| `mode` | `"paged"` | `"paged"` \| `"infinite"` \| `"cursor"` |
+| `base` / `initialPage` | `1` / `base` | нумерация страниц |
+| `staleTime` | `Infinity` | мс, пока закэшированная страница отдаётся без фонового перезапроса (stale-while-revalidate) |
+| `maxCachedQueries` / `gcTime` | `1` / `Infinity` | сколько ключей запроса хранить (возврат к старому фильтру ⇒ кэш) и как долго |
+| `maxCachedPages` | `Infinity` | LRU-лимит страниц на запрос (видимое окно не вытесняется) |
+| `maxPages` | `Infinity` | `infinite`: окно держит не больше стольких страниц — старые уходят из памяти, offset продолжения сохраняется |
+| `keepPreviousData` | `false` | держать строки предыдущего запроса, пока грузится страница 1 нового |
+| `persist` | `{ maxPages: 3 }` | что попадает в storage: ограниченный хвост, `"window"` (всё + якорь скролла) или `false` |
+| `persistPendingAdds` | `"keep"` | неотправленные добавления переживают перезагрузку (`"drop"` — выбросить) |
+| `revalidateOnHydrate` | `"first"` | что перепроверяет восстановленное просроченное окно после отрисовки (`"none"` \| `"first"` \| `"all"`) |
+| `queryKey(values, context)` | авто | запасной выход, если авто-зависимости не сериализуются |
+
+**Persist.** С `usePersist` / `store.persist` текущая страница (а для `infinite` — хвост окна)
+восстанавливается после перезагрузки и отдаётся без запроса — но только если сохранённый запрос
+совпадает с живыми значениями и контекстом (окно, сохранённое для tenant A, никогда не отдаётся
+tenant B). При `persist: "window"` вызывайте `list.setScrollAnchor(id)` из IntersectionObserver и
+читайте `list.scrollAnchor` после гидрации, чтобы восстановить скролл.
+
+**Вложенные списки.** Тот же блок `pagination` на списке внутри шаблона сущности пагинирует **каждый
+per-entity экземпляр независимо** (`user.orders.setPage(2)`) — со своим кэшем и ключом запроса.
+Резолвер получает значения владельца первым аргументом; прочитанные поля владельца становятся его
+зависимостями, так что правка `user.region` перезапрашивает только список этого пользователя.
+
+**Suspense.** `resolve.options.suspense: true` заставляет `items` / `map` / `length` бросать промис
+запроса, пока списку нечего показать (первая страница или смена запроса без `keepPreviousData`);
+навигация по страницам и `loadMore` никогда не «подвешивают» уже показанные строки.
 
 ### Элемент списка — свойства прокси
 

@@ -18,6 +18,40 @@ export const mockProducts = [
   { id: "p4", title: "Monitor 4K", price: 599, category: "electronics", inStock: true },
 ];
 
+// ─── Orders — a paginated feed (57 rows, one page per request) ───────────────
+
+const ORDER_STATUSES = ["paid", "pending", "shipped", "cancelled"] as const;
+
+export const mockOrders = Array.from({ length: 57 }, (_, i) => ({
+  id: `ord-${i + 1}`,
+  title: `Order #${1000 + i}`,
+  amount: Math.round(((i * 37) % 900) + 25),
+  status: ORDER_STATUSES[i % ORDER_STATUSES.length] as string,
+}));
+
+/**
+ * Paginated endpoint: LIMIT/OFFSET over the (optionally searched) orders.
+ * Returns the page plus the total, the shape a `PagedResult` expects.
+ */
+export function fetchOrders(params: {
+  q?: string;
+  offset: number;
+  limit: number;
+}): Promise<{ items: typeof mockOrders; total: number }> {
+  return new Promise((resolve) =>
+    setTimeout(() => {
+      const q = (params.q ?? "").trim().toLowerCase();
+      const rows = q
+        ? mockOrders.filter((o) => o.title.toLowerCase().includes(q) || o.status.includes(q))
+        : mockOrders;
+      resolve({
+        items: rows.slice(params.offset, params.offset + params.limit),
+        total: rows.length,
+      });
+    }, 500),
+  );
+}
+
 export const mockUserDetails: Record<string, object> = {
   u1: { department: "Engineering", phone: "+1-555-0101" },
   u2: { department: "Product", phone: "+1-555-0102" },
@@ -133,3 +167,4 @@ export function fetchUnreliableData(): Promise<{ status: string; timestamp: numb
     }, 300),
   );
 }
+

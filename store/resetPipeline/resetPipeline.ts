@@ -5,6 +5,7 @@ import { setGroupRevalidate, captureInitialValues } from "../dirtyTracking";
 import { recomputeAndNotify } from "../compute/recompute";
 import { buildResetPatch } from "./buildResetPatch";
 import { resetFlowNavForSubtree } from "../flow/flowNavigation";
+import { resetPagination } from "../pagination/paginationController";
 
 /**
  * ResetPipeline — resets a group node's values.
@@ -26,9 +27,24 @@ export class ResetPipeline {
     const valuesCache = this.kernel.values;
 
     // On a full form reset, clear entity-field resolve states so they run
-    // again when entities are loaded through the list resolver.
+    // again when entities are loaded through the list resolver. A PAGINATED
+    // nested list keeps its state: its page cache survives the reset (per-page
+    // rollback, zero network), so its resolve state — status, settled dep set,
+    // cycle counter — must survive with it, or the next read would refetch a
+    // fresh cached window and the owner-field retrigger would go blind.
     if (groupNode === this.kernel.rootConfig) {
-      this.kernel.resolveManager.entityStates.clearAll();
+      const entityStates = this.kernel.resolveManager.entityStates;
+      const kept: Array<{ ownerId: string; node: object; state: import("../resolvePipeline").ResolveState }> = [];
+      this.kernel.entityRegistry.forEachEntityList((owner, ls) => {
+        if (!ls.pagination) return;
+        const ownerId = String(
+          (nodeState.get(owner.id as object) as { value?: unknown } | undefined)?.value ?? owner.id.value,
+        );
+        const state = entityStates.get(ownerId, ls.listConfigNode);
+        if (state) kept.push({ ownerId, node: ls.listConfigNode, state });
+      });
+      entityStates.clearAll();
+      for (const k of kept) entityStates.set(k.ownerId, k.node, k.state);
     }
 
     const patch = buildResetPatch(groupNode, initialValueMap, values);
@@ -39,9 +55,25 @@ export class ResetPipeline {
     // their EntityListState versions → React redraws the lists. The owner's
     // projectionObj is re-synced so getValues() returns the initial state.
     if (groupNode === this.kernel.rootConfig) {
-      for (const { state } of this.kernel.entityRegistry.resetEntityListStates()) {
+      for (const { owner, state } of this.kernel.entityRegistry.resetEntityListStates()) {
+        // A paginated nested instance rolls back per cached page, like a
+        // paginated root list (edits undone, navigation and cache kept).
+        if (state.pagination) {
+          resetPagination(state);
+          changed.add(owner as unknown as object);
+        }
         this.kernel.syncListValuesCache(state);
         changed.add(state as unknown as object);
+      }
+      // Paginated root lists: per-page rollback — EDITS are undone, not
+      // navigation (pointer and cache kept, in-flight results discarded, the
+      // resolve state stays `resolved` so nothing lazily refetches). Zero network.
+      for (const ls of this.kernel.nodes.allListStates) {
+        if (ls.ownerEntity !== null || !ls.pagination) continue;
+        resetPagination(ls);
+        this.kernel.syncListValuesCache(ls);
+        changed.add(ls as unknown as object);
+        changed.add(ls.listConfigNode as object);
       }
     }
 

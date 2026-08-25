@@ -39,8 +39,14 @@ import type {
   Unsubscribe,
 } from "./types";
 import type { MappableKey } from "../constants";
-import { FILTER_SPREAD_KEYS, SORT_SPREAD_KEYS } from "../constants";
+import { FILTER_SPREAD_KEYS, PAGINATION_SPREAD_KEYS, SORT_SPREAD_KEYS } from "../constants";
 import type { FieldState } from "../compute/index";
+import {
+  clearFamilies,
+  deleteIdEverywhere,
+  rekeyPagination,
+} from "../pagination/paginationController";
+import { seedFamilyFromWindow } from "../pagination/paginationPersist";
 
 // ─── Palistor ─────────────────────────────────────────────────────────────────
 
@@ -156,10 +162,14 @@ export class Palistor<
     // are matched RAW on the list proxy, so a fieldMapping renaming anything TO
     // one of them would silently rewrite the read into a miss — throw instead.
     for (const external of Object.keys(this.externalToInternal)) {
-      if (FILTER_SPREAD_KEYS.includes(external) || SORT_SPREAD_KEYS.includes(external)) {
+      if (
+        FILTER_SPREAD_KEYS.includes(external) ||
+        SORT_SPREAD_KEYS.includes(external) ||
+        PAGINATION_SPREAD_KEYS.includes(external)
+      ) {
         throw new Error(
           `[palistor] fieldMapping renames "${this.externalToInternal[external]}" to "${external}", ` +
-            `which is a reserved list key (${[...FILTER_SPREAD_KEYS, ...SORT_SPREAD_KEYS].join(", ")}).`,
+            `which is a reserved list key (${[...FILTER_SPREAD_KEYS, ...SORT_SPREAD_KEYS, ...PAGINATION_SPREAD_KEYS].join(", ")}).`,
         );
       }
     }
@@ -491,6 +501,25 @@ export class Palistor<
       this.nodes.nodeState.set(idLeaf, { ...leafState, value: newId });
       if (projObj) projObj["id"] = newId;
     }
+    // Paginated lists: the registry rewrote only the visible window — reach
+    // every cached page (ids + initialIds, with confirmed-add promotion).
+    for (const ls of this.nodes.allListStates) {
+      if (!ls.pagination || ls.ownerEntity !== null) continue;
+      if (rekeyPagination(ls, oldId, newId)) {
+        this.syncListValuesCache(ls);
+        changed.add(ls as unknown as object);
+        changed.add(ls.listConfigNode as object);
+      }
+    }
+    // Paginated NESTED instances (the registry never registers per-entity lists).
+    this.entityRegistry.forEachEntityList((owner, ls) => {
+      if (!ls.pagination) return;
+      if (rekeyPagination(ls, oldId, newId)) {
+        this.syncListValuesCache(ls);
+        changed.add(ls as unknown as object);
+        changed.add(owner as unknown as object);
+      }
+    });
     const recomputed = this.recompute(changed);
     for (const n of changed) recomputed.add(n);
     this.notifyChanged(recomputed);
@@ -526,6 +555,13 @@ export class Palistor<
     // clears the owner pointer.
     const affectedLists = new Set<ListState>();
     for (const ls of this.nodes.allListStates) {
+      // Paginated: the id may sit on an off-screen cached page — splice it out
+      // of every page of every family (server-truth accounting included), then
+      // the window re-projects.
+      if (ls.pagination && ls.ownerEntity === null) {
+        if (deleteIdEverywhere(ls, id)) affectedLists.add(ls);
+        continue;
+      }
       const idx = ls.itemIds.indexOf(id);
       if (idx >= 0) {
         ls.itemIds.splice(idx, 1);
@@ -536,12 +572,25 @@ export class Palistor<
     if (owner) {
       const ownerNode = this.entityRegistry.get(owner.ownerId);
       const ownerList = ownerNode?.lists?.get(owner.ownerListNode);
-      if (ownerList) {
+      if (ownerList && !ownerList.pagination) {
         const idx = ownerList.itemIds.indexOf(id);
         if (idx >= 0) {
           ownerList.itemIds.splice(idx, 1);
           affectedLists.add(ownerList);
         }
+      }
+    }
+    // Paginated nested instances: the id may sit on an off-screen cached page
+    // of any owner's list (re-parenting leaves the old copy behind) — splice
+    // it out everywhere, server-truth accounting included.
+    this.entityRegistry.forEachEntityList((_o, ls) => {
+      if (ls.pagination && deleteIdEverywhere(ls, id)) affectedLists.add(ls);
+    });
+    // The deleted entity's own paginated lists die with it — release their
+    // retention timers so a cache eviction never outlives its owner.
+    if (entityNode.lists) {
+      for (const ls of entityNode.lists.values()) {
+        if (ls.pagination) clearFamilies(ls);
       }
     }
 
@@ -786,9 +835,12 @@ export class Palistor<
    *
    * @internal
    */
-  restoreLists(values: Record<string, unknown>): Set<object> {
+  restoreLists(
+    values: Record<string, unknown>,
+    paginationBlobs?: Record<string, unknown>,
+  ): Set<object> {
     const changed = new Set<object>();
-    this._restoreListsRec(this.rootConfig, values, null, changed);
+    this._restoreListsRec(this.rootConfig, values, null, changed, "", paginationBlobs);
     return changed;
   }
 
@@ -797,6 +849,8 @@ export class Palistor<
     valueObj: Record<string, unknown> | undefined,
     ownerEntity: EntityNode | null,
     changed: Set<object>,
+    parentPath = "",
+    paginationBlobs?: Record<string, unknown>,
   ): void {
     for (const key of configKeys(configNode as Record<string, unknown>)) {
       const child = (configNode as Record<string, unknown>)[key];
@@ -812,6 +866,8 @@ export class Palistor<
               nested as Record<string, unknown>,
               ownerEntity,
               changed,
+              parentPath ? `${parentPath}.${key}` : key,
+              paginationBlobs,
             );
           }
         }
@@ -860,16 +916,37 @@ export class Palistor<
       }
 
       if (ownerEntity) {
-        const els = this.entityRegistry.getOrCreateEntityListState(ownerEntity, listConfigNode);
-        els.itemIds = ids;
-        els.initialItemIds = [...ids];
+        const els = this.entityRegistry.getOrCreateEntityListState(
+          ownerEntity,
+          listConfigNode,
+          this.nodes.listFieldKeys.get(listConfigNode)?.join("."),
+        );
+        if (els.pagination) {
+          // Paginated nested instance: no blob is persisted for it — the
+          // restored array bootstraps a synthesized stale family (rule 6)
+          // and the first fetch RECONCILES it instead of replacing it.
+          const seeded = seedFamilyFromWindow(this, els, ids, undefined);
+          for (const n of seeded) changed.add(n);
+          changed.add(ownerEntity as unknown as object);
+        } else {
+          els.itemIds = ids;
+          els.initialItemIds = [...ids];
+        }
         this.syncListValuesCache(els);
         changed.add(els as unknown as object);
       } else {
         const listState = this.nodes.listStates.get(listConfigNode);
         if (listState) {
-          listState.itemIds = ids;
-          listState.initialItemIds = [...ids];
+          if (listState.pagination) {
+            // Paginated root list: file the window under its page + pointer
+            // (or synthesize a stale family when the blob is absent/untrusted).
+            const listPath = parentPath ? `${parentPath}.${key}` : key;
+            const seeded = seedFamilyFromWindow(this, listState, ids, paginationBlobs?.[listPath]);
+            for (const n of seeded) changed.add(n);
+          } else {
+            listState.itemIds = ids;
+            listState.initialItemIds = [...ids];
+          }
           this.syncListValuesCache(listState);
           // ListState is the tracking key; listConfigNode is the backward-compat bridge.
           changed.add(listState as unknown as object);

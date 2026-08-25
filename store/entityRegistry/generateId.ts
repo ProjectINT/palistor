@@ -18,3 +18,8 @@ let seq = 0;
 export function generateTmpId(): string {
   return `_tmp_${Date.now().toString(36)}_${randomStr(8)}_${++seq}`;
 }
+
+/** A `_tmp_*` id — by construction never a server-assigned one. */
+export function isTmpId(id: string): boolean {
+  return id.startsWith("_tmp_");
+}

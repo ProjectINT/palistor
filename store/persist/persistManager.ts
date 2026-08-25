@@ -14,12 +14,15 @@ import type { PersistDriver, PersistOptions } from "./types";
 import { applyPatch } from "../applyPatch/applyPatch";
 import { recomputeAndNotify } from "../compute/recompute";
 import type { Palistor } from "../store/palistor";
+import type { ListState } from "../store/types";
 import {
   restoreFlowNav,
   runFlowEntryLifecycle,
   serializeFlowNav,
   type FlowNavSnapshot,
 } from "../flow/flowNavigation";
+import { PAGINATION_PERSIST_KEY, serializePagination } from "../pagination/paginationPersist";
+import { clearFamilies } from "../pagination/paginationController";
 
 /**
  * Reserved persist-snapshot key for flow navigation (defineFlow):
@@ -28,6 +31,22 @@ import {
  * saved — derived from navigation on hydrate.
  */
 const FLOWS_PERSIST_KEY = "__flows";
+
+/**
+ * A storage-quota failure — the one save error worth retrying with a smaller
+ * payload. `setItem` throws it synchronously; browsers disagree on the name
+ * and the legacy code, so all three spellings are matched.
+ */
+function isQuotaError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: number };
+  return (
+    e.name === "QuotaExceededError" ||
+    e.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    e.code === 22 ||
+    e.code === 1014
+  );
+}
 
 // ─── Field filtering ─────────────────────────────────────────────────────────
 
@@ -80,6 +99,7 @@ export class PersistManager {
   private debounceMs = 100;
   private pickFields: string[] | undefined;
   private omitFields: string[] | undefined;
+  private onError: PersistOptions["onError"] | undefined;
 
   /** Unsubscribe from subscribeGlobal. */
   private unsubscribe: (() => void) | null = null;
@@ -113,9 +133,19 @@ export class PersistManager {
 
   /**
    * Save the current values to storage (no debounce).
+   *
+   * A `QuotaExceededError` is not an edge case for a paginated list — the
+   * window grows with scroll depth. Rather than letting the first over-quota
+   * write kill persistence for the whole form, the payload is retried once
+   * with every pagination window trimmed to its pointer, then once with no
+   * pagination blob at all; only then does `onError('save')` fire.
    */
   private async saveToStorage(): Promise<void> {
     if (!this.active || !this.currentKey || !this.currentDriver) return;
+    // Symmetric to the isHydrating guard: a window mid-refetch is a torn
+    // intermediate state that must not reach storage (it would hydrate as
+    // `resolved` and never self-correct).
+    if (this.isRefetchInFlight()) return;
 
     const allValues = this.kernel.getValues() as Record<string, unknown>;
     const filtered = filterValues(allValues, this.pickFields, this.omitFields);
@@ -123,13 +153,54 @@ export class PersistManager {
     // Flow: navigation is stored under a separate reserved key, not subject
     // to pick/omit (it is not a form field).
     const flowNav = serializeFlowNav(this.kernel);
-    const payload = flowNav ? { ...filtered, [FLOWS_PERSIST_KEY]: flowNav } : filtered;
 
+    const build = (paginationMode: "full" | "pointer" | "none"): Record<string, unknown> => {
+      // Pagination: the window + pointer + dep values of every paginated root
+      // list whose array survived pick/omit — bound to its list, unlike `__flows`.
+      const pagination =
+        paginationMode === "none"
+          ? null
+          : serializePagination(this.kernel, filtered, paginationMode === "pointer");
+      if (!flowNav && !pagination) return filtered;
+      const payload: Record<string, unknown> = { ...filtered };
+      if (flowNav) payload[FLOWS_PERSIST_KEY] = flowNav;
+      if (pagination) payload[PAGINATION_PERSIST_KEY] = pagination;
+      return payload;
+    };
+
+    let lastError: unknown;
+    for (const mode of ["full", "pointer", "none"] as const) {
+      try {
+        const serialized = this.serialize(build(mode));
+        await Promise.resolve(this.currentDriver.setItem(this.currentKey, serialized));
+        return;
+      } catch (err) {
+        lastError = err;
+        // Only a quota failure is worth retrying smaller; anything else
+        // (a serializer throw, a dead driver) fails the same way every time.
+        if (!isQuotaError(err)) break;
+      }
+    }
+    this.reportError(lastError, "save");
+  }
+
+  /** Any paginated root list with a page fetch in flight. */
+  private isRefetchInFlight(): boolean {
+    for (const ls of this.kernel.nodes.allListStates) {
+      const p = ls.pagination;
+      if (!p || ls.ownerEntity !== null) continue;
+      const fam = p.currentQueryKey === null ? undefined : p.families.get(p.currentQueryKey);
+      if (fam && fam.inFlight.size > 0) return true;
+    }
+    return false;
+  }
+
+  private reportError(error: unknown, phase: "save" | "hydrate"): void {
+    if (!this.onError) return;
     try {
-      const serialized = this.serialize(payload);
-      await Promise.resolve(this.currentDriver.setItem(this.currentKey, serialized));
+      this.onError(error, phase);
     } catch {
-      // Serialization/write errors are silenced (production-safe)
+      // onError must not break the store
     }
   }
 
@@ -181,19 +252,31 @@ export class PersistManager {
       if (flowSnapshots !== undefined) {
         delete (values as Record<string, unknown>)[FLOWS_PERSIST_KEY];
       }
+      const paginationBlobs = (values as Record<string, unknown>)[PAGINATION_PERSIST_KEY] as
+        | Record<string, unknown>
+        | undefined;
+      if (paginationBlobs !== undefined) {
+        delete (values as Record<string, unknown>)[PAGINATION_PERSIST_KEY];
+      }
 
       // Apply as a patch — applyPatch walks the config tree recursively
-      // (scalar/group fields; list nodes are skipped).
+      // (scalar/group fields; list nodes are skipped). The values cache is
+      // updated in the same pass so the pagination seed below recomputes its
+      // queryKey against the restored values.
       const patchedNodes = applyPatch(
         this.kernel.rootConfig,
         this.kernel.nodes.nodeState,
         values,
         new Set(),
+        this.kernel.values,
       );
 
       // Restore root and per-entity list membership from the snapshot.
       // No-op for configs without lists (graceful for older snapshots).
-      const listChanged = this.kernel.restoreLists(values);
+      const listChanged = this.kernel.restoreLists(
+        values,
+        paginationBlobs && typeof paginationBlobs === "object" ? paginationBlobs : undefined,
+      );
       for (const n of listChanged) patchedNodes.add(n);
 
       // Flow: restore navigation (active step, stack, visited).
@@ -217,8 +300,9 @@ export class PersistManager {
       for (const flowState of enteredFlows) {
         runFlowEntryLifecycle(this.kernel, flowState);
       }
-    } catch {
-      // Deserialization errors are silenced
+    } catch (err) {
+      // Deserialization errors are silenced — but never invisible.
+      this.reportError(err, "hydrate");
     } finally {
       // Only the CURRENT run may clear the flag — a superseded run finishing
       // late must not unmark a newer hydration that is still in flight.
@@ -249,6 +333,7 @@ export class PersistManager {
     this.debounceMs = options.debounce ?? 100;
     this.pickFields = options.pick as string[] | undefined;
     this.omitFields = options.omit as string[] | undefined;
+    this.onError = options.onError;
     this.active = true;
 
     // Subscribe to changes for auto-save
@@ -275,6 +360,38 @@ export class PersistManager {
 
     this.currentKey = null;
     this.currentDriver = null;
+    this.onError = undefined;
+    this.clearPaginationCaches();
+  }
+
+  /**
+   * Drop every paginated family and supersede its in-flight fetches. Called
+   * from disable() — which a superseded enable() runs first, so this is the
+   * account-switch path: the page cache is scoped to the persisted session,
+   * and a completion filed after the switch would land another user's rows in
+   * the window (the new key's hydration may restore nothing at all). The
+   * resolve state returns to `idle`, so the emptied list lazily refetches
+   * under the live key instead of rendering empty forever.
+   */
+  private clearPaginationCaches(): void {
+    const clear = (ls: ListState): void => {
+      const p = ls.pagination;
+      if (!p) return;
+      if (p.families.size === 0 && p.currentQueryKey === null) return;
+      clearFamilies(ls);
+      this.kernel.syncListValuesCache(ls);
+      const state = this.kernel.resolveManager.getListResolveState(ls);
+      if (state) {
+        state.status = "idle";
+        state.promise = null;
+        state.error = null;
+      }
+    };
+    for (const ls of this.kernel.nodes.allListStates) {
+      if (ls.ownerEntity === null) clear(ls);
+    }
+    // Nested instances belong to the persisted session as much as root lists.
+    this.kernel.entityRegistry.forEachEntityList((_owner, ls) => clear(ls));
   }
 
   /** Force-save the current values to storage (no debounce). */

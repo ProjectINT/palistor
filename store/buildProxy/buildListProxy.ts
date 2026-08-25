@@ -2,9 +2,12 @@ import {
   CONFIG_NODE,
   FILTER_SPREAD_KEYS,
   FILTER_STATE,
+  CHAIN_SPREAD_KEYS,
+  INFINITE_SPREAD_KEYS,
   LIST_STATE,
   LIST_ONLY_KEYS,
   LIST_SPREAD_KEYS,
+  PAGINATION_SPREAD_KEYS,
 } from "../constants";
 import type { MappableKey } from "../constants";
 import type { AnyConfigNode, ListState } from "../store/types";
@@ -13,6 +16,28 @@ import type { Palistor } from "../store/palistor";
 import { generateTmpId } from "../entityRegistry";
 import { applyClientFilter } from "../filtering/filterController";
 import { buildFilterProxy } from "./buildFilterProxy";
+import {
+  currentFamily,
+  currentPageOf,
+  discardPendingAdds,
+  displayTotal,
+  ensureCurrentFamily,
+  findPageWithId,
+  getOrCreateEntry,
+  hasIdInFamily,
+  hasNextPageOf,
+  isEntryExpired,
+  isPaginatedDirty,
+  loadedPagesOf,
+  markStaleAfter,
+  nextOrdinalOf,
+  pageCountOf,
+  pendingAddsOf,
+  projectWindow,
+  touchPage,
+  warnOnce,
+} from "../pagination/paginationController";
+import type { QueryFamily } from "../pagination/types";
 import {
   buildEntityProjectionProxy,
   buildEntityValuesWithLists,
@@ -126,8 +151,12 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       for (const n of changed) recomputed.add(n);
       kernel.notifyChanged(recomputed);
     } else {
-      // Root: full recompute (valuesCache.users → all computed props).
-      const recomputed = kernel.recompute();
+      // Root: a PAGINATED list recomputes targeted — it sources to group path
+      // "" and the groupDeps edges cover cross-group readers of its slot, so a
+      // full-tree recompute per navigation (per `loadMore`) is pure waste.
+      const recomputed = listState.pagination
+        ? kernel.recompute(new Set<object>([listState as unknown as object, listConfigNode as object]))
+        : kernel.recompute();
       // Root-list tracking is keyed by the ListState object.
       recomputed.add(listState as unknown as object);
       // Backward-compat bridge: older tests read getNodeVersion(listNode).
@@ -146,7 +175,15 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       ? applyClientFilter(listState, kernel)
       : listState.itemIds;
 
-  /** Trigger lazy list resolve on first access (root + per-entity, single path). */
+  /**
+   * Trigger lazy list resolve on first access (root + per-entity, single path).
+   *
+   * `options.suspense`: a pending run throws its promise (React Suspense).
+   * A paginated list suspends ONLY while it has nothing renderable — the
+   * first page, or a queryKey change without `keepPreviousData`; a page
+   * navigation / `loadMore` / background revalidation keeps the current
+   * window on screen and never unmounts it into a fallback.
+   */
   const triggerLazyResolveIfNeeded = (): void => {
     if (!listConfig?.resolve) return;
     const st = kernel.resolveManager.getListResolveState(listState);
@@ -155,7 +192,168 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       // Defer: the GET trap fires during a React render; a synchronous
       // resolve→notify would yield "Cannot update a component while rendering another".
       queueMicrotask(() => kernel.resolveManager.triggerListResolve(listState));
+      return;
     }
+    if (
+      listConfig.resolve.options?.suspense === true &&
+      st.status === "pending" &&
+      st.promise
+    ) {
+      if (!pg) throw st.promise;
+      if (listState.itemIds.length === 0 && !pg.isPreviousData) throw st.promise;
+    }
+  };
+
+  // ─── Pagination (root lists with `resolve.pagination`) ──────────────────────
+  // Mutation inversion: pages are the source of truth, the window is always a
+  // projection. Every local edit mutates the authoritative PageCacheEntry.ids
+  // (never initialIds), then projectWindow + notify re-derive everything else.
+
+  const pg = listState.pagination;
+  const famNow = (): QueryFamily | undefined => (pg ? currentFamily(pg) : undefined);
+  /** The family a local edit lands in — created on the bootstrap key before any fetch. */
+  const famForEdit = (): QueryFamily =>
+    famNow() ??
+    ensureCurrentFamily(
+      listState,
+      kernel.resolveManager.pagedLiveValues(listState),
+      kernel.context,
+      Date.now(),
+    ).fam;
+
+  /**
+   * Mutation inversion (root + nested): the row lands on the authoritative
+   * page entry — paged/cursor the CURRENT page, infinite the LAST loaded
+   * ordinal — and the window is re-derived. Dedup is family-wide (the same
+   * entity must never sit on two cached pages); an over-full page is fine,
+   * fullness math reads `fetchedCount`, never `|ids|`.
+   */
+  const pagedAdd = (entityId: string): void => {
+    const fam = famForEdit();
+    if (hasIdInFamily(fam, entityId)) return;
+    const ordinal = currentPageOf(pg!);
+    getOrCreateEntry(fam, ordinal, Date.now()).ids.push(entityId);
+    if (pg!.mode === "infinite" && !pg!.loadedOrdinals.includes(ordinal)) {
+      // First row of an empty infinite window: the ordinal becomes the
+      // window so the optimistic row is actually visible.
+      pg!.loadedOrdinals.push(ordinal);
+    }
+    projectWindow(listState);
+    notifyListChanged();
+  };
+
+  /**
+   * Paged/cursor: replace the CURRENT page's ids (ids parked on other cached
+   * pages stay there — family-wide dedup); a cardinality change shifts the
+   * later offsets, a same-length reorder stales nothing. Infinite refuses:
+   * no correct page-boundary split of an arbitrary permutation exists (any
+   * split changes which entry's baseline/guard/rekey finds each row, and a
+   * later single-page refetch would roll back exactly one slice of the
+   * user's ordering).
+   */
+  const pagedSetItems = (uniqueIds: string[]): void => {
+    if (pg!.mode === "infinite") {
+      const message =
+        `[palistor] setItems() is not supported on the infinite-mode list ` +
+        `"${pg!.listPath}": a multi-page window has no correct per-page assignment.`;
+      if (process.env.NODE_ENV !== "production") throw new Error(message);
+      console.warn(message);
+      return;
+    }
+    const fam = famForEdit();
+    const entry = getOrCreateEntry(fam, pg!.currentPage, Date.now());
+    const next = uniqueIds.filter((id) => {
+      const o = findPageWithId(fam, id);
+      return o === undefined || o === pg!.currentPage;
+    });
+    const lengthChanged = next.length !== entry.ids.length;
+    entry.ids = next;
+    if (lengthChanged) markStaleAfter(fam, pg!.currentPage);
+    projectWindow(listState);
+    notifyListChanged();
+  };
+  const isFetching = (): boolean => (famNow()?.inFlight.size ?? 0) > 0;
+  const isInfinite = pg?.mode === "infinite";
+  /** cursor + infinite: the modes whose continuation runs off a cursor chain. */
+  const isChain = !!pg && pg.mode !== "paged";
+
+  /**
+   * The guaranteed no-resolver hot path: a fresh cached page is a synchronous
+   * projection + notify; only a miss / stale page enters the resolve pipeline.
+   *
+   * A page past `staleTime` is SERVED and revalidated in the background
+   * (stale-while-revalidate); a page marked `stale` — its rows are known wrong
+   * after an offset shift or an explicit `invalidate` — blocks on the fetch.
+   */
+  const setPageFn = (n: number): void => {
+    if (!pg) return;
+    if (!Number.isInteger(n) || n < pg.base) return;
+    if (pg.mode === "infinite") {
+      warnOnce(
+        pg,
+        "setPage-infinite",
+        `[palistor] setPage() on the infinite-mode list "${pg.listPath}" is not a ` +
+          `navigation — use loadMore() / refetch().`,
+      );
+      return;
+    }
+    const fam = famNow();
+    const entry = fam?.pages.get(n);
+    if (pg.mode === "cursor" && !entry && n !== nextOrdinalOf(pg)) {
+      // A cursor chain only reaches an ordinal through its predecessor's
+      // cursor — random access is not addressable on the server.
+      warnOnce(
+        pg,
+        "setPage-cursor",
+        `[palistor] setPage(${n}) on the cursor-mode list "${pg.listPath}" is ` +
+          `unreachable: a cursor chain is sequential (use nextPage()/prevPage()).`,
+      );
+      return;
+    }
+    if (fam && entry && entry.status === "fresh") {
+      pg.currentPage = n;
+      pg.loadedOrdinals = [n];
+      touchPage(fam, n);
+      projectWindow(listState);
+      notifyListChanged();
+      if (isEntryExpired(entry, pg, Date.now())) {
+        // Served now, refreshed behind it — the reconcile recipe keeps
+        // un-flushed local edits on the page.
+        kernel.resolveManager.revalidatePaginated(listState, n);
+      }
+      return;
+    }
+    pg.currentPage = n;
+    pg.loadedOrdinals = [n];
+    void kernel.resolveManager.triggerPagedFetch(listState, n);
+  };
+  const nextPageFn = (): void => {
+    if (!pg || !hasNextPageOf(pg, famNow())) return;
+    setPageFn(pg.currentPage + 1);
+  };
+  const prevPageFn = (): void => {
+    if (!pg || pg.currentPage <= pg.base) return;
+    setPageFn(pg.currentPage - 1);
+  };
+  const loadMoreFn = (): void => {
+    kernel.resolveManager.loadMorePaginated(listState);
+  };
+  const prefetchFn = (n: number): Promise<unknown> =>
+    kernel.resolveManager.prefetchPaginated(listState, n);
+  const setPageSizeFn = (n: number): void => {
+    kernel.resolveManager.setPageSizePaginated(listState, n);
+  };
+  const refetchFn = (): Promise<unknown> => kernel.resolveManager.refetchPaginated(listState);
+  const invalidateFn = (page?: number): void => {
+    kernel.resolveManager.invalidatePaginated(listState, page);
+  };
+  const discardPendingAddsFn = (): void => {
+    if (!pg) return;
+    if (discardPendingAdds(listState).length > 0) notifyListChanged();
+  };
+  const setScrollAnchorFn = (id: string | null): void => {
+    if (!pg) return;
+    pg.scrollAnchor = id;
   };
 
   // ─── Mutations ───────────────────────────────────────────────────────────────
@@ -185,6 +383,10 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       if (childNode) {
         kernel.entityRegistry.setEntityOwner(childNode, ownerId, listConfigNode as object);
       }
+      if (pg) {
+        pagedAdd(entityId);
+        return fromValues ? buildItemProxy(entityId) : undefined;
+      }
       if (!listState.itemIds.includes(entityId)) {
         listState.itemIds.push(entityId);
       }
@@ -201,6 +403,10 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
         const entityNode = kernel.entityRegistry.upsert(idOrValues as EntityData);
         entityId = entityNode.id.value as string;
       }
+      if (pg) {
+        pagedAdd(entityId);
+        return fromValues ? buildItemProxy(entityId) : undefined;
+      }
       if (!listState.itemIds.includes(entityId)) {
         listState.itemIds.push(entityId);
         notifyListChanged();
@@ -210,6 +416,24 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
   };
 
   const removeFn = (id: string): void => {
+    if (pg) {
+      // Paged: splice from whichever cached page holds the id (P — possibly
+      // off-screen). A SERVER row (in initialIds) shifts every later offset,
+      // so ordinals > P go stale; an un-flushed local add shifts nothing.
+      const fam = famNow();
+      if (!fam) return;
+      const o = findPageWithId(fam, id);
+      if (o === undefined) return;
+      const entry = fam.pages.get(o)!;
+      entry.ids.splice(entry.ids.indexOf(id), 1);
+      // A SERVER row shifts every later offset. infinite stales nothing: the
+      // later pages are ON SCREEN and a background refetch would reflow under
+      // the user's scroll — only the continuation point (Σ fetchedCount) moves.
+      if (pg.mode !== "infinite" && entry.initialIds.includes(id)) markStaleAfter(fam, o);
+      projectWindow(listState);
+      notifyListChanged();
+      return;
+    }
     const idx = listState.itemIds.indexOf(id);
     if (idx === -1) return;
     listState.itemIds.splice(idx, 1);
@@ -235,14 +459,20 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
           );
         }
       }
-      listState.itemIds = uniqueIds;
       for (const id of uniqueIds) {
         const childNode = kernel.entityRegistry.get(id);
         if (childNode) {
           kernel.entityRegistry.setEntityOwner(childNode, ownerId, listConfigNode as object);
         }
       }
+      if (pg) {
+        pagedSetItems(uniqueIds);
+        return;
+      }
+      listState.itemIds = uniqueIds;
       notifyListChanged();
+    } else if (pg) {
+      pagedSetItems(uniqueIds);
     } else {
       listState.itemIds.length = 0;
       for (const id of uniqueIds) listState.itemIds.push(id);
@@ -298,6 +528,9 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
       (k) => fwd[k as MappableKey] ?? k,
     ),
     ...(listState.filter ? FILTER_SPREAD_KEYS : []),
+    ...(listState.pagination ? PAGINATION_SPREAD_KEYS : []),
+    ...(isInfinite ? INFINITE_SPREAD_KEYS : []),
+    ...(isChain ? CHAIN_SPREAD_KEYS : []),
   ];
 
   const proxy = new Proxy(listConfigNode as unknown as Record<string, unknown>, {
@@ -357,10 +590,77 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
           return visibleIds().length;
 
         case "loading":
+          // Paginated: derived from the current family's in-flight set — N
+          // concurrent page fetches, one status flag would flip false early.
+          if (pg) return isFetching();
           // Single source for root and per-entity: the resolve-state status.
           return (
             kernel.resolveManager.getListResolveState(listState)?.status === "pending"
           );
+
+        // ── Pagination surface (gated: undefined on a non-paginated list) ─
+        case "page":
+          // infinite: DERIVED from what actually loaded — never a stored
+          // pointer that a failed fetch could have advanced past a hole.
+          return pg ? currentPageOf(pg) : undefined;
+        case "pageSize":
+          return pg ? pg.pageSize : undefined;
+        case "pageCount":
+          return pg ? pageCountOf(pg, famNow()) : undefined;
+        case "total":
+          return pg ? displayTotal(famNow()) : undefined;
+        case "serverTotal":
+          return pg ? famNow()?.serverTotal : undefined;
+        case "hasNextPage":
+          return pg ? hasNextPageOf(pg, famNow()) : undefined;
+        case "hasPrevPage":
+          return pg ? pg.currentPage > pg.base : undefined;
+        case "isFetching":
+          return pg ? isFetching() : undefined;
+        case "isInitialLoading":
+          // Never a skeleton while the previous query's rows are on screen.
+          return pg ? isFetching() && !pg.isPreviousData && !famNow()?.pages.size : undefined;
+        case "setPage":
+          return pg ? setPageFn : undefined;
+        case "nextPage":
+          return pg ? nextPageFn : undefined;
+        case "prevPage":
+          return pg ? prevPageFn : undefined;
+        case "refetch":
+          return pg ? refetchFn : undefined;
+        case "invalidate":
+          return pg ? invalidateFn : undefined;
+        case "prefetch":
+          return pg ? prefetchFn : undefined;
+        case "setPageSize":
+          return pg ? setPageSizeFn : undefined;
+        case "isPreviousData":
+          return pg ? pg.isPreviousData : undefined;
+        case "isStaleFromStorage":
+          return pg ? pg.isStaleFromStorage : undefined;
+        case "pendingAdds":
+          return pg ? pendingAddsOf(pg, famNow()) : undefined;
+        case "discardPendingAdds":
+          return pg ? discardPendingAddsFn : undefined;
+        case "scrollAnchor":
+          return pg ? pg.scrollAnchor : undefined;
+        case "setScrollAnchor":
+          return pg ? setScrollAnchorFn : undefined;
+
+        // ── infinite mode only ────────────────────────────────────────────
+        case "loadMore":
+          return isInfinite ? loadMoreFn : undefined;
+        case "isFetchingNextPage":
+          // A footer spinner, never the first-load skeleton: false while the
+          // window is still empty (that state is `isInitialLoading`).
+          return isInfinite
+            ? pg!.loadedOrdinals.length > 0 && (famNow()?.inFlight.has(nextOrdinalOf(pg!)) ?? false)
+            : undefined;
+        case "loadedPages":
+          return isInfinite ? loadedPagesOf(pg!, famNow()) : undefined;
+        case "continuationLost":
+          return isChain ? (famNow()?.continuationLost ?? false) : undefined;
+
 
         case "error":
           // Projection of the existing ResolveState — no separate error state.
@@ -375,6 +675,10 @@ export function buildListProxy(listState: ListState, kernel: Palistor<any, any>)
           return reloadFn;
 
         case "dirty":
+          // Paginated: per mode. infinite uses the exact per-page rollup — a
+          // window-level compare can read equal while a page still carries
+          // un-flushed edits, once `dedupe` collapsed a cross-page duplicate.
+          if (pg) return isPaginatedDirty(listState);
           // dirty by composition: current itemIds differ from initial snapshot
           return !arraysEqual(listState.itemIds, listState.initialItemIds);
 

@@ -1,9 +1,9 @@
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
 import { defineList } from "@palistor/store/defineList";
-import type { TranslateFn } from "@palistor";
-import { fetchUsers, fetchProducts, fetchUnreliableData, fetchUserDetails, fetchUserBio, fetchUserStatus, updateUser, createUser } from "./mockApi";
-import type { User } from "./types";
+import type { ListResolveContext, TranslateFn } from "@palistor";
+import { fetchUsers, fetchProducts, fetchOrders, fetchUnreliableData, fetchUserDetails, fetchUserBio, fetchUserStatus, updateUser, createUser } from "./mockApi";
+import type { Order, User } from "./types";
 
 export const catalogFormConfig = {
   // --- Filter fields ---
@@ -96,6 +96,42 @@ export const catalogFormConfig = {
       },
     },
   ],
+
+  // --- Orders list (PAGINATED: one page per request, cached per page) ---
+  // `pagination` in `resolve` is the only switch. The resolver gets the page
+  // request as `ctx.page`; `values.searchQuery` is read → it becomes a
+  // query-key dependency, so typing in the search box invalidates the cache
+  // and refetches page 1 exactly once. Switching to an already-loaded page is
+  // a synchronous projection — no request.
+  orders: defineList<Order>({
+    template: {
+      id: { value: "" },
+      title: {
+        value: "",
+        label: (t: TranslateFn) => t("catalog.orderTitle"),
+      },
+      amount: {
+        value: 0,
+        label: (t: TranslateFn) => t("catalog.orderAmount"),
+      },
+      status: {
+        value: "",
+        label: (t: TranslateFn) => t("catalog.orderStatus"),
+      },
+    },
+    resolve: {
+      deps: ["searchQuery"],
+      pagination: { pageSize: 5 },
+      resolver: async (values: Record<string, unknown>, _store: unknown, ctx: ListResolveContext) =>
+        fetchOrders({
+          q: values.searchQuery as string,
+          offset: ctx.page!.offset,
+          limit: ctx.page!.pageSize,
+        }),
+      onError: (err: unknown, { notify }: { notify: (msg: string) => void }) =>
+        notify(err instanceof Error ? err.message : "Failed to load orders"),
+    },
+  }),
 
   // --- Group with resolve (async single-object load) ---
   serverStatus: {

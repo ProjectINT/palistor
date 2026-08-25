@@ -76,4 +76,17 @@ export interface PersistOptions<TValues = Record<string, unknown>> {
    * Ignored when `pick` is set.
    */
   omit?: (keyof TValues & string)[];
+
+  /**
+   * Called when a save or a hydration fails — both paths swallow the error to
+   * stay production-safe, and without this hook a failure is invisible.
+   *
+   * The failure that matters in practice is a synchronous
+   * `QuotaExceededError` from `setItem`: it would otherwise silently disable
+   * persistence for the WHOLE form at a point determined by how far the user
+   * scrolled a paginated list, so it never reproduces in dev. Before giving
+   * up, the manager retries once with every pagination window trimmed to its
+   * pointer, so a large list can never take the form's own persistence down.
+   */
+  onError?: (error: unknown, phase: "save" | "hydrate") => void;
 }

@@ -4,6 +4,7 @@ import type {
   ListResolver,
   ListResolveConfig,
   FilterBlock,
+  PaginationConfig,
 } from "./store/types";
 
 interface DefineListConfig<TEntity extends Record<string, any>> {
@@ -19,6 +20,13 @@ interface DefineListConfig<TEntity extends Record<string, any>> {
     resolver: ListResolver<TEntity>;
     deps?: string[];
     onError?: (error: unknown, ctx: { notify: (msg: string) => void }) => void;
+    /**
+     * Opt-in pagination with page-level caching: the resolver receives
+     * `ctx.page` and may return `{ items, total }`; switching to an
+     * already-loaded page never calls the resolver.
+     */
+    pagination?: PaginationConfig;
+    options?: ListResolveConfig["options"];
   };
 }
 

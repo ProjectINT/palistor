@@ -31,6 +31,9 @@ export type TranslateFn = (...args: any[]) => string;
 export type FormConfig<TValues = Record<string, unknown>> = Record<string, ConfigNode<any, TValues>>;
 import type { NotifyFn, Resolve, ResolveStatus } from "../resolvePipeline";
 import type { SubmitResult } from "../submitPipeline/submitPipeline";
+import type { PagedResult, PageRequest, PaginationState } from "../pagination/types";
+
+export type { PagedResult, PageRequest } from "../pagination/types";
 
 // ─── Utility types ───────────────────────────────────────────────────────────
 
@@ -307,8 +310,8 @@ export interface ListResolveContext {
     /** The serverKey — the request identity. */
     key: string;
   };
-  /** Reserved seam — PaginationPlan (PageRequest). */
-  page?: unknown;
+  /** Page request — present iff the list declares `resolve.pagination`. */
+  page?: PageRequest;
   /** Reserved seam — the future `sort` block. */
   sort?: unknown;
   queryKey: string;
@@ -374,6 +377,78 @@ export interface FilterProxyNode {
   readonly [field: string]: any;
 }
 
+// ─── Pagination (author-facing) ──────────────────────────────────────────────
+
+/**
+ * - `paged`    — the window is ONE page; `setPage` navigates freely;
+ * - `infinite` — the window ACCUMULATES (`loadMore`); continuation by cursor
+ *   when the resolver returns `nextCursor`, else by offset (`Σ fetchedCount`);
+ * - `cursor`   — one page at a time, navigated SEQUENTIALLY through the cursor
+ *   chain (`prevPage` is always a cache hit; a random `setPage` is not reachable).
+ */
+export type PageMode = "paged" | "infinite" | "cursor";
+
+/**
+ * Pagination block inside `resolve`. Its presence is the ONLY opt-in switch:
+ * no block ⇒ no state allocated ⇒ the plain list path runs exactly as today.
+ */
+export interface PaginationConfig {
+  pageSize: number;
+  /** Default `"paged"`. */
+  mode?: PageMode;
+  /** Page numbering base; default 1. */
+  base?: 0 | 1;
+  /** Default = `base`. */
+  initialPage?: number;
+  /** ms a cached page stays fresh; default `Infinity` (never auto-refetch). */
+  staleTime?: number;
+  /** Families kept (LRU); default 1 — a queryKey change evicts the old family. */
+  maxCachedQueries?: number;
+  /** LRU cap on pages within a family (window ordinals are pinned); default `Infinity`. */
+  maxCachedPages?: number;
+  /**
+   * infinite mode: the maximum number of ordinals HELD IN THE WINDOW; default
+   * `Infinity` (the window grows for the whole session). When a `loadMore`
+   * exceeds it, the oldest ordinals leave the window (their rows leave
+   * memory) and stay behind as `fetchedCount` tombstones, so the continuation
+   * offset survives. The only sanctioned way a window ordinal leaves memory.
+   * `persist.maxPages` is clamped to it.
+   */
+  maxPages?: number;
+  /**
+   * ms an INACTIVE family (one that is no longer current) is retained before
+   * being dropped; default `Infinity` — retention is then bounded only by
+   * `maxCachedQueries`. Only meaningful with `maxCachedQueries > 1`.
+   */
+  gcTime?: number;
+  /**
+   * Keep rendering the previous query's window while the new query's first
+   * page loads (`list.isPreviousData` reports it). Default `false`: a queryKey
+   * change clears the window immediately, so foreign rows are never shown.
+   */
+  keepPreviousData?: boolean;
+  /**
+   * What a hydrated window revalidates after paint; default `"first"` (only
+   * the first window ordinal). Restored pages are always SERVED meanwhile.
+   */
+  revalidateOnHydrate?: "none" | "first" | "all";
+  /**
+   * How much of the window reaches storage. Default `{ maxPages: 3 }` — a
+   * bounded tail (earlier ordinals persist as `fetchedCount` tombstones so the
+   * continuation offset survives). `'window'` persists everything and enables
+   * the scroll-anchor API; `false` persists the pointer only.
+   */
+  persist?: false | "window" | { maxPages: number };
+  /**
+   * Un-flushed optimistic adds across a reload; default `"keep"` (this is a
+   * form library — user input survives). A kept tmp row can never be rekeyed,
+   * so `list.pendingAdds` names them and `discardPendingAdds()` clears them.
+   */
+  persistPendingAdds?: "keep" | "drop";
+  /** Escape hatch when auto-dep values aren't cleanly serializable. */
+  queryKey?: (values: any, context: Record<string, unknown>) => unknown[];
+}
+
 /**
  * Resolver configuration for a ListNode (like Resolve for a group, but returns
  * an array of entity records). Minimal interface that avoids importing Resolve
@@ -381,15 +456,16 @@ export interface FilterProxyNode {
  */
 export interface ListResolveConfig {
   /**
-   * Async data loader — returns array of entity records.
-   * `ctx` carries the filter snapshot/params/key (and, later, page/sort) — see
+   * Async data loader — returns an array of entity records, or (paginated
+   * lists) a {@link PagedResult}. `ctx` carries the filter snapshot/params/key
+   * and, when `pagination` is declared, `ctx.page` — see
    * {@link ListResolveContext}. Two-argument resolvers keep working unchanged.
    */
   resolver: (
     values: any,
     store: ProxyStore<any>,
     ctx: ListResolveContext,
-  ) => Promise<Array<Record<string, unknown>>>;
+  ) => Promise<Array<Record<string, unknown>> | PagedResult>;
   /**
    * Error handler called when resolver throws.
    * ctx.notify — notification function from useNotifier.
@@ -397,10 +473,18 @@ export interface ListResolveConfig {
   onError?: (error: unknown, ctx: { notify: (...args: any[]) => void }) => void;
   /** Explicit dependency paths — re-trigger resolver when these paths change. */
   deps?: string[];
+  /** Opt-in pagination with page-level caching (see PaginationPlan.md). */
+  pagination?: PaginationConfig;
   options?: {
     /** Wait for first access to the list. Default: true */
     lazy?: boolean;
-    /** Throw Promise for React Suspense. Default: false */
+    /**
+     * Throw the in-flight promise from `items` / `length` / `map` / `values`
+     * for React Suspense. Default: false. A paginated list throws only while
+     * it has NOTHING renderable (the first page, or a queryKey change without
+     * `keepPreviousData`) — a page navigation / `loadMore` / background
+     * revalidation keeps the current window on screen and never suspends.
+     */
     suspense?: boolean;
   };
 }
@@ -446,6 +530,15 @@ export interface ListState {
    * Mutated in place — the ListState identity is never recreated.
    */
   filter?: import("../filtering/types").FilterState;
+  /**
+   * Optional pagination sidecar — present iff `resolve.pagination` is
+   * configured, on a root list AND on every per-entity instance of a nested
+   * list (one sidecar per `(owner, listConfigNode)` pair; the template-level
+   * placeholder of a nested list never carries one).
+   * When present, `itemIds` is the current visible WINDOW (a projection of the
+   * cached pages) and `initialItemIds` its baseline.
+   */
+  pagination?: PaginationState;
 }
 
 /**
@@ -481,6 +574,61 @@ export interface ListProxyNode<TItem> {
   readonly resolveStatus: ResolveStatus;
   /** Force a resolver re-run, ignoring the resolved-state dedup. No-op without a resolver. */
   reload(): void;
+
+  // ─── Pagination surface (lists with `resolve.pagination` only) ───────────
+  /** Current page ordinal (honoring `base`). */
+  readonly page?: number;
+  readonly pageSize?: number;
+  /** Server-derived page count (contiguous cached pages while the total is unknown). */
+  readonly pageCount?: number;
+  /** DISPLAY total: server total + local optimistic delta (undefined until known). */
+  readonly total?: number;
+  /** RAW server-truth total — moves only on fetch / delete / rekey-promotion. */
+  readonly serverTotal?: number;
+  readonly hasNextPage?: boolean;
+  readonly hasPrevPage?: boolean;
+  /** Any page fetch in flight (native pagination getter, never mapped). */
+  readonly isFetching?: boolean;
+  /** Fetching with nothing cached yet — skeleton vs spinner. */
+  readonly isInitialLoading?: boolean;
+  /** Synchronous projection for a cached page; a resolver call only on a miss. */
+  setPage?(n: number): void;
+  nextPage?(): void;
+  prevPage?(): void;
+  /** Exactly ONE request: the whole family goes stale, the current page refetches now. */
+  refetch?(): Promise<unknown>;
+  /**
+   * paged: mark one page (or the whole current family) stale; the next visit
+   * refetches. cursor / infinite: TRUNCATING — every ordinal after `page` is
+   * dropped (their cursors are minted by it and may now reach nothing).
+   */
+  invalidate?(page?: number): void;
+  /** Fetch an ordinal into the cache WITHOUT moving the pointer (hover warmup). */
+  prefetch?(n: number): Promise<unknown>;
+  /** Clear every family, reset to `initialPage` and fetch once. */
+  setPageSize?(n: number): void;
+  /** `keepPreviousData`: the rendered window still belongs to the previous query. */
+  readonly isPreviousData?: boolean;
+  /** Ids of un-flushed optimistic adds restored from storage. */
+  readonly pendingAdds?: readonly string[];
+  /** Drop those rows — the documented escape from a permanently dirty window. */
+  discardPendingAdds?(): void;
+  /** The window came from storage and was already past `staleTime`. */
+  readonly isStaleFromStorage?: boolean;
+  /** Record the first visible row (`persist: 'window'`); read back after hydrate. */
+  setScrollAnchor?(id: string | null): void;
+  readonly scrollAnchor?: string | null;
+
+  // ─── infinite mode only ───────────────────────────────────────────────────
+  /** Append the next ordinal (cache hit ⇒ no fetch). No-op while one is in flight. */
+  loadMore?(): void;
+  /** The next-ordinal fetch is in flight — a footer spinner, not a skeleton. */
+  readonly isFetchingNextPage?: boolean;
+  /** Frozen per-ordinal snapshot of the window, for section-header UIs. */
+  readonly loadedPages?: ReadonlyArray<{ ordinal: number; ids: readonly string[] }>;
+  /** The cursor chain could not be rebuilt — offer "Reload feed", not "Load more". */
+  readonly continuationLost?: boolean;
+
   add(id: string): void;
   add(values: Record<string, unknown>): TItem;
   remove(id: string): void;
@@ -508,9 +656,9 @@ export type PalistorList<T extends Record<string, any>> = ListProxyNode<Palistor
 export type TypedListNode<TEntity extends Record<string, any>> =
   readonly [any, any?] & { readonly [__typedListBrand]: TEntity };
 
-/** Typed list resolver. */
+/** Typed list resolver — a bare array, or a {@link PagedResult} for paginated lists. */
 export type ListResolver<TEntity extends Record<string, any>> =
-  (values: any, store: ProxyStore<any>, ctx: ListResolveContext) => Promise<TEntity[]>;
+  (values: any, store: ProxyStore<any>, ctx: ListResolveContext) => Promise<TEntity[] | PagedResult<TEntity>>;
 
 /** Typed template: each Entity key → ConfigNode with the matching value type. */
 export type TemplateConfig<TEntity extends Record<string, any>> = {

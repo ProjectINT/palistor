@@ -34,7 +34,19 @@
     "serverStatus": "Server Status",
     "retry": "Retry",
     "listDirty": "List modified",
-    "entityCount": "Entities: {count}"
+    "entityCount": "Entities: {count}",
+    "orders": "Orders (paginated)",
+    "ordersHint": "One page per request · a cached page switch never calls the resolver · typing in the search re-keys the cache and refetches page 1 once",
+    "orderTitle": "Order",
+    "orderAmount": "Amount",
+    "orderStatus": "Status",
+    "loadingOrders": "Loading orders...",
+    "noOrders": "No orders",
+    "prevPage": "Prev",
+    "nextPage": "Next",
+    "pageOf": "Page {page} of {count}",
+    "ordersTotal": "{count} orders",
+    "refetch": "Refetch"
   },
   "async": {
     "title": "Async Resolvers Demo",

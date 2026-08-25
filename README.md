@@ -167,6 +167,7 @@ Palistor's philosophy is to provide a complete toolkit for generating any fronte
 | **Dirty tracking** | Per-field and per-group change flags; the baseline updates after resolve and reset |
 | **Async resolvers** | Data loading with auto-tracked dependencies, retry, optimistic updates and React Suspense |
 | **Lists & entities** | Normalized entity registry, list proxy with `add / remove / setItems`, per-entity templates |
+| **Pagination** | Page-level cache — a cached page switch never calls the resolver; `paged` / `infinite` / `cursor` modes, persisted windows, nested lists |
 | **Flows** | Step wizards via `defineFlow` / `defineStep`: navigation, branching, per-step validation |
 | **Field mapping** | Rename field-state props to your UI kit's convention (`isRequired` → `required`, …) |
 | **Persist** | Autosave to `localStorage`, `sessionStorage` or any custom driver — flow navigation included |
@@ -712,6 +713,133 @@ the same for root lists and per-entity nested lists.
 > applied, so a mapping such as `{ isInvalid: "error" }` does not shadow them: on a **field** `.error`
 > stays the validation flag, on a **list** `.error` is the resolve error. The two never coexist on
 > one node.
+
+### Pagination
+
+> 🔗 **Source:** [modules/lists-demo/OrdersPagedSection.tsx](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/modules/lists-demo/OrdersPagedSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
+
+A list fetches **one page at a time** and caches every page it has seen. Add a `pagination` block to
+`resolve` — its presence is the only switch. The resolver gets the page request as `ctx.page` and
+returns `{ items, total }` (a bare array still works — `total` is then derived from the loaded pages).
+
+```typescript
+const orders = defineList<Order>({
+  template: { id: { value: "" }, title: { value: "" }, amount: { value: 0 } },
+  resolve: {
+    deps: ["search"],                       // seeds the query key before the first run
+    pagination: { pageSize: 20 },           // mode: "paged" (default) | "infinite" | "cursor"
+    resolver: async (values, store, ctx) => {
+      const r = await api.orders({
+        q: values.search,                   // every value / context read is an auto-dep
+        tenant: store.context.tenantId,
+        offset: ctx.page!.offset,           // (page − base) × pageSize
+        limit: ctx.page!.pageSize,
+        cursor: ctx.page!.cursor,           // cursor / infinite modes
+      });
+      return { items: r.rows, total: r.count, nextCursor: r.next }; // PagedResult
+    },
+  },
+});
+```
+
+**Switching to a page that is already cached never calls the resolver** — it is a synchronous
+projection. Only a miss, a stale page or a change in what the resolver read (search, filters,
+`store.context`, …) does: that is a new *query key*, so the old pages are invalidated and page 1 is
+fetched exactly once. The same values written back unchanged are a strict no-op.
+
+```typescript
+const list = form.orders;
+
+// Reactive getters (a Pager reading only page / pageCount re-renders on setPage)
+list.page            // current page (honors `base`, default 1)
+list.pageSize
+list.pageCount       // from the server total, else the number of contiguous cached pages
+list.total           // DISPLAY total: server total ± local optimistic adds/removes
+list.serverTotal     // raw server total — moves only on fetch / delete / confirmed add
+list.hasNextPage     // never fooled by an optimistic add
+list.hasPrevPage
+list.isFetching      // any page fetch in flight (`loading` reads the same signal)
+list.isInitialLoading // fetching with nothing cached yet — skeleton vs. spinner
+list.isPreviousData  // `keepPreviousData`: the rows on screen belong to the previous query
+list.pendingAdds     // ids of un-flushed optimistic adds (restored from storage or not)
+
+// Navigation
+list.setPage(n);     // cached & fresh → synchronous; otherwise one fetch
+list.nextPage();  list.prevPage();
+list.prefetch(n);    // warm the cache without moving the pointer (hover)
+list.setPageSize(n); // clears the cache, fetches page 1 once
+
+// Freshness — always at most ONE request
+await list.refetch();   // paged: the whole query goes stale, the current page refetches now;
+                        // infinite / cursor: pull-to-refresh — back to the first page
+list.invalidate();      // mark every page stale; the current one refetches now
+list.invalidate(3);     // one page (cursor / infinite: every page after it is dropped too)
+list.discardPendingAdds(); // drop un-flushed optimistic rows (escape from a permanently dirty list)
+
+// infinite mode only
+list.loadMore();            // append the next page (cache hit ⇒ no fetch; no-op while one is in flight)
+list.isFetchingNextPage     // a footer spinner, distinct from isInitialLoading
+list.loadedPages            // [{ ordinal, ids }] — for section-header UIs
+list.continuationLost       // cursor chain could not be rebuilt → offer "Reload feed"
+```
+
+```tsx
+function Orders() {
+  const form = useForm(store);
+  const orders = form.orders;
+  return (
+    <>
+      {orders.isInitialLoading ? <Skeleton /> : orders.map((o, i, id) => <Row key={id} order={o} />)}
+      <button disabled={!orders.hasPrevPage} onClick={orders.prevPage}>Prev</button>
+      <span>Page {orders.page} of {orders.pageCount}{orders.isFetching && " …"}</span>
+      <button disabled={!orders.hasNextPage} onClick={orders.nextPage}>Next</button>
+    </>
+  );
+}
+```
+
+**Modes.** `paged` — one page on screen, random access. `infinite` — the window accumulates
+(`loadMore`); the continuation runs off `nextCursor` when the resolver returns one, else off the
+offset. `cursor` — one page on screen, sequential access through `nextCursor` (`prevPage` is free,
+`setPage(n)` reaches only the next ordinal).
+
+**Local edits vs. the cache.** `add / remove / setItems` mutate the cached page they land on; the
+visible window is always a projection of the pages. `dirty` is the aggregate over every cached page,
+so an un-flushed add parked on an off-screen page keeps the list dirty. `reset()` rolls back the edits
+of every cached page and keeps the navigation (no request). `store.rekey(tmp, real)` reaches every
+cached page and promotes the confirmed row into server truth; `store.delete(id)` splices it out of
+every page and shifts the later ones stale. A deleted row on a `paged` list is replaced on screen by
+the head of the next cached page until that page is refetched.
+
+| `pagination` option | Default | Meaning |
+|---|---|---|
+| `pageSize` | — | required |
+| `mode` | `"paged"` | `"paged"` \| `"infinite"` \| `"cursor"` |
+| `base` / `initialPage` | `1` / `base` | page numbering |
+| `staleTime` | `Infinity` | ms a cached page is served without a background refetch (stale-while-revalidate) |
+| `maxCachedQueries` / `gcTime` | `1` / `Infinity` | how many query keys are retained (flip back to an old filter ⇒ cache hit) and for how long |
+| `maxCachedPages` | `Infinity` | LRU cap on cached pages per query (the visible window is never evicted) |
+| `maxPages` | `Infinity` | `infinite`: the window keeps at most this many pages — the oldest leave memory, the continuation offset survives |
+| `keepPreviousData` | `false` | keep the previous query's rows on screen while page 1 of the new one loads |
+| `persist` | `{ maxPages: 3 }` | what reaches storage: a bounded tail, `"window"` (everything + the scroll anchor), or `false` |
+| `persistPendingAdds` | `"keep"` | un-flushed optimistic adds survive a reload (`"drop"` to discard) |
+| `revalidateOnHydrate` | `"first"` | what a restored, expired window revalidates after paint (`"none"` \| `"first"` \| `"all"`) |
+| `queryKey(values, context)` | auto | escape hatch when the auto-tracked dependency values are not serializable |
+
+**Persist.** With `usePersist` / `store.persist` the current page (and, for `infinite`, the tail of the
+window) is restored on reload and served without a request — but only when the saved query still
+matches the live values and context (a window saved for tenant A is never served to tenant B). With
+`persist: "window"` call `list.setScrollAnchor(id)` from an IntersectionObserver and read
+`list.scrollAnchor` after hydrate to restore the scroll position.
+
+**Nested lists.** The same `pagination` block on a list inside an entity template paginates **each
+per-entity instance independently** (`user.orders.setPage(2)`), with its own cache and query key. The
+resolver receives the owner's values as the first argument — the owner fields it reads become its
+dependencies, so editing `user.region` re-keys only that user's list.
+
+**Suspense.** `resolve.options.suspense: true` makes `items` / `map` / `length` throw the in-flight
+promise while the list has nothing to render (the first page, or a query change without
+`keepPreviousData`); a page navigation or `loadMore` never suspends the rows already on screen.
 
 ### List item — proxy properties
 

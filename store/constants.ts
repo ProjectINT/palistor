@@ -241,6 +241,77 @@ export const FILTER_SPREAD_KEYS: string[] = ["filter", "values", "fullLength"];
 export const SORT_SPREAD_KEYS: string[] = ["sort"];
 
 /**
+ * Extra spread keys for a list WITH a `resolve.pagination` block — appended
+ * in buildListProxy, gated on `listState.pagination` (a list without one
+ * keeps its key set byte-for-byte). Reactive getters first, methods last.
+ *
+ * Reserved against `fieldMapping` collisions in the Palistor constructor:
+ * `isFetching` is a NATIVE pagination getter, not an alias of the mapped
+ * `loading` — one string must not carry two meanings.
+ */
+export const PAGINATION_SPREAD_KEYS: string[] = [
+  "page",
+  "pageSize",
+  "pageCount",
+  "total",
+  "serverTotal",
+  "hasNextPage",
+  "hasPrevPage",
+  "isFetching",
+  "isInitialLoading",
+  "isPreviousData",
+  "isStaleFromStorage",
+  "pendingAdds",
+  "scrollAnchor",
+  "setPage",
+  "nextPage",
+  "prevPage",
+  "refetch",
+  "invalidate",
+  "prefetch",
+  "setPageSize",
+  "discardPendingAdds",
+  "setScrollAnchor",
+];
+
+/**
+ * Extra spread keys for an `infinite`-mode list only — a paged/cursor list
+ * never advertises `loadMore`. Appended after {@link PAGINATION_SPREAD_KEYS}.
+ */
+export const INFINITE_SPREAD_KEYS: string[] = [
+  "isFetchingNextPage",
+  "loadedPages",
+  "loadMore",
+];
+
+/**
+ * Extra spread key for a CHAIN mode (`cursor` / `infinite`): a persisted
+ * cursor can turn out unusable, and the UI must be able to offer "Reload feed"
+ * instead of a Load-more button that fails forever.
+ */
+export const CHAIN_SPREAD_KEYS: string[] = ["continuationLost"];
+
+/** Reactive pagination getters (tracked by the ListState version). */
+export const PAGINATION_TRACKED_KEYS = new Set<string>([
+  "page",
+  "pageSize",
+  "pageCount",
+  "total",
+  "serverTotal",
+  "hasNextPage",
+  "hasPrevPage",
+  "isFetching",
+  "isInitialLoading",
+  "isPreviousData",
+  "isStaleFromStorage",
+  "pendingAdds",
+  "scrollAnchor",
+  "isFetchingNextPage",
+  "loadedPages",
+  "continuationLost",
+]);
+
+/**
  * List-scoped keys that are deliberately NOT in {@link MAPPABLE_KEYS} and must
  * be matched against the RAW key, before the `externalToInternal` translation.
  *
@@ -267,4 +338,7 @@ export const LIST_ONLY_KEYS = new Set<string>([
   "filter",
   "values",
   "fullLength",
+  ...PAGINATION_SPREAD_KEYS,
+  ...INFINITE_SPREAD_KEYS,
+  ...CHAIN_SPREAD_KEYS,
 ]);

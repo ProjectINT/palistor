@@ -16,6 +16,10 @@ export type { AnyResolveEntry, GroupResolveEntry, ListResolveEntry, TemplateFiel
 export { initResolveStates } from "./initResolveStates";
 export { executeResolve } from "./executeResolve";
 export { executeListResolve } from "./executeListResolve";
+export { executePagedListResolve } from "./executePagedListResolve";
+export type { PagedListResolveDeps } from "./executePagedListResolve";
+export type { PageRequest, PagedResult } from "../pagination/types";
+export { createLiveValuesSnapshotProxy } from "./createLiveValuesSnapshotProxy";
 export { executeEntityFieldResolve } from "./executeEntityFieldResolve";
 export type { EntityFieldResolveDeps } from "./executeEntityFieldResolve";
 export { findResolvesToRetrigger } from "./findResolvesToRetrigger";

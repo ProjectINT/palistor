@@ -5,6 +5,7 @@ import { hasComputedProps } from "./hasComputedProps";
 import { isListNode } from "./NodeRegistry/nodeUtils";
 import { normalizeFilterBlock } from "../filtering/normalizeFilterBlock";
 import { registerFilterNodes } from "../filtering/registerFilterNodes";
+import { createPaginationState } from "../pagination/paginationController";
 
 /**
  * Service keys of a config node that tree walks skip.
@@ -193,6 +194,15 @@ export function registerNodes<TNode extends AnyConfigNode>(
               translate,
             );
           }
+        }
+
+        // Pagination sidecar on the ROOT ListState. The template-level
+        // ListState of a nested list is a placeholder and never paginated:
+        // every per-entity instance gets its own sidecar when EntityRegistry
+        // instantiates it (`getOrCreateEntityListState`).
+        const paginationBlock = listConfig?.resolve?.pagination;
+        if (paginationBlock && !inTemplate) {
+          listState.pagination = createPaginationState(paginationBlock, path);
         }
 
         // Register template fields as a regular group (path = the list key)

@@ -36,7 +36,7 @@ export function emptyValueFor(defaultValue: unknown): unknown {
 // ─── Keys ────────────────────────────────────────────────────────────────────
 
 /** Deterministic JSON: object keys in sorted order at every level. */
-function stableStringify(value: unknown): string {
+export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
     const s = JSON.stringify(value);
     return s === undefined ? "u" : s;
