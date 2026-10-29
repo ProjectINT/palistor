@@ -34,9 +34,9 @@ jobs:
       # Contract tests are typed against the public types (cube/tsconfig.json).
       - run: npm run typecheck:cube
 
-      # Parity of the Cube core with the store (experiments/CubePlan.md). Red
-      # is expected until Gate 1; then drop continue-on-error.
+      # Parity of the Cube core with the store (experiments/CubePlan.md).
+      # Required since Gate 1 (2026-10-29): the contract slices A and B are
+      # green on both implementations.
       - run: npm run test:cube
-        continue-on-error: true
         env:
           NODE_OPTIONS: --max-old-space-size=4096

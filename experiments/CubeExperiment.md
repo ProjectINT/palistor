@@ -69,3 +69,62 @@
 2. **`item.id` элемента списка.** В store это строка id сущности (README, раздел List proxy API). В наброске `id` — дочерний кубик. Шаг 2.1.
 3. **API списков.** Store: `store.set(rows)` плюс `list.setItems(ids)`. Набросок: `setItems(rows)`. Шаг 2.1.
 4. **`lazy: false` на списке.** Конструктор `Cube` запускает resolve внутри `super()`, до инициализации полей `ListCube` (`ids`, `cache`). Инициализаторы полей затем затирают оптимистичный результат. Фаза 1.
+
+## Фаза 1: гипотеза на ядре (2026-10-29)
+
+План: [CubePlan.md](./CubePlan.md), Фаза 1. Гейт 1 пройден: go.
+
+### Контракт
+
+Срез A лежит в `cube/contract/sliceA/` (13 файлов), срез B в `cube/contract/sliceB/` (2 файла). Файлы скопированы из `store/` и `react/`, в них заменён импорт на `@impl` плюс три вида правок, перечисленных здесь полностью:
+
+- Вырезаны блоки, тестирующие внутренности напрямую: `collectLeafStates` и `applyLeafBeforeSubmit` (submitPipeline), `collectDefaults` и `buildResetPatch` (resetPipeline), `OnChangePipeline.fire`, `computeFieldKey` и `findOnChangeNodes` (onChangePipeline), блок `useForm(entity, templateSelector)` из `useForm.test.tsx` (поверхность шага 2.1). В submitPipeline `store.submitPipeline.execute(root)` стал `store.submit()`, `nodeState.get(root).submitting` → `store.proxy.submitting`; в crossGroupVisibility убраны два чтения `store.nodes.nodeState`, проверка идёт через proxy.
+- `writePipeline/writePipeline.test.ts` целиком гоняет `store.writePipeline.execute` и `nodeState`: заменён на `writeSkip.test.ts` с теми же правилами через публичную поверхность (format → store, setter с одним уведомлением, skip по `Object.is` включая NaN).
+- `init/createResolveManager.phase4.test.ts` и `react/phase5.test.tsx` из списка среза B не перенесены: оба целиком про per-entity field resolve, `useForm(entity, templateSelector)`, `store.resolveManager` и `store.entityRegistry`. Это поверхность шага 2.1, туда они и уходят.
+
+Добавлен `sketchHoles.test.tsx`: контракт на дыры наброска (ребёнок `length`, зависимость resolve после `await`, `lazy: false` на списке, spread через `useForm`, компонент без `useForm` не протекает в подписку родителя, стабильный `getSnapshot`). Он зелёный на store, то есть фиксирует поведение store, а не Cube. Поведение, которого в store нет (ошибка конструктора на зарезервированное имя ребёнка, отвязка удалённых элементов списка), проверяется в `cube/core/core.test.ts`.
+
+`cube/contract/sliceA/store.test.ts` исключён из `typecheck:cube`: в `store/` этот файл не проверялся ни одним tsconfig, и с `config: x as any` тип `ConfigProxy<any>` сваливается в тип flow-узла без `label`. Это вопрос к публичным типам, не к контракту.
+
+### Ядро после Фазы 1
+
+`cube/core/`: `track` (Source, Signal, Observer), `memo`, `hub` (батч → один цикл уведомлений, подписки по узлу через версию состояния, переводчик, контекст с сигналом на ключ), `node` (публичный узел), `resolve`, `cube`, `listCube`, `registry`, `config`. Решения, отличающие его от наброска:
+
+- **Публичный узел без Proxy.** `store.proxy.a.b` — обычный объект: собственные перечислимые геттеры ровно по spread-ключам store (`{...form.email}` отдаёт те же props), остальное — геттеры на прототипе, общем для всех узлов одного конфига; дети — неперечислимые геттеры там же. Члены класса `Cube` снаружи не видны, поэтому ребёнок `length` (palirent, `vehicleForm/parameters.config.ts`) — обычное поле. Зарезервированы ровно имена, которые proxy группы в store отвечал до поиска ребёнка (`value`, `submitting`, `dirty`, `revalidate`, `loading`, `values`, `submit`, `reset`, `setValues`, `onValueChange`, `label`, `placeholder`, `description`, `isVisible`, `isRequired`, `isDisabled`, `isReadOnly`, `isInvalid`, `errorMessage`): в store такой ребёнок был недостижим, в Cube конструктор бросает понятную ошибку.
+- **Proxy только на границе `useForm`.** Tracking proxy записывает узлы, у которых компонент читал состояние; `getSnapshot` сравнивает их версии состояния. Версия состояния узла (`store.getNodeVersion`) растёт, только когда меняется что-то наблюдаемое (сигнатура: value, вычисляемые флаги и строки, dirty, ошибки, loading…), а не при каждом bump зависимости: это и даёт точность ререндеров store. Снимок `getSnapshot` стабилен внутри рендера. Массив `items` через границу оборачивается лениво: компонент, рисующий `items.slice(0, 100)`, платит за 100 строк.
+- **Зависимости resolve после `await`.** Резольвер получает `values`, геттеры которого привязаны к наблюдателю запуска, и `store` с `context`, трекающим ключи. Изменение зависимости в полёте → перезапуск после завершения (`asyncContextInFlight` зелёный). Собственный результат резольвера за изменение не считается.
+- **Утечки.** `remove` / `setItems` отвязывают view-кубики удалённых id от реестра и снимают их resolve с учёта. Поддерево элемента списка строится при первом обращении: 1 000 строк в реестре — это 1 000 лёгких кубиков, а не 1 000 × поля шаблона.
+- **Один цикл уведомлений на действие.** `hub.batch` собирает запись, setter и patch в одно уведомление, как `recomputeAndNotify` в store; `getVersion` считает циклы.
+
+### Гейт 1
+
+| Критерий | store | cube | Итог |
+|---|---|---|---|
+| Срезы A и B | 239 контрактных тестов в 16 файлах зелёные | те же 239 зелёные, без `skip` | ✓ |
+| Ререндеры (компонент списка / компоненты строк): монтирование, обновление 1 000 строк на месте, одна видимая строка, строка вне окна, замена на новые id | 2 / 200, 1 / 100, 0 / 1, 0 / 0, 1 / 200 | 1 / 100, 1 / 100, 0 / 1, 0 / 0, 1 / 100 | ✓, при монтировании вдвое меньше |
+| Форма 500 полей: создание стора | 0.597 ms | 0.157 ms (rme ±11 %) | ✓ |
+| Запись в поле без зависимых + чтение 50 флагов | 0.123 ms | 0.0072 ms | ✓ |
+| Запись в поле со всеми 50 зависимыми + чтение флагов | 0.133 ms | 0.0134 ms | ✓ |
+| Список 1 000 строк, 100 отрисовано: замена на 1 000 новых id | 4.45 ms | 2.87 ms | ✓ |
+| Тот же список: обновление всех 1 000 строк на месте | 1.90 ms | 0.88 ms | ✓ |
+| Строки под срезы A и B | 8 186 (механизм store без списков, пагинации, flow, persist, фильтров) + 1 442 смешанного `createResolveManager` | 1 658 (`cube/core` 1 455, `useForm` 132, фасад 71) | ✓, 4.9× (5.8× с resolve manager) |
+| Бандл точки входа (rolldown, minify, react external) | 127 916 B, 36 132 B gzip | 25 420 B, 8 312 B gzip | 5.0× / 4.3× |
+
+JS `cube/` после tsc: 66 378 B, 16 953 B gzip (после Фазы 0 было 29 544 / 8 087: ядро набрало поведение store и выросло в 2.2 раза, оставшись в 5 раз меньше store). Тесты: проект `store` 114 файлов, 1 521 passed + 1 todo (включая контракт); проект `cube` 17 файлов, 246. Машина и команды бенчей как в Фазе 0; проекты гонять по одному.
+
+Бенч формы по-прежнему верхняя граница: в cube нет i18n-обвязки и flow. Бенч списка честный: обе реализации монтируют те же 100 компонентов с `useForm`. Замена id на cube до оптимизаций стоила 5.1–5.8 ms; три правки сняли её до 2.9: прототипные узлы элементов (литерал с 9 аксессорами стоил ~1 ms на 1 000), ленивое поддерево элемента и ленивая обёртка `items` на границе `useForm`.
+
+### Расхождения Фазы 0 и новые
+
+1. **Submit и скрытые поля** — баг наброска, исправлен: Cube валидирует все листья, как store. `surface.test.tsx` зелёный.
+2. **`item.id`** — строка id сущности, собственное свойство узла элемента поверх ребёнка `id` шаблона.
+3. **API списков** — `setItems` принимает и строки (id уже в реестре), и объекты (кладёт в реестр); `store.set(rows)` реализован для плоских строк с id. Остальное (`rekey`, `delete`, `invalidate`, вложенные списки, `useForm(entity, template)`) — шаг 2.1.
+4. **`lazy: false`** — eager-резольверы стартуют после конструктора фасада, когда дерево построено.
+5. **Новое, намеренное: зарезервированные имена детей** (список выше). Кандидат в документ миграции. Частичный grep по palirent и saas-starter (`submit`, `values`, `submitting`, `revalidate`, `setValues`, `onValueChange` как ключи конфигов) нашёл совпадения только в словарях i18n; окончательно покажет Фаза 3 — ошибкой конструктора.
+6. **Новое, намеренное до 2.1: `{...item}` элемента списка** даёт только `{ id }` (store: `id`, ключи шаблона, `loading`, `submitting`, `submit`, `values`, `dirty`). Узлы элементов прототипные ради цены на тысячах строк. Решить в 2.1 вместе с поверхностью сущности.
+7. **Найдено в store и повторено:** лист с `value: null` читается как `""` (`registerNodes`: `initialValues[key] ?? config.value ?? ""`). Зафиксировано в `sketchHoles.test.tsx`; кандидат в документ миграции на Фазу 4, если решить чинить.
+8. `setContext` не уведомляет подписчиков (как store), но перезапускает резольверы, читавшие изменённые ключи, в том числе после `await`.
+
+### Что осталось от наброска
+
+Заглушки `NotImplementedError`: `persist`, `rekey`, `delete`, `invalidate`, `fieldMapping`, `useForm(entity, templateSelector)`, `useNotifier`, `useTranslator`, `useStoreContext`, `usePersist`, `defineFlow` / `defineStep`. Порядок — таблица Фазы 2 в CubePlan.md.

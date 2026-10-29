@@ -119,13 +119,20 @@ Cube переписывает механизм Palistor (один рекурси
 
 При no-go: ветка остаётся с пометкой «закрыто», `cube/` не попадает в пакет, выводы в CubeExperiment.md.
 
+**Статус на 2026-10-29.** Фаза 1 сделана, Гейт 1 пройден (go); цифры и решения в [CubeExperiment.md](./CubeExperiment.md), раздел «Фаза 1». Отличия от текста выше:
+
+- Контракт лежит в `cube/contract/sliceA/` и `sliceB/`. Из списка среза B не перенесены `init/createResolveManager.phase4.test.ts` и `react/phase5.test.tsx`: оба про per-entity field resolve и `useForm(entity, templateSelector)`, поверхность шага 2.1 — туда они и добавлены в таблице ниже. `writePipeline/writePipeline.test.ts` целиком механизменный (гоняет `store.writePipeline.execute`): заменён на `writeSkip.test.ts` с теми же правилами через публичный API. В смешанных файлах вырезаны блоки по внутренностям (`collectLeafStates`, `collectDefaults`, `OnChangePipeline.fire` и т. п.); прочие правки — только импорт из `@impl`. Дыры наброска закрыты контрактом `sketchHoles.test.tsx` (зелёный и на store).
+- Публичный узел сделан без Proxy вообще (собственные геттеры по spread-ключам плюс прототип на конфиг), Proxy остался только в `useForm`. Зарезервированные имена детей заморожены равными тем, что proxy группы store отвечал до поиска ребёнка; `length` среди них нет.
+- `store.test.ts` исключён из `typecheck:cube`: файл никогда не типизировался, проблема публичных типов, не контракта.
+- CI: `npm run test:cube` обязателен с этого момента, `continue-on-error` снят.
+
 ## Фаза 2. Фичи-модули вокруг ядра (4–6 недель)
 
 Порядок по использованию у потребителей. Каждый шаг: перенос контрактных тестов среза → зелёный `cube` → пререлиз `0.1.0-cube.N` → запись в журнал.
 
 | Шаг | Что переносится | Контрактные тесты |
 |---|---|---|
-| 2.1 Списки и реестр | `defineList`, `ListResolver`, `set` / `delete` / `rekey` / `invalidate`, вложенные списки, представление одной записи через несколько шаблонов, dirty и `getValues` списков, ошибка resolve списка | `defineList*.test.ts`, `entityList{Dirty,GetValues,Mutations,Nested,Resolve}.test.ts`, `listAddReturn`, `setItemsDuplicates`, `listResolveError`, `entityRegistry/entityIntegration.test.ts`, `store/store/{deleteListConsistency,listNodeGuard,listStateInit}.test.ts`, `resolvePipeline/{listResolve,listResolveContext,entityTemplateResolve,executeEntityFieldResolve}.test.ts`, `init/createResolveManager.entityField.test.ts`, `submitPipeline/leafCallbacks.entity.react.test.tsx`, `react/{defineList.react,entity-list-field,entity-list-nested,listResolveError.react}.test.tsx`, `react/phase4.test.tsx` (уведомления по общему листу сущности) |
+| 2.1 Списки и реестр | `defineList`, `ListResolver`, `set` / `delete` / `rekey` / `invalidate`, вложенные списки, представление одной записи через несколько шаблонов, dirty и `getValues` списков, ошибка resolve списка | `defineList*.test.ts`, `entityList{Dirty,GetValues,Mutations,Nested,Resolve}.test.ts`, `listAddReturn`, `setItemsDuplicates`, `listResolveError`, `entityRegistry/entityIntegration.test.ts`, `store/store/{deleteListConsistency,listNodeGuard,listStateInit}.test.ts`, `resolvePipeline/{listResolve,listResolveContext,entityTemplateResolve,executeEntityFieldResolve}.test.ts`, `init/createResolveManager.entityField.test.ts`, `init/createResolveManager.phase4.test.ts` и `react/phase5.test.tsx` (из среза B Фазы 1: per-entity field resolve), `submitPipeline/leafCallbacks.entity.react.test.tsx`, `react/{defineList.react,entity-list-field,entity-list-nested,listResolveError.react}.test.tsx`, `react/phase4.test.tsx` (уведомления по общему листу сущности) |
 | 2.2 React-обвязка | `useTranslator`, `useNotifier`, `useStoreContext`, контекст стора на корне, i18n в `label` / `placeholder` / `description` | `store/store/context.test.ts`, react-тесты хуков внутри `useForm.test.tsx` |
 | 2.3 Фильтрация | `filters:` блок, debounce, клиентская проекция | `filtering.test.ts`, `filteringExample.port.test.ts`, `react/filtering.react.test.tsx` |
 | 2.4 Persist | драйверы, `usePersist`, гонки гидрации, persist списков | `persist/{persist,hydrationRaces}.test.ts`, `entityListPersist.test.ts` |

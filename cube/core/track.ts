@@ -1,32 +1,47 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Reactive core: ONE mechanism for everything.
-// "Who is observing right now" is a module-level slot. Every cube getter calls
-// track(this). That covers three things at once, which in Palistor take four
-// different tracking proxies plus the group dependency maps:
-//   1) computed flags (isVisible: (v) => v.showAddress),
-//   2) resolve dependencies,
-//   3) which cubes a component read in useForm.
+// Anything that can change is a Source with a version. Whoever reads it calls
+// track(source); the current Observer records the version it saw. A memo, a
+// resolve run or a signature is fresh while every recorded version still
+// matches. That replaces groupDeps, dependencies, topologicalSort, recompute*
+// and the values tracking proxies of store/.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Cube } from "./cube";
+/** A cube, a list, the translator, a context key: anything with a version. */
+export interface Source {
+  version: number;
+}
 
-export interface Observer {
-  deps: Set<Cube>;
+/** A standalone versioned value (translator, context keys). */
+export class Signal implements Source {
+  version = 0;
+  bump() { this.version++; }
+}
+
+export class Observer {
+  /** source → version at the first read. */
+  readonly deps = new Map<Source, number>();
+
+  add(s: Source) {
+    if (!this.deps.has(s)) this.deps.set(s, s.version);
+  }
+
+  /** At least one source moved since it was read. */
+  changed(): boolean {
+    for (const [s, v] of this.deps) if (s.version !== v) return true;
+    return false;
+  }
 }
 
 let current: Observer | null = null;
 
-export const track = (c: Cube) => { current?.deps.add(c); };
+export const track = (s: Source) => { current?.add(s); };
 
-export function observe<T>(obs: Observer, fn: () => T): T {
+export function observe<T>(obs: Observer | null, fn: () => T): T {
   const prev = current;
   current = obs;
   try { return fn(); } finally { current = prev; }
 }
 
-/**
- * Installs `obs` without restoring the previous observer: reads until the end
- * of the component body land in it. Only the sketch's useForm uses this; the
- * leak into the last frame is a known hole (CubePlan.md, Phase 1).
- */
-export function enter(obs: Observer | null) { current = obs; }
+/** Reads inside fn are invisible to the observer around the call. */
+export const untracked = <T>(fn: () => T): T => observe(null, fn);
