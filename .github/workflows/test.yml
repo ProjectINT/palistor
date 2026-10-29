@@ -3,7 +3,7 @@ name: Test
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, cube-architecture]
 
 jobs:
   test:
@@ -28,5 +28,15 @@ jobs:
       # job, so such regressions fail loudly. The heap cap gives the jsdom suite
       # headroom while still letting a genuine loop die in bounded time.
       - run: npm test
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # Contract tests are typed against the public types (cube/tsconfig.json).
+      - run: npm run typecheck:cube
+
+      # Parity of the Cube core with the store (experiments/CubePlan.md). Red
+      # is expected until Gate 1; then drop continue-on-error.
+      - run: npm run test:cube
+        continue-on-error: true
         env:
           NODE_OPTIONS: --max-old-space-size=4096

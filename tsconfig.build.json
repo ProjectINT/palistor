@@ -20,13 +20,17 @@
     "index.ts",
     "store/**/*.ts",
     "react/**/*.ts",
-    "react/**/*.tsx"
+    "react/**/*.tsx",
+    "cube/**/*.ts",
+    "cube/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "app-demo",
     "**/*.test.ts",
-    "**/*.test.tsx"
+    "**/*.test.tsx",
+    "cube/contract/**",
+    "cube/bench/**"
   ]
 }

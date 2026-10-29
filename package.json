@@ -1,6 +1,6 @@
 {
   "name": "palistor",
-  "version": "0.0.32",
+  "version": "0.1.0-cube.0",
   "description": "Declarative MVVM-style state framework for React — forms, lists & wizards, batteries included",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -40,6 +40,11 @@
       "types": "./dist/react/useNotifier.d.ts",
       "import": "./dist/react/useNotifier.js",
       "default": "./dist/react/useNotifier.js"
+    },
+    "./cube": {
+      "types": "./dist/cube/index.d.ts",
+      "import": "./dist/cube/index.js",
+      "default": "./dist/cube/index.js"
     }
   },
   "files": [
@@ -47,10 +52,13 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "vitest run",
+    "test": "vitest run --project store",
+    "test:cube": "vitest run --project cube",
+    "typecheck:cube": "tsc -p cube/tsconfig.json",
+    "bench": "vitest bench --run",
     "prepublishOnly": "npm run build",
     "publish:npm": "npm publish --registry=https://registry.npmjs.org",
-    "publish:github": "npm pkg set name=@projectint/palistor && npm publish --registry=https://npm.pkg.github.com; npm pkg set name=palistor"
+    "publish:github": "sh -c 'npm pkg set name=@projectint/palistor && npm publish --registry=https://npm.pkg.github.com \"$@\"; npm pkg set name=palistor' publish:github"
   },
   "keywords": [
     "mvvm",

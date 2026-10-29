@@ -5,7 +5,35 @@ on:
     types: [published]
 
 jobs:
+  # Only a regular release moves `latest`. A GitHub pre-release publishes under
+  # the version's prerelease id (0.1.0-cube.3 → "cube"). Without --tag, npm 10
+  # (Node 20) would tag any version `latest`, prereleases included.
+  dist-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: tag
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$PRERELEASE" == "true" ]]; then
+            [[ "$VERSION" == *-* ]] || { echo "::error::A pre-release needs a prerelease version, got $VERSION"; exit 1; }
+            TAG=${VERSION#*-}
+            TAG=${TAG%%.*}
+            [[ "$TAG" =~ ^[a-z][a-z0-9-]*$ && "$TAG" != latest ]] || { echo "::error::Cannot derive a dist-tag from $VERSION"; exit 1; }
+          else
+            [[ "$VERSION" != *-* ]] || { echo "::error::$VERSION is a prerelease version; mark the GitHub release as a pre-release"; exit 1; }
+            TAG=latest
+          fi
+          echo "Publishing $VERSION under dist-tag $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
   publish-npm:
+    needs: dist-tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,11 +52,12 @@ jobs:
 
       - run: npm test
 
-      - run: npm publish --provenance --access public
+      - run: npm publish --provenance --access public --tag ${{ needs.dist-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-github:
+    needs: dist-tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,6 +78,6 @@ jobs:
 
       - run: npm pkg set name=@projectint/palistor # scoped name only inside the CI runner
 
-      - run: npm publish
+      - run: npm publish --tag ${{ needs.dist-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
