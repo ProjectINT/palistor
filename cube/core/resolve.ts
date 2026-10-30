@@ -3,6 +3,9 @@
 // becomes the value, group → it patches the children, list → it becomes the
 // items. Dependencies are whatever the run read, through a values object
 // bound to the run's own observer: reads after an `await` count too.
+//
+// An entity cube (a list item's field, a per-entity list) shares its state
+// with every view of the same row: store keyed these per (entityId, config).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ResolveConfig, Values } from "./config";
@@ -21,18 +24,49 @@ export class ResolveState {
   status: ResolveStatus = "idle";
   error: unknown = null;
   promise: Promise<unknown> | null = null;
+  /** The cubes showing this resolve (one, or every view of an entity's row). */
+  private readonly cubes = new Set<Cube>();
+  private primary: Cube;
   private deps = new Map<Source, number>();
   private scheduled = false;
   private run_: object | null = null;
   private autoRuns = 0;
 
-  constructor(private readonly cube: Cube, readonly config: ResolveConfig) {}
+  constructor(cube: Cube, readonly config: ResolveConfig) {
+    this.primary = cube;
+    this.cubes.add(cube);
+  }
+
+  get cube(): Cube { return this.primary; }
 
   get lazy() { return this.config.options?.lazy !== false; }
 
-  /** First read of a lazy resolve: start it on the next microtask (never inside a render). */
+  attach(cube: Cube) {
+    this.cubes.add(cube);
+    if (this.run_ === DISPOSED) this.run_ = null;
+  }
+
+  /** The cube left the tree. Returns true when no view is left. */
+  detach(cube: Cube): boolean {
+    this.cubes.delete(cube);
+    if (this.primary === cube && this.cubes.size) this.primary = this.cubes.values().next().value!;
+    return this.cubes.size === 0;
+  }
+
+  private bump() { for (const c of this.cubes) c.bump(); }
+
+  /**
+   * First read of a lazy resolve: start it on the next microtask (never inside
+   * a render). An entity field whose row already carries a value other than
+   * the template default is treated as resolved (store: skipIfResolved).
+   */
   touch() {
     if (this.status !== "idle" || this.scheduled || !this.lazy) return;
+    const c = this.primary;
+    if (c.item && c.kind === "leaf" && (this.config.options?.skipIfResolved ?? true)) {
+      const v = c.peek();
+      if (v != null && v !== c.config.value) { this.status = "resolved"; return; }
+    }
     this.scheduled = true;
     queueMicrotask(() => {
       this.scheduled = false;
@@ -51,7 +85,7 @@ export class ResolveState {
     for (const [s, v] of this.deps) {
       if (s.version === v) continue;
       if (++this.autoRuns > MAX_AUTO_RUNS) {
-        console.warn("[palistor/cube] resolve restarted too many times in a row, stopping (dependency cycle?)", this.cube.path);
+        console.warn("[palistor/cube] resolve restarted too many times in a row, stopping (dependency cycle?)", this.primary.path);
         this.deps.clear();
         return;
       }
@@ -60,21 +94,32 @@ export class ResolveState {
     }
   }
 
-  /** The cube left the tree (list item removed): drop in-flight results. */
+  /** The cube left the tree (entity deleted): drop in-flight results. */
   dispose() { this.run_ = DISPOSED; }
 
+  /** Full-form reset: back to idle, an in-flight run is dropped, the next read starts over. */
+  reset() {
+    this.run_ = {};
+    this.status = "idle";
+    this.error = null;
+    this.promise = null;
+    this.deps.clear();
+    this.autoRuns = 0;
+    this.bump();
+  }
+
   start() {
-    const { cube, config } = this;
+    const { primary: cube, config } = this;
     const hub = cube.hub;
     const run = {};
     this.run_ = run;
     this.status = "pending";
     this.error = null;
     hub.batch(() => {
-      cube.bump();
+      this.bump();
       if (!config.optimisticResolver) return;
       try {
-        const r = untracked(() => config.optimisticResolver!(hub.root.values));
+        const r = untracked(() => config.optimisticResolver!((cube.item ?? hub.root).values));
         if (r !== undefined) cube.applyResolved(r, false);
       } catch (e) {
         console.warn("Error in optimistic resolver:", e);
@@ -84,10 +129,12 @@ export class ResolveState {
   }
 
   private async execute(run: object): Promise<unknown> {
-    const { cube, config } = this;
+    const { primary: cube, config } = this;
     const hub = cube.hub;
     const attempts = config.options?.retry?.attempts ?? 0;
     const delay = config.options?.retry?.delay ?? 1000;
+    /** An entity cube's resolver sees its row (store: the entity's flat values), the rest see the form. */
+    const base = cube.item ?? hub.root;
     let lastError: unknown;
     let obs = new Observer();
 
@@ -98,13 +145,16 @@ export class ResolveState {
       }
       obs = new Observer();
       for (const p of config.deps ?? []) {
-        const dep = hub.root.find(p);
+        const dep = base.find(p);
         if (dep) observe(obs, () => dep.value);
       }
       const writes: Array<[Cube, unknown]> = [];
       try {
-        const values = bindValues(hub.root, obs, writes);
-        const result = await untracked(() => config.resolver(values, storeFor(hub, obs)));
+        const values = bindValues(base, obs, writes, base !== hub.root);
+        const store = storeFor(hub, obs);
+        const result = await untracked(() =>
+          cube.kind === "list" ? config.resolver(values, store, listContext()) : config.resolver(values, store),
+        );
         if (this.run_ !== run) return result;
         // Changed while in flight: decided before our own result moves anything.
         const stale = obs.changed();
@@ -112,7 +162,7 @@ export class ResolveState {
           if (result !== undefined) cube.applyResolved(result, true);
           for (const [target, v] of writes) target.assign(v);
           this.status = "resolved";
-          cube.bump();
+          this.bump();
           this.settle(obs); // before the batch notifies: checkDeps must not see our own result as a change
         });
         if (stale) this.start();
@@ -126,7 +176,7 @@ export class ResolveState {
     const stale = obs.changed();
     this.error = lastError;
     try { config.onError?.(lastError, { notify: hub.notify }); } catch { /* onError must not break the store */ }
-    hub.batch(() => { this.status = "error"; cube.bump(); this.settle(obs); });
+    hub.batch(() => { this.status = "error"; this.bump(); this.settle(obs); });
     if (stale) this.start();
     return undefined;
   }
@@ -139,20 +189,31 @@ export class ResolveState {
 
 const DISPOSED = {};
 
+/** store: the third list-resolver argument, always present (the filter block is Phase 2.3). */
+function listContext() {
+  return { filter: { values: {}, params: undefined, key: "" }, queryKey: "" };
+}
+
 /**
- * The resolver's `values`: the root values tree, each read recorded on the
- * run's observer (before and after any await), each write buffered and
- * applied together with the result.
+ * The resolver's `values`: the base group's values tree, each read recorded on
+ * the run's observer (before and after any await), each write buffered and
+ * applied together with the result. An entity's tree skips its lists (store:
+ * the owner's flat snapshot).
  */
-function bindValues(group: Cube, obs: Observer, writes: Array<[Cube, unknown]>): Values {
+function bindValues(group: Cube, obs: Observer, writes: Array<[Cube, unknown]>, skipLists: boolean): Values {
   const out: Values = {};
+  if (group.entityId !== undefined) {
+    Object.defineProperty(out, "id", { enumerable: true, configurable: true, get: () => observe(obs, () => group.idValue()) });
+  }
   for (const [k, child] of group.children) {
+    if (skipLists && child.kind === "list") continue;
     let nested: Values | undefined;
     Object.defineProperty(out, k, {
       enumerable: true,
+      configurable: true,
       get: () => {
         if (child.kind !== "group") return observe(obs, () => child.snapshotValue());
-        return (nested ??= bindValues(child, obs, writes));
+        return (nested ??= bindValues(child, obs, writes, skipLists));
       },
       set: (v) => { writes.push([child, v]); },
     });

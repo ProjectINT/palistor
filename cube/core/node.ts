@@ -47,6 +47,18 @@ function leafNode(c: Cube, proto: object): PublicNode {
   } as PublicNode;
 }
 
+/** store's entity-leaf proxy spread: the leaf keys plus dirty, loading, submitting, submit. */
+function entityLeafNode(c: Cube, proto: object): PublicNode {
+  const node = leafNode(c, proto);
+  Object.defineProperties(node, {
+    dirty: { enumerable: true, configurable: true, get: () => c.dirty },
+    loading: { enumerable: true, configurable: true, get: () => { c.touch(); return c.loading; } },
+    submitting: { enumerable: true, configurable: true, get: () => c.submitting },
+    submit: { enumerable: true, configurable: true, get: () => submit(c) },
+  });
+  return node;
+}
+
 /** store: GROUP_SPREAD_KEYS. */
 function groupNode(c: Cube, proto: object): PublicNode {
   return {
@@ -62,7 +74,6 @@ function groupNode(c: Cube, proto: object): PublicNode {
     get reset() { return reset(c); },
   } as PublicNode;
 }
-
 
 /** store: LIST_SPREAD_KEYS. */
 function listNode(l: ListCube, proto: object): PublicNode {
@@ -90,11 +101,11 @@ function listNode(l: ListCube, proto: object): PublicNode {
 
 // ── Prototypes: the off-spread names, children by config ───────────────────
 
-function accessors(reads: Record<string, Read>): PropertyDescriptorMap {
+function accessors(reads: Record<string, Read>, enumerable = false): PropertyDescriptorMap {
   const out: PropertyDescriptorMap = {};
   for (const k in reads) {
     const read = reads[k];
-    out[k] = { configurable: true, get(this: PublicNode) { return read(this[CUBE]); } };
+    out[k] = { configurable: true, enumerable, get(this: PublicNode) { return read(this[CUBE]); } };
   }
   return out;
 }
@@ -123,22 +134,24 @@ const GROUP_HIDDEN = accessors({
 });
 
 /**
- * A list item's node. There can be thousands per read of `items`, and each own
- * accessor costs ~100 ns to create, so the group surface sits on a prototype
- * (one per template) and the instance owns only `id`: `item.id` is the entity
- * id string, as in store. {...item} therefore spreads `{ id }` only.
- * TODO(Phase 2.1): store's entity projection spread keys.
+ * An entity node (a list item, or the view useForm(entity, template) opens):
+ * store's entity projection spread — `id`, the template's keys, then loading,
+ * submitting, submit, values, dirty — as own enumerable getters. `id` is the
+ * entity id string (store.rekey moves it) and shadows a template child named
+ * `id`, the row's id leaf. The group surface off the spread (value, reset,
+ * revalidate, …) sits on a prototype shared by every node of one template.
  */
-const ITEM_SURFACE = accessors({
-  submitting: (c) => c.submitting,
-  dirty: (c) => c.dirty,
-  revalidate: (c) => c.revalidate,
+const ITEM_OWN_TAIL = accessors({
   loading: (c) => c.loading,
-  values: (c) => c.values,
+  submitting: (c) => c.submitting,
   submit,
-  reset,
-});
-ITEM_SURFACE.value = {
+  values: (c) => c.values,
+  dirty: (c) => c.dirty,
+}, true);
+ITEM_OWN_TAIL.id = { enumerable: true, configurable: true, get(this: PublicNode) { return (this[CUBE] as Cube).idValue(); } };
+
+const ITEM_HIDDEN = accessors({ revalidate: (c) => c.revalidate, reset });
+ITEM_HIDDEN.value = {
   configurable: true,
   get(this: PublicNode) { const c: Cube = this[CUBE]; c.touch(); return c.value; },
   set(this: PublicNode, v: unknown) { this[CUBE].write(v); },
@@ -150,11 +163,16 @@ const itemCtors = new WeakMap<CubeConfig, ItemCtor>();
 function itemCtor(template: CubeConfig): ItemCtor {
   let ctor = itemCtors.get(template);
   if (ctor) return ctor;
-  const proto = Object.create(groupProto(template), ITEM_SURFACE);
+  const proto = Object.create(groupProto(template, true), ITEM_HIDDEN);
+  const own: PropertyDescriptorMap = { id: ITEM_OWN_TAIL.id };
+  for (const k of childKeys(template, true)) {
+    if (k === "id") continue;
+    own[k] = { ...childAccessor(k), enumerable: true };
+  }
+  for (const k of ["loading", "submitting", "submit", "values", "dirty"]) own[k] = ITEM_OWN_TAIL[k];
   const Item = function (this: PublicNode, c: Cube) {
     Object.defineProperty(this, CUBE, { value: c });
-    // Own data property: shadows a template child named `id` (the row's id leaf) on the prototype.
-    Object.defineProperty(this, "id", { enumerable: true, configurable: true, value: c.entityId });
+    Object.defineProperties(this, own);
   };
   Item.prototype = proto;
   itemCtors.set(template, (ctor = Item as unknown as ItemCtor));
@@ -167,34 +185,52 @@ export const RESERVED_CHILD_NAMES: ReadonlySet<string> = new Set([
   ...Object.keys(GROUP_HIDDEN),
 ]);
 
+/**
+ * Names a template child cannot take: the entity node answers these before
+ * the template (store's entity projection did the same). The other group
+ * names (label, value, reset, …) are shadowed by the template's own keys.
+ */
+export const RESERVED_TEMPLATE_CHILD_NAMES: ReadonlySet<string> = new Set([
+  "loading", "submitting", "submit", "values", "dirty",
+]);
+
 /** Keys whose read is node state (useForm tracks the node on them). */
 export const STATE_KEYS: ReadonlySet<string> = new Set([
   "value", "label", "placeholder", "description", "isRequired", "isReadOnly", "isDisabled", "isVisible",
-  "isInvalid", "errorMessage", "dirty", "loading", "submitting", "revalidate",
+  "isInvalid", "errorMessage", "dirty", "loading", "submitting", "revalidate", "values",
   "items", "length", "map", "error", "resolveStatus",
 ]);
 
-const LIST_PROTO = Object.prototype;
+const LIST_PROTO = Object.create(Object.prototype, {
+  [Symbol.iterator]: {
+    configurable: true,
+    value: function* (this: PublicNode) { yield* (this[CUBE] as ListCube).itemNodes(); },
+  },
+});
 const LEAF_PROTO = Object.create(Object.prototype, LEAF_HIDDEN);
 const groupProtos = new WeakMap<CubeConfig, object>();
+const templateGroupProtos = new WeakMap<CubeConfig, object>();
 
-/** One prototype per group config: the hidden names plus a getter per child. */
-function groupProto(config: CubeConfig): object {
-  const hit = groupProtos.get(config);
+function childAccessor(k: string): PropertyDescriptor {
+  return {
+    configurable: true,
+    get(this: PublicNode) {
+      const c: Cube = this[CUBE];
+      c.touch();
+      return c.children.get(k)!.node;
+    },
+  };
+}
+
+/** One prototype per group config (and role): the hidden names plus a getter per child. */
+function groupProto(config: CubeConfig, template: boolean): object {
+  const cache = template ? templateGroupProtos : groupProtos;
+  const hit = cache.get(config);
   if (hit) return hit;
   const desc: PropertyDescriptorMap = { ...GROUP_HIDDEN };
-  for (const k of childKeys(config)) {
-    desc[k] = {
-      configurable: true,
-      get(this: PublicNode) {
-        const c: Cube = this[CUBE];
-        c.touch();
-        return c.children.get(k)!.node;
-      },
-    };
-  }
+  for (const k of childKeys(config, template)) desc[k] = childAccessor(k);
   const proto = Object.create(Object.prototype, desc);
-  groupProtos.set(config, proto);
+  cache.set(config, proto);
   return proto;
 }
 
@@ -202,8 +238,8 @@ export function makeNode(cube: Cube): PublicNode {
   if (cube.entityId !== undefined) return new (itemCtor(cube.config))(cube);
   const node =
     cube.kind === "list" ? listNode(cube as ListCube, LIST_PROTO)
-    : cube.kind === "leaf" ? leafNode(cube, LEAF_PROTO)
-    : groupNode(cube, groupProto(cube.config));
+    : cube.kind === "leaf" ? (cube.item ? entityLeafNode(cube, LEAF_PROTO) : leafNode(cube, LEAF_PROTO))
+    : groupNode(cube, groupProto(cube.config, cube.item !== null));
   Object.defineProperty(node, CUBE, { value: cube });
 
   const props = cube.kind === "leaf" ? cube.config.componentProps : undefined;
@@ -216,12 +252,13 @@ export function makeNode(cube: Cube): PublicNode {
   return node;
 }
 
-/** Construction-time check: a group child must not take a name of the group node. */
-export function assertChildName(key: string, path: string) {
-  if (!RESERVED_CHILD_NAMES.has(key)) return;
+/** Construction-time check: a child must not take a name its node answers itself. */
+export function assertChildName(key: string, path: string, template: boolean) {
+  const reserved = template ? RESERVED_TEMPLATE_CHILD_NAMES : RESERVED_CHILD_NAMES;
+  if (!reserved.has(key)) return;
   throw new Error(
-    `[palistor/cube] "${path}": a child cannot be named "${key}", the group node uses that name ` +
-    `(reserved: ${[...RESERVED_CHILD_NAMES].join(", ")}).`,
+    `[palistor/cube] "${path}": a child cannot be named "${key}", the ${template ? "entity" : "group"} node uses that name ` +
+    `(reserved: ${[...reserved].join(", ")}).`,
   );
 }
 

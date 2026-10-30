@@ -1,4 +1,4 @@
-import { Cube, Hub, cubeOf, type CubeConfig, type NotifyFn, type SubmitResult, type Translate, type Values } from "./core";
+import { Cube, Hub, cubeOf, type CubeConfig, type NotifyFn, type Registry, type SubmitResult, type Translate, type Values } from "./core";
 import { notImplemented } from "./notImplemented";
 
 export interface PalistorOptions {
@@ -28,10 +28,14 @@ export class Palistor {
     this.root.settleComputed();
     if (options.context) hub.context = options.context;
     hub.settle();
-    for (const c of hub.resolving) if (!c.rs!.lazy) c.rs!.start();
+    for (const rs of hub.resolving) if (!rs.lazy) rs.start();
   }
 
   get proxy(): any { return this.root.node; }
+  /** The config object the store was built from (store.rootConfig). */
+  get rootConfig(): CubeConfig { return this.root.config; }
+  /** The entity registry: rows, ownership, template bindings and the resolved cache. */
+  get entityRegistry(): Registry { return this.hub.registry; }
 
   get context(): Record<string, unknown> { return this.hub.context; }
   setContext(ctx: Record<string, unknown>): void { this.hub.setContext(ctx); }
@@ -54,15 +58,17 @@ export class Palistor {
   setNotifier(fn: NotifyFn | null): void { this.hub.notifier = fn; }
 
   get persist(): never { return notImplemented("store.persist"); }
-  /** Upsert rows into the entity registry (flat rows with an id; the rest of store.set is Phase 2.1). */
+
+  /** Create or update entities (recursive merge; a row without an id gets a `_tmp_` one). One notification. */
   set(data: Values | Values[]): void {
-    const rows = Array.isArray(data) ? data : [data];
-    if (rows.some((r) => r.id == null || r.id === "")) notImplemented("store.set() of a row without id");
-    this.hub.batch(() => { for (const r of rows) this.hub.registry.set(r); });
+    this.hub.setRows(Array.isArray(data) ? data : [data]);
   }
-  rekey(_oldId: string, _newId: string): void { notImplemented("store.rekey()"); }
-  delete(_id: string): void { notImplemented("store.delete()"); }
-  invalidate(_id: string, _templateNode?: object): void { notImplemented("store.invalidate()"); }
+  /** Move an entity to a new id everywhere it is referenced (lists, views, ownership, bindings). */
+  rekey(oldId: string, newId: string): void { this.hub.rekeyEntity(oldId, newId); }
+  /** Remove an entity: its owned children go too, every list drops it, its views and resolves are released. */
+  delete(id: string): void { this.hub.deleteEntity(id); }
+  /** Forget that (entity, template) was resolved, so the next useForm(entity, template) mount resolves again. */
+  invalidate(id: string, templateNode?: object): void { this.hub.registry.clearResolved(id, templateNode); }
 
   /** A config node (store's subscription key) or a public node → its cube. */
   private cubeFor(node: object): Cube | undefined {

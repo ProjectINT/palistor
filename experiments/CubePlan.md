@@ -141,6 +141,8 @@ Cube переписывает механизм Palistor (один рекурси
 | 2.7 Flows | `defineFlow` / `defineStep`, навигация, ветвление, persist шага | `flow/{defineFlow,flowNavigation}.test.ts` |
 | 2.8 Suspense и retry на листе | то, что осталось из `resolvePipeline` | остаток `resolvePipeline/*` контрактных |
 
+**Статус на 2026-10-30.** Шаг 2.1 сделан: срез C (`cube/contract/sliceC/`, 25 файлов) зелёный на `store` и на `cube`; цифры, решения и отличия от таблицы — в [CubeExperiment.md](./CubeExperiment.md), раздел «Фаза 2.1». Не по таблице: `listNodeGuard` и `listStateInit` (гоняли ходоки ядра store) заменены одним публичным `listNodeGuard.test.ts`; `executeEntityFieldResolve`, `createResolveManager.entityField` и `createResolveManager.phase4` (менеджер с подложными deps) — одним публичным `entityFieldResolve.test.tsx`; `entityTemplateResolve` стал `.tsx` и идёт через `useForm(entity, template)`. Из 2.2 досрочно взят `useStoreContext`: его требует `listResolveContext.test`. Пререлиз `0.1.0-cube.1` — после публикации `cube.0` (ждёт go-ahead с Фазы 0).
+
 Замечания по шагам:
 
 - Пагинация, persist и flow сейчас цепляются за внутренности (`ListState`, resolve manager, `groupDepsMap`). Их тесты переносятся целиком, код привязки переписывается. Ожидать, что строки в этих модулях почти не уменьшатся: это фичи, а не механизм.

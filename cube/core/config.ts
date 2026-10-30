@@ -8,8 +8,8 @@ export type Translate = (key: string, ...args: any[]) => string;
 export type NotifyFn = (...args: any[]) => void;
 
 export interface ResolveConfig {
-  /** Leaf → value, group → patch of values, list → array of rows. */
-  resolver: (values: Values, store: any) => unknown;
+  /** Leaf → value, group → patch of values, list → array of rows (a list resolver also gets a context). */
+  resolver: (values: Values, store: any, ctx?: any) => unknown;
   /** A synchronous placeholder applied when the run starts. Same result shape. */
   optimisticResolver?: (values: Values) => unknown;
   onError?: (error: unknown, ctx: { notify: NotifyFn }) => void;
@@ -19,6 +19,8 @@ export interface ResolveConfig {
     /** false → start right on creation, true (default) → on first read. */
     lazy?: boolean;
     retry?: { attempts: number; delay?: number };
+    /** Entity field: skip when the row already holds a value other than the template default (default true). */
+    skipIfResolved?: boolean;
   };
 }
 
@@ -35,7 +37,7 @@ export interface CubeConfig {
   formatter?: (raw: any, values: Values) => unknown;
   setter?: (value: any, values: Values, prev: any) => unknown;
   beforeSubmit?: (payload: any, values: Values) => any;
-  onSubmit?: (payload: any, store: any, parent: any) => unknown;
+  onSubmit?: (payload: any, store: any, parent?: any) => unknown;
   afterSubmit?: (result: unknown, actions: { reset(): void }) => unknown;
   onChange?: (info: { fieldKey: string; newValue: unknown; previousValue: unknown; allValues: Values }) => unknown;
   reset?: (defaults: Values) => Values;
@@ -58,14 +60,26 @@ export const CONFIG_PROPS = new Set<string>([
 
 export const isLeafConfig = (c: object) => "value" in c;
 
-const childKeyCache = new WeakMap<CubeConfig, string[]>();
+/** Service keys whose value is an object by nature; under a template every other object-valued key is a child node. */
+const STRUCTURAL_PROPS = new Set<string>(["componentProps", "resolve", "types", "dependencies", "deps", "__flowSteps"]);
 
-/** Child keys of a group config (a template is shared by thousands of items: cached). */
-export function childKeys(c: CubeConfig): string[] {
-  let keys = childKeyCache.get(c);
+const groupChildKeys = new WeakMap<CubeConfig, string[]>();
+const templateChildKeys = new WeakMap<CubeConfig, string[]>();
+
+/**
+ * Child keys of a config (a template is shared by thousands of items: cached).
+ * A form group's service keys (label, isVisible, …) are never children, as in
+ * store, where its proxy answered them before child lookup. Under an entity
+ * template an object there (`label: { value: "" }`) is a child: store's entity
+ * projection reached such template fields.
+ */
+export function childKeys(c: CubeConfig, template = false): string[] {
+  const cache = template ? templateChildKeys : groupChildKeys;
+  let keys = cache.get(c);
   if (!keys) {
-    keys = Object.keys(c).filter((k) => !CONFIG_PROPS.has(k) && typeof c[k] === "object" && c[k] !== null);
-    childKeyCache.set(c, keys);
+    const skip = template ? STRUCTURAL_PROPS : CONFIG_PROPS;
+    keys = Object.keys(c).filter((k) => !skip.has(k) && typeof c[k] === "object" && c[k] !== null);
+    cache.set(c, keys);
   }
   return keys;
 }

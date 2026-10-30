@@ -128,3 +128,61 @@ JS `cube/` после tsc: 66 378 B, 16 953 B gzip (после Фазы 0 был
 ### Что осталось от наброска
 
 Заглушки `NotImplementedError`: `persist`, `rekey`, `delete`, `invalidate`, `fieldMapping`, `useForm(entity, templateSelector)`, `useNotifier`, `useTranslator`, `useStoreContext`, `usePersist`, `defineFlow` / `defineStep`. Порядок — таблица Фазы 2 в CubePlan.md.
+
+## Фаза 2.1: списки и реестр (2026-10-30)
+
+План: [CubePlan.md](./CubePlan.md), Фаза 2, шаг 2.1. Сделано: `store.set` / `rekey` / `delete` / `invalidate`, реестр с владением и привязками, вложенные списки (в элементе и в группе внутри элемента), `useForm(entity, templateSelector)` с resolve шаблона и submit сущности, per-entity resolve полей с `skipIfResolved`, spread-ключи сущности, `useStoreContext`.
+
+### Контракт
+
+Срез C лежит в `cube/contract/sliceC/` (25 файлов, 9 050 строк; store-оригиналы — 24 файла, 11 100 строк, плюс блок `useForm(entity, templateSelector)` из `useForm.test.tsx`). Зелёный на `store` и на `cube`: 307 тестов и 1 todo. Правки относительно оригиналов, полностью:
+
+- Импорт из `@impl`. Шесть файлов импортируют `CONFIG_NODE` и `LIST_STATE` из `store/constants` ради шима `trackKey(node)`: store ключует `getNodeVersion` / `subscribe` внутренними объектами (ListState списка, лист сущности), Cube — самим публичным узлом; шим отдаёт то и другое.
+- Внутренности заменены публичной поверхностью: `store.nodes.listStates`, `allListStates`, `entityProjectionObjs`, `resolveManager.*`, `entityStates`, `buildListProxy(getOrCreateEntityListState(...))`, `hub.postNotifyHook`, `resetPipeline.execute` → резольвер для начального состава, `items.map(i => i.id)`, `resolveStatus`, чтение `items` как ленивый триггер, `useForm(entity, s => s.editForm)`. Тесты per-entity списков, которые в store строили прокси над группой `editUser` руками, переписаны на корневой список `users` с `contacts` в шаблоне (`entityListMutations`, `entityListResolve`, `deleteListConsistency`, `setItemsDuplicates`). `entity.name.value` → `leaf(entity.name)` (store хранит в реестре узлы `{ value }`, Cube — плоские строки); `entity.owner` → `ownerOf(store, id)` (`entityRegistry.ownerOf` в Cube, `.owner` узла в store).
+- Вырезано как механизм: `listNodeGuard` и `listStateInit` целиком (ходоки ядра) — заменены `listNodeGuard.test.ts` с теми же правилами снаружи; `executeEntityFieldResolve`, `createResolveManager.entityField` и `createResolveManager.phase4` — заменены `entityFieldResolve.test.tsx`; блок 4.2 `phase4.test.tsx` (`computeNodes`, `bumpLeafVersions`: там же ререндер по `setTranslator` компонента, читающего только значение — Cube перерисовывает только то, чей текст зависит от переводчика); «deleted leaf nodes are removed from leafNodes» из `entityIntegration`.
+- Вырезано как чужой шаг: блок `fieldMapping` из `listResolveError` (2.6), persist round-trip из `entityListNested` (2.4).
+- Два теста поправлены по смыслу. В `useFormEntity` «entity and list share the same leaf» форма-хук ничего не читала в рендере и перерисовывалась в store случайно: его `getSnapshot` после первой навигации возвращал 0 вместо версии. Теперь хук читает `name.value`. В `entityFieldResolve` значения резольвера читаются внутри него: store отдаёт снимок, Cube — живые геттеры.
+
+### Ядро после 2.1
+
+`cube/` 2 699 строк (ядро 2 125, React 188, фасад и экспорты 386); после Фазы 1 было 1 658. Эквивалент store для этого шага — около 3 500 строк: `entityRegistry` 537, `buildListProxy` 732 (с ветками пагинации и фильтра, которых в Cube ещё нет), `buildEntityProjectionProxy` 400, `executeListResolve` 291, `executeEntityFieldResolve` 288, сущностная часть `palistor.ts` 731, сущностная часть `createResolveManager` ~430. JS `cube/` после tsc: 99 443 B, 24 834 B gzip (Фаза 1: 66 378 / 16 953).
+
+Решения:
+
+- **Строка в реестре плоская**, merge рекурсивный (как store), ключ, впервые появившийся в строке, засевает baseline для dirty. Baseline хранится на строке, не на view: две проекции одной записи согласны в `dirty`. Лист сущности хранит путь внутри строки (`rowPath`), поэтому группа внутри шаблона читает `row.profile.bio`.
+- **Состояние resolve поля сущности общее на пару (id, конфиг)** (store: `EntityResolveStateMap`): элемент списка и форма `useForm(entity, template)` над одной записью запускают один резольвер и вместе видят `loading`. Снятый view отвязывается; состояние без views уходит из `hub.resolving` и возвращается с новым view; `store.delete` и `store.reset()` сбрасывают его.
+- **View-кубик `useForm(entity, template)`** создаётся один на (id, шаблон) и живёт между монтированиями, как и `isResolved` в реестре. Resolve шаблона: `resolver(entityNode, store)` → merge в строку → `markResolved`; submit сущности: только `validate` листьев шаблона, `onSubmit(entityNode, store)`, `afterSubmit(result, { reset })` с пустым reset — ровно store.
+- **Зарезервированные имена детей зависят от роли.** В группе формы — прежний список Фазы 1. В шаблоне сущности store отвечал сам только на `loading`, `submitting`, `submit`, `values`, `dirty`, а `label: { value: "" }` доставал как поле; в Cube ровно так: в шаблоне это ребёнок, в группе формы `label: { value: "Section" }` остаётся свойством группы (как store, где такой ребёнок был недостижим), и конфиг из `defineList.test.ts` строится.
+- **Spread сущности = store**: `{...item}` даёт `id`, ключи шаблона, `loading`, `submitting`, `submit`, `values`, `dirty` (собственные перечислимые аксессоры, ~0,9 мкс на элемент; расхождение № 6 Фазы 1 закрыто). Spread листа сущности — ключи листа плюс `dirty`, `loading`, `submitting`, `submit`. У списка появился `Symbol.iterator`.
+- **Граница `useForm`: два поколения прочитанных узлов** вместо «только растёт» (store копил все строки, которые список когда-либо показал). Чтение `item.id` трекает лист `id` строки (дешёвая сигнатура), а не кубик сущности: трекинг сущности на 100 строк стоил +1,5 мс на замену. Сигнатура группы без `validate` / `isRequired` не считает `isInvalid` / `errorMessage`.
+- **`useStoreContext`** перенесён как есть (12 строк).
+
+### Цифры
+
+| Критерий | store | cube |
+|---|---|---|
+| Срез C | 307 тестов зелёные | те же 307, без `skip` |
+| Проекты целиком | 137 файлов, 1 795 + 2 todo | 42 файла, 553 + 1 todo |
+| Ререндеры (список / строки): монтирование, обновление 1 000 на месте, одна строка, строка вне окна, замена id | 2 / 200, 1 / 100, 0 / 1, 0 / 0, 1 / 200 | 1 / 100, 1 / 100, 0 / 1, 0 / 0, 1 / 100 (как в Фазе 1) |
+| Список 1 000 строк, 100 отрисовано: замена на 1 000 новых id | 4,21 ms | 3,95–4,00 ms |
+| Тот же список: обновление всех 1 000 строк на месте | 1,79 ms | 1,04 ms |
+| Форма 500 полей: создание / запись без зависимых / запись со всеми зависимыми | — | 0,153 / 0,0069 / 0,0129 ms (Фаза 1: 0,157 / 0,0072 / 0,0134) |
+
+Бенчи сегодняшние на обеих реализациях (store сегодня медленнее своих цифр Фазы 1, машина другая по нагрузке). Промежуточная версия с трекингом кубика сущности на `item.id` давала 6,0 ms на замену — на 43 % хуже store; два поколения и лист `id` вернули 3,95. Прогоны проекта `store` несколько раз падали с «Worker exited unexpectedly» без имени файла; `--reporter=json` показал файл (`entityFieldResolve`, все тесты `pending`) и причину — пункт 10 ниже, не память.
+
+### Расхождения, найденные и намеренные
+
+1. **Значения резольвера живые**, привязаны к наблюдателю запуска (так же для форм с Фазы 1): резольвер, читающий `values.x` после применения своего результата, видит новое значение; store отдавал снимок. Контракт читает внутри резольвера.
+2. **Resolve поля сущности перезапускается по `setContext`** ключа, который он читал. В store контекстные зависимости записывались, но перезапуск шёл только по изменению путей сущности. Надмножество; в контракте нет.
+3. **Результат resolve — новый baseline dirty и для листьев сущности.** В store `_setEntitiesRaw` писал значение сырым, `initialValueMap` оставался старым, и строки после повторного resolve показывали dirty-листья.
+4. **`rekey` переписывает id и в начальном составе списка** (store — только в `itemIds`, список после rekey становился dirty). `delete` убирает id только из текущего состава, как store.
+5. **Нестроковый `id` строки** → `String(id)` (store выдавал tmp-id). Пустой или отсутствующий → `_tmp_…`, как store.
+6. **`entityRegistry` в Cube** — объект `Registry`: `get` (плоская строка), `has`, `size`, `bind` / `unbind` / `getBindings`, `markResolved` / `isResolved` / `clearResolved`, `ownerOf`, `getChildrenByOwner`. В store `get` отдавал узел `{ id: { value } , … }` с неперечислимыми `owner` и `lists`.
+7. **Reset листа сущности из `afterSubmit`** сбрасывает один лист (store: `onReset` листа); reset листа формы — всю его группу (контракт Фазы 1).
+8. **`values` сущности и `getValues` списка — по шаблону**, с `id` первым. В store `entity.values` собирались по всем ключам записи, включая те, что в шаблон не входят. Нетронутый вложенный список ключа не добавляет (как store); корневой всегда `[]`.
+9. **Типы.** `typecheck:cube` исключает ещё девять файлов среза C: вложенный `defineList` или группа внутри типизированного шаблона не типизируются (`TemplateConfig`), react-оригиналы ставили `as any`. Та же категория, что `store.test.ts` в Фазе 1 — публичные типы, не контракт.
+10. **Найдено в store: резольвер поля сущности, читающий своё же поле, перезапускается бесконечно.** Запись результата всегда идёт в `notifyChanged`, путь `_entity_.<id>.<field>` попадает в его собственные зависимости, а `_retriggerEntityFieldResolves` не имеет предела, в отличие от `MAX_AUTO_RETRIGGERS` корневых resolve. Так один контрактный тест (резольвер делал `{ ...values }`) ронял воркер vitest. Cube фиксирует зависимости до применения своего результата и не перезапускается. Тест читает только чужие ключи; кандидат в фикс `main`.
+
+### Что осталось от наброска
+
+Заглушки `NotImplementedError`: `persist`, `fieldMapping`, `useNotifier`, `useTranslator`, `usePersist`, `defineFlow` / `defineStep`. Следующий шаг — 2.2 (React-обвязка: `useTranslator`, `useNotifier`, контекст стора на корне, i18n в `label` / `placeholder` / `description`).

@@ -22,6 +22,7 @@ import type { defineFieldMapping as StoreDefineFieldMapping } from "../store/def
 
 import { Palistor as CubePalistor } from "./palistor";
 import { useForm as cubeUseForm } from "./react/useForm";
+import { useStoreContext as cubeUseStoreContext } from "./react/useStoreContext";
 import { defineList as cubeDefineList } from "./defineList";
 import { stub } from "./notImplemented";
 
@@ -114,7 +115,7 @@ export const useForm = cubeUseForm as unknown as typeof StoreUseForm;
 export const usePersist: typeof StoreUsePersist = stub("usePersist()");
 // TODO(Phase 2.2): React bindings
 export const useTranslator: typeof StoreUseTranslator = stub("useTranslator()");
-export const useStoreContext: typeof StoreUseStoreContext = stub("useStoreContext()");
+export const useStoreContext = cubeUseStoreContext as unknown as typeof StoreUseStoreContext;
 
 // ============================================================================
 // defineList — typed list helper
