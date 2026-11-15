@@ -360,9 +360,29 @@ export class Cube implements Source {
     });
   }
 
+  /**
+   * An entity field's validity (store's entity-leaf proxy): its own `validate`,
+   * run live — no revalidate gate, `isRequired` takes no part, false without a
+   * rule. Entity submit checks the same rules.
+   */
+  private get rowError(): unknown {
+    const validate = this.config.validate;
+    if (typeof validate !== "function") return undefined; // most row fields: no memo at all
+    return this.memo("rowError", () => {
+      track(this.hub.translator);
+      return validate(this.value, this.scopeValues, this.hub.translate) || undefined;
+    });
+  }
+
   get revalidate(): boolean { track(this); return this.revalidateFlag; }
-  get errorMessage() { return this.revalidate ? this.rawError : undefined; }
-  get isInvalid() { return this.revalidate && this.rawError ? true : undefined; }
+  get errorMessage() {
+    if (this.item && this.kind === "leaf") return this.rowError;
+    return this.revalidate ? this.rawError : undefined;
+  }
+  get isInvalid() {
+    if (this.item && this.kind === "leaf") return this.rowError !== undefined;
+    return this.revalidate && this.rawError ? true : undefined;
+  }
 
   get dirty(): boolean {
     track(this);

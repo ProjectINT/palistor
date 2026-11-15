@@ -1,10 +1,10 @@
 /**
  * List filtering (FilteringPlan.md, Phase 1). Ported from store/filtering.test.ts
- * (Phase 2.3): import from @impl; B2 (fieldMapping over filter fields) cut, it
- * belongs to step 2.6.
+ * (Phase 2.3): import from @impl. B2 (fieldMapping over filter fields) was
+ * cut in 2.3 and came back with step 2.6.
  *
  *  A. Shorthand & classification (literal expansion, $-keys, dev throws)
- *  B. State layer ($filters registration, derived fields; B2 fieldMapping moves to step 2.6)
+ *  B. State layer ($filters registration, derived fields, fieldMapping)
  *  C. Boundaries (getValues/reset/submit/persist never see filters)
  *  D. Server fields (ctx, params, one-fetch invalidation, debounce, issuedKey)
  *  E. Client fields (projection, isEmpty skipping, $all, local-add exemption, memo)
@@ -172,6 +172,37 @@ describe("B. State layer", () => {
       filter.isNarrowed.value = false;
     }).toThrow(/derived and read-only/);
     expect(() => filter.set({ isNarrowed: false })).toThrow(/derived/);
+  });
+
+  it("B2. fieldMapping normalizes filter field configs and reserved keys throw", () => {
+    const store = new Palistor({
+      config: {
+        vehicles: defineList<Vehicle>({
+          template: { id: { value: "" }, name: { value: "" }, brand_id: { value: "" } },
+          filter: { brand: { value: null, caption: "Brand" } as any },
+        }),
+      },
+      fieldMapping: { label: "caption" } as const,
+    });
+    const filter = (store.proxy.vehicles as any).filter;
+    // config authored in the external vocabulary; read back through it too
+    expect(filter.brand.caption).toBe("Brand");
+
+    // a fieldMapping renaming anything TO a reserved list key throws
+    expect(
+      () =>
+        new Palistor({
+          config: { name: { values: "" } },
+          fieldMapping: { value: "values" } as const,
+        }),
+    ).toThrow(/reserved list key/);
+    expect(
+      () =>
+        new Palistor({
+          config: { name: { value: "" } },
+          fieldMapping: { isInvalid: "filter" } as const,
+        }),
+    ).toThrow(/reserved list key/);
   });
 
   it("B3. a filter on a nested (per-entity) list warns and is ignored", () => {

@@ -1,10 +1,13 @@
-import { Cube, Hub, Persist, cubeOf, type CubeConfig, type NotifyFn, type Registry, type SubmitResult, type Translate, type Values } from "./core";
-import { notImplemented } from "./notImplemented";
+import {
+  Cube, FieldMap, Hub, Persist, cubeOf,
+  type CubeConfig, type NotifyFn, type Registry, type SubmitResult, type Translate, type Values,
+} from "./core";
 
 export interface PalistorOptions {
   config: CubeConfig;
   initialValues?: Values;
   context?: Record<string, unknown>;
+  /** One public vocabulary for field-state names (internal → external): the config is written in it, nodes answer it. */
   fieldMapping?: Record<string, string>;
 }
 
@@ -20,13 +23,20 @@ export class Palistor {
   readonly root: Cube;
   /** Hydration and autosave through a storage driver (store.persist). */
   readonly persist: Persist;
+  /** @internal The fieldMapping option as passed (internal → external); {} without one. */
+  readonly fieldMapping: Record<string, string>;
+  /** @internal The reverse map (external → internal). */
+  readonly externalToInternal: Record<string, string>;
 
   constructor(options: PalistorOptions) {
-    if (options.fieldMapping) notImplemented("option `fieldMapping`");
     const hub = this.hub;
     hub.store = this;
+    const map = new FieldMap(options.fieldMapping ?? {});
+    this.fieldMapping = options.fieldMapping ?? {};
+    this.externalToInternal = map.e2i;
+    if (!map.empty) hub.map = map;
     this.persist = hub.persist = new Persist(hub);
-    this.root = new Cube(options.config, null, "", hub);
+    this.root = new Cube(map.normalize(options.config), null, "", hub);
     if (options.initialValues) this.root.seed(options.initialValues);
     this.root.settleComputed();
     if (options.context) hub.context = options.context;

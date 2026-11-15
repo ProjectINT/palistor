@@ -139,5 +139,5 @@ export type {
 // defineFieldMapping — typed fieldMapping helper (preserves literals)
 // ============================================================================
 
-// The helper itself is an identity; the store rejects `fieldMapping` until Phase 2.6.
+// An identity that keeps the map's literal types; the store applies the map (cube/core/mapping.ts).
 export const defineFieldMapping: typeof StoreDefineFieldMapping = (mapping) => mapping;

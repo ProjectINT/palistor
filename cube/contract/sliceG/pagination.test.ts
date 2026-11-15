@@ -2,8 +2,10 @@
  * List pagination (PaginationPlan.md, Phase 1 — paged mode, root lists).
  * Ported from store/pagination/pagination.test.ts (Phase 2.5): import from
  * @impl; cache internals through the slice shim (paging.ts); the resolve
- * manager's dep set / retrigger counter checks (B1, B2) dropped; F1
- * (fieldMapping) moves to step 2.6; F6 (store's snapshot-proxy unit) cut.
+ * manager's dep set / retrigger counter checks (B1, B2) dropped; F6 (store's
+ * snapshot-proxy unit) cut. F1 (fieldMapping) was cut in 2.5 and came back
+ * with step 2.6, its configs cast `as any` (an `any` map makes the config
+ * validator reject every key; the store original was never type-checked).
  *
  *  A. Cache hits & navigation (no-resolver hot path, getters, tracking keys)
  *  B. queryKey invalidation (auto-deps, $context, unchanged value, re-key in place)
@@ -891,6 +893,23 @@ describe("E. Persist round-trip", () => {
 // ─── F. Compat ───────────────────────────────────────────────────────────────
 
 describe("F. Compat", () => {
+  it("F1. fieldMapping onto a pagination key throws at construction", () => {
+    expect(
+      () =>
+        new Palistor({
+          config: { name: { value: "" } } as any,
+          fieldMapping: { dirty: "page" } as any,
+        }),
+    ).toThrow(/reserved list key/);
+    expect(
+      () =>
+        new Palistor({
+          config: { name: { value: "" } } as any,
+          fieldMapping: { loading: "isFetching" } as any,
+        }),
+    ).toThrow(/reserved list key/);
+  });
+
   it("F2. spread/ownKeys: pagination keys present on a paginated list, byte-for-byte unchanged otherwise", async () => {
     // `length` mirrors the array target's non-enumerable descriptor — Object.keys skips it.
     const enumerable = (keys: string[]) => keys.filter((k) => k !== "length");

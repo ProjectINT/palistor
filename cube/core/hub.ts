@@ -2,6 +2,7 @@ import type { CubeConfig, NotifyFn, ResolveConfig, Translate, Values } from "./c
 import { Cube } from "./cube";
 import { ListState, type ListCube } from "./listCube";
 import { idOf, Registry } from "./registry";
+import type { FieldMap } from "./mapping";
 import type { Persist } from "./persist";
 import { ResolveState, type Resolving } from "./resolve";
 import { Signal } from "./track";
@@ -21,6 +22,8 @@ export class Hub {
   store: unknown = null;
   /** store.persist: a successful group submit clears its snapshot. */
   persist: Persist | null = null;
+  /** fieldMapping: public nodes answer its external names. Null without a map. */
+  map: FieldMap | null = null;
 
   /** Notification cycles so far: store.getVersion(). */
   cycle = 0;

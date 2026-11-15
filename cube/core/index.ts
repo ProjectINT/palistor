@@ -1,6 +1,7 @@
 export { Cube } from "./cube";
 export { ListCube } from "./listCube"; // also registers list children with Cube
 export { Hub } from "./hub";
+export { FieldMap } from "./mapping";
 export { Memo } from "./memo";
 export { Persist, localStorageDriver, sessionStorageDriver, type PersistDriver, type PersistOptions } from "./persist";
 export { Registry, generateTmpId } from "./registry";

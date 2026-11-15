@@ -48,16 +48,27 @@ function leafNode(c: Cube, proto: object): PublicNode {
   } as PublicNode;
 }
 
-/** store's entity-leaf proxy spread: the leaf keys plus dirty, loading, submitting, submit. */
+/** store's entity-leaf proxy spread: the leaf keys, then dirty, loading, submitting, submit, and onValueChange last. */
 function entityLeafNode(c: Cube, proto: object): PublicNode {
-  const node = leafNode(c, proto);
-  Object.defineProperties(node, {
-    dirty: { enumerable: true, configurable: true, get: () => c.dirty },
-    loading: { enumerable: true, configurable: true, get: () => { c.touch(); return c.loading; } },
-    submitting: { enumerable: true, configurable: true, get: () => c.submitting },
-    submit: { enumerable: true, configurable: true, get: () => submit(c) },
-  });
-  return node;
+  return {
+    __proto__: proto,
+    get value() { c.touch(); return c.value; },
+    set value(v: unknown) { c.write(v); },
+    get label() { c.touch(); return c.label; },
+    get placeholder() { c.touch(); return c.placeholder; },
+    get description() { c.touch(); return c.description; },
+    get isRequired() { c.touch(); return c.isRequired; },
+    get isReadOnly() { c.touch(); return c.isReadOnly; },
+    get isDisabled() { c.touch(); return c.isDisabled; },
+    get isVisible() { c.touch(); return c.isVisible; },
+    get isInvalid() { c.touch(); return c.isInvalid; },
+    get errorMessage() { c.touch(); return c.errorMessage; },
+    get dirty() { return c.dirty; },
+    get loading() { c.touch(); return c.loading; },
+    get submitting() { return c.submitting; },
+    get submit() { return submit(c); },
+    get onValueChange() { return onValueChange(c); },
+  } as PublicNode;
 }
 
 /** store: GROUP_SPREAD_KEYS. */
@@ -272,6 +283,7 @@ const LIST_PROTO = Object.create(Object.prototype, {
   },
 });
 const LEAF_PROTO = Object.create(Object.prototype, LEAF_HIDDEN);
+const ENTITY_LEAF_PROTO = Object.create(LEAF_PROTO);
 const groupProtos = new WeakMap<CubeConfig, object>();
 const templateGroupProtos = new WeakMap<CubeConfig, object>();
 
@@ -298,14 +310,27 @@ function groupProto(config: CubeConfig, template: boolean): object {
   return proto;
 }
 
+/**
+ * fieldMapping lays one prototype layer per node prototype (mapping.ts), so
+ * every node on one prototype has the same own keys: an entity leaf (own
+ * dirty, loading, submitting, submit) gets a prototype of its own.
+ */
 export function makeNode(cube: Cube): PublicNode {
-  if (cube.entityId !== undefined) return new (itemCtor(cube.config))(cube);
-  // A list's own keys are exactly store's (Reflect.ownKeys included): its cube link sits on a per-list prototype.
-  if (cube.kind === "list") return listNode(cube as ListCube, Object.create(LIST_PROTO, { [CUBE]: { value: cube } }));
+  const map = cube.hub.map;
+  if (cube.entityId !== undefined) {
+    const item = new (itemCtor(cube.config))(cube);
+    return map ? map.project(item) : item;
+  }
+  if (cube.kind === "list") {
+    // A list's own keys are exactly store's (Reflect.ownKeys included): its cube link sits on a per-list prototype.
+    const list = listNode(cube as ListCube, Object.create(LIST_PROTO, { [CUBE]: { value: cube } }));
+    return map ? map.project(list) : list;
+  }
   const node =
-    cube.kind === "leaf" ? (cube.item ? entityLeafNode(cube, LEAF_PROTO) : leafNode(cube, LEAF_PROTO))
+    cube.kind === "leaf" ? (cube.item ? entityLeafNode(cube, ENTITY_LEAF_PROTO) : leafNode(cube, LEAF_PROTO))
     : groupNode(cube, groupProto(cube.config, cube.item !== null));
   Object.defineProperty(node, CUBE, { value: cube });
+  if (map) map.project(node);
 
   const props = cube.kind === "leaf" ? cube.config.componentProps : undefined;
   if (props) {
