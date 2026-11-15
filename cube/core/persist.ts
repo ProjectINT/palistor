@@ -22,7 +22,10 @@
 //                 while a root list fetches a page (a torn window). disable()
 //                 drops every page cache: it belongs to the persisted session.
 //
-// The reserved key `__flows` belongs to step 2.7; until then hydration drops it.
+//   • flows     — the navigation of every flow under `__flows[flowPath]`
+//                 (flow.ts), outside pick / omit: it is not a form field.
+//                 Hydration restores it after the values; a flow whose active
+//                 step moved enters it again (onEnter → resolve → onReady).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { isLeafConfig, isPlainObject, type CubeConfig, type Values } from "./config";
@@ -145,15 +148,18 @@ export class Persist {
       const values = s.deserialize(raw);
       if (!isPlainObject(values)) return;
       const blobs = values[PAGINATION_KEY];
+      const flows = values[FLOWS_KEY];
       delete values[PAGINATION_KEY];
       delete values[FLOWS_KEY];
       const hub = this.hub;
-      hub.batch(() => {
+      const entered = hub.batch(() => {
         const ctx: Restore = { blobs: isPlainObject(blobs) ? blobs : undefined, seeds: [] };
         restoreGroup(hub, hub.root, values, ctx);
         // Pages are keyed on values: seeded once every value is back (a seed may queue nested ones).
         for (let i = 0; i < ctx.seeds.length; i++) ctx.seeds[i]();
+        return isPlainObject(flows) ? hub.flows.filter((f) => f.restore(flows[f.path])) : [];
       });
+      for (const flow of entered) flow.enterCurrent();
     } catch (e) {
       this.report(s, e, "hydrate");
     } finally {
@@ -228,6 +234,15 @@ export class Persist {
 
   private payload(s: Session): Values { return this.withPages(this.values(s), "full"); }
 
+  /** The navigation of every flow, keyed by its path; null without flows. */
+  private flows(): Values | null {
+    const flows = this.hub.flows;
+    if (flows.length === 0) return null;
+    const out: Values = {};
+    for (const f of flows) out[f.path] = f.snapshot();
+    return out;
+  }
+
   private values(s: Session): Values {
     const values = this.hub.root.getValues();
     if (s.pick?.length) {
@@ -239,17 +254,23 @@ export class Persist {
     return values;
   }
 
-  /** The window blobs of paginated root lists whose array is in the payload. */
+  /** The payload: the values, the flows' navigation, the window blobs of paginated root lists whose array is in it. */
   private withPages(values: Values, mode: PageMode): Values {
-    if (mode === "none") return values;
+    const flows = this.flows();
     let blobs: Values | null = null;
-    for (const list of this.hub.lists) {
-      const pager = list.pager;
-      if (!pager || list.item || !Array.isArray(valueAt(values, list.path))) continue;
-      const blob = pager.serialize(mode === "pointer");
-      if (blob) (blobs ??= {})[list.path] = blob;
+    if (mode !== "none") {
+      for (const list of this.hub.lists) {
+        const pager = list.pager;
+        if (!pager || list.item || !Array.isArray(valueAt(values, list.path))) continue;
+        const blob = pager.serialize(mode === "pointer");
+        if (blob) (blobs ??= {})[list.path] = blob;
+      }
     }
-    return blobs ? { ...values, [PAGINATION_KEY]: blobs } : values;
+    if (!flows && !blobs) return values;
+    const out: Values = { ...values };
+    if (flows) out[FLOWS_KEY] = flows;
+    if (blobs) out[PAGINATION_KEY] = blobs;
+    return out;
   }
 
   private report(s: Session, error: unknown, phase: "save" | "hydrate") {

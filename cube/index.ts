@@ -3,8 +3,7 @@
  *
  * Repeats the export list of the root `index.ts` name for name. Runtime values
  * come from the Cube core; every type is re-exported from the store
- * implementation, so consumer code type-checks the same against both. Exports
- * the core doesn't cover yet keep their name and throw NotImplementedError.
+ * implementation, so consumer code type-checks the same against both.
  * Rollout: experiments/CubePlan.md.
  */
 
@@ -27,8 +26,8 @@ import { useTranslator as cubeUseTranslator } from "./react/useTranslator";
 import { useNotifier as cubeUseNotifier } from "./react/useNotifier";
 import { usePersist as cubeUsePersist } from "./react/usePersist";
 import { defineList as cubeDefineList } from "./defineList";
+import { defineFlow as cubeDefineFlow, defineStep as cubeDefineStep } from "./defineFlow";
 import { localStorageDriver as cubeLocalStorageDriver, sessionStorageDriver as cubeSessionStorageDriver } from "./core";
-import { stub } from "./notImplemented";
 
 // ============================================================================
 // Persist — drivers and types
@@ -122,9 +121,8 @@ export const defineList = cubeDefineList as unknown as typeof StoreDefineList;
 // defineFlow / defineStep — step-based flow primitive
 // ============================================================================
 
-// TODO(Phase 2.7): flows
-export const defineFlow: typeof StoreDefineFlow = stub("defineFlow()");
-export const defineStep: typeof StoreDefineStep = stub("defineStep()");
+export const defineFlow = cubeDefineFlow as unknown as typeof StoreDefineFlow;
+export const defineStep = cubeDefineStep as unknown as typeof StoreDefineStep;
 export type {
   AnyFlowStep,
   DefineFlowOptions,

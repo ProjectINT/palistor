@@ -18,6 +18,8 @@
   // originals cast `as any`). Same category: public types, not the contract.
   // sliceF/entityListPersist (store original never type-checked) has both:
   // nested defineList templates and `config: x as any` root reads.
+  // sliceI/flowNavigation (store original never type-checked) reads
+  // `vi.fn(async () => undefined).mock.calls[0][0]`: a test typing slip.
   "exclude": [
     "contract/sliceA/store.test.ts",
     "contract/sliceC/deleteListConsistency.test.ts",
@@ -29,6 +31,7 @@
     "contract/sliceC/entityListResolve.test.ts",
     "contract/sliceC/listResolveError.react.test.tsx",
     "contract/sliceC/listResolveError.test.ts",
-    "contract/sliceF/entityListPersist.test.ts"
+    "contract/sliceF/entityListPersist.test.ts",
+    "contract/sliceI/flowNavigation.test.ts"
   ]
 }

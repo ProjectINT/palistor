@@ -2,6 +2,7 @@ import type { CubeConfig, NotifyFn, ResolveConfig, Translate, Values } from "./c
 import { Cube } from "./cube";
 import { ListState, type ListCube } from "./listCube";
 import { idOf, Registry } from "./registry";
+import type { FlowCube } from "./flow";
 import type { FieldMap } from "./mapping";
 import type { Persist } from "./persist";
 import { ResolveState, type Resolving } from "./resolve";
@@ -40,6 +41,8 @@ export class Hub {
   readonly resolving = new Set<Resolving>();
   /** Checked after every notification cycle, before the resolves: the list filters' issue gates. */
   readonly gates = new Set<{ check(): void }>();
+  /** Every flow of the form tree, in config order (persist, reset, the first step's entry at construction). */
+  readonly flows: FlowCube[] = [];
   /** Every list alive: root lists and the per-entity lists of built items. */
   readonly lists = new Set<ListCube>();
   readonly registry = new Registry();

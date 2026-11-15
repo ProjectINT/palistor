@@ -12,6 +12,7 @@
 
 import { childKeys, type CubeConfig } from "./config";
 import type { Cube } from "./cube";
+import type { FlowCube, StepCube } from "./flow";
 import type { ListCube } from "./listCube";
 import { track } from "./track";
 
@@ -86,6 +87,63 @@ function groupNode(c: Cube, proto: object): PublicNode {
     get reset() { return reset(c); },
   } as PublicNode;
 }
+
+/** store: GROUP_SPREAD_KEYS, then FLOW_SPREAD_KEYS. The steps are children, off the spread. */
+function flowNode(f: FlowCube, proto: object): PublicNode {
+  return {
+    __proto__: proto,
+    get value() { f.touch(); return f.value; },
+    set value(v: unknown) { f.write(v); },
+    get submitting() { return f.submitting; },
+    get dirty() { return f.dirty; },
+    get revalidate() { return f.revalidate; },
+    get loading() { return f.loading; },
+    get values() { return f.values; },
+    get submit() { return submit(f); },
+    get reset() { return reset(f); },
+    get currentStepKey() { return f.currentStepKey; },
+    get currentStepIndex() { return f.currentStepIndex; },
+    get canGoBack() { return f.canGoBack; },
+    get history() { return f.history; },
+    get errors() { return f.errors; },
+    get steps() { return f.stepsNode; },
+    get nextStep() { return f.fn("nextStep", () => () => f.nextStep()); },
+    get back() { return f.fn("back", () => () => f.back()); },
+    get goTo() { return f.fn("goTo", () => (keyOrIndex: string | number) => f.goTo(keyOrIndex)); },
+    get validate() { return f.fn("validate", () => () => f.validate()); },
+  } as PublicNode;
+}
+
+/**
+ * flow.steps (store's steps proxy): own enumerable keys are the step keys,
+ * `current` and `length`, as its ownKeys were; indices and iteration sit on a
+ * per-flow prototype with the flow's cube link (useForm tracks navigation on
+ * the flow through it). Not extensible, getters only: writes throw, as the
+ * proxy's set trap made them.
+ */
+export function stepsNode(f: FlowCube): PublicNode {
+  const steps = f.steps;
+  const protoDesc: PropertyDescriptorMap = { [CUBE]: { value: f } };
+  steps.forEach((s, i) => { protoDesc[i] = { configurable: true, get: () => s.node }; });
+  const node = Object.create(Object.create(STEPS_PROTO, protoDesc)) as PublicNode;
+  for (const s of steps) Object.defineProperty(node, s.key, { enumerable: true, configurable: true, get: () => s.node });
+  Object.defineProperty(node, "current", { enumerable: true, configurable: true, get: () => f.current.node });
+  Object.defineProperty(node, "length", { enumerable: true, configurable: true, get: () => steps.length });
+  return Object.preventExtensions(node);
+}
+
+/** Through `this`, so iterating a useForm view yields tracked steps. */
+const STEPS_PROTO = Object.create(Object.prototype, {
+  [Symbol.iterator]: {
+    configurable: true,
+    value: function* (this: PublicNode) { for (let i = 0; i < this.length; i++) yield this[i]; },
+  },
+});
+
+/** Navigation reads: useForm tracks them on a flow (and flow.steps) or a step only. */
+export const FLOW_STATE_KEYS: ReadonlySet<string> = new Set([
+  "currentStepKey", "currentStepIndex", "canGoBack", "history", "errors", "current", "status",
+]);
 
 /**
  * store: LIST_SPREAD_KEYS, plus FILTER_SPREAD_KEYS (`filter`, `values` — the
@@ -276,6 +334,16 @@ export const STATE_KEYS: ReadonlySet<string> = new Set([
   "fullLength", "isActive", "activeCount", "isPending", // list / list.filter
 ]);
 
+/**
+ * A step answers its status off the spread, and its own isInvalid. Neither
+ * wakes the step's lazy resolve: store's group proxy answered both before its
+ * lazy-resolve trigger (the flow starts it on entry).
+ */
+const STEP_HIDDEN = accessors({
+  status: (c) => (c as StepCube).status,
+  isInvalid: (c) => c.isInvalid,
+});
+
 const LIST_PROTO = Object.create(Object.prototype, {
   [Symbol.iterator]: {
     configurable: true,
@@ -286,6 +354,7 @@ const LEAF_PROTO = Object.create(Object.prototype, LEAF_HIDDEN);
 const ENTITY_LEAF_PROTO = Object.create(LEAF_PROTO);
 const groupProtos = new WeakMap<CubeConfig, object>();
 const templateGroupProtos = new WeakMap<CubeConfig, object>();
+const stepProtos = new WeakMap<CubeConfig, object>();
 
 function childAccessor(k: string): PropertyDescriptor {
   return {
@@ -310,6 +379,15 @@ function groupProto(config: CubeConfig, template: boolean): object {
   return proto;
 }
 
+/** A step's prototype: its group prototype plus `status` (a config used as a plain group elsewhere keeps its own). */
+function stepProto(config: CubeConfig): object {
+  const hit = stepProtos.get(config);
+  if (hit) return hit;
+  const proto = Object.create(groupProto(config, false), STEP_HIDDEN) as object;
+  stepProtos.set(config, proto);
+  return proto;
+}
+
 /**
  * fieldMapping lays one prototype layer per node prototype (mapping.ts), so
  * every node on one prototype has the same own keys: an entity leaf (own
@@ -326,9 +404,11 @@ export function makeNode(cube: Cube): PublicNode {
     const list = listNode(cube as ListCube, Object.create(LIST_PROTO, { [CUBE]: { value: cube } }));
     return map ? map.project(list) : list;
   }
+  const role = cube.flowRole;
   const node =
     cube.kind === "leaf" ? (cube.item ? entityLeafNode(cube, ENTITY_LEAF_PROTO) : leafNode(cube, LEAF_PROTO))
-    : groupNode(cube, groupProto(cube.config, cube.item !== null));
+    : role === "flow" ? flowNode(cube as FlowCube, groupProto(cube.config, false))
+    : groupNode(cube, role === "step" ? stepProto(cube.config) : groupProto(cube.config, cube.item !== null));
   Object.defineProperty(node, CUBE, { value: cube });
   if (map) map.project(node);
 

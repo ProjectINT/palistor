@@ -1,5 +1,5 @@
 import {
-  Cube, FieldMap, Hub, Persist, cubeOf,
+  Cube, FieldMap, FlowCube, Hub, Persist, cubeOf, formCube,
   type CubeConfig, type NotifyFn, type Registry, type SubmitResult, type Translate, type Values,
 } from "./core";
 
@@ -11,11 +11,7 @@ export interface PalistorOptions {
   fieldMapping?: Record<string, string>;
 }
 
-/**
- * The `new Palistor({ config })` store surface over a root Cube. Whatever the
- * core doesn't cover yet throws NotImplementedError, so the contract tests
- * list the remaining work.
- */
+/** The `new Palistor({ config })` store surface over a root Cube. */
 export class Palistor {
   /** @internal */
   readonly hub = new Hub();
@@ -36,12 +32,15 @@ export class Palistor {
     this.externalToInternal = map.e2i;
     if (!map.empty) hub.map = map;
     this.persist = hub.persist = new Persist(hub);
-    this.root = new Cube(map.normalize(options.config), null, "", hub);
+    this.root = formCube(map.normalize(options.config), null, "", hub);
     if (options.initialValues) this.root.seed(options.initialValues);
     this.root.settleComputed();
     if (options.context) hub.context = options.context;
+    this.root.walk((c) => { if (c instanceof FlowCube) hub.flows.push(c); });
     hub.settle();
-    for (const rs of hub.resolving) if (!rs.lazy) rs.start();
+    // Every flow enters its first step (onEnter → resolve → onReady) before the eager resolves start, as in store.
+    for (const flow of hub.flows) flow.enterCurrent();
+    for (const rs of hub.resolving) if (!rs.lazy && rs.status === "idle") rs.start();
   }
 
   get proxy(): any { return this.root.node; }

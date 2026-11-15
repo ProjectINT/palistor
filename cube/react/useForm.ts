@@ -4,7 +4,7 @@
 // state versions. The rest of the system is getters and memos.
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { CUBE, LIST_STATE_KEYS, STATE_KEYS, cubeOf, type Cube, type Hub, type PublicNode } from "../core";
+import { CUBE, FLOW_STATE_KEYS, LIST_STATE_KEYS, STATE_KEYS, cubeOf, type Cube, type Hub, type PublicNode } from "../core";
 import { Palistor } from "../palistor";
 
 const SOURCE = Symbol("palistor.trackingSource");
@@ -94,9 +94,13 @@ function wrap(source: PublicNode, refs: Refs, hub: Hub, cache: WeakMap<object, o
       if (key === SOURCE) return target;
       if (key === HUB) return hub;
       if (typeof key === "symbol") return Reflect.get(target, key);
-      // fieldMapping: state names are checked by their internal name (pagination getters are never mapped).
+      // fieldMapping: state names are checked by their internal name (pagination and navigation getters are never mapped).
       const name = hub.map ? hub.map.internal(key) : key;
-      if (STATE_KEYS.has(name) || (cube.kind === "list" && LIST_STATE_KEYS.has(key))) track(refs, cube);
+      if (
+        STATE_KEYS.has(name) ||
+        (cube.kind === "list" && LIST_STATE_KEYS.has(key)) ||
+        (FLOW_STATE_KEYS.has(key) && cube.flowRole !== null) // a flow, its steps collection, a step
+      ) track(refs, cube);
       // An entity's id moves on store.rekey: follow the row's id leaf when the template has one
       // (a leaf's state is cheap to compare), the entity cube itself otherwise.
       else if (key === "id" && cube.entityId !== undefined) track(refs, cube.children.get("id") ?? cube);

@@ -1,12 +1,14 @@
-export { Cube } from "./cube";
+export { Cube, formCube } from "./cube";
 export { ListCube } from "./listCube"; // also registers list children with Cube
+export { FlowCube, StepCube, FLOW_STEPS_PROP, type FlowNavSnapshot, type StepStatus } from "./flow"; // registers flow groups with Cube
 export { Hub } from "./hub";
 export { FieldMap } from "./mapping";
 export { Memo } from "./memo";
 export { Persist, localStorageDriver, sessionStorageDriver, type PersistDriver, type PersistOptions } from "./persist";
 export { Registry, generateTmpId } from "./registry";
 export { ResolveState, type ResolveStatus } from "./resolve";
-export { CUBE, cubeOf, STATE_KEYS, LIST_STATE_KEYS, type PublicNode } from "./node";
+export { CUBE, cubeOf, STATE_KEYS, LIST_STATE_KEYS, FLOW_STATE_KEYS, type PublicNode } from "./node";
 export { Pager, type PageRequest, type PersistBlob } from "./pagination";
 export { Observer, Signal, observe, track, untracked, type Source } from "./track";
+export { CONFIG_PROPS } from "./config";
 export type { CubeConfig, ListConfig, NotifyFn, ResolveConfig, SubmitResult, Translate, Values } from "./config";

@@ -31,6 +31,17 @@ let createList: ListFactory | null = null;
 /** Called by listCube.ts, so that Cube builds list children without importing its own subclass. */
 export function registerList(factory: ListFactory) { createList = factory; }
 
+type FlowFactory = (config: CubeConfig, parent: Cube | null, key: string, hub: Hub) => Cube | null;
+let createFlow: FlowFactory | null = null;
+
+/** Called by flow.ts: a form group carrying the defineFlow marker becomes a FlowCube. */
+export function registerFlow(factory: FlowFactory) { createFlow = factory; }
+
+/** A cube of the form tree: a flow when the config carries the defineFlow marker (store registered flows outside lists only). */
+export function formCube(config: CubeConfig, parent: Cube | null, key: string, hub: Hub): Cube {
+  return createFlow?.(config, parent, key, hub) ?? new Cube(config, parent, key, hub);
+}
+
 export type CubeKind = "leaf" | "group" | "list";
 
 /** useForm(entity, template): the template-level resolve of one (entity, template) pair. */
@@ -99,16 +110,24 @@ export class Cube implements Source {
 
   get node(): PublicNode { return (this.node_ ??= makeNode(this)); }
 
+  /** A flow (defineFlow) or one of its steps: their nodes answer navigation (flow.ts). */
+  get flowRole(): "flow" | "step" | null { return null; }
+
   get children(): Map<string, Cube> {
     if (this.children_) return this.children_;
     const m = (this.children_ = new Map<string, Cube>());
     if (this.kind === "group") {
       for (const k of checkedChildKeys(this.config, this)) {
         const sub = this.config[k] as CubeConfig | ListConfig;
-        m.set(k, Array.isArray(sub) ? makeList(sub, this, k, this.hub) : new Cube(sub, this, k, this.hub));
+        m.set(k, Array.isArray(sub) ? makeList(sub, this, k, this.hub) : this.makeChild(sub, k));
       }
     }
     return m;
+  }
+
+  /** A group child. Runs during construction (the form tree is built eagerly): an override may read only `config`. */
+  protected makeChild(config: CubeConfig, key: string): Cube {
+    return this.item ? new Cube(config, this, key, this.hub) : formCube(config, this, key, this.hub);
   }
 
   /** A child only if the subtree is built (registry writes skip list items nobody has opened). */
@@ -379,7 +398,7 @@ export class Cube implements Source {
     if (this.item && this.kind === "leaf") return this.rowError;
     return this.revalidate ? this.rawError : undefined;
   }
-  get isInvalid() {
+  get isInvalid(): boolean | undefined {
     if (this.item && this.kind === "leaf") return this.rowError !== undefined;
     return this.revalidate && this.rawError ? true : undefined;
   }
@@ -552,13 +571,20 @@ export class Cube implements Source {
     const walk = (c: Cube, prefix: string) => {
       for (const [k, child] of c.children) {
         const p = prefix ? `${prefix}.${k}` : k;
-        if (child.kind === "group") walk(child, p);
+        if (child.kind === "group") { if (!child.exempt) walk(child, p); }
         else if (child.kind === "leaf" && child.rawError) out.push({ path: p, message: child.rawError });
       }
     };
     walk(this, "");
     return out;
   }
+
+  /**
+   * Leaves below don't block a submit started above this cube: a hidden flow
+   * step (an untaken branch, store's filterHiddenFlowStepErrors). Submitting
+   * the step itself still validates it.
+   */
+  protected get exempt(): boolean { return false; }
 
   private setSubmitting(v: boolean) {
     if (this.submittingFlag !== v) { this.submittingFlag = v; this.bump(); }
@@ -591,7 +617,12 @@ export class Cube implements Source {
       this.walk((c) => c.setRevalidate(false));
       if (this === this.hub.root) this.hub.resetEntities();
     });
+    // Flows in the reset subtree start over, after the values (store's resetFlowNavForSubtree).
+    if (this.hub.flows.length) this.walk((c) => c.restart());
   }
+
+  /** After a reset that covers this cube: a flow goes back to its first step (flow.ts). */
+  protected restart() {}
 
   private initialSnapshot(): Values {
     const out: Values = {};
