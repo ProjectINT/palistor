@@ -16,6 +16,8 @@
   // The sliceC files below hit the known TemplateConfig gap (a nested
   // defineList or a group inside a typed template does not type; the react
   // originals cast `as any`). Same category: public types, not the contract.
+  // sliceF/entityListPersist (store original never type-checked) has both:
+  // nested defineList templates and `config: x as any` root reads.
   "exclude": [
     "contract/sliceA/store.test.ts",
     "contract/sliceC/deleteListConsistency.test.ts",
@@ -26,6 +28,7 @@
     "contract/sliceC/entityListNested.test.ts",
     "contract/sliceC/entityListResolve.test.ts",
     "contract/sliceC/listResolveError.react.test.tsx",
-    "contract/sliceC/listResolveError.test.ts"
+    "contract/sliceC/listResolveError.test.ts",
+    "contract/sliceF/entityListPersist.test.ts"
   ]
 }

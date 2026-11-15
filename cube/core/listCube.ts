@@ -215,6 +215,25 @@ export class ListCube extends Cube {
     this.bump();
   }
 
+  /**
+   * Persist hydration: the membership and its baseline at once (store set
+   * itemIds and initialItemIds), so the restored list is not dirty. The rows
+   * are already in the registry. Returns the item views, in order.
+   */
+  restore(ids: string[]): Cube[] {
+    const next = [...new Set(ids)];
+    this.hub.batch(() => {
+      const keep = new Set(next);
+      for (const id of next) this.own(id);
+      for (const id of this.ids) if (!keep.has(id)) this.drop(id);
+      this.ids = next;
+      this.initialIds = [...next];
+      this.touched = true;
+      this.bump();
+    });
+    return ids.map((id) => this.view(id));
+  }
+
   /** The list itself leaves the tree (its owner item was dropped): its views go with it. */
   release() {
     for (const [id, v] of this.views) { this.hub.registry.detach(id, v); v.dispose(); }

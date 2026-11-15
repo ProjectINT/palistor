@@ -1,4 +1,4 @@
-import { Cube, Hub, cubeOf, type CubeConfig, type NotifyFn, type Registry, type SubmitResult, type Translate, type Values } from "./core";
+import { Cube, Hub, Persist, cubeOf, type CubeConfig, type NotifyFn, type Registry, type SubmitResult, type Translate, type Values } from "./core";
 import { notImplemented } from "./notImplemented";
 
 export interface PalistorOptions {
@@ -18,11 +18,14 @@ export class Palistor {
   readonly hub = new Hub();
   /** @internal */
   readonly root: Cube;
+  /** Hydration and autosave through a storage driver (store.persist). */
+  readonly persist: Persist;
 
   constructor(options: PalistorOptions) {
     if (options.fieldMapping) notImplemented("option `fieldMapping`");
     const hub = this.hub;
     hub.store = this;
+    this.persist = hub.persist = new Persist(hub);
     this.root = new Cube(options.config, null, "", hub);
     if (options.initialValues) this.root.seed(options.initialValues);
     this.root.settleComputed();
@@ -56,8 +59,6 @@ export class Palistor {
 
   setTranslator(t: Translate | null): void { this.hub.setTranslator(t); }
   setNotifier(fn: NotifyFn | null): void { this.hub.notifier = fn; }
-
-  get persist(): never { return notImplemented("store.persist"); }
 
   /** Create or update entities (recursive merge; a row without an id gets a `_tmp_` one). One notification. */
   set(data: Values | Values[]): void {

@@ -442,6 +442,7 @@ export class Cube implements Source {
         const target = this.kind === "leaf" && !this.inRow ? this.parent ?? hub.root : this;
         await this.config.afterSubmit(result, { reset: () => target.reset() });
       }
+      if (this.kind !== "leaf") await hub.persist?.clear(); // store: a group's successful submit drops the draft
       return { success: true, result };
     } finally {
       hub.batch(() => this.setSubmitting(false));

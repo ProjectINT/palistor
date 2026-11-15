@@ -25,7 +25,9 @@ import { useForm as cubeUseForm } from "./react/useForm";
 import { useStoreContext as cubeUseStoreContext } from "./react/useStoreContext";
 import { useTranslator as cubeUseTranslator } from "./react/useTranslator";
 import { useNotifier as cubeUseNotifier } from "./react/useNotifier";
+import { usePersist as cubeUsePersist } from "./react/usePersist";
 import { defineList as cubeDefineList } from "./defineList";
+import { localStorageDriver as cubeLocalStorageDriver, sessionStorageDriver as cubeSessionStorageDriver } from "./core";
 import { stub } from "./notImplemented";
 
 // ============================================================================
@@ -35,14 +37,8 @@ import { stub } from "./notImplemented";
 export type { PersistDriver, PersistOptions } from "../store/persist/types";
 export type { PersistManager } from "../store/persist/persistManager";
 
-const driverStub = (name: string): typeof StoreLocalStorageDriver => ({
-  getItem: stub(`${name}.getItem()`),
-  setItem: stub(`${name}.setItem()`),
-  removeItem: stub(`${name}.removeItem()`),
-});
-// TODO(Phase 2.4): persist
-export const localStorageDriver = driverStub("localStorageDriver");
-export const sessionStorageDriver = driverStub("sessionStorageDriver");
+export const localStorageDriver: typeof StoreLocalStorageDriver = cubeLocalStorageDriver;
+export const sessionStorageDriver: typeof StoreLocalStorageDriver = cubeSessionStorageDriver;
 
 // ============================================================================
 // Store types (config, proxy, values)
@@ -112,8 +108,7 @@ export const useNotifier = cubeUseNotifier as unknown as typeof StoreUseNotifier
 // ============================================================================
 
 export const useForm = cubeUseForm as unknown as typeof StoreUseForm;
-// TODO(Phase 2.4): persist
-export const usePersist: typeof StoreUsePersist = stub("usePersist()");
+export const usePersist = cubeUsePersist as unknown as typeof StoreUsePersist;
 export const useTranslator = cubeUseTranslator as unknown as typeof StoreUseTranslator;
 export const useStoreContext = cubeUseStoreContext as unknown as typeof StoreUseStoreContext;
 

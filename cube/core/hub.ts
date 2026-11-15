@@ -2,6 +2,7 @@ import type { CubeConfig, NotifyFn, ResolveConfig, Translate, Values } from "./c
 import { Cube } from "./cube";
 import type { ListCube } from "./listCube";
 import { idOf, Registry } from "./registry";
+import type { Persist } from "./persist";
 import { ResolveState } from "./resolve";
 import { Signal } from "./track";
 
@@ -18,6 +19,8 @@ export class Hub {
   root!: Cube;
   /** The facade passed to onSubmit / resolvers as `store`. */
   store: unknown = null;
+  /** store.persist: a successful group submit clears its snapshot. */
+  persist: Persist | null = null;
 
   /** Notification cycles so far: store.getVersion(). */
   cycle = 0;

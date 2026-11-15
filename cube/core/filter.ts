@@ -94,7 +94,7 @@ function normalize(block: Values, list: string): { fields: FieldSpec[]; all?: Al
       } else if (key !== "$persist") {
         fail(`unknown filter block option "${key}" on list "${list}" (known: $all, $toParams, $persist). Field names must not start with "$".`);
       }
-      continue; // $persist: accepted, applied with persist (step 2.4)
+      continue; // $persist: accepted and ignored, as in store (its `__filters` blob is FilteringPlan Phase 2, never shipped)
     }
     if (FILTER_BUILTINS.has(key)) {
       fail(`filter field "${key}" on list "${list}" collides with a built-in member of list.filter (${[...FILTER_BUILTINS].join(", ")}).`);
