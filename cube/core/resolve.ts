@@ -11,6 +11,7 @@
 import type { ResolveConfig, Values } from "./config";
 import type { Cube } from "./cube";
 import type { Hub } from "./hub";
+import type { ListCube } from "./listCube";
 import { Observer, observe, untracked, type Source } from "./track";
 
 export type ResolveStatus = "idle" | "pending" | "resolved" | "error";
@@ -31,6 +32,8 @@ export class ResolveState {
   private scheduled = false;
   private run_: object | null = null;
   private autoRuns = 0;
+  /** invalidate() during a run: start again once it lands. */
+  private rerun = false;
 
   constructor(cube: Cube, readonly config: ResolveConfig) {
     this.primary = cube;
@@ -79,6 +82,16 @@ export class ResolveState {
     if (this.status !== "pending") this.start();
   }
 
+  /**
+   * An outside request for fresh data (a list filter's server key moved): run
+   * now, or right after the run in flight. User-driven, so it is not counted
+   * against the restart cap (store counted it and went silent after 10 searches).
+   */
+  invalidate() {
+    if (this.status === "pending") this.rerun = true;
+    else this.start();
+  }
+
   /** After every notification cycle: restart when something the last run read has moved. */
   checkDeps() {
     if (this.status !== "resolved" && this.status !== "error") return;
@@ -105,6 +118,7 @@ export class ResolveState {
     this.promise = null;
     this.deps.clear();
     this.autoRuns = 0;
+    this.rerun = false;
     this.bump();
   }
 
@@ -113,6 +127,7 @@ export class ResolveState {
     const hub = cube.hub;
     const run = {};
     this.run_ = run;
+    this.rerun = false;
     this.status = "pending";
     this.error = null;
     hub.batch(() => {
@@ -153,11 +168,11 @@ export class ResolveState {
         const values = bindValues(base, obs, writes, base !== hub.root);
         const store = storeFor(hub, obs);
         const result = await untracked(() =>
-          cube.kind === "list" ? config.resolver(values, store, listContext()) : config.resolver(values, store),
+          cube.kind === "list" ? config.resolver(values, store, (cube as ListCube).resolveContext()) : config.resolver(values, store),
         );
         if (this.run_ !== run) return result;
         // Changed while in flight: decided before our own result moves anything.
-        const stale = obs.changed();
+        const stale = obs.changed() || this.rerun;
         hub.batch(() => {
           if (result !== undefined) cube.applyResolved(result, true);
           for (const [target, v] of writes) target.assign(v);
@@ -173,7 +188,7 @@ export class ResolveState {
     }
 
     if (this.run_ !== run) return;
-    const stale = obs.changed();
+    const stale = obs.changed() || this.rerun;
     this.error = lastError;
     try { config.onError?.(lastError, { notify: hub.notify }); } catch { /* onError must not break the store */ }
     hub.batch(() => { this.status = "error"; this.bump(); this.settle(obs); });
@@ -188,11 +203,6 @@ export class ResolveState {
 }
 
 const DISPOSED = {};
-
-/** store: the third list-resolver argument, always present (the filter block is Phase 2.3). */
-function listContext() {
-  return { filter: { values: {}, params: undefined, key: "" }, queryKey: "" };
-}
 
 /**
  * The resolver's `values`: the base group's values tree, each read recorded on

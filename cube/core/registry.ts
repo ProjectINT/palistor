@@ -1,5 +1,6 @@
 import { isPlainObject, type Values } from "./config";
 import type { Cube } from "./cube";
+import type { Source } from "./track";
 
 let tmpSeq = 0;
 
@@ -62,7 +63,9 @@ function clonePlain<T>(v: T): T {
  *   • bindings    — templates currently showing an entity (useForm mount)
  *   • resolved    — (entity, template) pairs whose template resolve ran
  */
-export class Registry {
+export class Registry implements Source {
+  /** Moves on every row change (set, delete, rekey): what a client filter projection depends on. */
+  version = 0;
   private readonly rows = new Map<string, Values>();
   private readonly baselines = new Map<string, Values>();
   private readonly views = new Map<string, Set<Cube>>();
@@ -92,11 +95,13 @@ export class Registry {
       fresh.id = id;
       this.rows.set(id, fresh);
       this.baselines.set(id, clonePlain(fresh));
+      this.version++;
       return true;
     }
     const changed: string[][] = [];
     merge(prev, this.baselines.get(id)!, row, [], changed);
     if (changed.length === 0) return false;
+    this.version++;
     const views = this.views.get(id);
     if (views) for (const v of views) for (const p of changed) bumpPath(v, p);
     return true;
@@ -121,7 +126,7 @@ export class Registry {
   /** Removes the row and everything attached to it. Returns the views that were showing it. */
   delete(id: string): Set<Cube> {
     const views = this.views.get(id) ?? new Set<Cube>();
-    this.rows.delete(id);
+    if (this.rows.delete(id)) this.version++;
     this.baselines.delete(id);
     this.views.delete(id);
     this.bindings.delete(id);
@@ -143,6 +148,7 @@ export class Registry {
   rekey(oldId: string, newId: string): Set<Cube> {
     const row = this.rows.get(oldId);
     if (!row) return new Set();
+    this.version++;
     this.rows.delete(oldId);
     row.id = newId;
     this.rows.set(newId, row);

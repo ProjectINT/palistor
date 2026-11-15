@@ -99,7 +99,8 @@ function wrap(source: PublicNode, refs: Refs, hub: Hub, cache: WeakMap<object, o
       // (a leaf's state is cheap to compare), the entity cube itself otherwise.
       else if (key === "id" && cube.entityId !== undefined) track(refs, cube.children.get("id") ?? cube);
       const result = Reflect.get(target, key);
-      if (key === "items" && Array.isArray(result)) return wrapItems(result, refs, hub, cache);
+      // `values` of a filtered list is its visible items (a group's `values` is an object).
+      if ((key === "items" || key === "values") && Array.isArray(result)) return wrapItems(result, refs, hub, cache);
       if (key === "map" && typeof result === "function") {
         return (fn: (item: unknown, i: number, id: string) => unknown) =>
           result((item: PublicNode, i: number, id: string) => fn(wrap(item, refs, hub, cache), i, id));

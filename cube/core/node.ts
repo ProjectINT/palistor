@@ -75,12 +75,15 @@ function groupNode(c: Cube, proto: object): PublicNode {
   } as PublicNode;
 }
 
-/** store: LIST_SPREAD_KEYS. */
+/**
+ * store: LIST_SPREAD_KEYS, plus FILTER_SPREAD_KEYS (`filter`, `values` — the
+ * visible items, `fullLength`) on a list with a filter block. `length` is own
+ * but not enumerable, as on store's array-target proxy.
+ */
 function listNode(l: ListCube, proto: object): PublicNode {
-  return {
+  const node = {
     __proto__: proto,
     get items() { l.touch(); return l.itemNodes(); },
-    get length() { l.touch(); return l.length; },
     get loading() { return l.loading; },
     get dirty() { return l.dirty; },
     get error() { return l.error; },
@@ -92,11 +95,21 @@ function listNode(l: ListCube, proto: object): PublicNode {
     get map() {
       l.touch();
       return l.fn("map", () => <T>(fn: (item: PublicNode, i: number, id: string) => T) =>
-        l.items.map((item, i) => fn(item.node, i, item.entityId!)));
+        l.visibleItems().map((item, i) => fn(item.node, i, item.entityId!)));
     },
     get getValues() { return l.fn("getValues", () => () => structuredClone(l.plain())); },
     get reload() { return l.fn("reload", () => () => l.rs?.reload()); },
   } as PublicNode;
+  Object.defineProperty(node, "length", { configurable: true, get() { l.touch(); return l.length; } });
+  const filter = l.filter;
+  if (filter) {
+    Object.defineProperties(node, {
+      filter: { enumerable: true, configurable: true, get: () => filter.node },
+      values: { enumerable: true, configurable: true, get() { l.touch(); return l.itemNodes(); } },
+      fullLength: { enumerable: true, configurable: true, get() { l.touch(); return l.fullLength; } },
+    });
+  }
+  return node;
 }
 
 // ── Prototypes: the off-spread names, children by config ───────────────────
@@ -199,6 +212,7 @@ export const STATE_KEYS: ReadonlySet<string> = new Set([
   "value", "label", "placeholder", "description", "isRequired", "isReadOnly", "isDisabled", "isVisible",
   "isInvalid", "errorMessage", "dirty", "loading", "submitting", "revalidate", "values",
   "items", "length", "map", "error", "resolveStatus",
+  "fullLength", "isActive", "activeCount", "isPending", // list / list.filter
 ]);
 
 const LIST_PROTO = Object.create(Object.prototype, {

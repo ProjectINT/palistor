@@ -1,5 +1,6 @@
 import { childKeys, isLeafConfig, type CubeConfig, type ListConfig, type Values } from "./config";
 import { Cube, registerList } from "./cube";
+import { FilterCube, warnNestedFilters } from "./filter";
 import type { Hub } from "./hub";
 import type { PublicNode } from "./node";
 import { track, untracked } from "./track";
@@ -12,6 +13,10 @@ import { track, untracked } from "./track";
  * A list declared inside an entity template is a per-entity list: each item
  * gets its own instance, whose rows are owned by that item (store: ownerEntity,
  * one owner per child, cascade on delete).
+ *
+ * A root list may carry a filter (filter.ts). Then `items`, `length`, `map`
+ * and iteration show the visible rows; `getById`, `getValues`, `dirty` and the
+ * list's value in the form stay on the full membership.
  */
 export class ListCube extends Cube {
   readonly template: CubeConfig;
@@ -20,35 +25,76 @@ export class ListCube extends Cube {
   /** Membership was ever set. store: an untouched per-entity list had no state and added no key to values. */
   touched = false;
   private views = new Map<string, Cube>();
-  /** Per membership version: the view cubes, their public nodes, their values. */
-  private cache?: { version: number; items: Cube[]; nodes?: PublicNode[]; values?: Values[] };
+  /** The full membership and the visible one: view cubes, their public nodes, their values. */
+  private full?: Snapshot;
+  private shown?: Snapshot;
+  /** The last visible ids, kept while a new projection has the same ones. */
+  private shownIds?: string[];
+  /** `defineList({ filter })` on a root list. A per-entity list ignores it (warned at construction, as store). */
+  readonly filter?: FilterCube;
 
   constructor(config: ListConfig, parent: Cube, key: string, hub: Hub) {
     super(config as unknown as CubeConfig, parent, key, hub, undefined, "list");
     this.template = config[0];
     rejectComputed(this.template, `${this.path}[]`);
+    if (!this.item) {
+      warnNestedFilters(this.template, `${this.path}[]`);
+      const block = config[1]?.filter;
+      if (block) this.filter = new FilterCube(block as Values, this, hub);
+    }
     hub.lists.add(this);
   }
 
   /** The entity whose row owns this list's items (per-entity list), null for a root list. */
   get owner(): Cube | null { return this.item; }
 
+  /** View cubes of the full membership. */
   get items(): Cube[] { track(this); return this.snapshot().items; }
 
-  /** Public nodes of the items, same array while the membership is unchanged. */
+  /** View cubes of the visible rows (map). */
+  visibleItems(): Cube[] { return this.shownSnapshot().items; }
+
+  /** Public nodes of the visible rows, same array while they are unchanged. */
   itemNodes(): PublicNode[] {
-    track(this);
-    const c = this.snapshot();
+    const c = this.shownSnapshot();
     return (c.nodes ??= c.items.map((i) => i.node));
   }
 
-  private snapshot() {
-    if (this.cache?.version !== this.version) {
-      this.cache = { version: this.version, items: this.ids.map((id) => this.view(id)) };
-    }
-    return this.cache;
+  /** Visible rows. */
+  get length() { return this.visibleIds().length; }
+
+  /** The full loaded membership (`list.fullLength` of a filtered list). */
+  get fullLength() { track(this); return this.ids.length; }
+
+  /**
+   * The ids the list shows: the client filter's projection over the
+   * membership (re-run when the membership, a filter field or any registry
+   * row moves), the membership itself otherwise. Tracked.
+   */
+  visibleIds(): string[] {
+    track(this);
+    const f = this.filter;
+    if (!f?.hasClient) return this.ids;
+    return this.memo("visible", () => {
+      track(this);
+      track(this.hub.registry);
+      const next = f.project(this.ids, this.initialIds, (id) => this.hub.registry.get(id));
+      const prev = this.shownIds;
+      return (this.shownIds = next !== this.ids && prev && sameIds(prev, next) ? prev : next);
+    });
   }
-  get length() { track(this); return this.ids.length; }
+
+  private snapshot(): Snapshot { return (this.full = this.snap(this.ids, this.full)); }
+
+  private shownSnapshot(): Snapshot {
+    const ids = this.visibleIds();
+    return ids === this.ids ? this.snapshot() : (this.shown = this.snap(ids, this.shown));
+  }
+
+  /** Ids arrays are replaced, never mutated: same array, same snapshot. */
+  private snap(ids: string[], prev: Snapshot | undefined): Snapshot {
+    return prev?.ids === ids ? prev : { ids, items: ids.map((id) => this.view(id)) };
+  }
 
   getById(id: string) {
     track(this);
@@ -154,7 +200,7 @@ export class ListCube extends Cube {
     const view = this.views.get(oldId);
     if (view) { this.views.delete(oldId); this.views.set(newId, view); }
     let hit = false;
-    const swap = (arr: string[]) => arr.map((x) => (x === oldId ? ((hit = true), newId) : x));
+    const swap = (arr: string[]) => (arr.includes(oldId) ? ((hit = true), arr.map((x) => (x === oldId ? newId : x))) : arr);
     this.ids = swap(this.ids);
     this.initialIds = swap(this.initialIds);
     if (hit) this.bump();
@@ -206,6 +252,11 @@ export class ListCube extends Cube {
     }
   }
 
+  /** The resolver's third argument: the filter at launch (store passed it always, empty without a block). */
+  resolveContext(): unknown {
+    return this.filter?.launch() ?? { filter: { values: {}, params: undefined, key: "" }, queryKey: "" };
+  }
+
   override snapshotValue() {
     track(this);
     return untracked(() => this.plain());
@@ -217,9 +268,13 @@ export class ListCube extends Cube {
 
   protected override signature(): unknown[] {
     track(this);
-    return [this.version, this.loading, this.error, this.resolveStatus, this.dirty];
+    const sig: unknown[] = [this.version, this.loading, this.error, this.resolveStatus, this.dirty];
+    if (this.filter?.hasClient) sig.push(this.visibleIds()); // a keystroke in a `where` field re-renders the rows
+    return sig;
   }
 }
+
+interface Snapshot { ids: string[]; items: Cube[]; nodes?: PublicNode[]; values?: Values[] }
 
 /** store: a template is a rule set shared by every item; a computed value there would never run. */
 function rejectComputed(template: CubeConfig, path: string) {

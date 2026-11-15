@@ -289,10 +289,13 @@ export class Cube implements Source {
     });
   }
 
+  /** Where onChange bubbles after this cube: its parent (a filter block stops it). */
+  protected get bubbleTo(): Cube | null { return this.parent; }
+
   /** onChange on the leaf itself, then on every ancestor group: fire-and-forget, as in store. */
   private fireOnChange(newValue: unknown, previousValue: unknown) {
     const path = this.path;
-    for (let target: Cube | null = this; target; target = target.parent) {
+    for (let target: Cube | null = this; target; target = target.bubbleTo) {
       const onChange = target.config.onChange;
       if (typeof onChange !== "function") continue;
       const tp = target.path;
@@ -651,6 +654,9 @@ export class Cube implements Source {
       else if (c.kind === "group" && isPlainObject(v)) c.seed(v);
     }
   }
+
+  /** Construction: the stored value and its baseline, verbatim (a filter field keeps a null default, as store did). */
+  protected init(value: unknown) { this.raw = this.initial_ = value; }
 
   /** Construction: computed leaves are evaluated once (a bug throws here, as in store) and become the baseline. */
   settleComputed() {

@@ -32,6 +32,8 @@ export class Hub {
   readonly byConfig = new WeakMap<object, Cube>();
   /** Every resolve whose dependencies are re-checked after a notification cycle. */
   readonly resolving = new Set<ResolveState>();
+  /** Checked after every notification cycle, before the resolves: the list filters' issue gates. */
+  readonly gates = new Set<{ check(): void }>();
   /** Every list alive: root lists and the per-entity lists of built items. */
   readonly lists = new Set<ListCube>();
   readonly registry = new Registry();
@@ -88,6 +90,7 @@ export class Hub {
           if (v !== w.seen) { w.seen = v; w.fns.forEach((fn) => fn()); }
         }
         this.listeners.forEach((fn) => fn());
+        for (const g of this.gates) g.check();
         for (const rs of this.resolving) rs.checkDeps();
       }
     } finally {
