@@ -143,6 +143,8 @@ Cube переписывает механизм Palistor (один рекурси
 
 **Статус на 2026-10-30.** Шаг 2.1 сделан: срез C (`cube/contract/sliceC/`, 25 файлов) зелёный на `store` и на `cube`; цифры, решения и отличия от таблицы — в [CubeExperiment.md](./CubeExperiment.md), раздел «Фаза 2.1». Не по таблице: `listNodeGuard` и `listStateInit` (гоняли ходоки ядра store) заменены одним публичным `listNodeGuard.test.ts`; `executeEntityFieldResolve`, `createResolveManager.entityField` и `createResolveManager.phase4` (менеджер с подложными deps) — одним публичным `entityFieldResolve.test.tsx`; `entityTemplateResolve` стал `.tsx` и идёт через `useForm(entity, template)`. Из 2.2 досрочно взят `useStoreContext`: его требует `listResolveContext.test`. Пререлиз `0.1.0-cube.1` — после публикации `cube.0` (ждёт go-ahead с Фазы 0).
 
+**Статус на 2026-11-15.** Шаг 2.2 сделан: `useTranslator` и `useNotifier` в `cube/react/`, срез D (`cube/contract/sliceD/`, 4 файла, 30 тестов) зелёный на `store` и на `cube`. Механизм (переводчик, нотификатор, контекст) был в ядре с Фазы 1; в ядре одна правка — `t` для функций конфига стал стабильной обёрткой, как в store. Не по таблице: react-тестов хуков в `useForm.test.tsx` не было, они написаны заново. Найден баг store: после смены переводчика `errorMessage` из `validate` и флаги с `t` остаются на старом языке (кандидат в фикс `main`). Подробности — [CubeExperiment.md](./CubeExperiment.md), раздел «Фаза 2.2». Следующий шаг — 2.3.
+
 Замечания по шагам:
 
 - Пагинация, persist и flow сейчас цепляются за внутренности (`ListState`, resolve manager, `groupDepsMap`). Их тесты переносятся целиком, код привязки переписывается. Ожидать, что строки в этих модулях почти не уменьшатся: это фичи, а не механизм.

@@ -23,6 +23,8 @@ import type { defineFieldMapping as StoreDefineFieldMapping } from "../store/def
 import { Palistor as CubePalistor } from "./palistor";
 import { useForm as cubeUseForm } from "./react/useForm";
 import { useStoreContext as cubeUseStoreContext } from "./react/useStoreContext";
+import { useTranslator as cubeUseTranslator } from "./react/useTranslator";
+import { useNotifier as cubeUseNotifier } from "./react/useNotifier";
 import { defineList as cubeDefineList } from "./defineList";
 import { stub } from "./notImplemented";
 
@@ -103,8 +105,7 @@ export type Palistor<
 // ============================================================================
 
 export type { Resolve, NotifyFn, ResolveErrorContext, ResolveStatus } from "../store/resolvePipeline/";
-// TODO(Phase 2.2): React bindings
-export const useNotifier: typeof StoreUseNotifier = stub("useNotifier()");
+export const useNotifier = cubeUseNotifier as unknown as typeof StoreUseNotifier;
 
 // ============================================================================
 // React hooks
@@ -113,8 +114,7 @@ export const useNotifier: typeof StoreUseNotifier = stub("useNotifier()");
 export const useForm = cubeUseForm as unknown as typeof StoreUseForm;
 // TODO(Phase 2.4): persist
 export const usePersist: typeof StoreUsePersist = stub("usePersist()");
-// TODO(Phase 2.2): React bindings
-export const useTranslator: typeof StoreUseTranslator = stub("useTranslator()");
+export const useTranslator = cubeUseTranslator as unknown as typeof StoreUseTranslator;
 export const useStoreContext = cubeUseStoreContext as unknown as typeof StoreUseStoreContext;
 
 // ============================================================================

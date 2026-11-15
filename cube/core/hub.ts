@@ -47,6 +47,12 @@ export class Hub {
   stateSeq = 0;
 
   t: Translate = identity;
+  /**
+   * What config functions receive as `t`: a stable reference that always calls
+   * the current translator (store's services.translate), so a `t` kept in a
+   * closure follows a language switch. Memos track `translator`, not this.
+   */
+  readonly translate: Translate = (key, ...args) => this.t(key, ...args);
   readonly translator = new Signal();
   notifier: NotifyFn | null = null;
   readonly notify: NotifyFn = (...args) => this.notifier?.(...args);

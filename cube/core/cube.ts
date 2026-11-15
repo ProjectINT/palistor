@@ -319,13 +319,13 @@ export class Cube implements Source {
     const v = this.config[name];
     if (v === undefined) return dflt;
     if (typeof v !== "function") return v;
-    return this.memo(name, () => { track(this.hub.translator); return v(this.scopeValues, this.hub.t); });
+    return this.memo(name, () => { track(this.hub.translator); return v(this.scopeValues, this.hub.translate); });
   }
 
   private text(name: "label" | "placeholder" | "description"): string | undefined {
     const v = this.config[name];
     if (typeof v !== "function") return v as string | undefined;
-    return this.memo(name, () => { track(this.hub.translator); return v(this.hub.t, this.ctxValues); });
+    return this.memo(name, () => { track(this.hub.translator); return v(this.hub.translate, this.ctxValues); });
   }
 
   get isVisible() { return this.flag("isVisible", true); }
@@ -349,7 +349,7 @@ export class Cube implements Source {
       const validate = this.config.validate;
       if (validate) {
         track(this.hub.translator);
-        const r = validate(value, this.scopeValues, this.hub.t);
+        const r = validate(value, this.scopeValues, this.hub.translate);
         if (r) message = r;
       }
       return message;
@@ -470,7 +470,7 @@ export class Cube implements Source {
       if (c.kind === "leaf") {
         const validate = c.config.validate;
         if (typeof validate !== "function") continue;
-        const r = validate(c.peekValue(), c.scopeValues, this.hub.t);
+        const r = validate(c.peekValue(), c.scopeValues, this.hub.translate);
         if (r) errors.push({ path: p, message: String(r) });
       } else if (c.kind === "group") c.collectValidateErrors(errors, p);
     }
