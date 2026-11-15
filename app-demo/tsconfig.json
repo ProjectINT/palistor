@@ -21,7 +21,13 @@
     "paths": {
       "@/*": ["./src/*"],
       "@palistor": ["../index.ts"],
-      "@palistor/*": ["../*"]
+      "@palistor/store/store": ["../cube/exports/store/store.ts"],
+      "@palistor/store/persist": ["../cube/exports/store/persist.ts"],
+      "@palistor/react/useForm": ["../cube/exports/react/useForm.ts"],
+      "@palistor/react/usePersist": ["../cube/exports/react/usePersist.ts"],
+      "@palistor/react/useTranslator": ["../cube/exports/react/useTranslator.ts"],
+      "@palistor/react/useNotifier": ["../cube/exports/react/useNotifier.ts"],
+      "@palistor/cube": ["../cube/index.ts"]
     }
   },
   "include": [

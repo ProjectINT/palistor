@@ -14,7 +14,7 @@
 
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
-import { defineFieldMapping } from "@palistor/store/defineFieldMapping";
+import { defineFieldMapping } from "@palistor";
 
 // ============================================================================
 // The rename map (MUI / HTML-native style)

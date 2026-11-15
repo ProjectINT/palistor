@@ -2,7 +2,9 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Contract tests (cube/contract/**) and benches (cube/bench/**) import the
-// public API from "@impl"; each project points it at one implementation.
+// public API from "@impl"; each project points it at one implementation:
+// "store" at the store reference entry (index.store.ts), "cube" at the Cube
+// core. The package entry index.ts re-exports cube/ since Gate 2.
 const impl = (entry: string) => ({ "@impl": fileURLToPath(new URL(entry, import.meta.url)) });
 
 export default defineConfig({
@@ -12,7 +14,7 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        resolve: { alias: impl("./index.ts") },
+        resolve: { alias: impl("./index.store.ts") },
         test: {
           name: "store",
           include: ["{store,react}/**/*.test.{ts,tsx}", "cube/contract/**/*.test.{ts,tsx}"],

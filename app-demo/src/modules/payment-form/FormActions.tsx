@@ -12,7 +12,7 @@ export function FormActions() {
   const handleSubmit = async () => {
     const values = paymentStore.getValues();
     const res = await form.submit();
-    if (res.errors.length > 0) {
+    if (!res.success) {
       console.error('Submit errors:', res.errors);
       alert("Form submission failed!\n\n" + JSON.stringify(res.errors, null, 2));
       return;

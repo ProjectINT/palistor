@@ -1,0 +1,19 @@
+{
+  // The demo on the store implementation (the reference until Phase 4 of
+  // experiments/CubePlan.md): same subpaths, pointed at store/ and react/.
+  // Picked by next.config.ts when PALISTOR_IMPL=store (npm run dev:store,
+  // npm run test:e2e:store).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@palistor": ["../index.store.ts"],
+      "@palistor/store/store": ["../store/store/index.ts"],
+      "@palistor/store/persist": ["../store/persist/index.ts"],
+      "@palistor/react/useForm": ["../react/useForm.ts"],
+      "@palistor/react/usePersist": ["../react/usePersist.ts"],
+      "@palistor/react/useTranslator": ["../react/useTranslator.ts"],
+      "@palistor/react/useNotifier": ["../react/useNotifier.ts"]
+    }
+  }
+}

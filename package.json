@@ -12,34 +12,34 @@
       "default": "./dist/index.js"
     },
     "./store/store": {
-      "types": "./dist/store/store/index.d.ts",
-      "import": "./dist/store/store/index.js",
-      "default": "./dist/store/store/index.js"
+      "types": "./dist/cube/exports/store/store.d.ts",
+      "import": "./dist/cube/exports/store/store.js",
+      "default": "./dist/cube/exports/store/store.js"
     },
     "./store/persist": {
-      "types": "./dist/store/persist/index.d.ts",
-      "import": "./dist/store/persist/index.js",
-      "default": "./dist/store/persist/index.js"
+      "types": "./dist/cube/exports/store/persist.d.ts",
+      "import": "./dist/cube/exports/store/persist.js",
+      "default": "./dist/cube/exports/store/persist.js"
     },
     "./react/useForm": {
-      "types": "./dist/react/useForm.d.ts",
-      "import": "./dist/react/useForm.js",
-      "default": "./dist/react/useForm.js"
+      "types": "./dist/cube/exports/react/useForm.d.ts",
+      "import": "./dist/cube/exports/react/useForm.js",
+      "default": "./dist/cube/exports/react/useForm.js"
     },
     "./react/usePersist": {
-      "types": "./dist/react/usePersist.d.ts",
-      "import": "./dist/react/usePersist.js",
-      "default": "./dist/react/usePersist.js"
+      "types": "./dist/cube/exports/react/usePersist.d.ts",
+      "import": "./dist/cube/exports/react/usePersist.js",
+      "default": "./dist/cube/exports/react/usePersist.js"
     },
     "./react/useTranslator": {
-      "types": "./dist/react/useTranslator.d.ts",
-      "import": "./dist/react/useTranslator.js",
-      "default": "./dist/react/useTranslator.js"
+      "types": "./dist/cube/exports/react/useTranslator.d.ts",
+      "import": "./dist/cube/exports/react/useTranslator.js",
+      "default": "./dist/cube/exports/react/useTranslator.js"
     },
     "./react/useNotifier": {
-      "types": "./dist/react/useNotifier.d.ts",
-      "import": "./dist/react/useNotifier.js",
-      "default": "./dist/react/useNotifier.js"
+      "types": "./dist/cube/exports/react/useNotifier.d.ts",
+      "import": "./dist/cube/exports/react/useNotifier.js",
+      "default": "./dist/cube/exports/react/useNotifier.js"
     },
     "./cube": {
       "types": "./dist/cube/index.d.ts",

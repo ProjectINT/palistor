@@ -74,9 +74,12 @@ export const passport: FormConfig<PaymentFormValues> = {
           return t("form.passport.expiryDatePast");
         }
         
-        // Check the issue date precedes the expiry date
-        if (values.passport?.issueDate) {
-          const issueDate = new Date(values.passport.issueDate);
+        // Check the issue date precedes the expiry date. A nested field's
+        // functions receive its group's values: `values.issueDate`, not
+        // `values.passport.issueDate`.
+        const groupValues = values as unknown as PaymentFormValues["passport"];
+        if (groupValues.issueDate) {
+          const issueDate = new Date(groupValues.issueDate);
           if (date <= issueDate) {
             return t("form.passport.expiryDateBeforeIssue");
           }

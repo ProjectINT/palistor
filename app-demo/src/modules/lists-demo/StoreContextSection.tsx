@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useStoreContext } from "@palistor/react/useStoreContext";
+import { useStoreContext } from "@palistor";
 import { catalogStore } from "@/config/catalog/catalogConfig";
 
 const DEMO_ACCOUNTS = [

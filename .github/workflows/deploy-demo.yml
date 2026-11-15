@@ -7,6 +7,7 @@ on:
       - "app-demo/**"
       - "react/**"
       - "store/**"
+      - "cube/**"
       - "index.ts"
       - ".github/workflows/deploy-demo.yml"
   workflow_dispatch:
@@ -40,7 +41,7 @@ jobs:
             app-demo/package-lock.json
 
       # The demo consumes the library from its parent source via tsconfig paths
-      # (@palistor/* -> ../*). That source (e.g. react/useForm.ts) does
+      # (@palistor -> ../index.ts, @palistor/<subpath> -> the package's exports). That source (e.g. react/useForm.ts) does
       # `import ... from "react"`, which Node resolves by walking UP from the
       # file's location — so it checks the repo-root node_modules, never
       # app-demo's. Install the library's own deps at the root so its source can

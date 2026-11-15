@@ -40,3 +40,43 @@ jobs:
       - run: npm run test:cube
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+
+  # The demo stand end to end (app-demo/e2e, Playwright): the library from
+  # source in a real Next.js app — on the package entry (Cube core), then on
+  # the store reference (PALISTOR_IMPL=store), same suite.
+  e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            app-demo/package-lock.json
+
+      # The library source imports its deps from the repo root (see deploy-demo.yml).
+      - name: Install library deps (repo root)
+        working-directory: ${{ github.workspace }}
+        run: npm ci
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run test:e2e
+
+      - run: npm run test:e2e:store
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            app-demo/playwright-report
+            app-demo/test-results

@@ -17,12 +17,18 @@ export function PassportSection() {
   const handleSubmit = async () => {
     setSubmitStatus("idle");
     setSubmitError(null);
-    const res = await form.passport.submit();
-    if (res.errors.length > 0) {
+    try {
+      const res = await form.passport.submit();
+      if (!res.success) {
+        setSubmitStatus("error");
+        setSubmitError(res.errors.map((e: any) => e.message ?? String(e)).join(", "));
+      } else {
+        setSubmitStatus("success");
+      }
+    } catch (err) {
+      // onSubmit threw (the mock API failed): submit() rejects with that error.
       setSubmitStatus("error");
-      setSubmitError(res.errors.map((e: any) => e.message ?? String(e)).join(", "));
-    } else {
-      setSubmitStatus("success");
+      setSubmitError(err instanceof Error ? err.message : String(err));
     }
   };
 

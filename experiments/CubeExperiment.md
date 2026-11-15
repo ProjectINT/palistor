@@ -481,3 +481,46 @@ Suspense не срабатывает на перезапуске для уже �
 ### Что осталось от наброска
 
 Фаза 2 закрыта: все шаги таблицы сделаны. Следующее — Гейт 2: корневой `index.ts` и subpath-экспорты на `cube/`, `app-demo` на Cube, пререлиз `0.1.0-cube.N` (ждёт публикации `cube.0`). Заметки к Гейту 2: демо flow (2.7) и демо async прогнать руками. Демо async читает `serverStatus.loading` на группе с `retry`; у самой группы вычисляемых ключей нет (`label` стоят на листьях), так что расхождение 2 её не задевает.
+
+## Гейт 2: пакет и демо на Cube, e2e демо (2026-11-15)
+
+План: [CubePlan.md](./CubePlan.md), Гейт 2. Сделано всё, кроме публикации `0.1.0-cube.N` (ждёт `cube.0` и подтверждения).
+
+### Переключение
+
+- **Корень.** `index.ts` теперь `export * from "./cube/index"` — тот же список экспортов, все типы по-прежнему из store. Прежний корень переехал в `index.store.ts` (эталон store до Фазы 4). На него смотрят alias `@impl` проекта `store` в `vitest.config.ts` и `paths` в `cube/tsconfig.json`; в `dist` он не собирается.
+- **Subpath-экспорты.** Новые входы `cube/exports/{store/store,store/persist,react/useForm,react/usePersist,react/useTranslator,react/useNotifier}.ts` повторяют список экспортов прежних subpath-модулей: рантайм из `cube/index.ts`, типы из store. `package.json` → `dist/cube/exports/...`. palirent импортирует `palistor/react/useForm` (8 мест), `react/useTranslator` (3), `store/store` (2), `react/usePersist` (1): без этого шага он смешал бы `useForm` store с Palistor из Cube. Одно намеренное отличие: `PersistManager` из `palistor/store/persist` теперь только тип (класса в Cube нет, `store.persist` даёт те же методы); потребители его не импортируют.
+- **Демо.** `app-demo/tsconfig.json` больше не отдаёт исходники через `@palistor/*` → `../*`: `@palistor` → `../index.ts`, шесть subpath — ровно те, что в `exports`. Глубокие импорты, которых нет в `exports` (`store/defineList`, `store/defineFieldMapping`, `react/useStoreContext`), переведены на `@palistor`. Переключатель `PALISTOR_IMPL=store` (`next.config.ts` → `tsconfig.store.json`, `distDir` `.next-store`, порт 3002) поднимает то же демо на store — для сравнения на Фазе 3. Бандл проверен: на Cube в нём нет `store/buildProxy`, на store — `cube/core`.
+
+### e2e демо
+
+`app-demo/e2e/` — Playwright 1.64.1 (браузер из общего кэша, как у saas-starter), 7 файлов, 989 строк, 46 тестов + 1 `fixme`. `npm run test:e2e` гоняет Cube (`next dev` на 3001), `npm run test:e2e:store` — store; в CI добавлена job `e2e` с обоими прогонами. Покрыты все вкладки: ветвления видимости и обязательности, форматтеры, каскад сеттера, вычисляемые значения, `onChange`, чекбоксы, submit / reset / `setValues` формы, группа паспорта (dirty, reset, submit с валидацией, успех и ошибка `onSubmit`, валидатор, читающий соседнее поле), persist (debounce, `pick`, гидрация после перезагрузки, `flush`, `clear`, смена драйвера); списки (resolve списка, per-entity поле, add → temp id → `rekey`, remove / delete / invalidate, проекция сущности с шаблонным и ленивым resolve, фильтр по авто-зависимости, пагинация с кэшем страниц и перекэшированием по поиску, `useStoreContext`); retry группы; field mapping; flow целиком (валидация шага, ветка Enterprise, history, индикатор, `flow.submit`, reset); hash-навигация и смена локали через `useTranslator`. Фикстура ждёт гидрации (React вешает `__reactProps$` на узлы), сужает `Math.random` моков до «без отказов», а не до константы (константа ломала id в библиотеках), и выбирает опции HeroUI Select клавиатурой.
+
+Результат: **Cube 46/46** (и 138/138 при `--repeat-each=3`), **store 46/46**. Расхождений store ↔ Cube на демо нет. Консоль одинаковая по составу; store вызывает `validate` на submit дважды, Cube один раз. Ручной проход по всем вкладкам в Chrome на Cube — без ошибок в консоли.
+
+### Найдено в демо (исправлено)
+
+1. `FormActions` и `PassportSection` читали `res.errors.length`: по контракту `SubmitResult` успех — `{ success: true }` без `errors`, и успешный submit ронял страницу. Теперь `!res.success`.
+2. `PassportSection` не ловил реджект `submit()` при ошибке `onSubmit` (так в обеих реализациях) — необработанное исключение вместо бейджа ошибки.
+3. Валидатор `passport.expiryDate` читал `values.passport?.issueDate`, а функции вложенного поля получают значения своей группы: проверка «срок после даты выдачи» не работала никогда. Теперь `values.issueDate`.
+4. `appConfig` вклеивал мёртвый `catalog.ts` (списки и шаблон `editUser` с обязательными полями), которым ничто не пользовалось — списки живут в отдельном `catalogStore`. Корневой submit формы оплаты падал на `editUser.name`. Блок и файл удалены.
+5. `t("validation.amountMin")` без параметра `{min}` — `FORMATTING_ERROR` в консоли.
+
+### Открытые вопросы (обе реализации, решение за владельцем)
+
+1. **Скрытая группа блокирует submit родителя.** В submit участвуют все листья поддерева, скрытые тоже; исключение — только скрытые шаги flow. Вложенное поле при этом видит только значения своей группы и не может сделать себя необязательным по корневому полю. В демо поэтому «Pay» картой не проходит никогда: паспорт (только для банковского перевода) требует номер и дату. Тест помечен `test.fixme`. Варианты: исключать из submit листья под группой с `isVisible: false` (как шаги flow), либо давать функциям вложенных полей корневые значения вторым источником.
+2. **README не говорит, что функции вложенного поля (`isVisible`, `isRequired`, `validate`, `value`, `setter`) получают значения группы,** а `label` / `formatter` / `onChange` — корня. Демо ошиблось на этом дважды (п. 3 выше и попытка обусловить паспорт `paymentType`).
+3. **`isInvalid` группы — флаг её собственного `validate`, не агрегат детей** (так задокументировано). Демо рассчитывало на агрегат: «Save Passport» блокируется по `isInvalid`, в модалке пользователя — плашка «Fix validation errors»; оба никогда не срабатывают. Кандидат в README.
+
+### Попутные наблюдения
+
+- Обе реализации превращают `value: null` листа в `""` (паритет).
+- «Unsaved changes» горит сразу после загрузки формы оплаты и на store, и на Cube: HeroUI-инпуты возвращают числа строками (`price: "100"`), и форма становится dirty. Это демо, не библиотека.
+
+### Цифры
+
+Проект `store` 168 файлов, 2 228 passed + 2 todo; проект `cube` 77 файлов, 975 passed + 1 todo; `build` и `typecheck:cube` чистые; `tsc` демо чистый на обоих tsconfig.
+
+### Что дальше
+
+Пререлиз `0.1.0-cube.N` (после публикации `cube.0`), затем Фаза 3: palirent и saas-starter на `palistor@cube`. Для сравнения на потребителях `index.store.ts` и `test:e2e:store` остаются до Фазы 4.

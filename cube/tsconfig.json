@@ -1,12 +1,13 @@
 // Editor and `npm run typecheck:cube` view of cube/, including contract tests
-// and benches. "@impl" resolves to the store entry: cube/index.ts re-exports
-// the same public types, so the contract is typed once for both.
+// and benches. "@impl" resolves to the store entry (index.store.ts):
+// cube/index.ts re-exports the same public types, so the contract is typed
+// once for both.
 {
   "extends": "../tsconfig.build.json",
   "compilerOptions": {
     "noEmit": true,
     "paths": {
-      "@impl": ["../index.ts"]
+      "@impl": ["../index.store.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

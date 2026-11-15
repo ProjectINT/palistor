@@ -28,7 +28,7 @@ export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amoun
     dependencies: [],
     validate: (value: number, _values: PaymentFormValues, t: TranslateFn) => {
       if (value <= 0) {
-        return t("validation.amountMin");
+        return t("validation.amountMin", { min: 1 });
       }
     },
   },

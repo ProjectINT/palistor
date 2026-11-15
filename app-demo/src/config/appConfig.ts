@@ -1,10 +1,10 @@
 /**
  * Global app configuration — a single Palistor store
  *
- * Demonstrates complex global state:
- * - Payment form: conditional visibility, requiredness, validation, formatters,
- *   setter dependencies, i18n, computed values, nested fields
- * - Catalog: lists (ListNode), async resolve with retry, filters, entity editing
+ * Demonstrates complex global state — the payment form: conditional
+ * visibility, requiredness, validation, formatters, setter dependencies, i18n,
+ * computed values, nested fields. Lists, async resolve and entity editing live
+ * in their own store: catalog/catalogConfig.ts.
  */
 
 import { Palistor } from "@palistor/store/store";
@@ -21,18 +21,15 @@ import { address } from "./address";
 import { passport } from "./passport";
 import { checkboxes } from "./checkboxes";
 import { computed } from "./computed";
-import { catalog } from "./catalog/catalog";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 import type { Country, PaymentFormValues, PaymentType, AccountType, CryptoNetwork } from "./types";
-import type { CatalogValues } from "./catalog/types";
 
 export type { PaymentFormValues, PaymentType, AccountType, CryptoNetwork, Country };
-export type { CatalogValues };
-export type AppValues = PaymentFormValues & CatalogValues;
+export type AppValues = PaymentFormValues;
 
 // ============================================================================
 // Configuration
@@ -109,11 +106,6 @@ export const appConfig = {
   lastModified: {
     value: 0,
   },
-
-  // --------------------------------------------------------------------------
-  // Catalog — filters, lists, entity editing
-  // --------------------------------------------------------------------------
-  ...catalog,
 };
 
 // ============================================================================
@@ -181,6 +173,3 @@ export const paymentStore = appStore;
 export const paymentFormConfig = appConfig;
 export const paymentFormDefaults = appDefaults;
 export const usePaymentForm = useAppForm;
-
-export const catalogStore = appStore;
-export const useCatalogForm = useAppForm;

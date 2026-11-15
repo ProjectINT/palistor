@@ -1,6 +1,6 @@
 import { Palistor } from "@palistor/store/store";
 import { useForm } from "@palistor/react/useForm";
-import { defineList } from "@palistor/store/defineList";
+import { defineList } from "@palistor";
 import type { ListResolveContext, TranslateFn } from "@palistor";
 import { fetchUsers, fetchProducts, fetchOrders, fetchUnreliableData, fetchUserDetails, fetchUserBio, fetchUserStatus, updateUser, createUser } from "./mockApi";
 import type { Order, User } from "./types";
