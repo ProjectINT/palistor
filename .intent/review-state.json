@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "baseline": "d6fdee2545f2c090eac90793a7be44abded59eac",
+  "items": {
+    "skill:skills/palistor-field-mapping/SKILL.md": {
+      "fingerprint": "43bcc6084c4adb820735551b72cc53d5504ef245cc31da4d00b31f7e613e3cf9",
+      "snapshot": {
+        "cube/core/mapping.ts": "06d4fde3d1b8a4498424e0ea77813b280ba0afc82604f78201a731e2eee3e4ea",
+        "skills/palistor-field-mapping/SKILL.md": "e7e785988edc2ba48e46c84c582b31039f6b9b6abc723f6e09b490d83f75e625",
+        "store/constants.ts": "f890cabc82298b55061c8b7271afe8d52e6fe0941b72828f2091e2fc9b8d9f1b",
+        "store/defineFieldMapping.ts": "388c9c0a9e79cbb66894ee765cc8b81fd1c46013787e2fbc255eba6df4efc998"
+      },
+      "head": "d6fdee2545f2c090eac90793a7be44abded59eac",
+      "outcome": "updated",
+      "reason": "New skill for input adapters and fieldMapping, split out of the single skill. Corrected against the runtime: with a map active the config must use the mapped names or the constructor throws, duplicate map targets are not rejected, a widened map breaks typing in two different ways, useForm(subtree) does not type-check in a mapped store, an adapter is required even for a mapped spread.",
+      "evidence": [
+        "branch feat/intent-skills (working tree) on cube-architecture d6fdee2, palistor 0.1.0-cube.0, @tanstack/intent 0.5.6",
+        "sources read: cube/core/mapping.ts, store/defineFieldMapping.ts, store/constants.ts, mapping types in store/store/types.ts, react/useForm.ts; contract tests cube/contract/sliceH",
+        "intent validate: 4 skill files pass, no no-check fences; strict compile of all plain examples (tests/skills/tsconfig.json): 0 findings; npm run typecheck:skills: pass; 9 compiled fences, 4 expect-error",
+        "task check tests/skills/field-mapping-adapter: 8 pass / 2 expected fail",
+        "fresh consumer session: not run; third-party UI kits are not installed, so kit-specific props in two examples are unchecked"
+      ]
+    },
+    "skill:skills/palistor-flows/SKILL.md": {
+      "fingerprint": "3fc5d51148e0726c0322cf0ace1b3f481e407a24b4ae419a3007e500b0771881",
+      "snapshot": {
+        "cube/core/flow.ts": "50544971f29847b013a2605652b7e6e8021b9947cf63f941f961e18e23b2557d",
+        "cube/defineFlow.ts": "2268691db49dda8b28488d025448775dfd6c70288d33f4de156100e54d3b765b",
+        "skills/palistor-flows/SKILL.md": "cdc413992aa87dfe59199b4f2d97786ed5362237bce8e5d9952333fc4c1dec6b",
+        "skills/palistor-flows/references/flow-api.md": "e23c96eaa4d3daae6a471bc6f2b774efc9b07fbbcabea5df046ccfc9064ac0a2",
+        "store/flow/defineFlow.ts": "bce9fd63ae7627282aeeb80fb6ecf5f37f7cc47968cecae5d19e6b5b3f4c4f81"
+      },
+      "head": "d6fdee2545f2c090eac90793a7be44abded59eac",
+      "outcome": "updated",
+      "reason": "New skill for step wizards, split out of the single skill. Corrected against the runtime: nextStep never validates, back() keeps the left step completed, flow.errors is written only by flow.validate and flow.submit, FlowStepProxy takes the step config type, hidden steps keep their values in the payload, defineStep narrows inline defaults to literals.",
+      "evidence": [
+        "branch feat/intent-skills (working tree) on cube-architecture d6fdee2, palistor 0.1.0-cube.0, @tanstack/intent 0.5.6",
+        "sources read: cube/defineFlow.ts, cube/core/flow.ts, store/flow/defineFlow.ts, flow types in store/store/types.ts; contract tests cube/contract/sliceI",
+        "intent validate: 4 skill files pass, no no-check fences; strict compile of all plain examples (tests/skills/tsconfig.json): 0 findings; npm run typecheck:skills: pass; 8 compiled fences, 2 expect-error",
+        "task check tests/skills/flow-branching-wizard: 9 pass / 3 expected fail",
+        "fresh consumer session: 9 of 9"
+      ]
+    },
+    "skill:skills/palistor-lists/SKILL.md": {
+      "fingerprint": "a62cfdc965272c98903ccfdbbd3e00322d4b09b99a0f767759e62d1912dd2d50",
+      "snapshot": {
+        "cube/core/cube.ts": "24069460bf8a27d42d0a236b8b8fae127177279c43d8acd2231c707c3e106ab5",
+        "cube/core/filter.ts": "b85b2b79d74249562a63140c04b42bcc24779ba2ced013669a3c0377d0c709f3",
+        "cube/core/hub.ts": "a597465591c6cc3e046a7b8edbcd05aae0ff5c48bcaba2d6252515a9ea872666",
+        "cube/core/listCube.ts": "82aae20608cc64d14fbce1d4665b70b3c12f49185e852feebc4bf4ccc7224ac7",
+        "cube/core/node.ts": "cf9ecc5491e44a3b6cc427ae49c59636685baa56501a12e676e2c2e146ae435c",
+        "cube/core/pagination.ts": "6a0670ededce2f308c9d525dc5266763068114d24edea949217a1287e9368db5",
+        "cube/core/registry.ts": "778494e866e34b8ff680834131511840669f6f59bc60105b5f17685501e0595d",
+        "cube/core/resolve.ts": "6e75c3a2b79b55a724443f4ee7de75670491e9f8d926fd66efa426e6f51a0d54",
+        "cube/defineList.ts": "185e13b827f31216610477240318f5f6b28e712cac6ad05cdd2fa8a6ed4a62e9",
+        "cube/react/useForm.ts": "b001579b8d1a8caede18702d39ab27f9c49eb8d2f1accf7a35a6b2de7b27f855",
+        "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
+        "skills/palistor-lists/SKILL.md": "f8f339b4ade33b62b6bd07f663f2de065376535f41ad55f3e3d2a2ff799c2e3a",
+        "skills/palistor-lists/references/entity-editing.md": "58234dacda72af2849ec12da9b9a55b21288facb5e57f859cbecc33e3359b4fa",
+        "skills/palistor-lists/references/filtering.md": "03d0ac264b766a51965c1560adc8a8ee74a1178a7b36aafba0e79af77eac2827",
+        "skills/palistor-lists/references/list-api.md": "d4194bb5df6ad57d3a7553b80b2fdccfd33567854da075efb22e471790667e94",
+        "skills/palistor-lists/references/pagination.md": "25dfad7246f08efd0d04074aa297ae901bd5d4560cc8e7752b809d13f6946ce4",
+        "store/defineList.ts": "deeeb26a98527c33842fcd0b8ad291f836877f719384f84a3f8d7f2a7d807d88",
+        "store/pagination/types.ts": "3e3ef8e8f7928b9ca1822746c40ed5fca13fe67a8c9e9cd240a14240b95e2118",
+        "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
+      },
+      "head": "d6fdee2545f2c090eac90793a7be44abded59eac",
+      "outcome": "updated",
+      "reason": "New skill for collections, split out of the single skill and extended with filtering and pagination, which had no guidance. Corrected against contract tests: store.delete removes the row from every list, template field resolvers start lazily, store.invalidate needs the template config object, a dependency change re-runs the list resolver immediately, row fields ignore isRequired.",
+      "evidence": [
+        "branch feat/intent-skills (working tree) on cube-architecture d6fdee2, palistor 0.1.0-cube.0, @tanstack/intent 0.5.6",
+        "sources read: cube/defineList.ts, cube/core/listCube.ts, registry.ts, filter.ts, pagination.ts, resolve.ts, node.ts, hub.ts, cube.ts, cube/react/useForm.ts, store/store/types.ts, store/pagination/types.ts; contract tests cube/contract/sliceC, sliceE, sliceG",
+        "intent validate: 4 skill files pass, no no-check fences; strict compile of all plain examples (tests/skills/tsconfig.json): 0 findings; npm run typecheck:skills: pass; 16 compiled fences, 3 expect-error",
+        "task checks: lists-server-list 6 pass / 2 expected fail; lists-catalog-pages 6 pass / 2 expected fail",
+        "fresh consumer session lists-server-list: 6 of 6; lists-catalog-pages: not run",
+        "not probed at runtime (documented from README, types, contract-test titles): persistence round-trip, scrollAnchor, keepPreviousData, maxPages, gcTime, revalidateOnHydrate, list Suspense, nested-list pagination"
+      ]
+    },
+    "skill:skills/palistor/SKILL.md": {
+      "fingerprint": "3b508739c910b56ec51b44aaefdcded7c3223153f751f23ec2ac743b7b13fe39",
+      "snapshot": {
+        "cube/core/config.ts": "d14133efc4ded1888204e64a16d34a732b3427db9f6ee985aaab2b09e51fe4b6",
+        "cube/core/cube.ts": "24069460bf8a27d42d0a236b8b8fae127177279c43d8acd2231c707c3e106ab5",
+        "cube/core/hub.ts": "a597465591c6cc3e046a7b8edbcd05aae0ff5c48bcaba2d6252515a9ea872666",
+        "cube/core/node.ts": "cf9ecc5491e44a3b6cc427ae49c59636685baa56501a12e676e2c2e146ae435c",
+        "cube/core/persist.ts": "e60b19de17f21d72cf386634ca70a03fb12cdc51166884411f929544fa947945",
+        "cube/core/resolve.ts": "6e75c3a2b79b55a724443f4ee7de75670491e9f8d926fd66efa426e6f51a0d54",
+        "cube/index.ts": "a4582c88a4c3e0e62cd7c8479d047a515384fa52373c75e559d105bad53384e8",
+        "cube/palistor.ts": "0ca53dcf4d04d9badad93014230edccd1efe345186529f4af2a071bb2ca7d8e4",
+        "cube/react/useForm.ts": "b001579b8d1a8caede18702d39ab27f9c49eb8d2f1accf7a35a6b2de7b27f855",
+        "cube/react/useNotifier.ts": "0ed728a77294553fd71ee0a999cd05149fc9f482273726d312b636016ae5a72e",
+        "cube/react/usePersist.ts": "315ff1b23ada2fca3915025c95b3230bc760b8a75b2ee89b8dc3a0a490d5f887",
+        "cube/react/useStoreContext.ts": "e2c43f7c84ece1272145f5fc42d29ecb8060be974e4a41266d51d291a6655346",
+        "cube/react/useTranslator.ts": "85d1ae352af8338dcd73bb7d4917f0f8355ccc16e16e4108f1bccfcd67a4a306",
+        "index.ts": "e89f0234c4483f7829d788d27c56245ffca8f03cc50e9eec808cbf6f922add63",
+        "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
+        "skills/palistor/SKILL.md": "ee71366f8d1121299eeed432f0868b079acf0a03e56ea7c56a50a07b3980cff1",
+        "skills/palistor/references/async-resolve.md": "bdbe041529e4a6dded7cb9a4155cb452a963d8f01f1aa0ae1297d7ed243dd5fb",
+        "skills/palistor/references/config-options.md": "318c5fec54c5271c80b6d9d0ab9f5435eb3ade493c6e8770fc8c084b94384f19",
+        "skills/palistor/references/integrations.md": "a3e48dcbdc28bbf46deb7de03c0faa010926bfd61683fdd57f5eff4ec43bc531",
+        "skills/palistor/references/proxy-api.md": "84195a23355386d18fa2aabae1160a40577456d7022c78f173c42e535f00b5f7",
+        "skills/palistor/references/typescript.md": "a72f9a80d6a5d542721a52748941912c0bce3d54a8ad820ac1bab39803eb402e",
+        "store/persist/types.ts": "14da386af601f02137e586a31843480b696b0bbbe80f5bb355bccf45d20de4df",
+        "store/resolvePipeline/types.ts": "ded83d82da1298a254699b3b913de44da45e7bc489a00ce729b97d59fc1d57d5",
+        "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
+        "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
+      },
+      "head": "d6fdee2545f2c090eac90793a7be44abded59eac",
+      "outcome": "updated",
+      "reason": "The single 1624-line skill was rewritten into the core skill plus five references. Every statement was re-checked against the Cube runtime and the public types; statements that disagreed with the code were corrected: hidden fields are validated on submit, config functions receive the parent group values, isInvalid is true or undefined and a group flag is not an aggregate, dependencies is ignored, re-rendering is per node, config callback parameters need annotations under strict.",
+      "evidence": [
+        "branch feat/intent-skills (working tree) on cube-architecture d6fdee2, palistor 0.1.0-cube.0, @tanstack/intent 0.5.6",
+        "sources read: cube/core/cube.ts, node.ts, resolve.ts, persist.ts, hub.ts, config.ts, cube/palistor.ts, cube/react/*.ts, store/store/types.ts, store/resolvePipeline/types.ts, store/persist/types.ts; behavior confirmed by throwaway probe tests against index.ts",
+        "intent validate: 4 skill files pass, no no-check fences; strict compile of all plain examples (tests/skills/tsconfig.json): 0 findings; npm run typecheck:skills: pass; 24 compiled fences, 2 expect-error",
+        "task check tests/skills/form-dependent-fields: 7 checks pass on the reference solution, 1 named check fails on the mistake as expected",
+        "fresh consumer session (isolated subagent, tarball + intent install): 5 of 7 as delivered, 7 of 7 after renaming one payload key the task text had not named; task text fixed, not re-run"
+      ]
+    },
+    "planning:skills/_artifacts": {
+      "fingerprint": "83d7bc1e9c14b841791601566e6c367808dfc9380ec0fd22e20d4460d1984647",
+      "snapshot": {
+        "cube/core/config.ts": "d14133efc4ded1888204e64a16d34a732b3427db9f6ee985aaab2b09e51fe4b6",
+        "cube/core/cube.ts": "24069460bf8a27d42d0a236b8b8fae127177279c43d8acd2231c707c3e106ab5",
+        "cube/core/filter.ts": "b85b2b79d74249562a63140c04b42bcc24779ba2ced013669a3c0377d0c709f3",
+        "cube/core/flow.ts": "50544971f29847b013a2605652b7e6e8021b9947cf63f941f961e18e23b2557d",
+        "cube/core/hub.ts": "a597465591c6cc3e046a7b8edbcd05aae0ff5c48bcaba2d6252515a9ea872666",
+        "cube/core/listCube.ts": "82aae20608cc64d14fbce1d4665b70b3c12f49185e852feebc4bf4ccc7224ac7",
+        "cube/core/mapping.ts": "06d4fde3d1b8a4498424e0ea77813b280ba0afc82604f78201a731e2eee3e4ea",
+        "cube/core/node.ts": "cf9ecc5491e44a3b6cc427ae49c59636685baa56501a12e676e2c2e146ae435c",
+        "cube/core/pagination.ts": "6a0670ededce2f308c9d525dc5266763068114d24edea949217a1287e9368db5",
+        "cube/core/persist.ts": "e60b19de17f21d72cf386634ca70a03fb12cdc51166884411f929544fa947945",
+        "cube/core/registry.ts": "778494e866e34b8ff680834131511840669f6f59bc60105b5f17685501e0595d",
+        "cube/core/resolve.ts": "6e75c3a2b79b55a724443f4ee7de75670491e9f8d926fd66efa426e6f51a0d54",
+        "cube/defineFlow.ts": "2268691db49dda8b28488d025448775dfd6c70288d33f4de156100e54d3b765b",
+        "cube/defineList.ts": "185e13b827f31216610477240318f5f6b28e712cac6ad05cdd2fa8a6ed4a62e9",
+        "cube/index.ts": "a4582c88a4c3e0e62cd7c8479d047a515384fa52373c75e559d105bad53384e8",
+        "cube/palistor.ts": "0ca53dcf4d04d9badad93014230edccd1efe345186529f4af2a071bb2ca7d8e4",
+        "cube/react/useForm.ts": "b001579b8d1a8caede18702d39ab27f9c49eb8d2f1accf7a35a6b2de7b27f855",
+        "cube/react/useNotifier.ts": "0ed728a77294553fd71ee0a999cd05149fc9f482273726d312b636016ae5a72e",
+        "cube/react/usePersist.ts": "315ff1b23ada2fca3915025c95b3230bc760b8a75b2ee89b8dc3a0a490d5f887",
+        "cube/react/useStoreContext.ts": "e2c43f7c84ece1272145f5fc42d29ecb8060be974e4a41266d51d291a6655346",
+        "cube/react/useTranslator.ts": "85d1ae352af8338dcd73bb7d4917f0f8355ccc16e16e4108f1bccfcd67a4a306",
+        "index.ts": "e89f0234c4483f7829d788d27c56245ffca8f03cc50e9eec808cbf6f922add63",
+        "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
+        "skills/_artifacts/domain_map.yaml": "7dd009b9ffdfc4338680a7aacf5567daefd2935c20f800d127f5746766de1b55",
+        "skills/_artifacts/skill_spec.md": "95e6f395b1a5ea2706adde3af8fcf591a17bf4f92eca4355e2079ac438eda36e",
+        "skills/_artifacts/skill_tree.yaml": "969ac7c4ceaeecea145563f75811539564a602c142a8aed6ef6ad5c54058bdcc",
+        "skills/palistor-field-mapping/SKILL.md": "e7e785988edc2ba48e46c84c582b31039f6b9b6abc723f6e09b490d83f75e625",
+        "skills/palistor-flows/SKILL.md": "cdc413992aa87dfe59199b4f2d97786ed5362237bce8e5d9952333fc4c1dec6b",
+        "skills/palistor-flows/references/flow-api.md": "e23c96eaa4d3daae6a471bc6f2b774efc9b07fbbcabea5df046ccfc9064ac0a2",
+        "skills/palistor-lists/SKILL.md": "f8f339b4ade33b62b6bd07f663f2de065376535f41ad55f3e3d2a2ff799c2e3a",
+        "skills/palistor-lists/references/entity-editing.md": "58234dacda72af2849ec12da9b9a55b21288facb5e57f859cbecc33e3359b4fa",
+        "skills/palistor-lists/references/filtering.md": "03d0ac264b766a51965c1560adc8a8ee74a1178a7b36aafba0e79af77eac2827",
+        "skills/palistor-lists/references/list-api.md": "d4194bb5df6ad57d3a7553b80b2fdccfd33567854da075efb22e471790667e94",
+        "skills/palistor-lists/references/pagination.md": "25dfad7246f08efd0d04074aa297ae901bd5d4560cc8e7752b809d13f6946ce4",
+        "skills/palistor/SKILL.md": "ee71366f8d1121299eeed432f0868b079acf0a03e56ea7c56a50a07b3980cff1",
+        "skills/palistor/references/async-resolve.md": "bdbe041529e4a6dded7cb9a4155cb452a963d8f01f1aa0ae1297d7ed243dd5fb",
+        "skills/palistor/references/config-options.md": "318c5fec54c5271c80b6d9d0ab9f5435eb3ade493c6e8770fc8c084b94384f19",
+        "skills/palistor/references/integrations.md": "a3e48dcbdc28bbf46deb7de03c0faa010926bfd61683fdd57f5eff4ec43bc531",
+        "skills/palistor/references/proxy-api.md": "84195a23355386d18fa2aabae1160a40577456d7022c78f173c42e535f00b5f7",
+        "skills/palistor/references/typescript.md": "a72f9a80d6a5d542721a52748941912c0bce3d54a8ad820ac1bab39803eb402e",
+        "store/constants.ts": "f890cabc82298b55061c8b7271afe8d52e6fe0941b72828f2091e2fc9b8d9f1b",
+        "store/defineFieldMapping.ts": "388c9c0a9e79cbb66894ee765cc8b81fd1c46013787e2fbc255eba6df4efc998",
+        "store/defineList.ts": "deeeb26a98527c33842fcd0b8ad291f836877f719384f84a3f8d7f2a7d807d88",
+        "store/flow/defineFlow.ts": "bce9fd63ae7627282aeeb80fb6ecf5f37f7cc47968cecae5d19e6b5b3f4c4f81",
+        "store/pagination/types.ts": "3e3ef8e8f7928b9ca1822746c40ed5fca13fe67a8c9e9cd240a14240b95e2118",
+        "store/persist/types.ts": "14da386af601f02137e586a31843480b696b0bbbe80f5bb355bccf45d20de4df",
+        "store/resolvePipeline/types.ts": "ded83d82da1298a254699b3b913de44da45e7bc489a00ce729b97d59fc1d57d5",
+        "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
+        "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
+      },
+      "head": "d6fdee2545f2c090eac90793a7be44abded59eac",
+      "outcome": "updated",
+      "reason": "All three planning records were authored for the first batch: skill_tree.yaml (domains, references, review.ignore, repository distribution), domain_map.yaml (4 domains, developer tasks, 66 failure modes with sources, tensions, cross-references, gaps), skill_spec.md (inventory, decisions with reasons, mapping of every section and of all 34 mistake rows of the old skill, corrections, check outcomes, remaining work).",
+      "evidence": [
+        "branch feat/intent-skills (working tree) on cube-architecture d6fdee2, palistor 0.1.0-cube.0, @tanstack/intent 0.5.6",
+        "both YAML files parse; intent maintainer status: 0 files to sync, 0 authoring issues; skill_spec.md has no authoring marker",
+        "failure-mode inventory generated from the skill files, so it matches the 66 documented mistakes"
+      ]
+    }
+  }
+}

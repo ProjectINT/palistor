@@ -66,6 +66,7 @@ const store = new Palistor({
 - [Демо](#демо)
 - [Возможности](#возможности)
 - [Установка](#установка)
+- [Скиллы для агентов](#скиллы-для-агентов)
 - [Быстрый старт](#быстрый-старт)
 - [Концепции](#концепции)
 - [API Reference](#api-reference)
@@ -212,6 +213,48 @@ import {
   sessionStorageDriver,
 } from "palistor";
 ```
+
+---
+
+## Скиллы для агентов
+
+Palistor поставляет собственные инструкции для ИИ-агентов: четыре [Agent Skills](https://agentskills.io) лежат прямо в npm-пакете (`node_modules/palistor/skills/`) и версионируются вместе с кодом, который описывают. Агент, загрузивший их, пишет конфиги по правилам установленной у вас версии, а не по догадкам.
+
+**Рекомендуемый путь — [TanStack Intent](https://tanstack.com/intent/latest):**
+
+```bash
+npm i palistor
+npm i -D @tanstack/intent
+npx @tanstack/intent@latest install   # интерактивно: выбрать palistor
+```
+
+`intent install` сохраняет выбор в `package.json#intent.skills` и добавляет в `AGENTS.md` (или в уже существующий файл инструкций агента) блок, который велит агенту перед правкой кода выполнить `intent list` и `intent load palistor#<скилл>`. Claude Code сам читает `AGENTS.md` начиная с v2.1.277; в более старой версии добавьте `@AGENTS.md` в `CLAUDE.md` или используйте плагин ниже.
+
+**Альтернативы** — поставить скиллы прямо из этого репозитория:
+
+```bash
+# Плагин Claude Code (выполнять внутри Claude Code)
+/plugin marketplace add ProjectINT/palistor
+/plugin install palistor@palistor
+
+# skills CLI
+npx skills add ProjectINT/palistor --full-depth --skill palistor palistor-lists palistor-flows palistor-field-mapping
+
+# GitHub CLI
+gh skill add ProjectINT/palistor skills/palistor/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-lists/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-flows/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-field-mapping/SKILL.md
+```
+
+| Скилл | Чему учит |
+|---|---|
+| `palistor` | Ядро, начинать с него: config → store → `useForm` → spread; поля и группы, валидация, видимость, вычисляемые значения, submit и reset, асинхронный `resolve`, persist, i18n |
+| `palistor-lists` | Коллекции: `defineList`, loading / error / reload, добавление и удаление строк, временные id, редактирование одной сущности, фильтрация, пагинация |
+| `palistor-flows` | Пошаговые мастера: `defineFlow` / `defineStep`, навигация, ветвление, проверка шага и финальная проверка |
+| `palistor-field-mapping` | UI-киты: один адаптер на вид инпута, `fieldMapping` для переименования пропсов поля |
+
+Скиллы обновляются вместе с пакетом: `npm update palistor` приносит и инструкции для новой версии. Установка из репозитория (варианты выше) следует за веткой по умолчанию, а не за установленной версией.
 
 ---
 

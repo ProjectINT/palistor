@@ -48,13 +48,19 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "skills/palistor",
+    "skills/palistor-lists",
+    "skills/palistor-flows",
+    "skills/palistor-field-mapping"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run --project store",
     "test:cube": "vitest run --project cube",
     "typecheck:cube": "tsc -p cube/tsconfig.json",
+    "test:skills": "vitest run --project skills",
+    "typecheck:skills": "tsc -p tests/skills/tsconfig.json",
     "bench": "vitest bench --run",
     "prepublishOnly": "npm run build",
     "publish:npm": "npm publish --registry=https://registry.npmjs.org",
@@ -69,7 +75,8 @@
     "react",
     "state",
     "form-state",
-    "reactive"
+    "reactive",
+    "tanstack-intent"
   ],
   "author": "Yuri Palienko",
   "license": "MIT",
@@ -85,6 +92,7 @@
     "react": "^19"
   },
   "devDependencies": {
+    "@tanstack/intent": "0.5.6",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

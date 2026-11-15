@@ -1,0 +1,187 @@
+library:
+  name: palistor
+  version: 0.1.0-cube.0
+generated_from:
+  domain_map: skills/_artifacts/domain_map.yaml
+  skill_spec: skills/_artifacts/skill_spec.md
+# Paths never reported as unmapped changes: they hold no guidance and no
+# behavior a skill describes (tests, the demo app, plans, repo plumbing).
+review:
+  ignore:
+    - 'tests/**'
+    - 'app-demo/**'
+    - 'demo-test/**'
+    - 'experiments/**'
+    - 'docs_archive/**'
+    - 'cube/contract/**'
+    - 'cube/bench/**'
+    - '**/*.test.ts'
+    - '**/*.test.tsx'
+    - '.github/**'
+    - '.gitignore'
+    - 'LICENSE'
+    - '*.png'
+    - '*.svg'
+    - 'README.md'
+    - 'README.ru.md'
+    - 'architecture.md'
+    - '*Plan.md'
+    - 'PALISTOR_AGENT_SKILLS_TZ.md'
+    - 'vitest.config.ts'
+    - 'tsconfig.build.json'
+    - 'cube/tsconfig.json'
+skills:
+  - name: palistor
+    slug: palistor
+    domain: forms
+    path: skills/palistor/SKILL.md
+    description: 'Use when a React project depends on `palistor` and the task is to
+      build or change a form, an editable screen or other config-driven UI
+      state: declare a field or group config, create a store with `new
+      Palistor({ config })`, connect components with `useForm`, add validation,
+      required and visibility rules, computed values, formatters, setters,
+      submit and reset, async `resolve`, persistence, i18n or error
+      notifications. Also use it when such a form misbehaves: errors never
+      appear, a hidden field blocks submit, a component does not re-render. Read
+      this first. For collections of items use palistor-lists, for step-by-step
+      wizards use palistor-flows, for UI-kit prop renaming and input adapters
+      use palistor-field-mapping.
+
+      '
+    sources:
+      - ProjectINT/palistor:index.ts
+      - ProjectINT/palistor:cube/index.ts
+      - ProjectINT/palistor:cube/palistor.ts
+      - ProjectINT/palistor:cube/core/cube.ts
+      - ProjectINT/palistor:cube/core/config.ts
+      - ProjectINT/palistor:cube/core/node.ts
+      - ProjectINT/palistor:cube/core/resolve.ts
+      - ProjectINT/palistor:cube/core/persist.ts
+      - ProjectINT/palistor:cube/core/hub.ts
+      - ProjectINT/palistor:cube/react/*.ts
+      - ProjectINT/palistor:react/useForm.ts
+      - ProjectINT/palistor:store/store/types.ts
+      - ProjectINT/palistor:store/store/palistor.ts
+      - ProjectINT/palistor:store/resolvePipeline/types.ts
+      - ProjectINT/palistor:store/persist/types.ts
+    references:
+      - references/async-resolve.md
+      - references/config-options.md
+      - references/integrations.md
+      - references/proxy-api.md
+      - references/typescript.md
+    purpose: "Build forms with the Palistor reactive form state manager. Use when:
+      creating form configs, writing React components with useForm, adding
+      validation/formatters/setters, working with lists/entities, building
+      multi-step wizards/flows (defineFlow/defineStep), configuring
+      resolve/persist/submit pipelines, remapping field prop names to UI-library
+      conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
+    requires: []
+  - name: palistor-lists
+    slug: palistor-lists
+    domain: lists
+    path: skills/palistor-lists/SKILL.md
+    description: 'Use when a React screen built with palistor needs a collection of
+      records: a table, list or grid of rows loaded from an API with loading,
+      error, empty and retry states; adding, removing or inline-editing rows;
+      optimistic rows whose temporary id is later replaced by the server id; a
+      detail or edit form for one record; search and filter controls over the
+      rows, server-side or in memory; or page-by-page, load-more and cursor
+      pagination. Covers defineList, list and row (entity) proxies, useForm on a
+      row, store.set / rekey / delete / invalidate, list filter blocks and
+      resolve.pagination. Requires the palistor skill for config, store and
+      useForm basics. Step-by-step wizards belong to palistor-flows; renaming
+      field props for a UI kit belongs to palistor-field-mapping.
+
+      '
+    requires:
+      - palistor
+    sources:
+      - ProjectINT/palistor:cube/defineList.ts
+      - ProjectINT/palistor:cube/core/listCube.ts
+      - ProjectINT/palistor:cube/core/registry.ts
+      - ProjectINT/palistor:cube/core/filter.ts
+      - ProjectINT/palistor:cube/core/pagination.ts
+      - ProjectINT/palistor:cube/core/resolve.ts
+      - ProjectINT/palistor:cube/core/node.ts
+      - ProjectINT/palistor:cube/core/hub.ts
+      - ProjectINT/palistor:cube/core/cube.ts
+      - ProjectINT/palistor:cube/react/useForm.ts
+      - ProjectINT/palistor:react/useForm.ts
+      - ProjectINT/palistor:store/defineList.ts
+      - ProjectINT/palistor:store/store/types.ts
+      - ProjectINT/palistor:store/pagination/types.ts
+    references:
+      - references/entity-editing.md
+      - references/filtering.md
+      - references/list-api.md
+      - references/pagination.md
+    purpose: "Teaches how to model collections in Palistor: declaring a typed list
+      with defineList, rendering and editing its rows through entity proxies,
+      loading it with a resolver (loading, error, reload), mutating membership
+      (add, remove, temporary ids and rekey), editing one entity through a
+      separate template, and filtering or paginating the list."
+  - name: palistor-flows
+    slug: palistor-flows
+    domain: flows
+    path: skills/palistor-flows/SKILL.md
+    description: 'Use when a React project that depends on palistor needs a form
+      split into steps: a signup or onboarding wizard, a checkout, a survey or
+      any screen with Next and Back; steps that appear only for some answers
+      (branching); checking the current step before moving on and submitting
+      everything at the end; a progress indicator with active and completed
+      steps; restoring the user''s step after a reload or restarting the wizard.
+      Covers defineStep and defineFlow, flow navigation, step entry callbacks,
+      flow validation, submit, reset, persisted navigation and typing flow and
+      step props. Plain single-screen forms belong to the palistor skill,
+      collections of items to palistor-lists.
+
+      '
+    requires:
+      - palistor
+    sources:
+      - ProjectINT/palistor:cube/defineFlow.ts
+      - ProjectINT/palistor:cube/core/flow.ts
+      - ProjectINT/palistor:store/flow/defineFlow.ts
+    references:
+      - references/flow-api.md
+    purpose: "Build step-by-step wizards with palistor flows: declare steps with
+      defineStep, assemble them with defineFlow, drive navigation and branching,
+      validate each step, finalize the whole flow and type flow and step props."
+  - name: palistor-field-mapping
+    slug: palistor-field-mapping
+    domain: ui-integration
+    path: skills/palistor-field-mapping/SKILL.md
+    description: 'Use when palistor fields have to be rendered through UI components
+      in a React project: wiring a form to MUI, Ant Design, Chakra, HeroUI,
+      shadcn or in-house inputs; writing or fixing a reusable text input,
+      checkbox or select wrapper that receives a whole field through a JSX
+      spread; making field props use the UI kit''s names (required, disabled,
+      error, helperText) with fieldMapping or defineFieldMapping; fixing React
+      unknown-prop warnings, props leaking to the DOM, hidden fields that still
+      render, inputs that do not update, or renamed props that lost their types.
+      Covers one adapter per input kind, the single-vocabulary rule for mapped
+      configs, typing adapter and subtree props, and the limits of renaming
+      (names only, no value conversion). Field rules themselves (validation,
+      visibility) belong to the palistor skill.
+
+      '
+    requires:
+      - palistor
+    sources:
+      - ProjectINT/palistor:cube/core/mapping.ts
+      - ProjectINT/palistor:store/defineFieldMapping.ts
+      - ProjectINT/palistor:store/constants.ts
+    purpose: "Connect palistor fields to a UI component library: one adapter
+      component per input kind fed by a field spread, and fieldMapping /
+      defineFieldMapping to rename field props to the vocabulary of the UI kit,
+      with correct typing of the renamed props."
+distribution:
+  mode: repo
+  repository: ProjectINT/palistor
+  name: palistor
+  skills:
+    - palistor
+    - palistor-lists
+    - palistor-flows
+    - palistor-field-mapping

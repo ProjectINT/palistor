@@ -1,7 +1,8 @@
 /**
- * The SKILL.md fieldMapping example (Phase 2.6). Ported from
- * store/__skill_verify_tmp.test.ts (the file Phase 0 item 8 wanted renamed):
- * import from @impl, nothing else changed.
+ * The skill's fieldMapping example (Phase 2.6): with a mapping active the
+ * config is authored in the external names. Ported from the store suite's
+ * temporary skill-verification test, which was removed once this copy ran on
+ * both implementations: import from @impl, nothing else changed.
  */
 import { describe, expect, it } from "vitest";
 import { Palistor } from "@impl";

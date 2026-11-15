@@ -1,0 +1,69 @@
+# Discovery prompts
+
+Activation checks for the `description` of each skill: a prompt that should make an agent load the
+skill, and an adjacent prompt that should not. Half of them deliberately avoid the library's API
+vocabulary. Every prompt assumes a React project that already depends on `palistor`.
+
+How to run: expose the skills through the normal consumer setup (README, "Agent Skills"), give a
+fresh agent session one prompt, and record whether it actually loaded the skill's `SKILL.md` — a skill
+name in the answer is not enough. Repeat ambiguous prompts. Keep the prompts below fixed when tuning
+a description and test fresh phrasings separately.
+
+**Status: not run.** These prompts were written with the skills on 2026-11-15; no activation run has
+been recorded yet.
+
+## palistor
+
+Should load:
+
+1. "Сделай форму регистрации с зависимыми полями: адрес доставки показывать только для курьера, и он тогда обязателен."
+2. "The Save button does nothing on our settings form and no error shows up — find out why."
+3. "Add a computed total (price × quantity) and a draft that survives a page reload to the order form."
+
+Should not load (or not alone):
+
+1. "Add pagination and a search box to the orders table." → `palistor-lists`
+2. "Rewrite the README installation section." → no skill
+3. "Our Chakra inputs want `isInvalid` renamed to `invalid` everywhere." → `palistor-field-mapping`
+
+## palistor-lists
+
+Should load:
+
+1. "Add a customers table to the dashboard: fetch from /api/customers, show a spinner, an error with a retry button, and let me rename a customer inline."
+2. "The 'Add row' button should show the new invoice line immediately and swap in the real id once the POST returns."
+3. "Add search and 'only active' filtering plus Next/Previous pages to the orders list built with `defineList`."
+
+Should not load:
+
+1. "Build a signup form with email, password and confirm-password validation." → `palistor`
+2. "Make a three-step checkout where the shipping step is skipped for digital goods." → `palistor-flows`
+3. "Our MUI TextField wants `error` and `helperText` instead of `isInvalid` and `errorMessage` — wire that up once." → `palistor-field-mapping`
+
+## palistor-flows
+
+Should load:
+
+1. "Сделай регистрацию в три шага с кнопками Далее/Назад, шаг про компанию показывать только юрлицам."
+2. "Our checkout wizard lets users click Next with empty required fields — fix it."
+3. "Add a progress indicator showing completed and current steps of the onboarding."
+
+Should not load:
+
+1. "Add a phone field with validation to the profile form." → `palistor`
+2. "Paginate the orders table and add a search filter." → `palistor-lists`
+3. "Our MUI TextField shows a React warning about the isVisible prop." → `palistor-field-mapping`
+
+## palistor-field-mapping
+
+Should load:
+
+1. "Подключи нашу форму к MUI: чтобы required/error/helperText приходили сами, без ручной проброски."
+2. "React ругается: does not recognize the isVisible prop on a DOM element — после спреда поля в инпут."
+3. "Write a reusable Select wrapper for our form fields."
+
+Should not load:
+
+1. "Make the address field required only for courier delivery." → `palistor`
+2. "Build a 4-step onboarding wizard." → `palistor-flows`
+3. "Load the users list from the API and show a retry button on failure." → `palistor-lists`

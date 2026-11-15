@@ -30,6 +30,17 @@ export default defineConfig({
           benchmark: { include: ["cube/bench/**/*.bench.{ts,tsx}"] },
         },
       },
+      // Task checks for the agent skills (skills/, tests/skills/README.md):
+      // reference solutions import "palistor" like a consumer does, resolved
+      // to the package entry.
+      {
+        extends: true,
+        resolve: { alias: { palistor: fileURLToPath(new URL("./index.ts", import.meta.url)) } },
+        test: {
+          name: "skills",
+          include: ["tests/skills/**/*.test.{ts,tsx}"],
+        },
+      },
     ],
   },
 });

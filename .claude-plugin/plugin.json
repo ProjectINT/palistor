@@ -1,0 +1,9 @@
+{
+  "name": "palistor",
+  "skills": [
+    "./skills/palistor",
+    "./skills/palistor-lists",
+    "./skills/palistor-flows",
+    "./skills/palistor-field-mapping"
+  ]
+}

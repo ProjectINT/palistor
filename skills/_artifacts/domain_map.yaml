@@ -1,0 +1,555 @@
+# domain_map.yaml
+# Library: palistor
+# Version: 0.1.0-cube.0
+# Date: 2026-11-15
+# Status: draft (first batch authored by an agent; not yet reviewed by the maintainer)
+#
+# failure_modes list the mistake, its priority and evidence. The wrong and correct
+# patterns and the mechanism live in one place only: the skill file named in
+# `documented_in`, under a heading equal to `mistake`.
+
+library:
+  name: palistor
+  version: 0.1.0-cube.0
+  repository: https://github.com/ProjectINT/palistor
+  description: "Declarative config-driven state for React: forms, lists and step wizards"
+  primary_framework: React
+
+domains:
+  - name: "Forms and form state"
+    slug: forms
+    description: "Fields, groups and the rules between them: validation, visibility, computed values, submit, reset, loading data, drafts"
+  - name: "Collections of records"
+    slug: lists
+    description: "Lists of entities: loading, membership, row editing, filtering, pagination"
+  - name: "Step-by-step screens"
+    slug: flows
+    description: "Wizards: steps, navigation, branching, per-step and final validation"
+  - name: "UI component integration"
+    slug: ui-integration
+    description: "The hop from a field to a UI component: adapters and prop renaming"
+
+skills:
+  - name: palistor
+    slug: palistor
+    domain: forms
+    description: "A developer is building or changing a form, an editable screen or other config-driven UI state: fields and groups, validation, conditional and computed fields, submit and reset, loading data into the form, drafts, translations."
+    type: core
+    covers:
+      - "config tree: leaf (value) and group nodes"
+      - "new Palistor({ config, initialValues, context })"
+      - "useForm(store) / useForm(subtree) and the field spread"
+      - "validate, isRequired, isVisible, isDisabled, isReadOnly, computed value"
+      - "formatter, setter, onChange"
+      - "submit / reset / setValues on the root, a group or a field; SubmitResult"
+      - "group resolve (async loading)"
+      - "usePersist, useTranslator, useNotifier, useStoreContext"
+      - "ExtractValues, DeepPartialValues, PalistorProxy, FieldProxyNode"
+      - "routing to the three sub-skills"
+    tasks:
+      - "Build a form with required, conditional and computed fields and submit it"
+      - "Show validation errors only after the first submit attempt"
+      - "Split a form into sections with independent re-rendering"
+      - "Load data into a form from an API and reload it when an input changes"
+      - "Persist a draft, translate labels and report load errors"
+      - "Type form values, component props and config callbacks under strict TypeScript"
+      - "Diagnose a form that does not submit, does not show errors or does not re-render"
+    reference_candidates:
+      - topic: "config options"
+        reason: "more than 20 config keys with distinct signatures and value scopes; write and submit order"
+      - topic: "proxy and store API"
+        reason: "field, group and store members not needed on the common path"
+      - topic: "async resolve"
+        reason: "a conditional task (loading data) with its own options and mistakes"
+      - topic: "integrations"
+        reason: "four optional hooks: persist, i18n, notifications, store context"
+      - topic: "TypeScript"
+        reason: "typing rules needed only at component boundaries and for strict mode"
+    failure_modes:
+      - mistake: "Form logic in useState / useEffect instead of the config"
+        priority: CRITICAL
+        status: active
+        source: "README \"Idea\", cube/core/cube.ts (write, rawError)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "A hidden field still blocks submit"
+        priority: CRITICAL
+        status: active
+        source: "cube/core/cube.ts (collectErrors)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Passing store.proxy (or a part of it) to useForm"
+        priority: HIGH
+        status: active
+        source: "store/store/types.ts (RawStoreProxyMarker), cube/react/useForm.ts"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Reading state in render without useForm"
+        priority: HIGH
+        status: active
+        source: "cube/react/useForm.ts"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Expecting the whole form in a nested field's values"
+        priority: HIGH
+        status: active
+        source: "cube/core/cube.ts (scopeValues)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "A number field fed by a text input"
+        priority: HIGH
+        status: active
+        source: "cube/core/cube.ts (write)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Reading validity that is not there yet"
+        priority: HIGH
+        status: active
+        source: "cube/core/cube.ts (isInvalid, revalidate)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "useForm(store, selector)"
+        priority: MEDIUM
+        status: active
+        source: "cube/react/useForm.ts (resolveEntity)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Root submit where a group submit was meant"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/cube.ts (submit)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Changing the config object after the store exists"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/cube.ts (constructor)"
+        documented_in: skills/palistor/SKILL.md
+      - mistake: "Omitting onError"
+        priority: HIGH
+        status: active
+        source: "store/resolvePipeline/types.ts"
+        documented_in: skills/palistor/references/async-resolve.md
+      - mistake: "Loading in useEffect and writing with setValues"
+        priority: HIGH
+        status: active
+        source: "cube/core/resolve.ts"
+        documented_in: skills/palistor/references/async-resolve.md
+      - mistake: "Expecting the group's own values in resolver"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/resolve.ts (execute)"
+        documented_in: skills/palistor/references/async-resolve.md
+      - mistake: "Waiting for a resolve that nothing reads"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/cube.ts (touch), cube/core/node.ts"
+        documented_in: skills/palistor/references/async-resolve.md
+  - name: palistor-lists
+    slug: palistor-lists
+    domain: lists
+    description: "A developer needs a collection of same-shaped records in a palistor screen: load, render, add, remove and edit rows, edit one record in its own form, filter and paginate."
+    type: sub-skill
+    covers:
+      - "defineList<TEntity>({ template, resolve, filter })"
+      - "list proxy: items, map, length, loading, error, resolveStatus, reload, add, remove, setItems, getById, getValues, dirty"
+      - "entity (row) proxies and useForm(row) / useForm(row, templateSelector)"
+      - "store.set / rekey / delete / invalidate; temporary ids"
+      - "row validation and row submit"
+      - "template field resolve and template resolve"
+      - "filter block: server and client fields, where, param, debounce, $all, $toParams, list.filter controls"
+      - "resolve.pagination: paged, infinite, cursor; page cache; PagedResult and ctx.page"
+      - "PalistorRef, PalistorList, InferEntity, TemplateConfig, ListResolver"
+    tasks:
+      - "Render and edit a server-loaded list with loading, error and reload states"
+      - "Add, remove and edit list items, including optimistic rows with temporary ids"
+      - "Edit one entity through a separate template with its own validation and submit"
+      - "Filter a list with server and client filter fields"
+      - "Paginate a list (paged, infinite or cursor mode)"
+    reference_candidates:
+      - topic: "list API"
+        reason: "full list, row and row-field surfaces, store entity methods, typing helpers"
+      - topic: "entity editing"
+        reason: "separate edit template, three levels of loading, row submit"
+      - topic: "filtering"
+        reason: "filter block vocabulary and server/client field rules"
+      - topic: "pagination"
+        reason: "three modes, more than 20 list members, cache and persistence options"
+    failure_modes:
+      - mistake: "Treating a failed or not-yet-started list as empty"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceC/listResolveError.test.ts, cube/core/resolve.ts (touch)"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "One-argument useForm(row) with a row from getById, add or for…of"
+        priority: HIGH
+        status: active
+        source: "cube/react/useForm.ts (wrap, resolveInput, resolveEntity)"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Reading row fields in a child component without useForm(row)"
+        priority: HIGH
+        status: active
+        source: "cube/react/useForm.ts (wrap, track), cube/contract/sliceC/useFormEntity.test.tsx"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Expecting isRequired to validate a row"
+        priority: HIGH
+        status: active
+        source: "cube/core/cube.ts (rowError, submitEntity), cube/contract/sliceC/entityTemplateResolve.test.tsx"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Confusing list.remove(id) with store.delete(id)"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceC/deleteListConsistency.test.ts, cube/core/hub.ts (deleteEntity)"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Expecting a re-read or re-mount to refetch"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceC/listResolveError.test.ts"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Template or rows without id"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/registry.ts (idOf)"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Declaring a list as a raw array"
+        priority: MEDIUM
+        status: active
+        source: "store/store/types.ts (ConfigNodeToProxy), store/defineList.ts"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Index or row object as the React key"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/node.ts (listNode)"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Looking up the row you just added"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceC/listAddReturn.test.ts"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Reaching into store internals for list state"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceC/listResolveError.react.test.tsx"
+        documented_in: skills/palistor-lists/SKILL.md
+      - mistake: "Sending the onSubmit argument as the request body"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceC/entityTemplateResolve.test.tsx (\"onSubmit called with entityProxy and store\")"
+        documented_in: skills/palistor-lists/references/entity-editing.md
+      - mistake: "Expecting a field resolver to run when the list loads"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceC/entityFieldResolve.test.tsx (\"the list resolver loads entities without triggering field resolves\")"
+        documented_in: skills/palistor-lists/references/entity-editing.md
+      - mistake: "Reading form values in a field resolver"
+        priority: HIGH
+        status: active
+        source: "cube/core/resolve.ts (execute: base = cube.item ?? hub.root), cube/contract/sliceC/entityFieldResolve.test.tsx"
+        documented_in: skills/palistor-lists/references/entity-editing.md
+      - mistake: "Passing a proxy node to store.invalidate"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceC/entityTemplateResolve.test.tsx (\"invalidate(id, templateNode) clears only that pair\")"
+        documented_in: skills/palistor-lists/references/entity-editing.md
+      - mistake: "Using store.invalidate to remove or refresh a row"
+        priority: MEDIUM
+        status: active
+        source: "cube/palistor.ts (invalidate), cube/contract/sliceC/entityTemplateResolve.test.tsx"
+        documented_in: skills/palistor-lists/references/entity-editing.md
+      - mistake: "Reading a server filter through values or deps"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceE/filterSurface.test.tsx (\"the resolver's values and getValues() never contain the filter\")"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "where with param or debounce"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceE/filtering.test.ts (A6)"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "Filtering rows in the component"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceE/filteringExample.port.test.ts"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "Expecting store.reset() to clear the filters"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceE/filtering.test.ts (C1, F3)"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "Using list.length as the number of loaded rows"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceE/filtering.test.ts (C2, E2), cube/core/listCube.ts"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "Ignoring ctx.page"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceG/pagination.test.ts (A1, B1)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Replacing the rows with a spinner on list.loading"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceG/pagination.test.ts (A3), cube/core/listCube.ts (loading)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Calling an optional pagination method directly"
+        priority: MEDIUM
+        status: active
+        source: "store/store/types.ts (ListProxyNode)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Jumping to a page that does not exist"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/pagination.ts (setPage)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Using total to decide whether more rows exist"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceG/pagination.test.ts (A2, D7), cube/core/pagination.ts (hasNextPage)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Reading the list's own rows inside its resolver"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceG/pagination.test.ts (F7)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Mapping a field prop onto a pagination name"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceG/pagination.test.ts (F1)"
+        documented_in: skills/palistor-lists/references/pagination.md
+  - name: palistor-flows
+    slug: palistor-flows
+    domain: flows
+    description: "A developer is building a screen the user moves through step by step: a wizard, onboarding, checkout or survey, possibly with branches."
+    type: sub-skill
+    covers:
+      - "defineStep(key, config) and defineFlow({ steps, onSubmit, beforeSubmit, afterSubmit })"
+      - "flow proxy: currentStepKey, currentStepIndex, canGoBack, history, errors, steps, values"
+      - "nextStep, back, goTo, validate, submit, reset"
+      - "step status and the steps collection"
+      - "branching through a step isVisible"
+      - "step entry lifecycle: onEnter, resolve, onReady"
+      - "persisted navigation"
+      - "FlowProxyNode, FlowStepProxy, FlowStepsProxy, FlowValues, StepStatus, FlowError"
+    tasks:
+      - "Build a multi-step wizard with next and back navigation"
+      - "Branch a wizard by hiding steps based on earlier answers"
+      - "Validate each step on Next and finalize the whole flow on the last step"
+      - "Show a progress indicator from step statuses"
+      - "Restore the wizard step after a reload"
+    reference_candidates:
+      - topic: "flow API"
+        reason: "full flow, steps-collection and step surfaces, exported types, lifecycle and reset rules"
+    failure_modes:
+      - mistake: "Calling flow.nextStep() from the Next button"
+        priority: HIGH
+        status: active
+        source: "cube/core/flow.ts (nextStep), cube/contract/sliceI/flowNavigation.test.ts"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Inline step defaults without as"
+        priority: HIGH
+        status: active
+        source: "store/flow/defineFlow.ts (defineStep<const K, const C>)"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "A field-level condition that reads another step"
+        priority: HIGH
+        status: active
+        source: "cube/core/cube.ts (scopeValues), cube/contract/sliceI/flowNavigation.test.ts (\"branching via isVisible\")"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "A hidden required field inside a visible step"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceI/flowSurface.test.tsx (\"a hidden step is exempt, a hidden leaf in a visible step is not\")"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Sending the untaken branch to the server"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceI/flowNavigation.test.ts (\"hidden steps keep their values and stay in flow.values\")"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Rendering flow.errors after a failed step.submit()"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/flow.ts (validate, submit)"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Typing a step prop as FlowStepProxy<StepValues>"
+        priority: MEDIUM
+        status: active
+        source: "store/store/types.ts (FlowStepProxy)"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Steps that throw when the module loads"
+        priority: MEDIUM
+        status: active
+        source: "cube/defineFlow.ts, cube/contract/sliceI/defineFlow.test.ts"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Reading the flow through store.proxy in a component"
+        priority: MEDIUM
+        status: active
+        source: "react/useForm.ts (ForbidRawStoreProxy), cube/contract/sliceI/flowSurface.test.tsx"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Looking for navigation methods on the step"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceI/flowNavigation.test.ts (\"a step's onSubmit receives the flow proxy\")"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "A Back button that ignores canGoBack"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceI/flowNavigation.test.ts (\"back on an empty stack\")"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Expecting the current step in the values"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceI/defineFlow.test.ts (\"status never enters values\")"
+        documented_in: skills/palistor-flows/SKILL.md
+      - mistake: "Persisting with a pick or omit that drops the flow"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceI/flowSurface.test.tsx (\"navigation alone autosaves under __flows[path], outside pick\")"
+        documented_in: skills/palistor-flows/SKILL.md
+  - name: palistor-field-mapping
+    slug: palistor-field-mapping
+    domain: ui-integration
+    description: "A developer is connecting palistor fields to UI components: a UI kit or in-house inputs whose prop names or value shapes differ from the field proxy."
+    type: sub-skill
+    covers:
+      - "the field spread and what it carries"
+      - "one adapter component per input kind"
+      - "fieldMapping option and defineFieldMapping"
+      - "single vocabulary: configs written in the mapped names"
+      - "ApplyFieldMapping, ExternalConfigNode, PalistorProxy<T, M>, ConfigProxy<C, M>"
+      - "limits of renaming: names only, no value conversion"
+      - "which names are mappable and where they apply (fields, groups, lists, flows)"
+    tasks:
+      - "Rename field props to a UI kit's vocabulary with fieldMapping"
+      - "Write one adapter component per input kind and spread field proxies into it"
+      - "Convert value shapes (checkbox, change events, helper text) inside an adapter"
+      - "Type adapter and subtree props in a mapped store"
+    failure_modes:
+      - mistake: "Config written in palistor's names while a map is active"
+        priority: HIGH
+        status: active
+        source: "cube/core/mapping.ts (normalize), cube/contract/sliceH/skillExample.test.ts"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "Spreading a field where palistor-only props are not consumed"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceH/fieldMapping.test.tsx (\"only external names are visible in a spread\")"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "Wiring props by hand for every field"
+        priority: HIGH
+        status: active
+        source: "store/constants.ts (SPREADABLE_FIELD_STATE_PROPS)"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "Two palistor props mapped to one name"
+        priority: HIGH
+        status: active
+        source: "cube/core/mapping.ts (FieldMap constructor)"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "A field named like a mapped name"
+        priority: HIGH
+        status: active
+        source: "cube/core/mapping.ts (normalize)"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "A map that loses its literal types"
+        priority: HIGH
+        status: active
+        source: "store/defineFieldMapping.ts"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "new Palistor<typeof config>(…) with a map"
+        priority: HIGH
+        status: active
+        source: "store/store/types.ts (ProxyStoreOptions), cube/contract/sliceH/fieldMapping.test.tsx (\"static typing\")"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "useForm(subtree) in a mapped store"
+        priority: MEDIUM
+        status: active
+        source: "react/useForm.ts (overloads)"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "Expecting the map to convert values"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/mapping.ts (project)"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "A new adapter for every field"
+        priority: MEDIUM
+        status: active
+        source: "cube/contract/sliceH/fieldMapping.test.tsx (\"componentProps keys are preserved\")"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+      - mistake: "Renaming a prop to a name lists own"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/mapping.ts (RESERVED_LIST_KEYS)"
+        documented_in: skills/palistor-field-mapping/SKILL.md
+
+tensions:
+  - name: "Hide a field vs keep the form submittable"
+    skills: [palistor, palistor-flows]
+    description: "isVisible hides a field but submit still validates it; only a hidden flow step is exempt."
+    implication: "An agent that only hides a required field ships a form that cannot be submitted; one that expects the flow exemption in a plain form gets the same result."
+  - name: "Inferred config vs typed callbacks"
+    skills: [palistor, palistor-lists, palistor-flows, palistor-field-mapping]
+    description: "The config must stay an inferred literal for precise proxy types, yet nothing then types callback parameters."
+    implication: "Un-annotated callbacks pass the Intent validator (strict: false) and fail the consumer build with TS7006; annotating the config as FormConfig breaks the proxy types instead."
+  - name: "One vocabulary under a field mapping"
+    skills: [palistor, palistor-field-mapping]
+    description: "Core examples use palistor names (isRequired); with a fieldMapping the same config must use the mapped names."
+    implication: "Copying a core example into a mapped store throws at module load."
+  - name: "Form field rules vs row field rules"
+    skills: [palistor, palistor-lists]
+    description: "A form field validates isRequired and hides errors until submit; a row field ignores isRequired and validates live."
+    implication: "Reusing form-field expectations in a list template yields rows that are never invalid."
+
+cross_references:
+  - from: palistor
+    to: palistor-lists
+    reason: "A form with a collection needs defineList; store.set / rekey / delete / invalidate and the two-argument useForm are documented there."
+  - from: palistor
+    to: palistor-flows
+    reason: "A multi-step screen is a flow; hidden steps are the only fields exempt from submit validation."
+  - from: palistor
+    to: palistor-field-mapping
+    reason: "The core skill shows one native adapter; UI-kit adapters and prop renaming live there."
+  - from: palistor-lists
+    to: palistor
+    reason: "Assumes config, store, useForm and group resolve options."
+  - from: palistor-flows
+    to: palistor
+    reason: "A flow is a group and every step is a group; resolve options and usePersist are documented in the core skill."
+  - from: palistor-field-mapping
+    to: palistor
+    reason: "Field rules and the strict-mode annotation rule are stated in the core skill."
+  - from: palistor-field-mapping
+    to: palistor-lists
+    reason: "A mapping also renames dirty / loading on lists and rows, never list methods or pagination members."
+
+gaps:
+  - skill: palistor
+    question: "Should a hidden field (or a hidden group) be exempt from submit validation?"
+    context: "Today it is validated in both implementations; the README quick start (a hidden `passport` group with a required field) therefore cannot submit for a card payment. The skills document the current behavior and the same-predicate workaround."
+    status: open
+  - skill: palistor
+    question: "Which release first ships the skills?"
+    context: "metadata.library_version is the current package.json version (0.1.0-cube.0). Run `intent validate --set-version <version>` before that release."
+    status: open
+  - skill: palistor
+    question: "setValues and formatters: the README and the JSDoc say formatters are skipped, the runtime runs them."
+    context: "The skills state the runtime behavior. One of the two has to change."
+    status: open
+  - skill: palistor
+    question: "Type files move when store/ is removed (Cube plan, Phase 4)."
+    context: "The `sources` of all four skills point at store/** for public types and must be remapped then."
+    status: open
+  - skill: palistor-lists
+    question: "The JSDoc of ConfigNode.resolve says a template field resolver starts after the list resolver; the contract test shows it starts lazily only."
+    context: "The skill follows the contract test. The JSDoc in store/store/types.ts was out of scope for this batch."
+    status: open
+  - skill: palistor-lists
+    question: "A paginated list logs \"pagination invariant: window ordinal 1 … has no cached page\" on every query-key change."
+    context: "Looks like a Cube runtime defect; not mentioned in the skill."
+    status: open
+  - skill: palistor-lists
+    question: "Pagination and filter options not probed at runtime: persistence round-trip, scrollAnchor, keepPreviousData, maxPages, gcTime, revalidateOnHydrate, list Suspense, nested-list pagination."
+    context: "Documented from the README, the public types and contract-test titles only."
+    status: open
+  - skill: palistor-flows
+    question: "defineStep narrows inline defaults to literals (value: \"\" is typed as \"\")."
+    context: "Documented as a mistake with the `as string` workaround; a type-level fix would remove it."
+    status: open
+  - skill: palistor-field-mapping
+    question: "useForm(subtree) does not type-check in a mapped store when the map renames a group prop."
+    context: "Documented with the useForm(store) workaround; runtime is fine."
+    status: open
+  - skill: palistor
+    question: "No fresh consumer-agent session and no description-activation run were executed for this batch."
+    context: "Task checks pass on reference solutions and reject the documented mistakes; behavior of an agent that only has the skills is unverified."
+    status: open

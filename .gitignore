@@ -40,3 +40,9 @@ next-env.d.ts
 
 DetailedPlan.md
 demo-test/*
+# agent-skill task checks: a consumer agent's output, dropped in for grading
+tests/skills/*/subject/
+
+# Intent working files (the recorded state, .intent/review-state.json, is tracked)
+.intent/review.json
+.intent/skill-examples/

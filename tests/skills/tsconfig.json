@@ -1,0 +1,16 @@
+// `npm run typecheck:skills` view of the skill task checks: fixtures, reference
+// solutions, graders and tests are typed against the public entry, the way a
+// consumer project sees "palistor". `mistake/` holds deliberately wrong
+// solutions (some do not type-check, by design); `subject/` is a consumer
+// agent's output dropped in for grading (git-ignored).
+{
+  "extends": "../../tsconfig.build.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "palistor": ["../../index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["**/mistake/**", "**/subject/**"]
+}

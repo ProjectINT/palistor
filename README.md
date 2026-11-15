@@ -66,6 +66,7 @@ Palistor's state also caches data so it isn't re-fetched from the data layer unn
 - [Demo](#demo)
 - [Features](#features)
 - [Installation](#installation)
+- [Agent Skills](#agent-skills)
 - [Quick start](#quick-start)
 - [Concepts](#concepts)
 - [API reference](#api-reference)
@@ -215,6 +216,48 @@ import {
   sessionStorageDriver,
 } from "palistor";
 ```
+
+---
+
+## Agent Skills
+
+Palistor ships its own instructions for AI coding agents: four [Agent Skills](https://agentskills.io) inside the npm package (`node_modules/palistor/skills/`), versioned together with the code they describe. An agent that loads them writes configs by the rules of the version you have installed instead of guessing.
+
+**Recommended — [TanStack Intent](https://tanstack.com/intent/latest):**
+
+```bash
+npm i palistor
+npm i -D @tanstack/intent
+npx @tanstack/intent@latest install   # interactive: choose palistor
+```
+
+`intent install` saves your choice in `package.json#intent.skills` and adds a block to `AGENTS.md` (or to the agent instruction file the project already has) that tells the agent to run `intent list` and `intent load palistor#<skill>` before it edits code. Claude Code reads `AGENTS.md` by itself from v2.1.277; on an older version put `@AGENTS.md` into `CLAUDE.md`, or use the plugin below.
+
+**Alternatives** — install the skills straight from this repository:
+
+```bash
+# Claude Code plugin (run inside Claude Code)
+/plugin marketplace add ProjectINT/palistor
+/plugin install palistor@palistor
+
+# skills CLI
+npx skills add ProjectINT/palistor --full-depth --skill palistor palistor-lists palistor-flows palistor-field-mapping
+
+# GitHub CLI
+gh skill add ProjectINT/palistor skills/palistor/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-lists/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-flows/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-field-mapping/SKILL.md
+```
+
+| Skill | Teaches |
+|---|---|
+| `palistor` | The core, start here: config → store → `useForm` → spread; fields and groups, validation, visibility, computed values, submit and reset, async `resolve`, persist, i18n |
+| `palistor-lists` | Collections: `defineList`, loading / error / reload, adding and removing rows, temporary ids, editing one entity, filtering, pagination |
+| `palistor-flows` | Step wizards: `defineFlow` / `defineStep`, navigation, branching, per-step and final validation |
+| `palistor-field-mapping` | UI kits: one adapter component per input kind, `fieldMapping` to rename field props |
+
+The skills are updated together with the package: `npm update palistor` also brings the instructions for the new version. The repository installs above follow the default branch, not your installed version.
 
 ---
 

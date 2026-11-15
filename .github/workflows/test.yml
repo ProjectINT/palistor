@@ -41,6 +41,16 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
+      # Agent skills (skills/, shipped in the package). `intent validate`:
+      # structure, links, examples compiled against the source — check-skills.yml
+      # runs it on pull requests only, this covers direct pushes. The task
+      # checks (tests/skills): reference solutions type-check under `strict`
+      # like a consumer project, each grader accepts the solution and rejects
+      # the mistake its skill warns about.
+      - run: npm exec --no -- intent validate
+      - run: npm run typecheck:skills
+      - run: npm run test:skills
+
   # The demo stand end to end (app-demo/e2e, Playwright): the library from
   # source in a real Next.js app — on the package entry (Cube core), then on
   # the store reference (PALISTOR_IMPL=store), same suite.

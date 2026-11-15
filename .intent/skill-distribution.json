@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "mode": "repo",
+  "repository": "ProjectINT/palistor",
+  "skills": [
+    {
+      "name": "palistor",
+      "path": "skills/palistor/SKILL.md"
+    },
+    {
+      "name": "palistor-lists",
+      "path": "skills/palistor-lists/SKILL.md"
+    },
+    {
+      "name": "palistor-flows",
+      "path": "skills/palistor-flows/SKILL.md"
+    },
+    {
+      "name": "palistor-field-mapping",
+      "path": "skills/palistor-field-mapping/SKILL.md"
+    }
+  ],
+  "install": {
+    "skills": [
+      "npx",
+      "skills",
+      "add",
+      "ProjectINT/palistor",
+      "--full-depth",
+      "--skill",
+      "palistor",
+      "palistor-lists",
+      "palistor-flows",
+      "palistor-field-mapping"
+    ],
+    "github": [
+      [
+        "gh",
+        "skill",
+        "add",
+        "ProjectINT/palistor",
+        "skills/palistor/SKILL.md"
+      ],
+      [
+        "gh",
+        "skill",
+        "add",
+        "ProjectINT/palistor",
+        "skills/palistor-lists/SKILL.md"
+      ],
+      [
+        "gh",
+        "skill",
+        "add",
+        "ProjectINT/palistor",
+        "skills/palistor-flows/SKILL.md"
+      ],
+      [
+        "gh",
+        "skill",
+        "add",
+        "ProjectINT/palistor",
+        "skills/palistor-field-mapping/SKILL.md"
+      ]
+    ]
+  }
+}
