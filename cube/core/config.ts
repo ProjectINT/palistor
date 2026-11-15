@@ -15,12 +15,16 @@ export interface ResolveConfig {
   onError?: (error: unknown, ctx: { notify: NotifyFn }) => void;
   /** Value paths that restart the resolver even before its first run. */
   deps?: string[];
+  /** List only: a page cache (pagination.ts). The resolver gets `ctx.page` and may return `{ items, total, nextCursor, hasMore }`. */
+  pagination?: unknown;
   options?: {
     /** false → start right on creation, true (default) → on first read. */
     lazy?: boolean;
     retry?: { attempts: number; delay?: number };
     /** Entity field: skip when the row already holds a value other than the template default (default true). */
     skipIfResolved?: boolean;
+    /** List: `items` / `length` / `map` / `values` throw the run's promise while it is pending (a paginated list: only with nothing on screen). */
+    suspense?: boolean;
   };
 }
 

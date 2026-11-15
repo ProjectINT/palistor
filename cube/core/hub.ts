@@ -1,9 +1,9 @@
 import type { CubeConfig, NotifyFn, ResolveConfig, Translate, Values } from "./config";
 import { Cube } from "./cube";
-import type { ListCube } from "./listCube";
+import { ListState, type ListCube } from "./listCube";
 import { idOf, Registry } from "./registry";
 import type { Persist } from "./persist";
-import { ResolveState } from "./resolve";
+import { ResolveState, type Resolving } from "./resolve";
 import { Signal } from "./track";
 
 const identity: Translate = (k) => k;
@@ -34,7 +34,7 @@ export class Hub {
   /** Config object → its cube (root tree only; list items share a template). */
   readonly byConfig = new WeakMap<object, Cube>();
   /** Every resolve whose dependencies are re-checked after a notification cycle. */
-  readonly resolving = new Set<ResolveState>();
+  readonly resolving = new Set<Resolving>();
   /** Checked after every notification cycle, before the resolves: the list filters' issue gates. */
   readonly gates = new Set<{ check(): void }>();
   /** Every list alive: root lists and the per-entity lists of built items. */
@@ -48,6 +48,8 @@ export class Hub {
   private readonly entityResolves = new Map<string, Map<object, ResolveState>>();
   /** useForm(entity, template): one view cube per (entity id, template), stable across mounts. */
   private readonly entityViews = new Map<string, Map<CubeConfig, Cube>>();
+  /** Per-entity list membership (and page cache) per (owner id, list config), shared by every view of the owner. */
+  private readonly entityLists = new Map<string, Map<object, ListState>>();
   /** State-version sequence, so versions of different cubes never repeat. */
   stateSeq = 0;
 
@@ -173,6 +175,11 @@ export class Hub {
         for (const v of views.values()) v.dispose();
         this.entityViews.delete(id);
       }
+      const lists = this.entityLists.get(id);
+      if (lists) {
+        for (const st of lists.values()) if (st.pager) { st.pager.dispose(); this.resolving.delete(st.pager); }
+        this.entityLists.delete(id);
+      }
       for (const v of this.registry.delete(id)) v.bumpDeep(); // a mounted useForm(entity) view re-renders on defaults
       this.touch();
     });
@@ -187,6 +194,7 @@ export class Hub {
       for (const list of this.lists) list.rekeyId(oldId, newId);
       moveKey(this.entityResolves, oldId, newId);
       moveKey(this.entityViews, oldId, newId);
+      moveKey(this.entityLists, oldId, newId);
       for (const v of views) v.bumpDeep();
       this.touch();
     });
@@ -201,6 +209,15 @@ export class Hub {
     else rs.attach(cube);
     this.resolving.add(rs);
     return rs;
+  }
+
+  /** The shared membership of an owner's per-entity list. */
+  entityListState(ownerId: string, config: object): ListState {
+    let byConfig = this.entityLists.get(ownerId);
+    if (!byConfig) this.entityLists.set(ownerId, (byConfig = new Map()));
+    let st = byConfig.get(config);
+    if (!st) byConfig.set(config, (st = new ListState()));
+    return st;
   }
 
   /** The cube showing `id` through `template` for useForm(entity, template); created once. */
@@ -219,11 +236,28 @@ export class Hub {
   /**
    * Full-form reset (store's resetPipeline on the root): every per-entity
    * list is back to its initial membership, every entity field resolve starts
-   * over on its next read. Root lists keep their membership, as in store.
+   * over on its next read. Root lists keep their membership, as in store. A
+   * paginated list (root or per-entity) undoes its edits page by page and
+   * keeps its navigation, cache and status.
    */
   resetEntities(): void {
-    for (const list of this.lists) if (list.item) list.resetMembership();
+    const done = new Set<ListState>();
+    for (const list of this.lists) {
+      if (done.has(list.state)) continue;
+      done.add(list.state);
+      if (list.pager) list.pager.resetEdits();
+      else if (list.item) list.resetMembership();
+    }
     for (const byConfig of this.entityResolves.values()) for (const rs of byConfig.values()) rs.reset();
+  }
+
+  /** persist.disable() / an account switch: every page cache belongs to the persisted session. */
+  clearPageCaches(): void {
+    this.batch(() => {
+      for (const list of this.lists) list.pager?.clearSession();
+      // Per-entity caches outlive their views (they live with the owner): those with no view left too.
+      for (const byConfig of this.entityLists.values()) for (const st of byConfig.values()) st.pager?.clearSession();
+    });
   }
 }
 

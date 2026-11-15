@@ -21,7 +21,27 @@ const MAX_AUTO_RUNS = 20;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-export class ResolveState {
+/** What a cube's `rs` is: a ResolveState, or the Pager of a paginated list (pagination.ts). */
+export interface Resolving {
+  readonly status: ResolveStatus;
+  readonly error: unknown;
+  readonly promise: Promise<unknown> | null;
+  readonly lazy: boolean;
+  /** First read of a lazy resolve. */
+  touch(): void;
+  start(): void;
+  /** list.reload() and the like: run again now. */
+  reload(): void;
+  /** An outside request for fresh data (the list filter's gate). */
+  invalidate(): void;
+  /** After every notification cycle. */
+  checkDeps(): void;
+  dispose(): void;
+  /** The cube left the tree; true when no view is left. */
+  detach(cube: Cube): boolean;
+}
+
+export class ResolveState implements Resolving {
   status: ResolveStatus = "idle";
   error: unknown = null;
   promise: Promise<unknown> | null = null;

@@ -13,6 +13,7 @@
 import { childKeys, type CubeConfig } from "./config";
 import type { Cube } from "./cube";
 import type { ListCube } from "./listCube";
+import { track } from "./track";
 
 export const CUBE = Symbol("palistor.cube");
 export type PublicNode = Record<string | symbol, any>;
@@ -77,40 +78,89 @@ function groupNode(c: Cube, proto: object): PublicNode {
 
 /**
  * store: LIST_SPREAD_KEYS, plus FILTER_SPREAD_KEYS (`filter`, `values` — the
- * visible items, `fullLength`) on a list with a filter block. `length` is own
- * but not enumerable, as on store's array-target proxy.
+ * visible items, `fullLength`) on a list with a filter block, plus the
+ * pagination surface on a list with `resolve.pagination` (PAGINATION_SPREAD_KEYS,
+ * then INFINITE_SPREAD_KEYS for an infinite list, CHAIN_SPREAD_KEYS for
+ * cursor / infinite). `length` is own but not enumerable, second in key
+ * order, as on store's array-target proxy.
  */
 function listNode(l: ListCube, proto: object): PublicNode {
-  const node = {
-    __proto__: proto,
-    get items() { l.touch(); return l.itemNodes(); },
-    get loading() { return l.loading; },
-    get dirty() { return l.dirty; },
-    get error() { return l.error; },
-    get resolveStatus() { return l.resolveStatus; },
-    get add() { return l.fn("add", () => (row: any) => l.add(row)); },
-    get remove() { return l.fn("remove", () => (id: string) => l.remove(id)); },
-    get getById() { return l.fn("getById", () => (id: string) => l.getById(id)?.node); },
-    get setItems() { return l.fn("setItems", () => (rows: any[]) => l.setItems(rows)); },
-    get map() {
-      l.touch();
-      return l.fn("map", () => <T>(fn: (item: PublicNode, i: number, id: string) => T) =>
-        l.visibleItems().map((item, i) => fn(item.node, i, item.entityId!)));
-    },
-    get getValues() { return l.fn("getValues", () => () => structuredClone(l.plain())); },
-    get reload() { return l.fn("reload", () => () => l.rs?.reload()); },
-  } as PublicNode;
-  Object.defineProperty(node, "length", { configurable: true, get() { l.touch(); return l.length; } });
+  const fn = <F extends (...args: any[]) => any>(name: string, make: () => F) => ({ get: () => l.fn(name, make) });
+  const desc: Array<[string, PropertyDescriptor]> = [
+    ["items", { get() { l.touch(); return l.itemNodes(); } }],
+    ["length", { enumerable: false, get() { l.touch(); return l.length; } }],
+    ["loading", { get: () => l.loading }],
+    ["dirty", { get: () => l.dirty }],
+    ["error", { get: () => l.error }],
+    ["resolveStatus", { get: () => l.resolveStatus }],
+    ["add", fn("add", () => (row: any) => l.add(row))],
+    ["remove", fn("remove", () => (id: string) => l.remove(id))],
+    ["getById", fn("getById", () => (id: string) => l.getById(id)?.node)],
+    ["setItems", fn("setItems", () => (rows: any[]) => l.setItems(rows))],
+    ["map", {
+      get() {
+        l.touch();
+        return l.fn("map", () => <T>(f: (item: PublicNode, i: number, id: string) => T) =>
+          l.visibleItems().map((item, i) => f(item.node, i, item.entityId!)));
+      },
+    }],
+    ["getValues", fn("getValues", () => () => structuredClone(l.plain()))],
+    ["reload", fn("reload", () => () => l.rs?.reload())],
+  ];
   const filter = l.filter;
   if (filter) {
-    Object.defineProperties(node, {
-      filter: { enumerable: true, configurable: true, get: () => filter.node },
-      values: { enumerable: true, configurable: true, get() { l.touch(); return l.itemNodes(); } },
-      fullLength: { enumerable: true, configurable: true, get() { l.touch(); return l.fullLength; } },
-    });
+    desc.push(
+      ["filter", { get: () => filter.node }],
+      ["values", { get() { l.touch(); return l.itemNodes(); } }],
+      ["fullLength", { get() { l.touch(); return l.fullLength; } }],
+    );
   }
+  const pg = l.pager;
+  if (pg) {
+    desc.push(
+      ["page", { get: () => pg.page }],
+      ["pageSize", { get: () => { track(l); return pg.pageSize; } }],
+      ["pageCount", { get: () => pg.pageCount }],
+      ["total", { get: () => pg.total }],
+      ["serverTotal", { get: () => pg.serverTotal }],
+      ["hasNextPage", { get: () => pg.hasNextPage }],
+      ["hasPrevPage", { get: () => pg.hasPrevPage }],
+      ["isFetching", { get: () => pg.isFetching }],
+      ["isInitialLoading", { get: () => pg.isInitialLoading }],
+      ["isPreviousData", { get: () => { track(l); return pg.isPreviousData; } }],
+      ["isStaleFromStorage", { get: () => { track(l); return pg.isStaleFromStorage; } }],
+      ["pendingAdds", { get: () => pg.pendingAdds }],
+      ["scrollAnchor", { get: () => { track(l); return pg.scrollAnchor; } }],
+      ["setPage", fn("setPage", () => (n: number) => pg.setPage(n))],
+      ["nextPage", fn("nextPage", () => () => pg.nextPage())],
+      ["prevPage", fn("prevPage", () => () => pg.prevPage())],
+      ["refetch", fn("refetch", () => () => pg.refetch())],
+      ["invalidate", fn("invalidate", () => (page?: number) => pg.invalidatePage(page))],
+      ["prefetch", fn("prefetch", () => (n: number) => pg.prefetch(n))],
+      ["setPageSize", fn("setPageSize", () => (n: number) => pg.setPageSize(n))],
+      ["discardPendingAdds", fn("discardPendingAdds", () => () => pg.discardPendingAdds())],
+      ["setScrollAnchor", fn("setScrollAnchor", () => (id: string | null) => pg.setScrollAnchor(id))],
+    );
+    if (pg.mode === "infinite") {
+      desc.push(
+        ["isFetchingNextPage", { get: () => pg.isFetchingNextPage }],
+        ["loadedPages", { get: () => pg.loadedPages }],
+        ["loadMore", fn("loadMore", () => () => pg.loadMore())],
+      );
+    }
+    if (pg.mode !== "paged") desc.push(["continuationLost", { get: () => pg.continuationLost }]);
+  }
+  const node = Object.create(proto) as PublicNode;
+  for (const [k, d] of desc) Object.defineProperty(node, k, { enumerable: true, configurable: true, ...d });
   return node;
 }
+
+/** Pagination getters: list state for useForm (only on a list node, so a group child named `page` or `total` is not mistaken for state). */
+export const LIST_STATE_KEYS: ReadonlySet<string> = new Set([
+  "page", "pageSize", "pageCount", "total", "serverTotal", "hasNextPage", "hasPrevPage", "isFetching",
+  "isInitialLoading", "isPreviousData", "isStaleFromStorage", "pendingAdds", "scrollAnchor",
+  "isFetchingNextPage", "loadedPages", "continuationLost",
+]);
 
 // ── Prototypes: the off-spread names, children by config ───────────────────
 
@@ -250,9 +300,10 @@ function groupProto(config: CubeConfig, template: boolean): object {
 
 export function makeNode(cube: Cube): PublicNode {
   if (cube.entityId !== undefined) return new (itemCtor(cube.config))(cube);
+  // A list's own keys are exactly store's (Reflect.ownKeys included): its cube link sits on a per-list prototype.
+  if (cube.kind === "list") return listNode(cube as ListCube, Object.create(LIST_PROTO, { [CUBE]: { value: cube } }));
   const node =
-    cube.kind === "list" ? listNode(cube as ListCube, LIST_PROTO)
-    : cube.kind === "leaf" ? (cube.item ? entityLeafNode(cube, LEAF_PROTO) : leafNode(cube, LEAF_PROTO))
+    cube.kind === "leaf" ? (cube.item ? entityLeafNode(cube, LEAF_PROTO) : leafNode(cube, LEAF_PROTO))
     : groupNode(cube, groupProto(cube.config, cube.item !== null));
   Object.defineProperty(node, CUBE, { value: cube });
 

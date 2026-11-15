@@ -15,9 +15,14 @@
 //   • clear     — removes the snapshot; the current values count as handled,
 //                 so nothing writes them back until they change (store wrote
 //                 them back on the next cycle, undoing clear-on-submit).
+//   • pages     — a paginated root list adds its window blob under
+//                 `__pagination[listPath]` (pagination.ts) when its array
+//                 survived pick / omit; a quota failure retries with every
+//                 window trimmed to its pointer, then without blobs. No write
+//                 while a root list fetches a page (a torn window). disable()
+//                 drops every page cache: it belongs to the persisted session.
 //
-// Reserved snapshot keys `__flows` and `__pagination` belong to steps 2.7 and
-// 2.5; until then hydration drops them.
+// The reserved key `__flows` belongs to step 2.7; until then hydration drops it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { isLeafConfig, isPlainObject, type CubeConfig, type Values } from "./config";
@@ -25,6 +30,7 @@ import type { Cube } from "./cube";
 import type { Hub } from "./hub";
 import { idOf } from "./registry";
 import type { ListCube } from "./listCube";
+import { untracked } from "./track";
 
 /** store/persist/types.ts: sync or async storage. */
 export interface PersistDriver {
@@ -57,7 +63,23 @@ interface Session {
   onError?: PersistOptions["onError"];
 }
 
-const RESERVED = ["__flows", "__pagination"];
+const FLOWS_KEY = "__flows";
+const PAGINATION_KEY = "__pagination";
+
+/** store/persist/persistManager.ts: only a quota failure is worth retrying smaller. */
+function isQuotaError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: number };
+  return e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22 || e.code === 1014;
+}
+
+type PageMode = "full" | "pointer" | "none";
+
+/** What hydration hands down the tree: the window blobs, and the page seeds to run once every value is back. */
+interface Restore {
+  blobs?: Values;
+  seeds: Array<() => void>;
+}
 
 export class Persist {
   private session: Session | null = null;
@@ -101,6 +123,7 @@ export class Persist {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.settled = null;
+    this.hub.clearPageCaches();
   }
 
   /** Write now (no debounce). A no-op while hydration is in flight: it would store the not-yet-hydrated values. */
@@ -121,9 +144,16 @@ export class Persist {
       if (generation !== this.generation || raw == null) return;
       const values = s.deserialize(raw);
       if (!isPlainObject(values)) return;
-      for (const k of RESERVED) delete values[k];
+      const blobs = values[PAGINATION_KEY];
+      delete values[PAGINATION_KEY];
+      delete values[FLOWS_KEY];
       const hub = this.hub;
-      hub.batch(() => restoreGroup(hub, hub.root, values));
+      hub.batch(() => {
+        const ctx: Restore = { blobs: isPlainObject(blobs) ? blobs : undefined, seeds: [] };
+        restoreGroup(hub, hub.root, values, ctx);
+        // Pages are keyed on values: seeded once every value is back (a seed may queue nested ones).
+        for (let i = 0; i < ctx.seeds.length; i++) ctx.seeds[i]();
+      });
     } catch (e) {
       this.report(s, e, "hydrate");
     } finally {
@@ -159,28 +189,46 @@ export class Persist {
     if (this.timer !== null) { clearTimeout(this.timer); this.timer = null; }
   }
 
-  /** The driver is called synchronously: usePersist's cleanup flushes right before it disables. */
+  /**
+   * The driver is called synchronously: usePersist's cleanup flushes right
+   * before it disables (a sync driver's quota throw retries synchronously too).
+   */
   private async save(): Promise<void> {
     const s = this.session;
-    if (!s) return;
-    let text: string;
-    try {
-      text = s.serialize(this.payload(s));
-    } catch (e) {
-      this.report(s, e, "save");
-      return;
+    if (!s || this.fetchingPage()) return;
+    const values = this.values(s);
+    let lastError: unknown;
+    for (const mode of ["full", "pointer", "none"] as const) {
+      let text: string;
+      try {
+        text = s.serialize(this.withPages(values, mode));
+      } catch (e) {
+        this.report(s, e, "save");
+        return;
+      }
+      if (text === this.settled) return;
+      this.settled = text;
+      try {
+        await s.driver.setItem(s.key, text);
+        return;
+      } catch (e) {
+        if (this.settled === text) this.settled = null;
+        lastError = e;
+        if (!isQuotaError(e)) break;
+      }
     }
-    if (text === this.settled) return;
-    this.settled = text;
-    try {
-      await s.driver.setItem(s.key, text);
-    } catch (e) {
-      if (this.settled === text) this.settled = null;
-      this.report(s, e, "save");
-    }
+    this.report(s, lastError, "save");
   }
 
-  private payload(s: Session): Values {
+  /** A root list's page fetch in flight: its window is a torn intermediate state. */
+  private fetchingPage(): boolean {
+    for (const list of this.hub.lists) if (list.pager && !list.item && list.pager.isFetching) return true;
+    return false;
+  }
+
+  private payload(s: Session): Values { return this.withPages(this.values(s), "full"); }
+
+  private values(s: Session): Values {
     const values = this.hub.root.getValues();
     if (s.pick?.length) {
       const out: Values = {};
@@ -191,6 +239,19 @@ export class Persist {
     return values;
   }
 
+  /** The window blobs of paginated root lists whose array is in the payload. */
+  private withPages(values: Values, mode: PageMode): Values {
+    if (mode === "none") return values;
+    let blobs: Values | null = null;
+    for (const list of this.hub.lists) {
+      const pager = list.pager;
+      if (!pager || list.item || !Array.isArray(valueAt(values, list.path))) continue;
+      const blob = pager.serialize(mode === "pointer");
+      if (blob) (blobs ??= {})[list.path] = blob;
+    }
+    return blobs ? { ...values, [PAGINATION_KEY]: blobs } : values;
+  }
+
   private report(s: Session, error: unknown, phase: "save" | "hydrate") {
     try { s.onError?.(error, phase); } catch { /* onError must not break the store */ }
   }
@@ -198,19 +259,30 @@ export class Persist {
 
 // ── hydration ───────────────────────────────────────────────────────────────
 
+function valueAt(values: Values, path: string): unknown {
+  let cur: unknown = values;
+  for (const k of path.split(".")) cur = isPlainObject(cur) ? cur[k] : undefined;
+  return cur;
+}
+
 /** A form group: leaves take the stored value raw, groups recurse, lists are restored. */
-function restoreGroup(hub: Hub, group: Cube, values: Values) {
+function restoreGroup(hub: Hub, group: Cube, values: Values, ctx: Restore) {
   for (const [k, c] of group.children) {
     if (!(k in values)) continue;
     const v = values[k];
     if (c.kind === "leaf") { if (typeof c.config.value !== "function") c.assign(v); }
-    else if (c.kind === "group") { if (isPlainObject(v)) restoreGroup(hub, c, v); }
-    else if (Array.isArray(v)) restoreList(hub, c as ListCube, v);
+    else if (c.kind === "group") { if (isPlainObject(v)) restoreGroup(hub, c, v, ctx); }
+    else if (Array.isArray(v)) restoreList(hub, c as ListCube, v, ctx);
   }
 }
 
-/** Rows go to the registry (merged), the list gets the ids as membership and baseline, then each item's own lists. */
-function restoreList(hub: Hub, list: ListCube, rows: unknown[]) {
+/**
+ * Rows go to the registry (merged), the list gets the ids as membership and
+ * baseline, then each item's own lists. A paginated list is seeded from its
+ * blob instead (a per-entity one never has a blob: store bootstraps it), after
+ * every value is restored, since its pages are keyed on values.
+ */
+function restoreList(hub: Hub, list: ListCube, rows: unknown[], ctx: Restore) {
   const items: Array<[string, Values]> = [];
   for (const row of rows) {
     if (!isPlainObject(row)) continue;
@@ -218,16 +290,29 @@ function restoreList(hub: Hub, list: ListCube, rows: unknown[]) {
     if (hub.registry.set({ ...rowData(row, list.template), id })) hub.touch();
     items.push([id, row]);
   }
-  const views = list.restore(items.map(([id]) => id));
-  items.forEach(([, row], i) => restoreItemLists(hub, views[i], row));
+  const ids = items.map(([id]) => id);
+  const pager = list.pager;
+  if (pager) {
+    const blob = list.item ? undefined : ctx.blobs?.[list.path];
+    ctx.seeds.push(() => {
+      pager.seed(ids, blob);
+      for (const [id, row] of items) {
+        const view = untracked(() => list.getById(id));
+        if (view) restoreItemLists(hub, view, row, ctx);
+      }
+    });
+    return;
+  }
+  const views = list.restore(ids);
+  items.forEach(([, row], i) => restoreItemLists(hub, views[i], row, ctx));
 }
 
 /** Inside an item: only lists (its fields already came with the row), in groups too. */
-function restoreItemLists(hub: Hub, cube: Cube, values: Values) {
+function restoreItemLists(hub: Hub, cube: Cube, values: Values, ctx: Restore) {
   for (const [k, c] of cube.children) {
     const v = values[k];
-    if (c.kind === "list") { if (Array.isArray(v)) restoreList(hub, c as ListCube, v); }
-    else if (c.kind === "group" && isPlainObject(v)) restoreItemLists(hub, c, v);
+    if (c.kind === "list") { if (Array.isArray(v)) restoreList(hub, c as ListCube, v, ctx); }
+    else if (c.kind === "group" && isPlainObject(v)) restoreItemLists(hub, c, v, ctx);
   }
 }
 

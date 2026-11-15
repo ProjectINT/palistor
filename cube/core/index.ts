@@ -5,6 +5,7 @@ export { Memo } from "./memo";
 export { Persist, localStorageDriver, sessionStorageDriver, type PersistDriver, type PersistOptions } from "./persist";
 export { Registry, generateTmpId } from "./registry";
 export { ResolveState, type ResolveStatus } from "./resolve";
-export { CUBE, cubeOf, STATE_KEYS, type PublicNode } from "./node";
+export { CUBE, cubeOf, STATE_KEYS, LIST_STATE_KEYS, type PublicNode } from "./node";
+export { Pager, type PageRequest, type PersistBlob } from "./pagination";
 export { Observer, Signal, observe, track, untracked, type Source } from "./track";
 export type { CubeConfig, ListConfig, NotifyFn, ResolveConfig, SubmitResult, Translate, Values } from "./config";

@@ -3,6 +3,7 @@ import { Cube, registerList } from "./cube";
 import { FilterCube, warnNestedFilters } from "./filter";
 import type { Hub } from "./hub";
 import type { PublicNode } from "./node";
+import { Pager } from "./pagination";
 import { track, untracked } from "./track";
 
 /**
@@ -12,18 +13,23 @@ import { track, untracked } from "./track";
  *
  * A list declared inside an entity template is a per-entity list: each item
  * gets its own instance, whose rows are owned by that item (store: ownerEntity,
- * one owner per child, cascade on delete).
+ * one owner per child, cascade on delete). Its membership lives in the hub per
+ * (owner id, list config) — every view of the owner (another list with the
+ * same template, useForm(entity, template)) shows the same one, as store's
+ * one ListState per owner and list node did.
  *
  * A root list may carry a filter (filter.ts). Then `items`, `length`, `map`
  * and iteration show the visible rows; `getById`, `getValues`, `dirty` and the
  * list's value in the form stay on the full membership.
+ *
+ * A list with `resolve.pagination` (root or per-entity) keeps a page cache
+ * (pagination.ts): its membership is the projection of the current window,
+ * local edits go to the page entries, `dirty` is the per-page rollup.
  */
 export class ListCube extends Cube {
   readonly template: CubeConfig;
-  private ids: string[] = [];
-  private initialIds: string[] = [];
-  /** Membership was ever set. store: an untouched per-entity list had no state and added no key to values. */
-  touched = false;
+  /** Membership, baseline and page cache: this list's own, or (per-entity) shared by every view of the owner. */
+  readonly state: ListState;
   private views = new Map<string, Cube>();
   /** The full membership and the visible one: view cubes, their public nodes, their values. */
   private full?: Snapshot;
@@ -37,6 +43,15 @@ export class ListCube extends Cube {
     super(config as unknown as CubeConfig, parent, key, hub, undefined, "list");
     this.template = config[0];
     rejectComputed(this.template, `${this.path}[]`);
+    this.state = this.item ? hub.entityListState(this.item.entityId!, config) : new ListState();
+    this.state.cubes.add(this);
+    const resolve = config[1]?.resolve;
+    if (resolve?.pagination && typeof resolve.resolver === "function") {
+      const pager = (this.state.pager ??= new Pager(this, resolve, hub));
+      pager.attach(this);
+      this.rs = pager;
+      hub.resolving.add(pager);
+    }
     if (!this.item) {
       warnNestedFilters(this.template, `${this.path}[]`);
       const block = config[1]?.filter;
@@ -47,6 +62,26 @@ export class ListCube extends Cube {
 
   /** The entity whose row owns this list's items (per-entity list), null for a root list. */
   get owner(): Cube | null { return this.item; }
+
+  /** `resolve.pagination`: the page cache; also the list's `rs`. */
+  get pager(): Pager | undefined { return this.state.pager; }
+
+  private get ids(): string[] { return this.state.ids; }
+  private set ids(v: string[]) { this.state.ids = v; }
+  private get initialIds(): string[] { return this.state.initialIds; }
+  private set initialIds(v: string[]) { this.state.initialIds = v; }
+  /** Membership was ever set. store: an untouched per-entity list had no state and added no key to values. */
+  get touched(): boolean { return this.state.touched; }
+  set touched(v: boolean) { this.state.touched = v; }
+
+  /** A shared membership changed: every view of it moves. */
+  override bump() {
+    const cubes = this.state.cubes;
+    if (cubes.size <= 1) return super.bump();
+    for (const c of cubes) c.bumpOwn();
+  }
+
+  private bumpOwn() { super.bump(); }
 
   /** View cubes of the full membership. */
   get items(): Cube[] { track(this); return this.snapshot().items; }
@@ -84,7 +119,15 @@ export class ListCube extends Cube {
     });
   }
 
-  private snapshot(): Snapshot { return (this.full = this.snap(this.ids, this.full)); }
+  private snapshot(): Snapshot {
+    const ids = this.ids;
+    if (this.full?.ids !== ids && this.state.cubes.size > 1) {
+      // Another view changed the shared membership: views of ids that left it go.
+      const keep = new Set(ids);
+      for (const id of [...this.views.keys()]) if (!keep.has(id)) this.drop(id);
+    }
+    return (this.full = this.snap(ids, this.full));
+  }
 
   private shownSnapshot(): Snapshot {
     const ids = this.visibleIds();
@@ -107,10 +150,33 @@ export class ListCube extends Cube {
     return (c.values ??= c.items.map((i) => i.values));
   }
 
-  /** store: dirty by composition, the ids differ from the loaded ones. */
+  /** store: dirty by composition, the ids differ from the loaded ones; paginated: any cached page differs from its baseline. */
   override get dirty(): boolean {
     track(this);
-    return !sameIds(this.ids, this.initialIds);
+    return this.pager ? this.pager.isDirty() : !sameIds(this.ids, this.initialIds);
+  }
+
+  /** Paginated: some page of the current query is in flight (several can be). */
+  override get loading(): boolean | undefined {
+    if (!this.pager) return super.loading;
+    track(this);
+    return this.pager.isFetching;
+  }
+
+  /**
+   * A read through the public node (items, length, map, values): wakes the
+   * lazy resolve; with `options.suspense` a pending run throws its promise.
+   * A paginated list suspends only while nothing is renderable (the first
+   * page, or a new query without keepPreviousData).
+   */
+  override touch() {
+    const rs = this.rs;
+    if (!rs) return;
+    rs.touch();
+    const resolve = (this.config as unknown as ListConfig)[1]?.resolve;
+    if (resolve?.options?.suspense !== true || rs.status !== "pending" || !rs.promise) return;
+    if (this.pager && (this.ids.length > 0 || this.pager.isPreviousData)) return;
+    throw rs.promise;
   }
 
   // ── mutations (store's list proxy) ──────────────────────────────────────────
@@ -135,12 +201,14 @@ export class ListCube extends Cube {
     this.hub.batch(() => {
       this.own(id);
       this.touched = true;
-      if (!this.ids.includes(id)) { this.ids = [...this.ids, id]; this.bump(); }
+      if (this.pager) this.pager.add(id);
+      else if (!this.ids.includes(id)) { this.ids = [...this.ids, id]; this.bump(); }
     });
     return fromValues ? this.view(id).node : undefined;
   }
 
   remove(id: string) {
+    if (this.pager) return this.pager.remove(id);
     if (!this.ids.includes(id)) return;
     this.hub.batch(() => {
       this.ids = this.ids.filter((x) => x !== id);
@@ -173,6 +241,7 @@ export class ListCube extends Cube {
         ids.push(id);
       }
       for (const id of ids) this.own(id);
+      if (this.pager) return this.pager.setItems(ids);
       for (const id of this.ids) if (!seen.has(id)) this.drop(id);
       this.ids = ids;
       this.touched = true;
@@ -187,9 +256,10 @@ export class ListCube extends Cube {
 
   // ── registry-driven maintenance (hub) ──────────────────────────────────────
 
-  /** store.delete: the id leaves the membership (the initial ids keep it, as in store). */
+  /** store.delete: the id leaves the membership (the initial ids keep it, as in store); paginated: every cached page. */
   removeId(id: string) {
-    if (!this.ids.includes(id)) return;
+    if (this.pager) { this.drop(id); return this.pager.deleteId(id); }
+    if (!this.ids.includes(id)) { this.drop(id); return; } // a shared membership: another view already took it out
     this.ids = this.ids.filter((x) => x !== id);
     this.drop(id);
     this.bump();
@@ -199,6 +269,7 @@ export class ListCube extends Cube {
   rekeyId(oldId: string, newId: string) {
     const view = this.views.get(oldId);
     if (view) { this.views.delete(oldId); this.views.set(newId, view); }
+    if (this.pager) return this.pager.rekey(oldId, newId);
     let hit = false;
     const swap = (arr: string[]) => (arr.includes(oldId) ? ((hit = true), arr.map((x) => (x === oldId ? newId : x))) : arr);
     this.ids = swap(this.ids);
@@ -234,8 +305,24 @@ export class ListCube extends Cube {
     return ids.map((id) => this.view(id));
   }
 
+  /**
+   * Pagination: the projected window becomes the membership and its
+   * baseline. Views of ids that left it are released. The pager notifies.
+   */
+  setWindow(ids: string[], initialIds: string[]) {
+    const keep = new Set(ids);
+    for (const id of this.ids) if (!keep.has(id)) this.drop(id);
+    this.ids = ids;
+    this.initialIds = initialIds;
+    this.touched = true;
+  }
+
+  /** The membership as it is, untracked and without waking a lazy resolve. */
+  windowIds(): string[] { return this.ids; }
+
   /** The list itself leaves the tree (its owner item was dropped): its views go with it. */
   release() {
+    this.state.cubes.delete(this);
     for (const [id, v] of this.views) { this.hub.registry.detach(id, v); v.dispose(); }
     this.views.clear();
     this.hub.lists.delete(this);
@@ -294,6 +381,20 @@ export class ListCube extends Cube {
 }
 
 interface Snapshot { ids: string[]; items: Cube[]; nodes?: PublicNode[]; values?: Values[] }
+
+/**
+ * The membership of a list (store's ListState): ids, the dirty baseline, the
+ * page cache. A root list owns one; a per-entity list's lives in the hub per
+ * (owner id, list config) until the owner is deleted.
+ */
+export class ListState {
+  ids: string[] = [];
+  initialIds: string[] = [];
+  touched = false;
+  pager?: Pager;
+  /** The list cubes showing it (one per view of the owner). */
+  readonly cubes = new Set<ListCube>();
+}
 
 /** store: a template is a rule set shared by every item; a computed value there would never run. */
 function rejectComputed(template: CubeConfig, path: string) {

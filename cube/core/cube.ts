@@ -22,7 +22,7 @@ import type { Hub } from "./hub";
 import { Memo } from "./memo";
 import { assertChildName, makeNode, type PublicNode } from "./node";
 import { getAt, patchAt } from "./registry";
-import { ResolveState, type ResolveStatus } from "./resolve";
+import { ResolveState, type ResolveStatus, type Resolving } from "./resolve";
 import { track, untracked, type Source } from "./track";
 
 type ListFactory = (config: ListConfig, parent: Cube, key: string, hub: Hub) => Cube;
@@ -46,7 +46,7 @@ export class Cube implements Source {
   readonly item: Cube | null;
   /** Set on an entity cube: id of its registry row. Moves on store.rekey. */
   entityId?: string;
-  rs?: ResolveState;
+  rs?: Resolving;
   private tpl?: TemplateState;
 
   private raw: unknown;
@@ -89,7 +89,8 @@ export class Cube implements Source {
     // useForm(entity, template)); its fields share theirs with every view of the row.
     if (entityId === undefined) {
       const resolve = this.kind === "list" ? (config as unknown as ListConfig)[1]?.resolve : config.resolve;
-      if (resolve && typeof resolve.resolver === "function") {
+      // A paginated list's `rs` is its Pager, made by ListCube.
+      if (resolve && typeof resolve.resolver === "function" && !(this.kind === "list" && resolve.pagination)) {
         if (this.item) this.rs = hub.entityResolve(this.item.entityId!, config, this, resolve);
         else { this.rs = new ResolveState(this, resolve); hub.resolving.add(this.rs); }
       }

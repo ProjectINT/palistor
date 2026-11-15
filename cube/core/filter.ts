@@ -210,6 +210,9 @@ export class FilterCube extends Cube {
 
   get isActive(): boolean { return this.activeCount > 0; }
 
+  /** The block has fields whose values reach the resolver (a paginated list keys its pages on them). */
+  get hasServer(): boolean { return this.server.length > 0; }
+
   /** A server field changed and its debounce has not run out yet. */
   get isPending(): boolean { track(this); return this.timer !== null; }
 
@@ -262,7 +265,8 @@ export class FilterCube extends Cube {
     return out;
   }
 
-  private serverKey(): string {
+  /** The server fields' values as one key (what a request is identified by). */
+  serverKey(): string {
     return untracked(() => {
       const out: Values = {};
       for (const f of this.server) out[f.key] = f.value;
@@ -313,6 +317,14 @@ export class FilterCube extends Cube {
     if (!rs || rs.status === "idle" || this.serverKey() === this.issuedKey) return;
     rs.invalidate();
   }
+
+  /**
+   * A paginated list re-keyed on the current server values without launching
+   * (a retained family served from cache): those values are what the list
+   * shows now, so the next issue compares against them. (store kept the key of
+   * the last launch: a→""→a left the list on the unfiltered family.)
+   */
+  markIssued() { this.issuedKey = this.serverKey(); }
 
   private stopTimer() {
     if (!this.timer) return;
