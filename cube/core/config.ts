@@ -10,20 +10,26 @@ export type NotifyFn = (...args: any[]) => void;
 export interface ResolveConfig {
   /** Leaf → value, group → patch of values, list → array of rows (a list resolver also gets a context). */
   resolver: (values: Values, store: any, ctx?: any) => unknown;
-  /** A synchronous placeholder applied when the run starts. Same result shape. */
+  /** A synchronous placeholder applied when the run starts. Same result shape. Not for lists, as in store. */
   optimisticResolver?: (values: Values) => unknown;
   onError?: (error: unknown, ctx: { notify: NotifyFn }) => void;
   /** Value paths that restart the resolver even before its first run. */
   deps?: string[];
+  /** Context keys that must be non-null before a run starts; until then the resolve waits (idle) for setContext. Not for entity cubes, as in store. */
+  contextDeps?: string[];
   /** List only: a page cache (pagination.ts). The resolver gets `ctx.page` and may return `{ items, total, nextCursor, hasMore }`. */
   pagination?: unknown;
   options?: {
     /** false → start right on creation, true (default) → on first read. */
     lazy?: boolean;
+    /** Not for lists, as in store (list.reload() is the retry there). */
     retry?: { attempts: number; delay?: number };
     /** Entity field: skip when the row already holds a value other than the template default (default true). */
     skipIfResolved?: boolean;
-    /** List: `items` / `length` / `map` / `values` throw the run's promise while it is pending (a paginated list: only with nothing on screen). */
+    /**
+     * A form group: reading its children, value, label or flags throws the run's promise while it is pending.
+     * A list: `items` / `length` / `map` / `values` do (a paginated list: only with nothing on screen).
+     */
     suspense?: boolean;
   };
 }

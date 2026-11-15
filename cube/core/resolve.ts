@@ -16,7 +16,11 @@ import { Observer, observe, untracked, type Source } from "./track";
 
 export type ResolveStatus = "idle" | "pending" | "resolved" | "error";
 
-/** Automatic restarts in a row before a resolve is treated as a dependency cycle. */
+/**
+ * Automatic restarts in a row before a resolve is treated as a dependency
+ * cycle. Automatic: nothing outside a resolve changed since the run started
+ * (hub.userEpoch), so another resolve's result moved what this one read.
+ */
 const MAX_AUTO_RUNS = 20;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -52,6 +56,10 @@ export class ResolveState implements Resolving {
   private scheduled = false;
   private run_: object | null = null;
   private autoRuns = 0;
+  /** hub.userEpoch when the last run started. */
+  private epoch = 0;
+  /** contextDeps not met: idle until setContext brings them (store queued the entry). */
+  private waiting = false;
   /** invalidate() during a run: start again once it lands. */
   private rerun = false;
 
@@ -84,7 +92,7 @@ export class ResolveState implements Resolving {
    * the template default is treated as resolved (store: skipIfResolved).
    */
   touch() {
-    if (this.status !== "idle" || this.scheduled || !this.lazy) return;
+    if (this.status !== "idle" || this.scheduled || this.waiting || !this.lazy) return;
     const c = this.primary;
     if (c.item && c.kind === "leaf" && (this.config.options?.skipIfResolved ?? true)) {
       const v = c.peek();
@@ -112,19 +120,58 @@ export class ResolveState implements Resolving {
     else this.start();
   }
 
-  /** After every notification cycle: restart when something the last run read has moved. */
+  /**
+   * After every notification cycle (and setContext): restart when something
+   * the last run read has moved; a waiting resolve starts once its contextDeps
+   * are met.
+   */
   checkDeps() {
+    if (this.waiting) {
+      if (this.contextReady()) this.start();
+      return;
+    }
     if (this.status !== "resolved" && this.status !== "error") return;
     for (const [s, v] of this.deps) {
       if (s.version === v) continue;
-      if (++this.autoRuns > MAX_AUTO_RUNS) {
-        console.warn("[palistor/cube] resolve restarted too many times in a row, stopping (dependency cycle?)", this.primary.path);
-        this.deps.clear();
-        return;
-      }
-      this.start();
+      if (this.mayRestart()) this.start();
       return;
     }
+  }
+
+  /**
+   * A restart after a change from outside a resolve follows the user and
+   * starts the count over (store counted every restart, so a field the
+   * resolver read went silent after 10 edits). One with no such change since
+   * the run started is counted; over the cap the resolve keeps its last result,
+   * re-armed on the current versions, until the next outside change.
+   */
+  private mayRestart(): boolean {
+    if (this.primary.hub.userEpoch !== this.epoch) this.autoRuns = 0;
+    if (++this.autoRuns <= MAX_AUTO_RUNS) return true;
+    if (this.autoRuns === MAX_AUTO_RUNS + 1) {
+      console.warn("[palistor/cube] resolve restarted too many times in a row, stopping (dependency cycle?)", this.primary.path);
+    }
+    this.deps = new Map([...this.deps.keys()].map((s) => [s, s.version]));
+    return false;
+  }
+
+  /** contextDeps: every key non-null (store: isContextSatisfied). An entity cube never waits, as in store. */
+  private contextReady(): boolean {
+    const keys = this.config.contextDeps;
+    if (!keys || keys.length === 0 || this.primary.item) return true;
+    const ctx = this.primary.hub.context;
+    return keys.every((k) => ctx[k] != null);
+  }
+
+  /** contextDeps not met: the resolve goes idle (its last result stays) and waits. */
+  private park() {
+    this.waiting = true;
+    if (this.status === "idle") return;
+    this.run_ = {};
+    this.status = "idle";
+    this.error = null;
+    this.promise = null;
+    this.primary.hub.resolveBatch(() => this.bump());
   }
 
   /** The cube left the tree (entity deleted): drop in-flight results. */
@@ -138,6 +185,7 @@ export class ResolveState implements Resolving {
     this.promise = null;
     this.deps.clear();
     this.autoRuns = 0;
+    this.waiting = false;
     this.rerun = false;
     this.bump();
   }
@@ -145,16 +193,21 @@ export class ResolveState implements Resolving {
   start() {
     const { primary: cube, config } = this;
     const hub = cube.hub;
+    if (!this.contextReady()) { this.park(); return; }
+    this.waiting = false;
+    this.epoch = hub.userEpoch;
     const run = {};
     this.run_ = run;
     this.rerun = false;
     this.status = "pending";
     this.error = null;
-    hub.batch(() => {
+    // A list resolve has no optimistic placeholder and no retry, as in store.
+    const optimistic = cube.kind === "list" ? undefined : config.optimisticResolver;
+    hub.resolveBatch(() => {
       this.bump();
-      if (!config.optimisticResolver) return;
+      if (!optimistic) return;
       try {
-        const r = untracked(() => config.optimisticResolver!((cube.item ?? hub.root).values));
+        const r = untracked(() => optimistic((cube.item ?? hub.root).values));
         if (r !== undefined) cube.applyResolved(r, false);
       } catch (e) {
         console.warn("Error in optimistic resolver:", e);
@@ -166,7 +219,7 @@ export class ResolveState implements Resolving {
   private async execute(run: object): Promise<unknown> {
     const { primary: cube, config } = this;
     const hub = cube.hub;
-    const attempts = config.options?.retry?.attempts ?? 0;
+    const attempts = cube.kind === "list" ? 0 : config.options?.retry?.attempts ?? 0;
     const delay = config.options?.retry?.delay ?? 1000;
     /** An entity cube's resolver sees its row (store: the entity's flat values), the rest see the form. */
     const base = cube.item ?? hub.root;
@@ -192,15 +245,16 @@ export class ResolveState implements Resolving {
         );
         if (this.run_ !== run) return result;
         // Changed while in flight: decided before our own result moves anything.
-        const stale = obs.changed() || this.rerun;
-        hub.batch(() => {
+        const drift = obs.changed();
+        const rerun = this.rerun;
+        hub.resolveBatch(() => {
           if (result !== undefined) cube.applyResolved(result, true);
           for (const [target, v] of writes) target.assign(v);
           this.status = "resolved";
           this.bump();
           this.settle(obs); // before the batch notifies: checkDeps must not see our own result as a change
         });
-        if (stale) this.start();
+        if (rerun || (drift && this.mayRestart())) this.start();
         return result;
       } catch (e) {
         lastError = e;
@@ -208,11 +262,12 @@ export class ResolveState implements Resolving {
     }
 
     if (this.run_ !== run) return;
-    const stale = obs.changed() || this.rerun;
+    const drift = obs.changed();
+    const rerun = this.rerun;
     this.error = lastError;
     try { config.onError?.(lastError, { notify: hub.notify }); } catch { /* onError must not break the store */ }
-    hub.batch(() => { this.status = "error"; this.bump(); this.settle(obs); });
-    if (stale) this.start();
+    hub.resolveBatch(() => { this.status = "error"; this.bump(); this.settle(obs); });
+    if (rerun || (drift && this.mayRestart())) this.start();
     return undefined;
   }
 

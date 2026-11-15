@@ -661,8 +661,19 @@ export class Cube implements Source {
 
   // ── resolve ──────────────────────────────────────────────────────────────
 
-  /** A read through the public node: wakes a lazy resolve. */
-  touch() { this.rs?.touch(); }
+  /**
+   * A read through the public node: wakes a lazy resolve. A form group with
+   * `options.suspense` throws the run in flight for React Suspense (store's
+   * handleLazyResolve; an entity cube never suspends, as in store).
+   */
+  touch() {
+    const rs = this.rs;
+    if (!rs) return;
+    rs.touch();
+    if (rs.status === "pending" && rs.promise && this.kind === "group" && !this.item && this.config.resolve?.options?.suspense === true) {
+      throw rs.promise;
+    }
+  }
 
   /** Leaf → value, group → patch, list → items; `initial` → the result is the new baseline. */
   applyResolved(result: unknown, initial: boolean) {

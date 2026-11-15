@@ -73,8 +73,21 @@ export class Hub {
   context: Record<string, unknown> = {};
   private readonly contextKeys = new Map<string, Signal>();
 
+  /**
+   * Moves on every change made from outside a resolve: a write, a reset, a list
+   * action, setContext, a page fetch landing… A resolve restarted after one of
+   * these follows the user; one restarted with no such change in between was
+   * moved by another resolve's run (resolve.ts counts those as a possible cycle).
+   */
+  userEpoch = 0;
+  /** Inside a resolve's own change (a run starting, landing or failing). */
+  private own = 0;
+
   /** Marks the current batch as changing something. Called by every bump. */
-  touch() { this.dirty = true; }
+  touch() {
+    this.dirty = true;
+    if (this.own === 0) this.userEpoch++;
+  }
 
   /** Runs fn as one change: subscribers are notified once, after it returns. */
   batch<T>(fn: () => T): T {
@@ -84,6 +97,14 @@ export class Hub {
     } finally {
       if (--this.depth === 0 && this.dirty) this.flush();
     }
+  }
+
+  /** batch() for a resolve's own change: it does not move userEpoch (the notification after it runs outside). */
+  resolveBatch<T>(fn: () => T): T {
+    return this.batch(() => {
+      this.own++;
+      try { return fn(); } finally { this.own--; }
+    });
   }
 
   /** Construction is not a change: drop whatever it bumped. */
@@ -144,6 +165,7 @@ export class Hub {
     const changed = Object.keys(ctx).filter((k) => this.context[k] !== ctx[k]);
     this.context = { ...this.context, ...ctx };
     if (changed.length === 0) return;
+    this.userEpoch++;
     for (const k of changed) this.contextKey(k).bump();
     for (const rs of this.resolving) rs.checkDeps();
   }
