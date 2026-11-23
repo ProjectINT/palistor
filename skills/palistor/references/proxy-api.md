@@ -32,7 +32,7 @@ type-check on an adapter's props but are `undefined` at runtime unless passed ex
 | `setValues(patch)` | `void` | Bulk write: one notification, no `setter` / `onChange` |
 | `submitting` | `boolean` | This node's submit is running |
 | `dirty` | `boolean` | Any field below differs from the baseline |
-| `loading` | `boolean` | The group's `resolve` is running. Reading it does not start a lazy resolve |
+| `loading` | `boolean` | The group's `resolve` is running or about to run. Reading it starts a lazy resolve, as reading a child does (async resolve reference) |
 | `revalidate` | `boolean` | Errors of this subtree are visible (set by a submit, cleared by `reset`) |
 | `isVisible` | `boolean` | The group's own flag; `true` unless configured |
 | `isRequired`, `isReadOnly`, `isDisabled` | `boolean \| undefined` | The group's own flags; falsy unless configured |
@@ -74,6 +74,10 @@ const stop = store.subscribeGlobal(() => console.log(store.getValues())); // any
 stop();
 ```
 
+The constructor also takes `context`, `translator` and `notifier` (integrations reference),
+`fieldMapping` (the `palistor-field-mapping` skill) and, for a screen rendered on the server,
+`initialData` and `server` (the `palistor-ssr` skill).
+
 | Member | Use |
 | --- | --- |
 | `getValues()` | Snapshot for logging, serialization, non-reactive reads |
@@ -83,6 +87,7 @@ stop();
 | `context`, `setContext(patch)` | Data for callbacks that is not part of the form (integrations reference) |
 | `setTranslator(t)`, `setNotifier(fn)` | What `useTranslator` / `useNotifier` call (integrations reference) |
 | `persist` | Draft persistence manager (integrations reference) |
+| `start()` | Runs what a store starts by itself: eager resolves, a flow's first step, resolves that were already read. The constructor calls it wherever `window` exists; in a Node script or a test without a DOM call it yourself (async resolve reference). Idempotent |
 | `set`, `delete`, `rekey`, `invalidate` | List entities: see the `palistor-lists` skill |
 
 `subscribe(node, listener)`, `getVersion()` and `getNodeVersion(node)` exist for `useForm` itself;

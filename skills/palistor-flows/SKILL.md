@@ -1,12 +1,22 @@
 ---
 name: palistor-flows
 description: >
-  Use when a React project that depends on palistor needs a form split into steps: a signup or onboarding wizard, a checkout, a survey or any screen with Next and Back; steps that appear only for some answers (branching); checking the current step before moving on and submitting everything at the end; a progress indicator with active and completed steps; restoring the user's step after a reload or restarting the wizard. Covers defineStep and defineFlow, flow navigation, step entry callbacks, flow validation, submit, reset, persisted navigation and typing flow and step props. Plain single-screen forms belong to the palistor skill, collections of items to palistor-lists.
+  Use when a React project that depends on palistor needs a form split into
+  steps: a signup or onboarding wizard, a checkout, a survey or any screen with
+  Next and Back; steps that appear only for some answers (branching); checking
+  the current step before moving on and submitting everything at the end; a
+  progress indicator with active and completed steps; restoring the user's step
+  after a reload or restarting the wizard. Covers defineStep and defineFlow,
+  flow navigation, step entry callbacks, flow validation, submit, reset,
+  persisted navigation and typing flow and step props. Plain single-screen forms
+  belong to the palistor skill, collections of items to palistor-lists.
 metadata:
-  purpose: 'Build step-by-step wizards with palistor flows: declare steps with defineStep, assemble them with defineFlow, drive navigation and branching, validate each step, finalize the whole flow and type flow and step props.'
+  purpose: 'Build step-by-step wizards with palistor flows: declare steps with
+    defineStep, assemble them with defineFlow, drive navigation and branching,
+    validate each step, finalize the whole flow and type flow and step props.'
   type: sub-skill
   library: palistor
-  library_version: '0.1.0-cube.0'
+  library_version: '0.1.0-cube.1'
 sources:
   - 'ProjectINT/palistor:cube/defineFlow.ts'
   - 'ProjectINT/palistor:cube/core/flow.ts'
@@ -267,10 +277,11 @@ export function Wizard() {
 
 A step config accepts `onEnter(flowValues, store)` and `onReady(flowValues, store)` next to everything a group accepts. Entering a step runs `onEnter`, then starts the step's `resolve` if it has one and has not run, then `onReady` once that run settles (also after a failure; without a `resolve`, right after `onEnter`).
 
-- The first step is entered when the store is created — at module load, on the server too. Keep its `onEnter` free of browser-only or per-user effects.
+- The first step is entered when the store is created (for a module-level store, at module load) — in the browser. Where `window` is not defined (a server render, a Node script or test) no step is entered: `onEnter` and `onReady` are not called and no step `resolve` runs until `store.start()`, and the active step's `resolve` reads `loading: true` meanwhile. A test that expects `onEnter` in a `node` environment calls `store.start()` or creates the store with `new Palistor({ config, server: false })`.
+- For a wizard that is rendered on the server (Next.js App Router), or a step whose data a Server Component already fetched, read `palistor-ssr`.
 - Re-entering a step runs `onEnter` again. The resolve result is cached, so the resolver and `onReady` do not run again until the flow is reset.
 - Both callbacks are fire-and-forget: a throw or a rejection is swallowed and never blocks navigation.
-- `flow.loading` is true while any step's resolve is pending. For the `resolve` options themselves use the `palistor` skill.
+- `flow.loading` is true while any step's resolve is pending or about to start. Reading a step's `loading`, `status` or `isInvalid` never starts its resolve: the flow starts it on entry. For the `resolve` options themselves use the `palistor` skill.
 
 ### Keep the step across reloads
 

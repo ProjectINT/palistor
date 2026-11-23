@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useLocale } from "next-intl";
 
@@ -8,6 +9,9 @@ import { TabNavigation, type TabType } from "./TabNavigation";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 
 type Locale = "ru" | "en";
+
+// The /ssr route is built on the Cube implementation only (next.config.ts).
+const HAS_SSR_DEMO = process.env.NEXT_PUBLIC_PALISTOR_SSR_DEMO === "1";
 
 interface DemoHeaderProps {
   activeTab: TabType;
@@ -38,6 +42,14 @@ export function DemoHeader({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {HAS_SSR_DEMO && (
+            <Link
+              href="/ssr"
+              className="mr-2 text-sm text-zinc-500 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+            >
+              {t("demo.ssrLink")}
+            </Link>
+          )}
           <ThemeSwitcher />
           <LocaleSwitcher locale={locale} onLocaleChange={handleLocaleChange} />
         </div>

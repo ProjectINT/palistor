@@ -28,7 +28,7 @@ export const users = defineList<User>({
 | `resolve.onError(error, { notify })` | Called when the resolver throws. Optional on a list. |
 | `resolve.deps` | Extra dependency paths. Values the resolver reads are tracked automatically. |
 | `resolve.options.lazy` | `true` (default): start on the first read. `false`: start when the store is created. |
-| `resolve.options.suspense` | `true`: `items`, `length`, `map` and `values` throw the pending promise for React `<Suspense>`. |
+| `resolve.options.suspense` | `true`: `items`, `length`, `map` and `values` throw the pending promise for React `<Suspense>`. In a server render there is no run to wait for: the boundary's fallback is sent and the list renders in the browser (the `palistor-ssr` skill). |
 | `resolve.pagination` | Page cache, see [pagination](pagination.md). |
 | `filter` | Filter block, see [filtering](filtering.md). Root lists only. |
 
@@ -49,9 +49,9 @@ Read through `useForm(store).users`, or through `store.proxy.users` outside Reac
 | `length` | `number` | Number of rows shown. Starts a lazy resolve. |
 | `map(fn)` | `(row, index, id) => R` | Render entry point. Starts a lazy resolve. |
 | `[Symbol.iterator]` | | `for (const row of list)`. Rows from iteration work with the two-argument `useForm` only. |
-| `loading` | `boolean` | The resolver is running. |
+| `loading` | `boolean` | The resolver is running or about to run: `true` from the first read of the list until the run lands. Reading it starts a lazy resolve. |
 | `error` | `unknown \| null` | What the last run threw; `null` after a success, before any run and while a new run is pending. |
-| `resolveStatus` | `"idle" \| "pending" \| "resolved" \| "error"` | Raw resolve status. Stays `"idle"` on a list without a resolver. |
+| `resolveStatus` | `"idle" \| "pending" \| "resolved" \| "error"` | Raw resolve status; reading it never starts the resolve. `"idle"` until the run starts (also while `loading` is already `true`), and always on a list without a resolver. |
 | `reload()` | `void` | Run the resolver again. Stable identity; no-op without a resolver or while a run is pending. |
 | `dirty` | `boolean` | The membership differs from the last loaded one. |
 | `add(values)` | returns the row | Upsert the row and append it. A row without `id` gets a `_tmp_…` id. |
@@ -83,7 +83,7 @@ A row from `map` or `items`, passed through `useForm(row)`, or the result of `us
 The same members as a form field (`value`, `onValueChange`, `label`, `placeholder`, `description`, `isRequired`, `isReadOnly`, `isDisabled`, `isVisible`, `isInvalid`, `errorMessage`, `dirty`), with these differences:
 
 - `isInvalid` and `errorMessage` come from the field's `validate` rule and are live: no failed submit is needed to show them. `isInvalid` is `false`, not `undefined`, when there is no error. `isRequired` does not produce an error.
-- `loading` is `true` while the field's own resolver runs (see [entity editing](entity-editing.md)). It exists at runtime but is missing from the `FieldProxyNode` type: widen it once, `const field = row.isOnline as typeof row.isOnline & { loading: boolean }`.
+- `loading` is `true` from the first read of the field until its own resolver lands (see [entity editing](entity-editing.md)). It exists at runtime but is missing from the `FieldProxyNode` type: widen it once, `const field = row.isOnline as typeof row.isOnline & { loading: boolean }`.
 - A spread (`{...row.name}`) also carries `dirty`, `loading`, `submitting` and `submit`. An adapter that forwards the rest of its props to a DOM element must take these out.
 - The baseline of `dirty` is the value the row was loaded or created with; a resolver result moves it.
 

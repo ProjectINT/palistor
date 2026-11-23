@@ -17,6 +17,7 @@ import { describe, it, expect, vi } from "vitest";
 import { renderHook, act, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { Palistor, useForm } from "@impl";
+import { LOADING_ON_FIRST_READ } from "../impl";
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function flushPromises() {
@@ -71,8 +72,8 @@ describe("5.1: field.loading lifecycle", () => {
     });
 
     // Before microtask fires: reading bio.loading schedules the resolve via queueMicrotask,
-    // but the resolver hasn't started yet → loading is false.
-    expect((result.current as any).bio.loading).toBe(false);
+    // but the resolver hasn't started yet → loading is false on store. Cube: the due run already reads as loading.
+    expect((result.current as any).bio.loading).toBe(LOADING_ON_FIRST_READ);
     expect(bioResolver).not.toHaveBeenCalled();
 
     // Flush microtask → triggerEntityFieldResolve fires → status = "pending" → loading = true

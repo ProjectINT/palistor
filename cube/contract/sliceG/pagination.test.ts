@@ -19,6 +19,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { defineList, Palistor, type PageRequest } from "@impl";
 import { familyOf, LIST_SPREAD_KEYS, PAGINATION_SPREAD_KEYS, paging, trackKey } from "./paging";
+import { LOADING_ON_FIRST_READ } from "../impl";
 
 function flushPromises() {
   return new Promise<void>((r) => setTimeout(r, 0));
@@ -171,7 +172,7 @@ describe("A. Cache hits & navigation", () => {
     const s = makeStore({ gate: true });
     const l = s.list();
     expect(l.isFetching).toBe(false);
-    expect(l.loading).toBe(false);
+    expect(l.loading).toBe(LOADING_ON_FIRST_READ); // Cube: the read makes the first fetch due
     void l.items;
     await flushPromises();
     expect(l.isFetching).toBe(true);

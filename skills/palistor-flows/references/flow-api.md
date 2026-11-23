@@ -15,7 +15,7 @@ A flow node is a group node plus navigation. The group members (`isVisible`, `di
 | `errors` | `ReadonlyArray<FlowError>` | result of the last `validate()` or `submit()`; paths relative to the flow (`account.email`) |
 | `steps` | steps collection | see below |
 | `values` | `FlowValues<S>` | live values of all steps keyed by step key, hidden steps included |
-| `loading` | `boolean` | any step's resolve is pending |
+| `loading` | `boolean` | any step's resolve is pending, or the active step's is about to start (before `store.start()` where `window` is not defined) |
 | `isInvalid` | `boolean` | live: some visited, visible step has an error (no submit needed) |
 | `nextStep()` | `void` | go to the next visible step; with none ahead start `submit()` without awaiting it |
 | `back()` | `void` | pop the visit stack; no-op when it is empty |
@@ -54,10 +54,14 @@ A step is a group node (fields as children, `values`, `dirty`, `reset()`, `setVa
 Entering a step happens at store creation (first step), on `nextStep()` / `back()` / `goTo()`, after a reset that covers the flow, and after hydration onto a different step.
 
 1. `onEnter(flowValues, store)`.
-2. The step's `resolve`, if it has one and its state is idle. Reading `status` or `isInvalid` of a step never starts its resolve.
+2. The step's `resolve`, if it has one and its state is idle. Reading `status`, `isInvalid` or `loading` of a step never starts its resolve.
 3. `onReady(flowValues, store)` when that resolve settles, with success or failure. Without a `resolve` it runs right after `onEnter`. With a resolve that already ran (cached) it does not run again.
 
 Both callbacks are fire-and-forget; their errors are swallowed.
+
+Where `window` is not defined (a server render, a Node script or test) nothing is entered: no `onEnter`, no step `resolve`, no `onReady` until `store.start()`, which enters the active step once. Until then the active step's `resolve` reads `loading: true`.
+
+A step whose data came with the store's `initialData` option (the `palistor-ssr` skill) has nothing to request: its first entry runs `onEnter` and then `onReady` at once (after the re-run, if one of the step's declared dependencies changed before that entry). A later entry runs `onEnter` only, as for any step that is already resolved.
 
 ## Reset scope
 

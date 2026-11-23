@@ -10,12 +10,18 @@ description: >
   misbehaves: errors never appear, a hidden field blocks submit, a component
   does not re-render. Read this first. For collections of items use
   palistor-lists, for step-by-step wizards use palistor-flows, for UI-kit prop
-  renaming and input adapters use palistor-field-mapping.
+  renaming and input adapters use palistor-field-mapping, for rendering on the
+  server in Next.js use palistor-ssr.
 metadata:
-  purpose: "Build forms with the Palistor reactive form state manager. Use when: creating form configs, writing React components with useForm, adding validation/formatters/setters, working with lists/entities, building multi-step wizards/flows (defineFlow/defineStep), configuring resolve/persist/submit pipelines, remapping field prop names to UI-library conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
+  purpose: "Build forms with the Palistor reactive form state manager. Use when:
+    creating form configs, writing React components with useForm, adding
+    validation/formatters/setters, working with lists/entities, building
+    multi-step wizards/flows (defineFlow/defineStep), configuring
+    resolve/persist/submit pipelines, remapping field prop names to UI-library
+    conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
   type: core
   library: palistor
-  library_version: '0.1.0-cube.0'
+  library_version: '0.1.0-cube.1'
 sources:
   - 'ProjectINT/palistor:index.ts'
   - 'ProjectINT/palistor:cube/index.ts'
@@ -42,7 +48,9 @@ All behavior lives in a config object, state lives in a store outside React, com
 ## Setup
 
 One module holds the config, the store and the form. Create the store at module level — one store per
-form, never inside a component.
+form — and never call `new Palistor` in a component body. The exception is a screen rendered on the
+server with data of the current request (Next.js App Router): there the store is created per
+component instance with `usePalistor`; read `palistor-ssr` before writing it.
 
 ```tsx
 // orderForm.tsx
@@ -313,12 +321,14 @@ Outside render (event handlers, effects, non-React code) use the store itself:
 | A table or list of same-shaped items, add/remove rows, a list loaded from an API, filters, pagination | `palistor-lists` |
 | A wizard, onboarding, checkout or any Next/Back sequence of steps | `palistor-flows` |
 | Inputs from a UI kit or in-house inputs with other prop names (`required`, `error`, `helperText`) | `palistor-field-mapping` |
+| The form or list must be in the server-rendered HTML (Next.js App Router): data fetched by a Server Component, translated labels, no hydration mismatch | `palistor-ssr` |
 | Fields, groups, validation, submit, loading data into a form | this skill |
 
 ```text
 Same-shaped items in a collection?            → palistor-lists
 The user moves through steps?                 → palistor-flows
 Inputs expect props under other names?        → palistor-field-mapping
+Rendered on the server with its data?         → palistor-ssr
 Otherwise                                     → fields and groups (this skill)
 ```
 
@@ -457,4 +467,5 @@ here, the installed version differs: see Version below.
 Targets palistor v0.1.0-cube.0. If the project has another version installed, read the skill shipped
 with that version instead: it is in `node_modules/palistor/skills/`, or run
 `npm exec --no -- intent load palistor#palistor` (and `palistor#palistor-lists`,
-`palistor#palistor-flows`, `palistor#palistor-field-mapping` for the other skills).
+`palistor#palistor-flows`, `palistor#palistor-field-mapping`, `palistor#palistor-ssr` for the other
+skills).

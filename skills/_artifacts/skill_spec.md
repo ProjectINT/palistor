@@ -13,15 +13,17 @@ behavior into the config instead of component state, and record the constraints 
 | lists | Lists of entities: loading, membership, row editing, filtering, pagination | `palistor-lists` |
 | flows | Wizards: steps, navigation, branching, per-step and final validation | `palistor-flows` |
 | ui-integration | The hop from a field to a UI component: adapters and prop renaming | `palistor-field-mapping` |
+| server-rendering | A store under a server render: data, translations and context in the first HTML, nothing started on the server, hydration without a mismatch or a repeated request | `palistor-ssr` |
 
 ## Skill Inventory
 
 | Skill | Type | Domain | What it covers | Failure modes |
 | --- | --- | --- | --- | --- |
-| `palistor` | core | forms | Mental model (config → store → `useForm` → spread), fields and groups, validation, visibility, computed values, submit / reset, group resolve, persist, i18n, notifications, store context, typing, routing to the other skills | 14 |
+| `palistor` | core | forms | Mental model (config → store → `useForm` → spread), fields and groups, validation, visibility, computed values, submit / reset, group resolve, persist, i18n, notifications, store context (hooks and constructor options), `store.start()` and the no-`window` rule, typing, routing to the other skills | 14 |
 | `palistor-lists` | sub-skill | lists | `defineList`, list and row proxies, list resolve (loading / error / reload), add / remove / temporary ids / rekey, editing a row through a separate template, filtering, pagination | 28 |
 | `palistor-flows` | sub-skill | flows | `defineFlow` / `defineStep`, navigation, branching through step `isVisible`, per-step and final validation, step lifecycle, persisted navigation, typing | 13 |
 | `palistor-field-mapping` | sub-skill | ui-integration | The field spread, one adapter per input kind, `fieldMapping` / `defineFieldMapping`, single vocabulary, typing mapped props, limits of renaming | 11 |
+| `palistor-ssr` | sub-skill | server-rendering | `usePalistor` (a store per component instance), `PalistorProvider` / `usePalistorContext`, the constructor options `initialData`, `translator`, `notifier`, `server`, what restarts a resolve that got `initialData`, server mode and `store.start()`, `loading` and Suspense in a server render, `usePersist` over `initialData` | 8 |
 
 ## Failure Mode Inventory
 
@@ -45,13 +47,13 @@ and the mechanism are written once, in the file named in the last column.
 | 11 | Omitting onError | HIGH | store/resolvePipeline/types.ts | `references/async-resolve.md` |
 | 12 | Loading in useEffect and writing with setValues | HIGH | cube/core/resolve.ts | `references/async-resolve.md` |
 | 13 | Expecting the group's own values in resolver | MEDIUM | cube/core/resolve.ts (execute) | `references/async-resolve.md` |
-| 14 | Waiting for a resolve that nothing reads | MEDIUM | cube/core/cube.ts (touch), cube/core/node.ts | `references/async-resolve.md` |
+| 14 | Waiting for a resolve that never starts (until batch 2: "…that nothing reads") | MEDIUM | cube/core/node.ts (groupNode), cube/core/resolve.ts (touch, start), cube/ssr/serverMode.test.tsx ("store.start()", "server: false in Node behaves like the client") | `references/async-resolve.md` |
 
 ### palistor-lists (28 failure modes)
 
 | # | Mistake | Priority | Source | Documented in |
 | --- | --- | --- | --- | --- |
-| 1 | Treating a failed or not-yet-started list as empty | HIGH | cube/contract/sliceC/listResolveError.test.ts, cube/core/resolve.ts (touch) | `SKILL.md` |
+| 1 | Treating a failed or not-yet-started list as empty | HIGH | cube/contract/sliceC/listResolveError.test.ts, cube/contract/sliceC/listResolve.test.ts (loading before the first run), cube/core/resolve.ts (touch, due) | `SKILL.md` |
 | 2 | One-argument useForm(row) with a row from getById, add or for…of | HIGH | cube/react/useForm.ts (wrap, resolveInput, resolveEntity) | `SKILL.md` |
 | 3 | Reading row fields in a child component without useForm(row) | HIGH | cube/react/useForm.ts (wrap, track), cube/contract/sliceC/useFormEntity.test.tsx | `SKILL.md` |
 | 4 | Expecting isRequired to validate a row | HIGH | cube/core/cube.ts (rowError, submitEntity), cube/contract/sliceC/entityTemplateResolve.test.tsx | `SKILL.md` |
@@ -114,6 +116,19 @@ and the mechanism are written once, in the file named in the last column.
 | 10 | A new adapter for every field | MEDIUM | cube/contract/sliceH/fieldMapping.test.tsx ("componentProps keys are preserved") | `SKILL.md` |
 | 11 | Renaming a prop to a name lists own | MEDIUM | cube/core/mapping.ts (RESERVED_LIST_KEYS) | `SKILL.md` |
 
+### palistor-ssr (8 failure modes)
+
+| # | Mistake | Priority | Source | Documented in |
+| --- | --- | --- | --- | --- |
+| 1 | A module-level store for request data | CRITICAL | cube/palistor.ts (constructor), cube/ssr/usePalistor.test.tsx ("two components with the same config get different stores") | `SKILL.md` |
+| 2 | Translator, notifier or context applied through an effect | HIGH | cube/ssr/hydration.test.tsx ("a label through `translator`"), cube/ssr/usePalistor.test.tsx ("the provider's translator is applied in the first render"), cube/ssr/initialDataDeps.test.ts ("restarts when a `contextDeps` key changes"), cube/react/useTranslator.ts | `SKILL.md` |
+| 3 | Server data passed as initialValues | HIGH | cube/palistor.ts (constructor), cube/core/restore.ts, cube/ssr/initialData.test.tsx ("the data is applied over initialValues") | `SKILL.md` |
+| 4 | Expecting new props to replace the store's data | HIGH | cube/ssr/usePalistor.test.tsx ("an options object is read once too", "options passed as an object are followed too: context, translator and notifier, nothing else") | `SKILL.md` |
+| 5 | A resolver dependency that is not declared | HIGH | cube/ssr/initialDataDeps.test.ts ("does not restart on a value or a context key it did not declare, before its first real run") | `SKILL.md` |
+| 6 | Server data that answers another request | HIGH | cube/core/pagination.ts (accept), cube/ssr/initialDataLists.test.tsx ("no request right after construction; a filter change is one request for the first page") | `SKILL.md` |
+| 7 | Rows without id | MEDIUM | cube/ssr/initialData.test.tsx ("a row without an id is reported once per list") | `SKILL.md` |
+| 8 | Waiting for a resolver where there is no window | MEDIUM | cube/ssr/serverMode.test.tsx ("construction starts nothing", "store.start()") | `SKILL.md` |
+
 ## Tensions
 
 | Tension | Skills | Agent implication |
@@ -122,6 +137,9 @@ and the mechanism are written once, in the file named in the last column.
 | Inferred config vs typed callbacks | all four | The config must stay an inferred literal for precise proxy types, so nothing types callback parameters. Un-annotated callbacks pass `intent validate` (`strict: false`) and fail the consumer build (TS7006) |
 | One vocabulary under a field mapping | `palistor` ↔ `palistor-field-mapping` | Core examples use `isRequired`; with a `fieldMapping` the same config must use the mapped name, or the store throws at module load |
 | Form field rules vs row field rules | `palistor` ↔ `palistor-lists` | A form field validates `isRequired` and hides errors until submit; a row field ignores `isRequired` and validates live |
+| Module-level store vs a store per component instance | `palistor` ↔ `palistor-ssr` | The core skill creates the store at module level. A screen rendered on the server with request data needs `usePalistor`: a module is shared by every request and `initialData` exists only in the constructor |
+| `initialValues` vs `initialData` | `palistor` ↔ `palistor-ssr` | `initialValues` are defaults; `initialData` is a result that also fills lists and marks a resolve as answered. Server data passed as `initialValues` gives a skeleton on the server and a repeated request in the browser |
+| Automatic dependency tracking vs `initialData` | `palistor`, `palistor-lists` ↔ `palistor-ssr` | "Nothing to declare" holds for a resolver that has run. A resolve that got `initialData` has not: until its first real run only `deps`, `contextDeps`, filter fields and `reload()` restart it |
 
 ## Cross-References
 
@@ -132,6 +150,8 @@ and the mechanism are written once, in the file named in the last column.
 | `palistor` | `palistor-field-mapping` | The core skill shows one native adapter; UI-kit adapters and renaming live there |
 | `palistor-lists`, `palistor-flows`, `palistor-field-mapping` | `palistor` | All three assume config, store, `useForm`, group resolve options, `usePersist` and the annotation rule |
 | `palistor-field-mapping` | `palistor-lists` | A mapping renames `dirty` / `loading` on lists and rows, never list methods or pagination members |
+| `palistor`, `palistor-lists`, `palistor-flows` | `palistor-ssr` | Rendering on the server: `usePalistor` / `PalistorProvider` instead of a module-level store and effect hooks, `initialData` for rows, pages and step data, the no-`window` rule |
+| `palistor-ssr` | `palistor`, `palistor-lists`, `palistor-flows` | Assumes config, store, `useForm`, resolve options (`deps`, `contextDeps`, `suspense`), `usePersist`; the list itself and the step lifecycle are documented there |
 
 ## Reference Files
 
@@ -141,6 +161,7 @@ and the mechanism are written once, in the file named in the last column.
 | `palistor-lists` | `list-api`, `entity-editing`, `filtering`, `pagination` | Each is an independent sub-task with its own vocabulary and mistakes |
 | `palistor-flows` | `flow-api` | Full member tables, exported types, lifecycle and reset rules |
 | `palistor-field-mapping` | — | Fits in one file |
+| `palistor-ssr` | — | Fits in one file (355 lines); the per-node shapes of `initialData` are one table |
 
 ## Remaining Gaps
 
@@ -157,13 +178,17 @@ Decisions that belong to the maintainer. None blocks the skills; each states wha
 | `palistor-lists` | The JSDoc of `ConfigNode.resolve` says a template field resolver starts after the list resolver; the contract test shows it is lazy only. The skill follows the test | open |
 | `palistor-lists` | A paginated list logs `pagination invariant: window ordinal 1 … has no cached page` on every query-key change (looks like a runtime defect; the skill does not mention it) | open |
 | `palistor-lists` | Not probed at runtime, documented from README, types and contract-test titles: persistence round-trip, `scrollAnchor`, `keepPreviousData`, `maxPages`, `gcTime`, `revalidateOnHydrate`, list Suspense, nested-list pagination | open |
+| `palistor-ssr` | A list resolve cannot declare a context dependency: `ListResolveConfig` has `deps` but no `contextDeps`, and a paginated list ignores `contextDeps`. A list that got `initialData` therefore does not reload on a context change; the skill recommends a `key` on the component or `list.reload()` | open |
+| `palistor-ssr` | Statements without a test in `cube/ssr`: `suspense: true` without a `<Suspense>` boundary fails the server render (authoring probe); Next.js sends the fallback without logging because of the digest (comment on `clientOnly`, checked against Next 16; the tests assert the digest, not Next's reaction); a group with `resolve` that got `initialValues` still resolves (authoring probe, order of `seed` and `applyInitialData` in the constructor) | open |
+| `palistor-ssr` | `metadata.library_version` is `0.1.0-cube.0` (the current `package.json` version), but the published `0.1.0-cube.0` has no SSR API. The release that first ships SSR sets the version (`AGENTS.md`, "Releasing") | open |
+| `palistor` | The `loading` and server-mode rules exist in the Cube runtime only; `store/` keeps the previous behavior (`cube/contract/impl.ts`). The skills describe the package entry, which runs on Cube | open |
 | all | Typing gaps documented as workarounds instead of being fixed (library sources were out of scope): un-annotated config callbacks (TS7006), `FormConfig` cannot describe nested groups, `defineStep` narrows inline defaults to literals, `useForm(subtree)` rejected in a mapped store, pagination and filter members optional, raw-array lists untyped, a typed template rejects `onSubmit` / template `resolve`, `store.set` rejects interface-typed objects, `PalistorRef` has no `id`, two-argument `useForm` returns `any` | open |
 
 ## Recommended Skill File Structure
 
 - **Core skill:** `palistor` (the entry point; every other skill requires it).
-- **Sub-skills:** `palistor-lists`, `palistor-flows`, `palistor-field-mapping` — each a task worth discovering on its own.
-- **Framework skills:** none; the library is React-only.
+- **Sub-skills:** `palistor-lists`, `palistor-flows`, `palistor-field-mapping`, `palistor-ssr` — each a task worth discovering on its own.
+- **Framework skills:** none; the library is React-only. `palistor-ssr` names Next.js App Router in its description because that is where the task arises, but its API (`usePalistor`, `PalistorProvider`, `initialData`) is plain React, so it is a sub-skill.
 - **Composition skills:** none yet. A UI-kit composition (MUI, Ant Design) would be the first candidate; today `palistor-field-mapping` covers it generically.
 - **Layout:** flat, `skills/<name>/SKILL.md` at the repository root, names prefixed `palistor-` so they do not collide after third-party installers copy them into `.claude/skills/`.
 
@@ -173,8 +198,11 @@ Decisions that belong to the maintainer. None blocks the skills; each states wha
 
 The whole public entry (`index.ts`): `Palistor`, `useForm`, `usePersist`, `useTranslator`,
 `useNotifier`, `useStoreContext`, `defineList`, `defineFlow`, `defineStep`, `defineFieldMapping`, the
-storage drivers and the exported types. Not assessed: the subpath exports (`palistor/store/store`,
-`palistor/react/*`, `palistor/cube`) and the modular entries planned in `experiments/ModulesPlan.md`.
+storage drivers and the exported types; since batch 2 also `usePalistor`, `PalistorProvider`,
+`usePalistorContext`, the constructor options `translator` / `notifier` / `initialData` / `server`,
+`store.start()` and the types `InitialData`, `PalistorOptions`, `PalistorProviderProps`. Not
+assessed: the subpath exports (`palistor/store/store`, `palistor/react/*`, `palistor/cube`) and the
+modular entries planned in `experiments/ModulesPlan.md`.
 
 ### Batch 1 — 2026-11-15: split of the single skill, Intent distribution
 
@@ -363,3 +391,88 @@ written; their result is in the handoff message of the batch.
 - Before the first release that ships the skills: `intent validate --set-version <version>` and the
   "Targets palistor v…" line in `skills/palistor/SKILL.md` (procedure in `AGENTS.md`, "Releasing").
 - When `store/` is removed: remap `sources` to the new home of the public types.
+
+### Batch 2 — 2026-11-23: `palistor-ssr`; server mode and the `loading` rule
+
+- **Source revision:** branch `cube-architecture` at `69faf7f` plus the uncommitted working tree of
+  the SSR work (`experiments/SsrPlan.md`, Stages 1–4); `package.json` version `0.1.0-cube.0`.
+  Tooling: `@tanstack/intent` 0.5.6, TypeScript 5.9.3.
+- **Input:** `experiments/SsrPlan.md`, Stage 5 ("Skills"), and a fact sheet from the implementing
+  session.
+- **Evidence:** `cube/palistor.ts`, `cube/types.ts`, `cube/core/{hub,resolve,restore,pagination,flow,cube,listCube,node}.ts`,
+  `cube/react/{usePalistor.ts,provider.tsx}`, the nine test files of `cube/ssr/`, and the six
+  contract files whose `loading` expectations changed (`LOADING_ON_FIRST_READ`,
+  `cube/contract/impl.ts`). Statements that no test covers were probed with throwaway tests and
+  are listed in "Remaining Gaps".
+
+#### Decisions
+
+| Decision | Reason |
+| --- | --- |
+| A new skill `palistor-ssr`, not a section of `palistor` | "Render this screen on the server in Next.js" is found on its own: the request names neither forms nor lists, and its prerequisites (a store per component instance, constructor-time wiring) contradict the core skill's default setup |
+| Type `sub-skill`, `requires: [palistor]`; `palistor-lists` and `palistor-flows` are conditional pointers | The API is plain React, not a framework binding; a server-rendered form needs neither lists nor flows |
+| New domain `server-rendering` | The task cuts across forms, lists and flows |
+| `sources` are runtime files only; the `cube/ssr` tests are cited in the body | Same rule as batch 1: tests are in `review.ignore`, and a behavior change always touches a runtime source |
+| No reference file | 355 lines; the conditional detail (per-node shapes of `initialData`) is one table |
+| The no-`window` rule has two homes with pointers: remediation for a form in `palistor/references/async-resolve.md` ("Waiting for a resolve that never starts"), the full description in `palistor-ssr` | Any user of the core skill can hit it in a Node test; only the SSR task needs the rest |
+| Descriptions of `palistor` and `palistor-lists` got a pointer to `palistor-ssr` | Both already enumerate the sibling skills as boundaries |
+| `palistor-ssr` added to the repository distribution selection (`distribution.skills` in `skill_tree.yaml`), manifests regenerated by `intent maintainer sync` | Requested with the batch; the selection was all skills before. `intent maintainer setup --distribution` was not run: it also rewrites `AGENTS.md` and CI, outside the batch |
+| `domain_map.yaml` keeps its one-line strings | `intent maintainer add` re-wrapped every string of the file; the file was restored from `HEAD` and the new entries were added by hand to keep the diff readable |
+| Mistake variant of the task check: the translator registered through `useTranslator` | `initialValues` with rows of a typed list does not compile (TS2345), and a task-check mistake is imported by the test, so it must type-check |
+
+#### Guidance changed in the existing skills
+
+Behavior that changed for every consumer, not only for server rendering.
+
+| Where | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `palistor/references/async-resolve.md`, Behavior | Reading `loading` alone does not start a lazy resolve; `loading` is `true` while a run is pending | The first read of the children, `value` or `loading` starts it; `loading` is `true` from that read (from creation with `lazy: false`) until the run lands, `false` while it waits for `contextDeps`; without `window` nothing starts until `store.start()` | `cube/core/node.ts` (`groupNode`), `cube/core/resolve.ts` (`due`), `cube/contract/sliceJ/suspense.react.test.tsx`, `cube/ssr/serverMode.test.tsx` |
+| same file, mistake 14 | "Waiting for a resolve that nothing reads": rendering only `loading` shows `false` forever | "Waiting for a resolve that never starts": nothing reads it (`getValues()`, `group.values`, `dirty` do not count), or there is no `window` | probe; `cube/ssr/serverMode.test.tsx` |
+| same file, Suspense | — | In a server render the fallback is sent; pointer to `palistor-ssr` | `cube/ssr/suspense.test.tsx` |
+| `palistor/references/proxy-api.md` | Group `loading`: "Reading it does not start a lazy resolve"; no `start()` | Reading it starts a lazy resolve; `start()` in the store table; the new constructor options named with their owners | `cube/core/node.ts`, `cube/palistor.ts` |
+| `palistor/references/integrations.md` | Only the effect hooks | The constructor takes `translator`, `notifier`, `context`; the hooks register after the first render; pointer to `palistor-ssr` | `cube/palistor.ts`, `cube/react/useTranslator.ts`, `cube/ssr/hydration.test.tsx` |
+| `palistor/SKILL.md` | "Create the store at module level … never inside a component" | The same default, with the exception of a server-rendered screen with request data (`usePalistor`); routing table, decision list, description and version line name `palistor-ssr` | `cube/react/usePalistor.ts`, `cube/ssr/usePalistor.test.tsx` |
+| `palistor-lists/SKILL.md`, "How it runs" | "`loading`, `error` and `resolveStatus` never start it" | `loading` (and `isInitialLoading`) start it, `error` and `resolveStatus` do not; `loading` is `true` from the first read while `resolveStatus` is still `"idle"`; the no-`window` rule | `cube/core/node.ts` (`listNode`), `cube/contract/sliceC/listResolve.test.ts`, `cube/contract/sliceC/defineList.test.ts`, `cube/ssr/serverMode.test.tsx` |
+| same file, mistake 1 | "a list is `idle` with no items on the server render and on the first client render … Both look like no data" | A failed resolve looks empty to `!loading && length === 0`; a check of `length` alone also shows the empty state before the load; `loading` covers the first render | `cube/contract/sliceC/listResolveError.test.ts`, `cube/contract/sliceC/listResolve.test.ts` |
+| `palistor-lists/references/list-api.md` | `loading`: "The resolver is running" | Running or about to run; reading it starts a lazy resolve; `resolveStatus` never starts it; row-field `loading` from the first read; Suspense in a server render | same |
+| `palistor-lists/references/pagination.md` | `list.loading` reads the same signal as `isFetching`; `isInitialLoading`: "Fetching with nothing to show" | `loading` = `isFetching` plus the first fetch that is due; `isInitialLoading` is `true` from the first read and starts the first fetch; `initialData` for the first page | `cube/core/listCube.ts`, `cube/core/pagination.ts` (`due`, `isInitialLoading`, `accept`), `cube/contract/sliceG/pagination.test.ts`, `cube/ssr/initialDataLists.test.tsx` |
+| `palistor-lists/references/entity-editing.md` | List resolve starts on `items` / `length` / `map` | … / `loading` | `cube/core/node.ts` |
+| `palistor-flows/SKILL.md`, "Run code when a step opens" | "The first step is entered when the store is created — at module load, on the server too" | Entered at creation in the browser; without `window` no step is entered and `onEnter` / `onReady` are not called until `store.start()`; a step's `loading` never starts its resolve | `cube/ssr/serverMode.test.tsx`, `cube/core/flow.ts` (`enterCurrent`), `cube/core/node.ts` (`groupNode`) |
+| `palistor-flows/references/flow-api.md` | `loading`: "any step's resolve is pending"; entry at store creation | … or the active step's is about to start; the no-`window` rule; a step that got `initialData` gets `onReady` right after `onEnter` | `cube/ssr/serverMode.test.tsx`, `cube/ssr/initialDataFlow.test.ts` |
+| `tests/skills/lists-server-list` | The mistake failed two checks | It fails one: its `if (list.loading)` now covers the first render, so only the failed load is treated as empty | `npm run test:skills` |
+
+Verified unchanged: `palistor-field-mapping` (its sources did not change; it names `loading` only as a
+mappable prop), `palistor/references/config-options.md` and `typescript.md`,
+`palistor-lists/references/filtering.md`, the template resolve of `useForm(row, selector)` (it starts
+from an effect and `loading` still means "pending": `cube/core/cube.ts`, `loading`). No task check
+runs in a `node` environment.
+
+#### Check outcomes
+
+| Check | Result |
+| --- | --- |
+| `npm exec --no -- intent validate skills` | 5 skill files pass; after `maintainer sync` no packaging warning |
+| Strict compile of the new examples | The 5 plain `ts` / `tsx` fences of `palistor-ssr` compile with `strict: true` against the package entry (one-off script, as in batch 1); the sixth fence is `expect-error=TS2345` and is checked by `intent validate` |
+| `npm run typecheck:skills` | passes |
+| `npm run test:skills` | 6 task checks: 40 checks pass on the reference solutions, 10 named checks fail on the mistakes as expected. New: `ssr-server-list` (4 checks; the mistake fails 1) |
+| Grader of `ssr-server-list` against other wrong solutions (throwaway, not in the repository) | Rows passed as `initialValues` with a cast: 4 of 4 checks fail. A module-level store filled during render: 4 of 4 fail |
+| Sizes | `SKILL.md`: 466 / 425 / 404 / 359 / 355 lines (limit 500). Descriptions: 779 / 839 / 675 / 822 / 996 characters (limit 1024) |
+| `npm pack --dry-run` | 15 files under `skills/palistor*/`, `skills/palistor-ssr/SKILL.md` among them; nothing from `skills/_artifacts`, `tests/`, `.intent/` |
+| Fresh consumer session for `ssr-server-list` | not run |
+| Description activation (`tests/skills/discovery.md`) | not run; prompts for `palistor-ssr` were added |
+| `npm run test:cube`, `npm test`, `npm run build` | not run by this batch (the runtime was being edited by other sessions at the same time) |
+
+`intent maintainer review --record` and `intent maintainer check` were run after this section was
+written; their result is in the handoff message of the batch. The runtime was still changing when the
+batch ended, so the recorded review may be reopened by later source edits.
+
+#### Remaining work
+
+- Maintainer review of `palistor-ssr`, of the changed passages above and of the new rows in
+  "Remaining Gaps".
+- A fresh consumer-agent session for `ssr-server-list` and an activation run of the `palistor-ssr`
+  prompts.
+- At the release that first ships SSR: `intent validate --set-version <version>` and the "Targets
+  palistor v…" line in `skills/palistor/SKILL.md`.
+- If `usePalistor` gets more consumers outside server rendering (one hook instead of `useState` +
+  three effect hooks), decide whether its home stays `palistor-ssr` or moves to the core skill.

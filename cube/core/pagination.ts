@@ -762,9 +762,9 @@ export class Pager {
 
   get isFetching(): boolean { track(this.list); return (this.currentFamily()?.inFlight.size ?? 0) > 0; }
 
-  /** Never a skeleton while the previous query's rows are on screen. */
+  /** Never a skeleton while the previous query's rows are on screen. True from the first read on: a fetch that is due counts. */
   get isInitialLoading(): boolean {
-    return this.isFetching && !this.isPreviousData && !this.currentFamily()?.pages.size;
+    return (this.isFetching || this.due) && !this.isPreviousData && !this.currentFamily()?.pages.size;
   }
 
   /** A footer spinner: false while the window is still empty (that is isInitialLoading). */
@@ -819,6 +819,8 @@ export class Pager {
   fetch(requested: number, force = false, prefetch = false): Promise<unknown> {
     if (this.disposed) return Promise.resolve();
     const hub = this.hub;
+    // Server mode: no request before store.start(), which fetches the current page.
+    if (hub.held) { hub.deferred.add(this); return Promise.resolve(); }
     const resolve = this.resolve;
     const now = Date.now();
     // A launch reads the live filter: a fetch during the filter's debounce runs (and is keyed) with it.
@@ -1113,11 +1115,17 @@ export class Pager {
   /** First read: the current page starts on the next microtask (never inside a render). */
   touch() {
     if (this.status !== "idle" || this.scheduled || !this.lazy || this.disposed) return;
+    if (this.hub.held) { this.hub.deferred.add(this); return; }
     this.scheduled = true;
     queueMicrotask(() => {
       this.scheduled = false;
       if (this.status === "idle" && !this.disposed) this.start();
     });
+  }
+
+  /** The first fetch is coming: scheduled for the next microtask, or held back by server mode. */
+  get due(): boolean {
+    return this.status === "idle" && !this.disposed && (this.scheduled || (this.hub.held && this.hub.deferred.has(this)));
   }
 
   start() {
@@ -1167,6 +1175,7 @@ export class Pager {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    this.hub.deferred.delete(this);
     this.generation++;
     for (const fam of this.families.values()) clearGc(fam);
   }
@@ -1673,6 +1682,30 @@ export class Pager {
         for (const o of targets) this.revalidate(o);
       }, 0);
     }
+  }
+
+  /**
+   * `initialData`: the result of the first page (`initialPage`) under the live
+   * key, filed by the code a landed fetch runs through — fresh, with its total,
+   * cursor and hasMore. No run has read anything, so until the first real fetch
+   * the family is keyed on the declared `deps` and the filter; the next page is
+   * fetched as usual. The rows are fresh: `revalidateOnHydrate` does not apply.
+   */
+  accept(raw: unknown) {
+    this.filterKey = this.liveFilterKey();
+    const { fam } = this.ensureFamily(Date.now());
+    const ordinal = this.config.initialPage;
+    const req: PageRequest = { page: ordinal, pageSize: this.pageSize, offset: this.continuationOffset(fam, ordinal), queryKey: fam.queryKeyHash };
+    if (this.mode !== "paged") req.cursor = this.cursorFor(fam, ordinal) ?? null;
+    this.ingest(fam, ordinal, normalizeResult(raw), req, false);
+    this.keyObs = null;
+    this.project();
+    this.status = "resolved";
+    this.promise = null;
+    this.error = null;
+    // The rows answer the filter's current server values: the gate compares the next change against them.
+    this.list.filter?.markIssued();
+    this.changed();
   }
 
   /**

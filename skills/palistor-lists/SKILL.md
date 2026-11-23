@@ -1,20 +1,27 @@
 ---
 name: palistor-lists
 description: >
-  Use when a React screen built with palistor needs a collection of records: a table, list or grid of
-  rows loaded from an API with loading, error, empty and retry states; adding, removing or
-  inline-editing rows; optimistic rows whose temporary id is later replaced by the server id; a detail
-  or edit form for one record; search and filter controls over the rows, server-side or in memory; or
-  page-by-page, load-more and cursor pagination. Covers defineList, list and row (entity) proxies,
-  useForm on a row, store.set / rekey / delete / invalidate, list filter blocks and
-  resolve.pagination. Requires the palistor skill for config, store and useForm basics. Step-by-step
-  wizards belong to palistor-flows; renaming field props for a UI kit belongs to
-  palistor-field-mapping.
+  Use when a React screen built with palistor needs a collection of records: a
+  table, list or grid of rows loaded from an API with loading, error, empty and
+  retry states; adding, removing or inline-editing rows; optimistic rows whose
+  temporary id is later replaced by the server id; a detail or edit form for one
+  record; search and filter controls over the rows, server-side or in memory; or
+  page-by-page, load-more and cursor pagination. Covers defineList, list and row
+  (entity) proxies, useForm on a row, store.set / rekey / delete / invalidate,
+  list filter blocks and resolve.pagination. Requires the palistor skill for
+  config, store and useForm basics. Step-by-step wizards belong to
+  palistor-flows; renaming field props for a UI kit belongs to
+  palistor-field-mapping; rendering the list on the server in Next.js belongs to
+  palistor-ssr.
 metadata:
-  purpose: 'Teaches how to model collections in Palistor: declaring a typed list with defineList, rendering and editing its rows through entity proxies, loading it with a resolver (loading, error, reload), mutating membership (add, remove, temporary ids and rekey), editing one entity through a separate template, and filtering or paginating the list.'
+  purpose: 'Teaches how to model collections in Palistor: declaring a typed list
+    with defineList, rendering and editing its rows through entity proxies,
+    loading it with a resolver (loading, error, reload), mutating membership
+    (add, remove, temporary ids and rekey), editing one entity through a
+    separate template, and filtering or paginating the list.'
   type: sub-skill
   library: palistor
-  library_version: '0.1.0-cube.0'
+  library_version: '0.1.0-cube.1'
 sources:
   - 'ProjectINT/palistor:cube/defineList.ts'
   - 'ProjectINT/palistor:cube/core/listCube.ts'
@@ -88,8 +95,9 @@ function UserRow({ user }: { user: PalistorRef<User> }) {
 
 How it runs:
 
-- The resolve is lazy. It starts on the first read of `list.items`, `list.length` or `list.map` (also `list.values` on a filtered list), one microtask later. `loading`, `error` and `resolveStatus` never start it. `resolve.options.lazy: false` starts it when the store is created.
-- `loading`, `error` and `resolveStatus` (`"idle" | "pending" | "resolved" | "error"`) describe one resolve state. A failed run leaves the items untouched and `error` set until the next run starts. Branch on `resolveStatus`: `error` holds whatever the resolver threw, so it is `null` after a rejection with no value.
+- The resolve is lazy. It starts on the first read of `list.items`, `list.length`, `list.map` or `list.loading` (also `list.values` on a filtered list and `list.isInitialLoading` on a paginated one), one microtask later. `error` and `resolveStatus` never start it. `resolve.options.lazy: false` starts it when the store is created.
+- `loading`, `error` and `resolveStatus` (`"idle" | "pending" | "resolved" | "error"`) describe one resolve state. `loading` is `true` from the read that starts the load until the run lands; `resolveStatus` is still `"idle"` during that first render and becomes `"pending"` when the run starts. A failed run leaves the items untouched and `error` set until the next run starts. Branch on `resolveStatus`: `error` holds whatever the resolver threw, so it is `null` after a rejection with no value.
+- Where `window` is not defined (a server render, a Node script or test) no resolver starts until `store.start()`, and `loading` reads `true` meanwhile. To have the rows in server-rendered HTML (Next.js App Router), read the `palistor-ssr` skill.
 - `onError` is the notification channel (a toast through `useNotifier`); `list.error` is the state to render. Use both.
 - `map` passes `(row, index, id)`. Use `id` as the React key.
 - A row field is a field proxy like `form.email`: spread it into the adapter from the `palistor` skill (`<Input {...u.name} />`) or bind it by hand as above.
@@ -300,9 +308,9 @@ Wrong:
 if (!list.loading && list.length === 0) return <Empty />;
 ```
 
-Correct: branch on `list.resolveStatus` as in Setup — `"error"` → the error state, anything but `"resolved"` → loading, and the empty state only when resolved with `length === 0`. Read `list.length` (or `items` / `map`) before the first early return: a component that returns "Loading…" on `idle` without one of those reads never starts the load.
+Correct: branch on `list.resolveStatus` as in Setup — `"error"` → the error state, anything but `"resolved"` → loading, and the empty state only when resolved with `length === 0`. Read `list.length` (or `items` / `map` / `loading`) before the first early return: `resolveStatus` and `error` do not start the load, so a component that returns "Loading…" on `idle` without one of those reads never starts it.
 
-Why: a list is `idle` with no items on the server render and on the first client render (the resolve starts one microtask after the first read), and a failed resolve leaves `loading === false` with the items untouched. Both look like "no data". `onError` alone does not help: it notifies, it is not render state. Source: `cube/contract/sliceC/listResolveError.test.ts`, `cube/core/resolve.ts` (`touch`).
+Why: a failed resolve leaves `loading === false` with the items untouched, so this check shows the empty state after an error. A check of `length` alone shows it before the load as well: the rows are empty on the first render and in server-rendered HTML. `loading` covers that first render (it is `true` from the read that starts the load), but only `resolveStatus` tells loading, failed and empty apart. `onError` alone does not help: it notifies, it is not render state. Source: `cube/contract/sliceC/listResolveError.test.ts`, `cube/contract/sliceC/listResolve.test.ts` (`loading` before the first run), `cube/core/resolve.ts` (`touch`, `due`).
 
 ### HIGH — One-argument `useForm(row)` with a row from `getById`, `add` or `for…of`
 
@@ -421,3 +429,4 @@ If a check fails, find the symptom in Common Mistakes before changing the config
 - Read [entity editing](references/entity-editing.md) when a row needs a separate edit form, per-row or per-field loading, or its own submit.
 - Read [filtering](references/filtering.md) when the list needs search or filter controls.
 - Read [pagination](references/pagination.md) when the list is loaded page by page, with load-more, or by cursor.
+- Read the `palistor-ssr` skill when the list must be rendered on the server (Next.js App Router): rows a Server Component already fetched, no request from the store on the server, no second request after hydration.

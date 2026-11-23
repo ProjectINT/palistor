@@ -94,8 +94,8 @@ All of them are typed optional, because they exist only on a paginated list. Pas
 | `total` | Display total: the server total plus local adds and removes. `undefined` until known. |
 | `serverTotal` | The server total. Moves only on a fetch, `store.delete` or a confirmed add. |
 | `hasNextPage`, `hasPrevPage` | Not affected by local adds. |
-| `isFetching` | Some page of the current query is being fetched. `list.loading` reads the same signal. |
-| `isInitialLoading` | Fetching with nothing to show: choose a skeleton over a spinner. |
+| `isFetching` | Some page of the current query is being fetched. `list.loading` is the same signal plus the first fetch that is about to start. |
+| `isInitialLoading` | Nothing to show and a fetch is running or about to start: choose a skeleton over a spinner. `true` from the first read; reading it starts the lazy first fetch, as reading the rows or `loading` does (`isFetching` does not). |
 | `isPreviousData` | With `keepPreviousData`: the rows on screen belong to the previous query. |
 | `setPage(n)`, `nextPage()`, `prevPage()` | Cached and fresh: synchronous. Otherwise one fetch; the previous rows stay until it lands. |
 | `prefetch(n)` | Fetch a page into the cache without showing it. |
@@ -149,7 +149,8 @@ A wrong `pageSize`, `base`, `mode` or `persist.maxPages` throws when the store i
 
 - With `usePersist` the current page is restored without a request, but only when the saved query matches the live values and context. With `persist: "window"`, call `list.setScrollAnchor(id)` for the first visible row and read `list.scrollAnchor` after a reload to restore the scroll position.
 - Restored unconfirmed rows keep the list dirty. `list.pendingAdds` names them and `list.discardPendingAdds()` removes them. Give temporary rows an id that starts with `_tmp_` (the format `add()` generates), so a restored list can tell them from server rows.
-- `resolve.options.suspense: true` suspends only while the list has nothing to show (the first page, or a new query without `keepPreviousData`). Page changes and `loadMore` keep the rows on screen.
+- `resolve.options.suspense: true` suspends only while the list has nothing to show (the first page, or a new query without `keepPreviousData`). Page changes and `loadMore` keep the rows on screen. In a server render the boundary's fallback is sent and the list renders in the browser.
+- To render the first page on the server from rows a Server Component fetched, pass it to the store as `initialData` — an array, or `{ items, total, nextCursor, hasMore }` as the resolver returns it. Read the `palistor-ssr` skill first: the rows must answer the query the store would send.
 - A paginated list inside a row template paginates each row's instance separately. Its resolver receives the owner row's values, and the owner fields it reads form that instance's query key.
 
 ## Common mistakes

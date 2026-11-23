@@ -74,6 +74,21 @@ export class Hub {
   private readonly contextKeys = new Map<string, Signal>();
 
   /**
+   * Server mode before store.start(): nothing runs by itself — no resolver, no
+   * page fetch, no flow entry. The check sits where a run begins
+   * (ResolveState.start, Pager.fetch, FlowCube.enterCurrent), not at the callers.
+   */
+  held = false;
+  /** store.start() ran (in the constructor outside server mode). */
+  started = false;
+  /**
+   * What store.start() runs: the eager resolves, the active steps' resolves,
+   * and in server mode every resolve that was read or asked to run. While held
+   * they read as `loading`, as they do on the client's first render.
+   */
+  readonly deferred = new Set<Resolving>();
+
+  /**
    * Moves on every change made from outside a resolve: a write, a reset, a list
    * action, setContext, a page fetch landing… A resolve restarted after one of
    * these follows the user; one restarted with no such change in between was
@@ -109,6 +124,12 @@ export class Hub {
 
   /** Construction is not a change: drop whatever it bumped. */
   settle() { this.dirty = false; }
+
+  /** Construction: whatever fn changes is one silent step (no notification cycle, no dependency re-check). */
+  construct<T>(fn: () => T): T {
+    this.depth++;
+    try { return fn(); } finally { this.depth--; this.dirty = false; }
+  }
 
   private flush() {
     if (this.flushing) return; // a write from a listener: the loop below picks it up

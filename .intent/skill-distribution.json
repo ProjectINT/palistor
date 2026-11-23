@@ -18,6 +18,10 @@
     {
       "name": "palistor-field-mapping",
       "path": "skills/palistor-field-mapping/SKILL.md"
+    },
+    {
+      "name": "palistor-ssr",
+      "path": "skills/palistor-ssr/SKILL.md"
     }
   ],
   "install": {
@@ -31,7 +35,8 @@
       "palistor",
       "palistor-lists",
       "palistor-flows",
-      "palistor-field-mapping"
+      "palistor-field-mapping",
+      "palistor-ssr"
     ],
     "github": [
       [
@@ -61,6 +66,13 @@
         "add",
         "ProjectINT/palistor",
         "skills/palistor-field-mapping/SKILL.md"
+      ],
+      [
+        "gh",
+        "skill",
+        "add",
+        "ProjectINT/palistor",
+        "skills/palistor-ssr/SKILL.md"
       ]
     ]
   }

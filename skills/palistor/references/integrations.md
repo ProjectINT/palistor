@@ -3,6 +3,13 @@
 Four hooks connect a store to the application. Call each once, in a layout or provider component
 that stays mounted while the form is in use.
 
+The translator, the notifier and the context can also be given to the constructor —
+`new Palistor({ config, translator, notifier, context })` — and are then in place before the first
+render. `useTranslator`, `useNotifier` and `useStoreContext` register theirs in an effect, after it.
+When the first HTML must already be translated (a screen rendered on the server), or the store is
+created per component instance, read the `palistor-ssr` skill: `usePalistor` and
+`<PalistorProvider>` replace these three hooks there.
+
 ## Save a draft — `usePersist`
 
 ```tsx
@@ -80,7 +87,9 @@ export const signupStore = new Palistor({
 ```
 
 Without a registered translator `t` returns its key, which is enough for tests. Switching the
-translator re-renders the components whose translated texts changed.
+translator re-renders the components whose translated texts changed. The hook registers after the
+first render, so that render — and any HTML rendered on the server — shows the keys; the
+`translator` constructor option does not have that gap.
 
 ## Show load errors — `useNotifier`
 

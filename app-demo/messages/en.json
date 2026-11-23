@@ -2,6 +2,7 @@
   "demo": {
     "title": "Palistor Demo",
     "subtitle": "Form testing stand",
+    "ssrLink": "SSR demo →",
     "tabs": {
       "payment": "Payment Form",
       "flow": "Flow Wizard",
@@ -199,5 +200,33 @@
   "onChange": {
     "lastModified": "Last email change:",
     "description": "updated via onChange handler"
+  },
+  "ssr": {
+    "title": "Server rendering",
+    "subtitle": "A Server Component reads the rows and passes them as props. The client view creates its store with usePalistor, on the server and again in the browser, so the first HTML already has the data and the translations.",
+    "back": "← Back to the demo",
+    "workspace": "Workspace",
+    "requests": "Resolver calls",
+    "engineers": {
+      "title": "A list with data from the server",
+      "hint": "The rows are passed as initialData: they are in the HTML, and the resolver is not called after hydration. Typing in the search sends one request, 300 ms after the last keystroke.",
+      "search": "Search engineers",
+      "searchPlaceholder": "A name or a focus, for example: compilers",
+      "focus": "Focus",
+      "empty": "Nobody matches the search"
+    },
+    "projects": {
+      "title": "A list without server data",
+      "hint": "No initialData here. The server requests nothing and list.loading is already true there, so the HTML has the skeleton; the browser loads the rows.",
+      "year": "Year"
+    },
+    "summary": {
+      "title": "A Suspense group without server data",
+      "hint": "The group has resolve.options.suspense: true. The server sends the fallback of the Suspense boundary; the browser renders the content when the resolver returns.",
+      "fallback": "Loading the summary…",
+      "workspace": "Workspace (from the provider context)",
+      "headcount": "Engineers on file",
+      "topFocus": "Most common focus"
+    }
   }
 }

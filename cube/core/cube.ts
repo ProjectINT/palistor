@@ -22,7 +22,7 @@ import type { Hub } from "./hub";
 import { Memo } from "./memo";
 import { assertChildName, makeNode, type PublicNode } from "./node";
 import { getAt, patchAt } from "./registry";
-import { ResolveState, type ResolveStatus, type Resolving } from "./resolve";
+import { ResolveState, clientOnly, type ResolveStatus, type Resolving } from "./resolve";
 import { track, untracked, type Source } from "./track";
 
 type ListFactory = (config: ListConfig, parent: Cube, key: string, hub: Hub) => Cube;
@@ -414,10 +414,14 @@ export class Cube implements Source {
 
   get submitting(): boolean { track(this); return this.submittingFlag; }
 
-  /** Pending resolve: the cube's own, or (an entity cube) its template resolve. An entity field without one reads false, as in store. */
+  /**
+   * A resolve in flight or due (about to start, or held back by server mode):
+   * the cube's own, or (an entity cube) its template resolve. An entity field
+   * without one reads false, as in store.
+   */
   get loading(): boolean | undefined {
     track(this);
-    if (this.rs) return this.rs.status === "pending";
+    if (this.rs) return this.rs.status === "pending" || this.rs.due;
     if (this.entityId !== undefined) return this.tpl?.status === "pending";
     return this.kind === "leaf" && !this.item ? undefined : false;
   }
@@ -664,16 +668,20 @@ export class Cube implements Source {
   /**
    * A read through the public node: wakes a lazy resolve. A form group with
    * `options.suspense` throws the run in flight for React Suspense (store's
-   * handleLazyResolve; an entity cube never suspends, as in store).
+   * handleLazyResolve; an entity cube never suspends, as in store). In server
+   * mode there is no run to wait for: without data the boundary is left to the client.
    */
   touch() {
     const rs = this.rs;
     if (!rs) return;
     rs.touch();
-    if (rs.status === "pending" && rs.promise && this.kind === "group" && !this.item && this.config.resolve?.options?.suspense === true) {
-      throw rs.promise;
-    }
+    if (this.kind !== "group" || this.item || this.config.resolve?.options?.suspense !== true) return;
+    if (rs.status === "pending" && rs.promise) throw rs.promise;
+    if (this.hub.held && rs.due) throw clientOnly(this.path);
   }
+
+  /** A read of `loading`: wakes a lazy resolve and never suspends. */
+  wake() { this.rs?.touch(); }
 
   /** Leaf → value, group → patch, list → items; `initial` → the result is the new baseline. */
   applyResolved(result: unknown, initial: boolean) {

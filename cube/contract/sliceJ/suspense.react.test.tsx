@@ -17,6 +17,7 @@ import { describe, it, expect, vi } from "vitest";
 import React, { Suspense } from "react";
 import { act, render, screen } from "@testing-library/react";
 import { Palistor, useForm } from "@impl";
+import { LOADING_ON_FIRST_READ } from "../impl";
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
@@ -93,7 +94,7 @@ describe("group resolve under <Suspense>", () => {
       return <div data-testid="car">{String(loading)}:{form.car.brand.value}</div>;
     }
     mount(Car);
-    expect(shown()).toBe("false:default");
+    expect(shown()).toBe(`${LOADING_ON_FIRST_READ}:default`); // Cube: the run this read made due already reads as loading
     await act(async () => { await flush(); });
     expect(shown()).toBe("fallback");
     await act(async () => { runs[0].resolve({ brand: "Toyota" }); await flush(); });
@@ -139,7 +140,7 @@ describe("group resolve under <Suspense>", () => {
       return <div data-testid="car">{String(form.car.loading)}:{form.car.brand.value}</div>;
     }
     mount(Car);
-    expect(shown()).toBe("false:default");
+    expect(shown()).toBe(`${LOADING_ON_FIRST_READ}:default`); // Cube: the run this read made due already reads as loading
     await act(async () => { await flush(); });
     expect(shown()).toBe("true:default");
     await act(async () => { runs[0].resolve({ brand: "Toyota" }); await flush(); });

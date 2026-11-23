@@ -78,6 +78,7 @@ const store = new Palistor({
 - [i18n](#i18n)
 - [Уведомления](#уведомления)
 - [Контекст store](#контекст-store)
+- [SSR и Next.js](#ssr-и-nextjs)
 - [TypeScript](#typescript)
 - [Лицензия](#лицензия)
 
@@ -218,7 +219,7 @@ import {
 
 ## Скиллы для агентов
 
-Palistor поставляет собственные инструкции для ИИ-агентов: четыре [Agent Skills](https://agentskills.io) лежат прямо в npm-пакете (`node_modules/palistor/skills/`) и версионируются вместе с кодом, который описывают. Агент, загрузивший их, пишет конфиги по правилам установленной у вас версии, а не по догадкам.
+Palistor поставляет собственные инструкции для ИИ-агентов: пять [Agent Skills](https://agentskills.io) лежат прямо в npm-пакете (`node_modules/palistor/skills/`) и версионируются вместе с кодом, который описывают. Агент, загрузивший их, пишет конфиги по правилам установленной у вас версии, а не по догадкам.
 
 **Рекомендуемый путь — [TanStack Intent](https://tanstack.com/intent/latest):**
 
@@ -238,13 +239,14 @@ npx @tanstack/intent@latest install   # интерактивно: выбрать
 /plugin install palistor@palistor
 
 # skills CLI
-npx skills add ProjectINT/palistor --full-depth --skill palistor palistor-lists palistor-flows palistor-field-mapping
+npx skills add ProjectINT/palistor --full-depth --skill palistor palistor-lists palistor-flows palistor-field-mapping palistor-ssr
 
 # GitHub CLI
 gh skill add ProjectINT/palistor skills/palistor/SKILL.md
 gh skill add ProjectINT/palistor skills/palistor-lists/SKILL.md
 gh skill add ProjectINT/palistor skills/palistor-flows/SKILL.md
 gh skill add ProjectINT/palistor skills/palistor-field-mapping/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-ssr/SKILL.md
 ```
 
 | Скилл | Чему учит |
@@ -253,6 +255,7 @@ gh skill add ProjectINT/palistor skills/palistor-field-mapping/SKILL.md
 | `palistor-lists` | Коллекции: `defineList`, loading / error / reload, добавление и удаление строк, временные id, редактирование одной сущности, фильтрация, пагинация |
 | `palistor-flows` | Пошаговые мастера: `defineFlow` / `defineStep`, навигация, ветвление, проверка шага и финальная проверка |
 | `palistor-field-mapping` | UI-киты: один адаптер на вид инпута, `fieldMapping` для переименования пропсов поля |
+| `palistor-ssr` | Серверный рендер в Next.js (App Router): `usePalistor`, `PalistorProvider`, `initialData`; данные и переводы в первом HTML, без запросов store на сервере и без повторного запроса после гидратации |
 
 Скиллы обновляются вместе с пакетом: `npm update palistor` приносит и инструкции для новой версии. Установка из репозитория (варианты выше) следует за веткой по умолчанию, а не за установленной версией.
 
@@ -419,6 +422,11 @@ const store = new Palistor({
   initialValues,   // deep-partial значения поверх дефолтов из конфига
   context,         // начальный нереактивный контекст (см. «Контекст store»)
   fieldMapping,    // карта переименования пропсов (см. «Field mapping»)
+  translator,      // i18n-функция, действует с первого рендера (см. «i18n»)
+  notifier,        // функция уведомлений, стоящая за ctx.notify (см. «Уведомления»)
+  initialData,     // результаты резолверов, уже полученные сервером, в форме getValues() (см. «SSR и Next.js»)
+  server,          // серверный режим: store ничего не запускает сам;
+                   // по умолчанию typeof window === "undefined" (см. «SSR и Next.js»)
 });
 ```
 
@@ -444,6 +452,7 @@ const store = new Palistor({
 | `store.setContext(ctx)` | `void` | Домержить нереактивный контекст (см. «Контекст store») |
 | `store.context` | object | Текущий нереактивный контекст |
 | `store.persist` | `PersistManager` | Менеджер персистенции (`enable / disable / flush`) |
+| `store.start()` | `void` | Запустить то, что store запускает сам: вход в шаг флоу, eager-резолверы и все резолверы, которые уже читали. Вне серверного режима его вызывает конструктор; идемпотентен (см. «SSR и Next.js») |
 
 ---
 
@@ -466,6 +475,50 @@ const entity  = useForm(item, (s) => s.editForm); // привязка entity к 
 | `useForm(entityProxy, templateSelector)` | Отображение/редактирование entity из списка через template (bind при mount, unbind при unmount) |
 
 > ⚠️ Передача сырого поддерева `store.proxy` (например, `useForm(store.proxy.address)`) — **ошибка компиляции и рантайма**. Всегда сначала `useForm(store)`, а дальше — через возвращённый прокси.
+
+---
+
+### `usePalistor(options)`
+
+```tsx
+import { usePalistor } from "palistor";
+
+const store  = usePalistor({ config, context: { accountId } });             // объект опций
+const wizard = usePalistor(() => ({ config: buildConfig(), initialData })); // функция: вызывается один раз
+```
+
+Создаёт один store на экземпляр компонента и на каждом рендере возвращает его же. Принимает опции `new Palistor(options)` и подмешивает в них значения ближайшего `<PalistorProvider>`:
+
+| Опция | Что получает store |
+|---|---|
+| `context` | `{ ...providerContext, ...options.context }` — собственные ключи store важнее |
+| `translator`, `notifier` | Опция, если она задана, иначе значение провайдера |
+
+После mount хук следит только за этими тремя значениями и передаёт изменение через `store.setContext` / `setTranslator` / `setNotifier`: от провайдера — всегда, из опций — только если они переданы объектом (функция уже прочитана один раз). Контекст мержится по ключам: исчезнувший ключ сохраняет в store последнее значение — чтобы очистить его, передайте `undefined`. `config`, `initialValues`, `initialData`, `fieldMapping` и `server` читаются один раз; компоненту, который должен начать заново с новыми данными, нужен новый `key`. При unmount ничего не сбрасывается: store уходит вместе с компонентом.
+
+Под `<StrictMode>` в development React рендерит компонент дважды, но store создаётся один: функция опций вызывается один раз, eager-резолвер и первый `onEnter` флоу запускаются один раз. Рендер, который React отбрасывает до коммита, — компонент ушёл в suspense на первом рендере или React перезапустил конкурентный рендер навигации — теряет свой store, и запросы, которые этот store уже запустил, пропадают впустую; узлы, получившие `initialData`, запросов не запускают.
+
+### `<PalistorProvider>` / `usePalistorContext()`
+
+```tsx
+import { PalistorProvider, usePalistorContext } from "palistor";
+
+<PalistorProvider context={{ account, navigate }} translator={t} notifier={notifyError}>
+  {children}
+</PalistorProvider>
+
+const { account } = usePalistorContext<{ account: Account }>(); // в любом компоненте ниже
+```
+
+| Проп | Описание |
+|---|---|
+| `context` | Мержится в `store.context` каждого store, созданного через `usePalistor` ниже по дереву; собственная опция `context` у store важнее по каждому ключу |
+| `translator` | Функция перевода для store ниже по дереву, которым не задана своя |
+| `notifier` | Функция уведомлений (`ctx.notify`) для store ниже по дереву, которым не задана своя |
+
+Все пропсы необязательны. Вложенные провайдеры складываются: `context` внутреннего мержится поверх внешнего (неглубоко, ключ внутреннего важнее), а `translator` / `notifier`, которые внутренний не передал, наследуются. Контекст сравнивается по ключам, поэтому инлайновый `context={{ … }}` с теми же значениями изменением не считается — стабильными должны быть сами значения. Провайдер доходит только до store, созданных через `usePalistor`; store, созданный через `new Palistor()`, подключается через `useStoreContext` / `useTranslator` / `useNotifier`.
+
+`usePalistorContext<T>()` возвращает объединённый `context` провайдера. Это обычное чтение React-контекста: компонент перерендерится, когда изменится какой-либо ключ. Это значение провайдера, а не store: собственная опция `context` у store и последующие вызовы `setContext` видны в `store.context`. Без провайдера возвращается пустой объект; `T` не сверяется с тем, что передано провайдеру.
 
 ---
 
@@ -505,7 +558,7 @@ form.passport.isDisabled    // → boolean | undefined
 form.passport.isInvalid     // → boolean | undefined
 form.passport.errorMessage  // → string | undefined
 form.passport.submitting    // → boolean
-form.passport.loading       // → boolean (выполняется async-резолвер)
+form.passport.loading       // → boolean (async-резолвер выполняется или вот-вот запустится)
 form.passport.dirty         // → boolean (хотя бы одно поле изменилось)
 form.passport.revalidate    // → boolean (true после первого неудачного submit)
 form.passport.values        // → живой снапшот значений группы (стабильная ссылка)
@@ -637,7 +690,7 @@ const store = new Palistor({
         contextDeps: ["accountId"],  // ждать, пока context.accountId != null
 
         options: {
-          lazy: true,      // ждать первого обращения к узлу (default: true)
+          lazy: true,      // ждать первого чтения узла, в том числе `loading` (default: true)
           suspense: false, // бросать promise для React Suspense (default: false)
           retry: { attempts: 3, delay: 1000 },
         },
@@ -661,6 +714,8 @@ if (form.userInfo.loading) return <Spinner />;
   <UserInfoSection />
 </Suspense>
 ```
+
+`loading` равен `true`, пока резолвер выполняется, и ещё до его первого запуска, если тот вот-вот начнётся: у eager-резолвера (`lazy: false`) — с момента создания store, у lazy — с первого чтения узла. Чтение `loading` тоже считается таким чтением, поэтому `if (form.userInfo.loading) return <Spinner />` показывает спиннер уже в первом рендере. Резолвер, который ещё ждёт свои `contextDeps`, читается как `loading: false`. На сервере резолверы не запускаются, а узел с `suspense: true` отдаёт fallback своей границы — см. [SSR и Next.js](#ssr-и-nextjs).
 
 При изменении зависимости resolve-состояние сбрасывается, `optimisticResolver` применяется мгновенно, резолвер перезапускается. После успеха обновляется dirty-baseline — загруженные данные не считаются «грязными».
 
@@ -743,6 +798,11 @@ function Users() {
 }
 ```
 
+`loading` равен `true`, пока идёт прогон, а также с первого чтения списка до старта первого прогона.
+Чтение `loading` — тоже такое чтение: оно будит lazy-резолвер так же, как `items`. Поэтому компонент
+выше показывает спиннер уже в первом рендере, в том числе на сервере (см.
+[SSR и Next.js](#ssr-и-nextjs)). `resolveStatus` остаётся `"idle"`, пока прогон действительно не начался.
+
 `reload()` перезапускает резолвер даже после успешной загрузки, но никогда не запускает параллельный
 прогон поверх текущего. Идентичность функции стабильна — её можно класть в массив зависимостей или в
 проп `onRetry`. Работает одинаково для корневых и вложенных (per-entity) списков.
@@ -799,8 +859,9 @@ list.total           // ОТОБРАЖАЕМЫЙ total: серверный ± л
 list.serverTotal     // сырой серверный total — меняется только на fetch / delete / подтверждённый add
 list.hasNextPage     // оптимистичный add его не обманывает
 list.hasPrevPage
-list.isFetching      // любой запрос страницы в полёте (`loading` читает тот же сигнал)
-list.isInitialLoading // грузим, а в кэше ещё ничего — скелетон vs. спиннер
+list.isFetching      // любой запрос страницы в полёте (`loading`: он же или первый запрос, который вот-вот уйдёт)
+list.isInitialLoading // грузим или вот-вот начнём, а в кэше ещё ничего — скелетон vs. спиннер;
+                     // чтение будит lazy-список, как `loading` и `items`
 list.isPreviousData  // `keepPreviousData`: строки на экране принадлежат предыдущему запросу
 list.pendingAdds     // id не отправленных на сервер оптимистичных добавлений
 
@@ -1021,7 +1082,7 @@ defineStep("details", {
 })
 ```
 
-При входе в шаг: `onEnter → resolve (запускается сразу) → onReady`. Первый шаг каждого флоу «входится» при создании store. Результат resolve шага кэшируется — повторный вход его не перезапускает. `reset()` флоу (или любого предка) сбрасывает навигацию на первый шаг и заново выполняет entry lifecycle.
+При входе в шаг: `onEnter → resolve (запускается сразу) → onReady`. Первый шаг каждого флоу «входится» при создании store — кроме серверного режима, где ничего не запускается: колбэки не вызываются, а первый шаг с `resolve` читается как `loading: true` (см. [SSR и Next.js](#ssr-и-nextjs)). Результат resolve шага кэшируется — повторный вход его не перезапускает. `reset()` флоу (или любого предка) сбрасывает навигацию на первый шаг и заново выполняет entry lifecycle.
 
 Навигация флоу (текущий шаг, история) входит в снапшот [persist](#persist) и восстанавливается при гидратации.
 
@@ -1166,7 +1227,9 @@ cardNumber: {
 },
 ```
 
-Колбэк `validate` тоже получает `t` третьим аргументом. Без зарегистрированного транслятора функции получают identity-`t` — удобно для тестов и SSR без i18n-окружения.
+Колбэк `validate` тоже получает `t` третьим аргументом. Без зарегистрированного транслятора функции получают identity-`t`, то есть функция `label` возвращает свой ключ, — удобно для тестов.
+
+`useTranslator` регистрирует функцию в эффекте, после mount: в серверном HTML и в первом клиентском рендере её ещё нет. Чтобы перевод был уже в первом рендере, передайте функцию в конструктор — `new Palistor({ config, translator: t })` — или в `<PalistorProvider translator={t}>`: он отдаст её каждому store, созданному через `usePalistor` ниже по дереву (см. [SSR и Next.js](#ssr-и-nextjs)). `useTranslator` остаётся как был и действует после mount.
 
 ---
 
@@ -1216,6 +1279,192 @@ resolve: {
 ```
 
 Изменение ключа контекста перезапускает зависящие от него резолверы (через `contextDeps` или затреканный путь `$context.…`). Начальный контекст можно передать в конструктор: `new Palistor({ config, context: { accountId } })`.
+
+`useStoreContext` ставит контекст в эффекте, после mount. Для первого рендера, в том числе серверного, контекст должен быть уже в конструкторе: передайте его туда или положите общие ключи в `<PalistorProvider context={{ accountId }}>`. `usePalistor` подмешивает контекст провайдера в конструктор каждого store ниже по дереву (собственная опция `context` у store важнее по каждому ключу) и передаёт в store последующие изменения; `usePalistorContext()` читает те же значения в компоненте (см. [SSR и Next.js](#ssr-и-nextjs)). `useStoreContext` остаётся как был и действует после mount.
+
+---
+
+## SSR и Next.js
+
+> 🔗 **Код:** [app/ssr/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr) (`page.cube.tsx`, `SsrProviders.tsx`, `SsrView.tsx`, `ssrConfig.ts`), e2e: [e2e/ssr.spec.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/e2e/ssr.spec.ts) · **Живой результат:** [Демо → SSR](https://projectint.github.io/palistor/ssr/)
+>
+> Маршрут `/ssr` показывает три блока: список с серверными данными и фильтром (после гидратации запроса нет), список без серверных данных (в HTML — его скелетон) и группу с `suspense: true` (в HTML — её fallback).
+
+В Next.js App Router клиентский компонент рендерится дважды: на сервере в HTML, затем в браузере при гидратации. Store не сериализуется, поэтому он создаётся дважды — по разу на каждый рендер — из одних и тех же props, и оба рендера должны дать одинаковую разметку. На сервере эффекты не выполняются, а store не запускает резолверы, поэтому транслятора, зарегистрированного через `useTranslator`, и строк, которые загрузил бы резолвер, в HTML нет: вместо подписей — ключи переводов, вместо списка — его скелетон. Передайте в конструктор всё, что нужно первому рендеру, — контекст, транслятор, данные — и HTML придёт полным, а гидратация пройдёт без расхождений и без повторного запроса.
+
+Серверная страница загружает строки и передаёт их пропсами. Клиентский компонент создаёт свой store через `usePalistor` и передаёт строки в `initialData`:
+
+```tsx
+// app/[accountId]/customers/page.tsx — Server Component
+import { getCustomers } from "@/data/customers";
+import { CustomersView } from "./CustomersView";
+
+export default async function Page({ params }: { params: Promise<{ accountId: string }> }) {
+  const { accountId } = await params;
+  const customers = await getCustomers(accountId); // на сервере, с cookies пользователя
+  // key: другой аккаунт — другой экземпляр компонента: новый store с новыми строками
+  return <CustomersView key={accountId} accountId={accountId} customers={customers} />;
+}
+```
+
+```tsx
+// app/[accountId]/customers/CustomersView.tsx
+"use client";
+import { defineList, useForm, usePalistor, type PalistorRef, type TranslateFn } from "palistor";
+
+interface Customer { id: string; name: string }
+
+const customersConfig = {
+  search: { value: "", placeholder: (t: TranslateFn) => t("customers.search") },
+  customers: defineList<Customer>({
+    template: { id: { value: "" }, name: { value: "" } },
+    resolve: {
+      resolver: async (values, store) => api.getCustomers(store.context.accountId, values.search),
+      deps: ["search"],           // объявлено явно: до первого запуска резолвера авто-трекинг ничего не знает
+    },
+  }),
+};
+
+export function CustomersView({ accountId, customers }: { accountId: string; customers: Customer[] }) {
+  const store = usePalistor(() => ({
+    config: customersConfig,
+    context: { accountId },
+    initialData: { customers },   // список сразу resolved, без запроса
+  }));
+  const form = useForm(store);
+
+  return (
+    <>
+      <input
+        placeholder={form.search.placeholder}
+        value={form.search.value}
+        onChange={(e) => (form.search.value = e.target.value)}
+      />
+      <ul>{form.customers.map((c, i, id) => <CustomerRow key={id} customer={c} />)}</ul>
+    </>
+  );
+}
+
+// Строка читается через свой useForm: при изменении её полей перерисовывается только она.
+function CustomerRow({ customer }: { customer: PalistorRef<Customer> }) {
+  return <li>{useForm(customer).name.value}</li>;
+}
+```
+
+Значения, общие для всех store, — контекст, транслятор, нотификатор — задаются в `<PalistorProvider>` в layout. `usePalistor` подмешивает их в конструктор каждого store ниже по дереву:
+
+```tsx
+// app/providers.tsx — клиентская обёртка, которую рендерит layout
+"use client";
+import { useTranslations } from "next-intl";
+import { PalistorProvider } from "palistor";
+
+const notifyError = (error: unknown, code?: string) => addToast({ title: code ?? "Ошибка", color: "danger" });
+
+export function Providers({ account, children }: { account: Account; children: React.ReactNode }) {
+  const t = useTranslations();
+  return (
+    <PalistorProvider context={{ account }} translator={t} notifier={notifyError}>
+      {children}
+    </PalistorProvider>
+  );
+}
+```
+
+Теперь в HTML есть и переведённый placeholder, и строки. Резолвер `customers` не вызывается ни на сервере, ни после гидратации — только при изменении `search` или по `reload()`.
+
+Каждый модуль пакета с хуками начинается с `"use client"`, поэтому файл серверного компонента может импортировать `Palistor`, `defineList`, `defineFlow` и типы из `"palistor"` — например, модуль конфига, общий для страницы и клиентского компонента. Хуки приходят туда как клиентские ссылки и не выполняются.
+
+### Один store на экземпляр компонента
+
+Store с данными запроса создавайте внутри компонента: `usePalistor` строит его один раз на экземпляр компонента и на каждом рендере возвращает его же. Store уровня модуля живёт столько же, сколько серверный процесс, и общий для всех запросов, поэтому данные запроса в него попадать не должны. Именно поэтому `initialData` есть только у конструктора: метода, который добавил бы данные позже, нет. `usePalistor` читает `config` и `initialData` один раз: компоненту, который должен начать заново с новыми данными, нужен новый `key`.
+
+Store уровня модуля без данных запроса продолжает работать под SSR без правок: серверный режим действует и на него.
+
+### Серверный режим
+
+Store, созданный там, где нет `window`, работает в серверном режиме: сам он ничего не запускает. Ни eager-резолвер, ни lazy-резолвер по чтению, ни запрос страницы, ни вход в шаг флоу (`onEnter` / `onReady` не вызываются). Всё, что должно было запуститься, читается как `loading: true`, а store, созданный в браузере, вызывает каждый резолвер один раз. `useStoreContext`, `useTranslator`, `useNotifier` и `usePersist` работают через эффекты, которые сервер не выполняет, поэтому на сервере они ничего не делают.
+
+Одно следствие вне Next.js: скрипт или тест в Node без DOM тоже оказывается в серверном режиме. Запустите store явно или отключите режим:
+
+```typescript
+const store = new Palistor({ config });                 // Node: нет `window` → серверный режим
+store.start();                                          // вход в шаг флоу, eager-резолверы, все уже прочитанные резолверы
+
+const client = new Palistor({ config, server: false }); // или: вести себя как в браузере
+```
+
+`store.start()` идемпотентен, после него store ведёт себя как в браузере. Тестов под jsdom это не касается: `window` там есть.
+
+### `loading` в первом рендере
+
+```tsx
+const customers = useForm(store).customers;
+
+if (customers.loading) return <Skeleton />;
+return <ul>{customers.map((c, i, id) => <CustomerRow key={id} customer={c} />)}</ul>;
+```
+
+Без `initialData` этот код отдаёт скелетон и на сервере, и в первом клиентском рендере, так что они совпадают. За этим стоит правило: резолвер, который вот-вот запустится, уже читается как `loading: true` — eager (`lazy: false`) и резолвер активного шага флоу с момента создания store, lazy — с первого чтения. Чтение `loading` группы, списка или флоу — тоже такое чтение: оно будит lazy-резолвер точно так же, как чтение `items` или поля; так же действует `isInitialLoading` списка с пагинацией. В браузере правило то же: `loading` равен `true` между первым чтением и стартом прогона.
+
+Резолвер, который ждёт свои `contextDeps`, читается как `loading: false`: запускаться он пока не собирается. `loading` шага флоу не будит резолвер шага — его запускает сам флоу при входе. `resolveStatus` остаётся `"idle"`, пока прогон действительно не начался.
+
+### `suspense: true` на сервере
+
+Поставьте границу `<Suspense>` над компонентом, который читает узел с `suspense: true`. Без данных серверу нечего ждать, поэтому он отдаёт fallback границы, а содержимое оставляет браузеру:
+
+```tsx
+export function CarView() {
+  const store = usePalistor({ config: carConfig }); // car.resolve.options.suspense: true
+  return (
+    <Suspense fallback={<Spinner />}>
+      <CarCard store={store} /> {/* читает form.car.… — ниже границы */}
+    </Suspense>
+  );
+}
+```
+
+На сервере чтение бросает ошибку, которую Next.js воспринимает так же, как `next/dynamic` с `ssr: false`: отдаёт fallback, ничего не пишет в лог и рендерит содержимое в браузере. Вне Next.js React тоже отдаёт fallback, но сообщает об ошибке в серверный `onError`, а при гидратации — в `onRecoverableError`, по одному разу на границу.
+
+- **Граница обязательна**, как и всегда с `suspense: true`. Без неё ошибка обрывает серверный рендер.
+- **Вызывайте `usePalistor` выше границы, а узел читайте в дочернем компоненте ниже неё**: компонент, ушедший в suspense до первого коммита, ничего не сохраняет, поэтому каждая повторная попытка создаёт новый store и повторяет его запросы.
+- **После fallback браузер монтирует компонент как обычно.** Первый рендер показывает значения по умолчанию, а в suspense компонент уходит только при ре-рендере после старта прогона. Поэтому компонент, который читает только дочерние узлы, проходит путь fallback → значения по умолчанию → данные; обратно в fallback он попадает, только если читает и состояние самого узла, например `loading`.
+- **`initialData` для этого узла снимает ожидание**: содержимое уже есть в серверном HTML, и в suspense ничего не уходит.
+- **Чтение одного `loading` никогда не уводит в suspense**: компонент рендерит собственный скелетон, в том числе на сервере.
+
+### `initialData`
+
+То, что сервер уже загрузил, передайте как `initialData` — в той же форме, что у `store.getValues()`. Ключ, которого нет в данных, не трогается, и такой узел резолвится как обычно.
+
+```typescript
+const store = new Palistor({
+  config,
+  initialData: {
+    // группа: её значения
+    profile: { name: "Ann", email: "ann@example.com" },
+    // список: массив строк; вложенные списки лежат внутри своих строк
+    customers: [{ id: "c1", name: "Acme", orders: [{ id: "o1", amount: 90 }] }],
+    // список с пагинацией: первая страница в том виде, в каком её возвращает резолвер (можно и просто массив)
+    invoices: { items: firstPage, total: 240 },
+  },
+});
+```
+
+Узел с `resolve`, получивший данные, оказывается в том же состоянии, в каком его оставил бы резолвер, вернувший эти данные: значения, dirty-baseline (`dirty: false`, `reset()` возвращает к этим данным), состав списка, `resolveStatus: "resolved"`, `loading: false`. Его резолвер не вызывается ни на сервере, ни после гидратации. Шаг флоу, получивший данные, при первом входе вызывает `onEnter` и сразу за ним `onReady`, без запроса. Обоим рендерам нужны одни и те же данные; в Next.js они приходят с одними и теми же props.
+
+`initialData` — не `initialValues`: те лишь перекрывают дефолты конфига, и узел с `resolve` после них всё равно резолвится. Данные применяются поверх `initialValues`. Собственный `resolve` группы считается выполненным, если в данных есть значение хотя бы одного листа под ней, не считая списков: `{ customers: [...] }`, список во вложенной подгруппе или пустой `{ car: {} }` не закрывают `resolve` ни группы, ни корня.
+
+Ограничения:
+
+- **Объявляйте `deps`.** В браузере резолвер ещё не запускался, поэтому чтения, которые нашёл бы авто-трекинг, неизвестны до первого настоящего запуска. До тех пор узел перезапускается только по объявленным `resolve.deps`, при изменении ключа из `contextDeps`, при изменении фильтра списка и по `reload()`. Если список должен перезагружаться при изменении поля — укажите это поле в `deps`. Ключ запроса списка с пагинацией строится из `deps` и фильтра (`contextDeps` он не учитывает); следующая страница запрашивается как обычно.
+- **Данные должны быть теми, которые store запросил бы прямо сейчас**: для начальных значений фильтра, первой страницы (`pagination.initialPage`) и того же контекста. Контекст должен быть в конструкторе или в провайдере: ключ из `contextDeps`, который приходит позже через `useStoreContext`, считается изменением и перезапускает резолвер сразу после гидратации. Список с пагинацией кладёт строки под текущий ключ запроса.
+- **Данные встраиваются в HTML.** Пропсы клиентского компонента сериализуются в страницу — передавайте только то, что пользователю можно видеть.
+- **Каждой строке нужен `id`.** Строка без него получает временный id, который на сервере и в браузере разный (предупреждение в dev).
+- **Ключи, которых нет в конфиге, игнорируются** (предупреждение в dev).
+
+### Вместе с `usePersist`
+
+`usePersist` гидратирует в эффекте, после mount, поэтому сохранённый черновик накладывается поверх серверных данных: первый рендер совпадает с серверным HTML, затем появляется черновик, и форма становится dirty относительно серверных данных. Это ожидаемый порядок.
 
 ---
 
@@ -1290,6 +1539,7 @@ type UsersList  = PalistorList<User>;             // типизированны�
 | `TemplateConfig<TEntity>` / `ListResolver<TEntity>` | Типизированный шаблон / резолвер списка |
 | `PersistDriver` / `PersistOptions` | Контракты персистенции |
 | `Resolve<T>` / `NotifyFn` / `ResolveErrorContext` | Контракты резолверов |
+| `InitialData<TConfig>` / `PalistorOptions` / `PalistorProviderProps` | Контракты SSR: форма `initialData` для конфига, опции конструктора, пропсы провайдера |
 
 ---
 

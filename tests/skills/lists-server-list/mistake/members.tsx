@@ -1,7 +1,8 @@
 // The mistake: "Treating a failed or not-yet-started list as empty"
 // (skills/palistor-lists/SKILL.md, Common Mistakes). The empty state is decided
 // by `!loading && length === 0`, and a failed load is only sent to onError:
-// the screen says "No members yet" before the first load and after a failure.
+// the screen says "No members yet" after a failure. (`loading` is true from the
+// read that starts the load, so the first render itself shows "Loading members…".)
 import { defineList, Palistor, useForm } from "palistor";
 import type { PalistorRef } from "palistor";
 import { createMember, fetchMembers, type Member } from "./api";

@@ -1,0 +1,8 @@
+[
+  { "id": "eng-1", "name": "Margaret Hamilton", "focus": "Flight software" },
+  { "id": "eng-2", "name": "Grace Hopper", "focus": "Compilers" },
+  { "id": "eng-3", "name": "Barbara Liskov", "focus": "Type systems" },
+  { "id": "eng-4", "name": "Katherine Johnson", "focus": "Orbital mechanics" },
+  { "id": "eng-5", "name": "Radia Perlman", "focus": "Network protocols" },
+  { "id": "eng-6", "name": "Frances Allen", "focus": "Compilers" }
+]

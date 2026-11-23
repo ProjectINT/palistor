@@ -31,6 +31,12 @@ export interface Resolving {
   readonly error: unknown;
   readonly promise: Promise<unknown> | null;
   readonly lazy: boolean;
+  /**
+   * A first run is coming and there is no result yet: scheduled for the next
+   * microtask, or held back by server mode until store.start(). Reads as
+   * `loading`, so the server's render and the client's first one agree.
+   */
+  readonly due: boolean;
   /** First read of a lazy resolve. */
   touch(): void;
   start(): void;
@@ -62,6 +68,12 @@ export class ResolveState implements Resolving {
   private waiting = false;
   /** invalidate() during a run: start again once it lands. */
   private rerun = false;
+  /**
+   * initialData gave the result and no flow entry has met it yet: the step's
+   * first entry fires onReady (flow.ts). It survives a restart by a dependency,
+   * so that entry still answers; a reset clears it.
+   */
+  seeded = false;
 
   constructor(cube: Cube, readonly config: ResolveConfig) {
     this.primary = cube;
@@ -98,11 +110,21 @@ export class ResolveState implements Resolving {
       const v = c.peek();
       if (v != null && v !== c.config.value) { this.status = "resolved"; return; }
     }
+    const hub = c.hub;
+    if (hub.held) { hub.deferred.add(this); return; }
     this.scheduled = true;
     queueMicrotask(() => {
       this.scheduled = false;
       if (this.status === "idle" && this.run_ !== DISPOSED) this.start();
     });
+  }
+
+  /** A resolve that would only wait for its contextDeps is not due: it reads `loading: false`, as it does once parked. */
+  get due(): boolean {
+    if (this.status !== "idle" || this.waiting) return false;
+    const hub = this.primary.hub;
+    if (!this.scheduled && !(hub.held && hub.deferred.has(this))) return false;
+    return this.contextReady();
   }
 
   reload() {
@@ -174,8 +196,38 @@ export class ResolveState implements Resolving {
     this.primary.hub.resolveBatch(() => this.bump());
   }
 
+  /**
+   * `initialData`: the result came with the constructor. The state is the one
+   * a landed run leaves, except for the dependencies: no run has read anything,
+   * so only the declared ones are known — `deps` and the `contextDeps` keys, at
+   * their versions now. The first real run adds what it reads.
+   */
+  accept() {
+    const { primary: cube, config } = this;
+    const hub = cube.hub;
+    const base = cube.item ?? hub.root;
+    const obs = new Observer();
+    for (const p of config.deps ?? []) {
+      const dep = base.find(p);
+      if (dep) observe(obs, () => dep.value);
+    }
+    for (const k of config.contextDeps ?? []) obs.add(hub.contextKey(k));
+    this.run_ = {};
+    this.status = "resolved";
+    this.error = null;
+    this.promise = null;
+    this.waiting = false;
+    this.rerun = false;
+    this.seeded = true;
+    this.epoch = hub.userEpoch;
+    this.settle(obs);
+  }
+
   /** The cube left the tree (entity deleted): drop in-flight results. */
-  dispose() { this.run_ = DISPOSED; }
+  dispose() {
+    this.run_ = DISPOSED;
+    this.primary.hub.deferred.delete(this);
+  }
 
   /** Full-form reset: back to idle, an in-flight run is dropped, the next read starts over. */
   reset() {
@@ -187,12 +239,15 @@ export class ResolveState implements Resolving {
     this.autoRuns = 0;
     this.waiting = false;
     this.rerun = false;
+    this.seeded = false;
     this.bump();
   }
 
   start() {
     const { primary: cube, config } = this;
     const hub = cube.hub;
+    // Server mode: no run before store.start(), which picks this one up.
+    if (hub.held) { hub.deferred.add(this); return; }
     if (!this.contextReady()) { this.park(); return; }
     this.waiting = false;
     this.epoch = hub.userEpoch;
@@ -278,6 +333,21 @@ export class ResolveState implements Resolving {
 }
 
 const DISPOSED = {};
+
+/**
+ * Server mode, `suspense: true`, no data: this Suspense boundary is left to
+ * the client. The digest is Next.js's own "bail out to client-side rendering"
+ * signal (next/dynamic({ ssr: false }) throws the same): Next sends the
+ * boundary's fallback and logs nothing. It is an internal Next convention
+ * (checked against Next 16), so it lives in this one function. Outside Next,
+ * React sends the fallback as well and reports the error to the server's onError.
+ */
+export function clientOnly(path: string): Error {
+  return Object.assign(
+    new Error(`[palistor] "${path || "(root)"}" has suspense: true and no data on the server: its Suspense boundary renders on the client.`),
+    { digest: "BAILOUT_TO_CLIENT_SIDE_RENDERING" },
+  );
+}
 
 /**
  * The resolver's `values`: the base group's values tree, each read recorded on

@@ -15,5 +15,9 @@
       "@palistor/react/useTranslator": ["../react/useTranslator.ts"],
       "@palistor/react/useNotifier": ["../react/useNotifier.ts"]
     }
-  }
+  },
+  // Cube-only routes (`page.cube.tsx`, see next.config.ts) and everything they
+  // import must stay out of the store type-check. `exclude` replaces the base
+  // list, hence node_modules is repeated.
+  "exclude": ["node_modules", "src/app/ssr"]
 }

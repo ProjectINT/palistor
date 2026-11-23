@@ -4,6 +4,7 @@ import { FilterCube, warnNestedFilters } from "./filter";
 import type { Hub } from "./hub";
 import type { PublicNode } from "./node";
 import { Pager } from "./pagination";
+import { clientOnly } from "./resolve";
 import { track, untracked } from "./track";
 
 /**
@@ -156,25 +157,28 @@ export class ListCube extends Cube {
     return this.pager ? this.pager.isDirty() : !sameIds(this.ids, this.initialIds);
   }
 
-  /** Paginated: some page of the current query is in flight (several can be). */
+  /** Paginated: some page of the current query is in flight (several can be), or the first fetch is due. */
   override get loading(): boolean | undefined {
     if (!this.pager) return super.loading;
     track(this);
-    return this.pager.isFetching;
+    return this.pager.isFetching || this.pager.due;
   }
 
   /**
    * A read through the public node (items, length, map, values): wakes the
    * lazy resolve; with `options.suspense` a pending run throws its promise.
    * A paginated list suspends only while nothing is renderable (the first
-   * page, or a new query without keepPreviousData).
+   * page, or a new query without keepPreviousData). In server mode there is
+   * no run to wait for: without data the boundary is left to the client.
    */
   override touch() {
     const rs = this.rs;
     if (!rs) return;
     rs.touch();
     const resolve = (this.config as unknown as ListConfig)[1]?.resolve;
-    if (resolve?.options?.suspense !== true || rs.status !== "pending" || !rs.promise) return;
+    if (resolve?.options?.suspense !== true) return;
+    if (this.hub.held && rs.due) throw clientOnly(this.path);
+    if (rs.status !== "pending" || !rs.promise) return;
     if (this.pager && (this.ids.length > 0 || this.pager.isPreviousData)) return;
     throw rs.promise;
   }
@@ -289,9 +293,9 @@ export class ListCube extends Cube {
   /**
    * Persist hydration: the membership and its baseline at once (store set
    * itemIds and initialItemIds), so the restored list is not dirty. The rows
-   * are already in the registry. Returns the item views, in order.
+   * are already in the registry.
    */
-  restore(ids: string[]): Cube[] {
+  restore(ids: string[]): void {
     const next = [...new Set(ids)];
     this.hub.batch(() => {
       const keep = new Set(next);
@@ -302,7 +306,6 @@ export class ListCube extends Cube {
       this.touched = true;
       this.bump();
     });
-    return ids.map((id) => this.view(id));
   }
 
   /**
@@ -337,7 +340,8 @@ export class ListCube extends Cube {
     v.dispose();
   }
 
-  private view(id: string): Cube {
+  /** The view cube of a member row, made on first use. */
+  view(id: string): Cube {
     let c = this.views.get(id);
     if (!c) {
       c = new Cube(this.template, this, id, this.hub, id);

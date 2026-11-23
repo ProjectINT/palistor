@@ -23,6 +23,7 @@ import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { Palistor, useForm } from "@impl";
 import { CONFIG_NODE, LIST_STATE } from "../../../store/constants";
+import { LOADING_ON_FIRST_READ } from "../impl";
 
 /**
  * Contract shim: store keys subscriptions and versions by its internal objects
@@ -115,7 +116,7 @@ describe("entity field resolve — execution", () => {
     let resolveIt!: (v: unknown) => void;
     const { field } = makeFieldStore({ resolver: () => new Promise((r) => { resolveIt = r; }) });
 
-    expect(field().loading).toBe(false); // the read schedules the run
+    expect(field().loading).toBe(LOADING_ON_FIRST_READ); // the read schedules the run (Cube: a due run already reads as loading)
     await Promise.resolve();
     expect(field().loading).toBe(true);
 

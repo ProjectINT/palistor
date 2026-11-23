@@ -1,12 +1,25 @@
 ---
 name: palistor-field-mapping
 description: >
-  Use when palistor fields have to be rendered through UI components in a React project: wiring a form to MUI, Ant Design, Chakra, HeroUI, shadcn or in-house inputs; writing or fixing a reusable text input, checkbox or select wrapper that receives a whole field through a JSX spread; making field props use the UI kit's names (required, disabled, error, helperText) with fieldMapping or defineFieldMapping; fixing React unknown-prop warnings, props leaking to the DOM, hidden fields that still render, inputs that do not update, or renamed props that lost their types. Covers one adapter per input kind, the single-vocabulary rule for mapped configs, typing adapter and subtree props, and the limits of renaming (names only, no value conversion). Field rules themselves (validation, visibility) belong to the palistor skill.
+  Use when palistor fields have to be rendered through UI components in a React
+  project: wiring a form to MUI, Ant Design, Chakra, HeroUI, shadcn or in-house
+  inputs; writing or fixing a reusable text input, checkbox or select wrapper
+  that receives a whole field through a JSX spread; making field props use the
+  UI kit's names (required, disabled, error, helperText) with fieldMapping or
+  defineFieldMapping; fixing React unknown-prop warnings, props leaking to the
+  DOM, hidden fields that still render, inputs that do not update, or renamed
+  props that lost their types. Covers one adapter per input kind, the
+  single-vocabulary rule for mapped configs, typing adapter and subtree props,
+  and the limits of renaming (names only, no value conversion). Field rules
+  themselves (validation, visibility) belong to the palistor skill.
 metadata:
-  purpose: 'Connect palistor fields to a UI component library: one adapter component per input kind fed by a field spread, and fieldMapping / defineFieldMapping to rename field props to the vocabulary of the UI kit, with correct typing of the renamed props.'
+  purpose: 'Connect palistor fields to a UI component library: one adapter
+    component per input kind fed by a field spread, and fieldMapping /
+    defineFieldMapping to rename field props to the vocabulary of the UI kit,
+    with correct typing of the renamed props.'
   type: sub-skill
   library: palistor
-  library_version: '0.1.0-cube.0'
+  library_version: '0.1.0-cube.1'
 sources:
   - 'ProjectINT/palistor:cube/core/mapping.ts'
   - 'ProjectINT/palistor:store/defineFieldMapping.ts'

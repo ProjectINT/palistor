@@ -1,13 +1,17 @@
 /**
  * Palistor on the Cube core (experimental, `palistor/cube`).
  *
- * Repeats the export list of the root `index.ts` name for name. Runtime values
- * come from the Cube core; every type is re-exported from the store
- * implementation, so consumer code type-checks the same against both.
+ * Repeats the export list of the store entry (`index.store.ts`) name for name.
+ * Runtime values come from the Cube core; every type is re-exported from the
+ * store implementation, so consumer code type-checks the same against both.
  * Rollout: experiments/CubePlan.md.
+ *
+ * On top of that list, Cube only (experiments/SsrPlan.md): `usePalistor`,
+ * `PalistorProvider`, `usePalistorContext`, and the `Palistor` constructor
+ * takes `translator` / `notifier` / `server` / `initialData` and its instances
+ * have `start()`. Their types live in cube/types.ts.
  */
 
-import type { Palistor as StorePalistor } from "../store/store";
 import type { FieldMapping } from "../store/store/types";
 import type { localStorageDriver as StoreLocalStorageDriver } from "../store/persist/drivers";
 import type { useNotifier as StoreUseNotifier } from "../react/useNotifier";
@@ -19,6 +23,7 @@ import type { defineList as StoreDefineList } from "../store/defineList";
 import type { defineFlow as StoreDefineFlow, defineStep as StoreDefineStep } from "../store/flow/defineFlow";
 import type { defineFieldMapping as StoreDefineFieldMapping } from "../store/defineFieldMapping";
 
+import type { Palistor as PalistorStore, PalistorConstructor } from "./types";
 import { Palistor as CubePalistor } from "./palistor";
 import { useForm as cubeUseForm } from "./react/useForm";
 import { useStoreContext as cubeUseStoreContext } from "./react/useStoreContext";
@@ -88,12 +93,16 @@ export type {
 } from "../store/store/types";
 export type { Palistor as PalistorProxy } from "../store/store/types";
 
-export const Palistor = CubePalistor as unknown as typeof StorePalistor;
+// The store's class type, extended: the constructor also takes the server-rendering
+// options and instances have start(). Still assignable wherever the store's
+// Palistor<TConfig, TMapping> or a ProxyStore is expected.
+export const Palistor = CubePalistor as unknown as PalistorConstructor;
 export type Palistor<
   TConfig extends Record<string, any>,
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   TMapping extends FieldMapping = {},
-> = StorePalistor<TConfig, TMapping>;
+> = PalistorStore<TConfig, TMapping>;
+export type { InitialData, PalistorOptions, PalistorProviderProps } from "./types";
 
 // ============================================================================
 // Resolve — types and hooks
@@ -110,6 +119,11 @@ export const useForm = cubeUseForm as unknown as typeof StoreUseForm;
 export const usePersist = cubeUsePersist as unknown as typeof StoreUsePersist;
 export const useTranslator = cubeUseTranslator as unknown as typeof StoreUseTranslator;
 export const useStoreContext = cubeUseStoreContext as unknown as typeof StoreUseStoreContext;
+
+// Cube only: a store per component instance and the provider it is wired to
+// (typed where they are written; the store has no counterpart to borrow from).
+export { usePalistor } from "./react/usePalistor";
+export { PalistorProvider, usePalistorContext } from "./react/provider";
 
 // ============================================================================
 // defineList — typed list helper

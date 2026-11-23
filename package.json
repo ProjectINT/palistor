@@ -1,6 +1,6 @@
 {
   "name": "palistor",
-  "version": "0.1.0-cube.0",
+  "version": "0.1.0-cube.1",
   "description": "Declarative MVVM-style state framework for React — forms, lists & wizards, batteries included",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -52,7 +52,8 @@
     "skills/palistor",
     "skills/palistor-lists",
     "skills/palistor-flows",
-    "skills/palistor-field-mapping"
+    "skills/palistor-field-mapping",
+    "skills/palistor-ssr"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

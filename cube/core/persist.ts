@@ -8,7 +8,8 @@
 //   • hydrate   — raw state, like store's applyPatch: no formatter / setter /
 //                 onChange, one notification. Lists get their membership and
 //                 its baseline back, rows go to the registry, per-entity lists
-//                 to the item that owns them.
+//                 to the item that owns them (restore.ts, shared with the
+//                 constructor's `initialData`).
 //   • races     — a generation token: a hydration superseded by enable() /
 //                 disable() while awaiting the driver applies nothing; saves
 //                 (debounced and flush) wait until hydration has landed.
@@ -28,12 +29,9 @@
 //                 step moved enters it again (onEnter → resolve → onReady).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { isLeafConfig, isPlainObject, type CubeConfig, type Values } from "./config";
-import type { Cube } from "./cube";
+import { isPlainObject, type Values } from "./config";
 import type { Hub } from "./hub";
-import { idOf } from "./registry";
-import type { ListCube } from "./listCube";
-import { untracked } from "./track";
+import { restoreDraft } from "./restore";
 
 /** store/persist/types.ts: sync or async storage. */
 export interface PersistDriver {
@@ -77,12 +75,6 @@ function isQuotaError(err: unknown): boolean {
 }
 
 type PageMode = "full" | "pointer" | "none";
-
-/** What hydration hands down the tree: the window blobs, and the page seeds to run once every value is back. */
-interface Restore {
-  blobs?: Values;
-  seeds: Array<() => void>;
-}
 
 export class Persist {
   private session: Session | null = null;
@@ -153,10 +145,7 @@ export class Persist {
       delete values[FLOWS_KEY];
       const hub = this.hub;
       const entered = hub.batch(() => {
-        const ctx: Restore = { blobs: isPlainObject(blobs) ? blobs : undefined, seeds: [] };
-        restoreGroup(hub, hub.root, values, ctx);
-        // Pages are keyed on values: seeded once every value is back (a seed may queue nested ones).
-        for (let i = 0; i < ctx.seeds.length; i++) ctx.seeds[i]();
+        restoreDraft(hub, values, isPlainObject(blobs) ? blobs : undefined);
         return isPlainObject(flows) ? hub.flows.filter((f) => f.restore(flows[f.path])) : [];
       });
       for (const flow of entered) flow.enterCurrent();
@@ -284,69 +273,6 @@ function valueAt(values: Values, path: string): unknown {
   let cur: unknown = values;
   for (const k of path.split(".")) cur = isPlainObject(cur) ? cur[k] : undefined;
   return cur;
-}
-
-/** A form group: leaves take the stored value raw, groups recurse, lists are restored. */
-function restoreGroup(hub: Hub, group: Cube, values: Values, ctx: Restore) {
-  for (const [k, c] of group.children) {
-    if (!(k in values)) continue;
-    const v = values[k];
-    if (c.kind === "leaf") { if (typeof c.config.value !== "function") c.assign(v); }
-    else if (c.kind === "group") { if (isPlainObject(v)) restoreGroup(hub, c, v, ctx); }
-    else if (Array.isArray(v)) restoreList(hub, c as ListCube, v, ctx);
-  }
-}
-
-/**
- * Rows go to the registry (merged), the list gets the ids as membership and
- * baseline, then each item's own lists. A paginated list is seeded from its
- * blob instead (a per-entity one never has a blob: store bootstraps it), after
- * every value is restored, since its pages are keyed on values.
- */
-function restoreList(hub: Hub, list: ListCube, rows: unknown[], ctx: Restore) {
-  const items: Array<[string, Values]> = [];
-  for (const row of rows) {
-    if (!isPlainObject(row)) continue;
-    const id = idOf(row);
-    if (hub.registry.set({ ...rowData(row, list.template), id })) hub.touch();
-    items.push([id, row]);
-  }
-  const ids = items.map(([id]) => id);
-  const pager = list.pager;
-  if (pager) {
-    const blob = list.item ? undefined : ctx.blobs?.[list.path];
-    ctx.seeds.push(() => {
-      pager.seed(ids, blob);
-      for (const [id, row] of items) {
-        const view = untracked(() => list.getById(id));
-        if (view) restoreItemLists(hub, view, row, ctx);
-      }
-    });
-    return;
-  }
-  const views = list.restore(ids);
-  items.forEach(([, row], i) => restoreItemLists(hub, views[i], row, ctx));
-}
-
-/** Inside an item: only lists (its fields already came with the row), in groups too. */
-function restoreItemLists(hub: Hub, cube: Cube, values: Values, ctx: Restore) {
-  for (const [k, c] of cube.children) {
-    const v = values[k];
-    if (c.kind === "list") { if (Array.isArray(v)) restoreList(hub, c as ListCube, v, ctx); }
-    else if (c.kind === "group" && isPlainObject(v)) restoreItemLists(hub, c, v, ctx);
-  }
-}
-
-/** A row without the template's list keys: those belong to the per-entity lists. */
-function rowData(row: Values, config: CubeConfig): Values {
-  const out: Values = {};
-  for (const k in row) {
-    const sub = config[k];
-    if (Array.isArray(sub)) continue;
-    const v = row[k];
-    out[k] = isPlainObject(sub) && !isLeafConfig(sub) && isPlainObject(v) ? rowData(v, sub as CubeConfig) : v;
-  }
-  return out;
 }
 
 // ── drivers ─────────────────────────────────────────────────────────────────

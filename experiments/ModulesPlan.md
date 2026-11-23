@@ -57,7 +57,7 @@ import { usePersist, localStorageDriver } from "palistor/persist";
 | Вход | Рантайм-экспорты | Что подключает | Зависимости |
 |---|---|---|---|
 | `palistor` | все, как сейчас | все модули | — |
-| `palistor/core` | `Palistor`, `useForm`, `useTranslator`, `useNotifier`, `useStoreContext`, `defineFieldMapping` | ничего сверх ядра | — |
+| `palistor/core` | `Palistor`, `useForm`, `usePalistor`, `PalistorProvider`, `usePalistorContext`, `useTranslator`, `useNotifier`, `useStoreContext`, `defineFieldMapping` | ничего сверх ядра | — |
 | `palistor/lists` | `defineList` | списки (в том числе объявленные массивом) | — |
 | `palistor/filters` | нет | блок `filter` списка | сам импортирует `lists` |
 | `palistor/pagination` | нет | `resolve.pagination` | сам импортирует `lists` |

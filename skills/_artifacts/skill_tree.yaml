@@ -45,7 +45,8 @@ skills:
       appear, a hidden field blocks submit, a component does not re-render. Read
       this first. For collections of items use palistor-lists, for step-by-step
       wizards use palistor-flows, for UI-kit prop renaming and input adapters
-      use palistor-field-mapping.
+      use palistor-field-mapping, for rendering on the server in Next.js use
+      palistor-ssr.
 
       '
     sources:
@@ -91,7 +92,8 @@ skills:
       row, store.set / rekey / delete / invalidate, list filter blocks and
       resolve.pagination. Requires the palistor skill for config, store and
       useForm basics. Step-by-step wizards belong to palistor-flows; renaming
-      field props for a UI kit belongs to palistor-field-mapping.
+      field props for a UI kit belongs to palistor-field-mapping; rendering the
+      list on the server in Next.js belongs to palistor-ssr.
 
       '
     requires:
@@ -176,6 +178,46 @@ skills:
       component per input kind fed by a field spread, and fieldMapping /
       defineFieldMapping to rename field props to the vocabulary of the UI kit,
       with correct typing of the renamed props."
+  - name: palistor-ssr
+    slug: palistor-ssr
+    domain: server-rendering
+    path: skills/palistor-ssr/SKILL.md
+    description: "Use when a palistor form, list or wizard has to be rendered on the
+      server in a Next.js App Router project (or any React server render): the
+      first HTML must already contain the rows or values a Server Component
+      fetched and the translated labels, the server must send no request on
+      behalf of the store, hydration must report no mismatch and the browser
+      must not fetch the same data again. Also use it when the page source shows
+      translation keys or an empty list, when a hydration warning points at a
+      palistor screen, when a store is needed per mounted component instead of
+      one per module, or when a Node script or a test without a DOM never sees
+      its resolver run. Covers usePalistor, PalistorProvider,
+      usePalistorContext, the constructor options initialData, translator,
+      notifier and server, store.start(), and loading and Suspense during a
+      server render. Requires the palistor skill for config, store and useForm
+      basics; the list itself (defineList, filters, pagination) belongs to
+      palistor-lists.\n"
+    sources:
+      - ProjectINT/palistor:cube/palistor.ts
+      - ProjectINT/palistor:cube/types.ts
+      - ProjectINT/palistor:cube/react/usePalistor.ts
+      - ProjectINT/palistor:cube/react/provider.tsx
+      - ProjectINT/palistor:cube/core/restore.ts
+      - ProjectINT/palistor:cube/core/hub.ts
+      - ProjectINT/palistor:cube/core/resolve.ts
+      - ProjectINT/palistor:cube/core/pagination.ts
+      - ProjectINT/palistor:cube/core/flow.ts
+      - ProjectINT/palistor:cube/core/cube.ts
+      - ProjectINT/palistor:cube/core/listCube.ts
+      - ProjectINT/palistor:cube/core/node.ts
+    requires:
+      - palistor
+    purpose: "Render palistor forms, lists and wizards on the server in Next.js App
+      Router: create one store per component instance with usePalistor, hand it
+      the data a Server Component fetched through initialData, share context,
+      translator and notifier through PalistorProvider, and keep the server
+      render free of store requests and the hydration free of mismatches and
+      repeated fetches."
 distribution:
   mode: repo
   repository: ProjectINT/palistor
@@ -185,3 +227,4 @@ distribution:
     - palistor-lists
     - palistor-flows
     - palistor-field-mapping
+    - palistor-ssr

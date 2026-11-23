@@ -78,6 +78,7 @@ Palistor's state also caches data so it isn't re-fetched from the data layer unn
 - [i18n](#i18n)
 - [Notifications](#notifications)
 - [Store context](#store-context)
+- [SSR & Next.js](#ssr--nextjs)
 - [TypeScript](#typescript)
 - [License](#license)
 
@@ -221,7 +222,7 @@ import {
 
 ## Agent Skills
 
-Palistor ships its own instructions for AI coding agents: four [Agent Skills](https://agentskills.io) inside the npm package (`node_modules/palistor/skills/`), versioned together with the code they describe. An agent that loads them writes configs by the rules of the version you have installed instead of guessing.
+Palistor ships its own instructions for AI coding agents: five [Agent Skills](https://agentskills.io) inside the npm package (`node_modules/palistor/skills/`), versioned together with the code they describe. An agent that loads them writes configs by the rules of the version you have installed instead of guessing.
 
 **Recommended — [TanStack Intent](https://tanstack.com/intent/latest):**
 
@@ -241,13 +242,14 @@ npx @tanstack/intent@latest install   # interactive: choose palistor
 /plugin install palistor@palistor
 
 # skills CLI
-npx skills add ProjectINT/palistor --full-depth --skill palistor palistor-lists palistor-flows palistor-field-mapping
+npx skills add ProjectINT/palistor --full-depth --skill palistor palistor-lists palistor-flows palistor-field-mapping palistor-ssr
 
 # GitHub CLI
 gh skill add ProjectINT/palistor skills/palistor/SKILL.md
 gh skill add ProjectINT/palistor skills/palistor-lists/SKILL.md
 gh skill add ProjectINT/palistor skills/palistor-flows/SKILL.md
 gh skill add ProjectINT/palistor skills/palistor-field-mapping/SKILL.md
+gh skill add ProjectINT/palistor skills/palistor-ssr/SKILL.md
 ```
 
 | Skill | Teaches |
@@ -256,6 +258,7 @@ gh skill add ProjectINT/palistor skills/palistor-field-mapping/SKILL.md
 | `palistor-lists` | Collections: `defineList`, loading / error / reload, adding and removing rows, temporary ids, editing one entity, filtering, pagination |
 | `palistor-flows` | Step wizards: `defineFlow` / `defineStep`, navigation, branching, per-step and final validation |
 | `palistor-field-mapping` | UI kits: one adapter component per input kind, `fieldMapping` to rename field props |
+| `palistor-ssr` | Server rendering in Next.js (App Router): `usePalistor`, `PalistorProvider`, `initialData`; data and translations in the first HTML, no store requests on the server, no refetch after hydration |
 
 The skills are updated together with the package: `npm update palistor` also brings the instructions for the new version. The repository installs above follow the default branch, not your installed version.
 
@@ -422,6 +425,11 @@ const store = new Palistor({
   initialValues,   // deep-partial values that override config defaults
   context,         // initial non-reactive context (see Store context)
   fieldMapping,    // prop renaming map (see Field mapping)
+  translator,      // i18n function, in place from the first render (see i18n)
+  notifier,        // notification function behind ctx.notify (see Notifications)
+  initialData,     // resolver results the server already has, in the shape of getValues() (see SSR & Next.js)
+  server,          // server mode: the store starts nothing by itself;
+                   // default: typeof window === "undefined" (see SSR & Next.js)
 });
 ```
 
@@ -447,6 +455,7 @@ const store = new Palistor({
 | `store.setContext(ctx)` | `void` | Merge non-reactive context (see Store context) |
 | `store.context` | object | Current non-reactive context |
 | `store.persist` | `PersistManager` | Persistence manager (`enable / disable / flush`) |
+| `store.start()` | `void` | Run what the store starts by itself: flow step entry, eager resolvers, every resolver already read. The constructor calls it outside server mode; idempotent (see SSR & Next.js) |
 
 ---
 
@@ -469,6 +478,50 @@ Returns a typed tracking proxy. The component re-renders only when nodes it acce
 | `useForm(entityProxy, templateSelector)` | Render/edit a list entity through a template (binds on mount, unbinds on unmount) |
 
 > ⚠️ Passing a raw `store.proxy` subtree (e.g. `useForm(store.proxy.address)`) is a **compile-time and runtime error**. Always go through `useForm(store)` first and drill into the returned proxy.
+
+---
+
+### `usePalistor(options)`
+
+```tsx
+import { usePalistor } from "palistor";
+
+const store  = usePalistor({ config, context: { accountId } });             // options object
+const wizard = usePalistor(() => ({ config: buildConfig(), initialData })); // function: called once
+```
+
+Creates one store per component instance and returns the same store on every render. Takes the options of `new Palistor(options)` and merges the values of the nearest `<PalistorProvider>` into them:
+
+| Option | What the store gets |
+|---|---|
+| `context` | `{ ...providerContext, ...options.context }` — the store's own keys win |
+| `translator`, `notifier` | The option when given, the provider's otherwise |
+
+After mount the hook follows only these three and pushes a change with `store.setContext` / `setTranslator` / `setNotifier`: from the provider always, from the options only when they are passed as an object (a function has been read once). The context is merged per key: a key that disappears keeps its last value in the store — pass it as `undefined` to clear it. `config`, `initialValues`, `initialData`, `fieldMapping` and `server` are read once; a component that must start over with new data needs a new `key`. Unmount resets nothing: the store goes with the component.
+
+Under `<StrictMode>` in development React renders the component twice, but one store is built: the options function is called once, and an eager resolver or a flow's first `onEnter` starts once. A render that React discards before commit — a component that suspends on its first render, or a concurrent navigation render that React restarts — drops its store, and the requests that store has already started are wasted; nodes that got `initialData` start none.
+
+### `<PalistorProvider>` / `usePalistorContext()`
+
+```tsx
+import { PalistorProvider, usePalistorContext } from "palistor";
+
+<PalistorProvider context={{ account, navigate }} translator={t} notifier={notifyError}>
+  {children}
+</PalistorProvider>
+
+const { account } = usePalistorContext<{ account: Account }>(); // any component below
+```
+
+| Prop | Description |
+|---|---|
+| `context` | Merged into `store.context` of every `usePalistor` store below; a store's own `context` option wins per key |
+| `translator` | Translation function of the stores below that are not given their own |
+| `notifier` | Notification function (`ctx.notify`) of the stores below that are not given their own |
+
+All props are optional. Nested providers add up: the inner `context` is merged over the outer one (shallow, the inner key wins), and a `translator` / `notifier` the inner provider does not pass is inherited. The context is compared per key, so an inline `context={{ … }}` with the same values is not a change — keep the values themselves stable. The provider reaches only stores created with `usePalistor`; a store made with `new Palistor()` is wired with `useStoreContext` / `useTranslator` / `useNotifier`.
+
+`usePalistorContext<T>()` returns the provider's merged `context`. It is a plain React context read: the component re-renders when a key changes. It is the provider's value, not a store's — a store's own `context` option and later `setContext` calls are in `store.context`. Without a provider it returns an empty object; `T` is not checked against what the provider was given.
 
 ---
 
@@ -508,7 +561,7 @@ form.passport.isDisabled    // → boolean | undefined
 form.passport.isInvalid     // → boolean | undefined
 form.passport.errorMessage  // → string | undefined
 form.passport.submitting    // → boolean
-form.passport.loading       // → boolean (async resolver in progress)
+form.passport.loading       // → boolean (async resolver in progress or about to start)
 form.passport.dirty         // → boolean (at least one field changed)
 form.passport.revalidate    // → boolean (true after the first failed submit)
 form.passport.values        // → live snapshot of the group's values (stable reference)
@@ -640,7 +693,7 @@ const store = new Palistor({
         contextDeps: ["accountId"],  // wait until store.context.accountId != null
 
         options: {
-          lazy: true,      // wait for the first access to the node (default: true)
+          lazy: true,      // wait for the first read of the node, `loading` included (default: true)
           suspense: false, // throw a promise for React Suspense (default: false)
           retry: { attempts: 3, delay: 1000 },
         },
@@ -664,6 +717,8 @@ if (form.userInfo.loading) return <Spinner />;
   <UserInfoSection />
 </Suspense>
 ```
+
+`loading` is `true` while the resolver runs and also while its first run is about to start: for an eager resolver (`lazy: false`) from the moment the store is created, for a lazy one from the first read of the node. Reading `loading` is such a read, so `if (form.userInfo.loading) return <Spinner />` shows the spinner in the very first render. A resolver that still waits for its `contextDeps` reads `loading: false`. On the server no resolver runs, and a `suspense: true` node sends the fallback of its boundary — see [SSR & Next.js](#ssr--nextjs).
 
 When a dependency changes, the resolve state resets, `optimisticResolver` applies instantly and the resolver re-runs. After success the dirty baseline is updated, so resolved data is not marked dirty.
 
@@ -745,6 +800,11 @@ function Users() {
 }
 ```
 
+`loading` is `true` while a run is in flight and also from the first read of the list until its
+first run starts. Reading `loading` is itself such a read — it wakes the lazy resolver like `items`
+does — so the component above renders the spinner in its very first render, on the server too (see
+[SSR & Next.js](#ssr--nextjs)). `resolveStatus` stays `"idle"` until the run really starts.
+
 `reload()` re-runs the resolver even after a successful load, but never spawns a parallel run while
 one is in flight. Its identity is stable, so it is safe in a deps array or an `onRetry` prop. Works
 the same for root lists and per-entity nested lists.
@@ -801,8 +861,9 @@ list.total           // DISPLAY total: server total ± local optimistic adds/rem
 list.serverTotal     // raw server total — moves only on fetch / delete / confirmed add
 list.hasNextPage     // never fooled by an optimistic add
 list.hasPrevPage
-list.isFetching      // any page fetch in flight (`loading` reads the same signal)
-list.isInitialLoading // fetching with nothing cached yet — skeleton vs. spinner
+list.isFetching      // any page fetch in flight (`loading`: this, or the first fetch about to start)
+list.isInitialLoading // fetching, or about to fetch, with nothing cached yet — skeleton vs. spinner;
+                     // reading it wakes the lazy list, as `loading` and `items` do
 list.isPreviousData  // `keepPreviousData`: the rows on screen belong to the previous query
 list.pendingAdds     // ids of un-flushed optimistic adds (restored from storage or not)
 
@@ -1023,7 +1084,7 @@ defineStep("details", {
 })
 ```
 
-On entering a step: `onEnter → resolve (triggered eagerly) → onReady`. The first step of every flow is entered when the store is created. A step's resolve result is cached — re-entering does not re-run it. `reset()` of the flow (or any ancestor) resets navigation to the first step and re-runs the entry lifecycle.
+On entering a step: `onEnter → resolve (triggered eagerly) → onReady`. The first step of every flow is entered when the store is created — except in server mode, where nothing starts: no callback is called, and a first step with `resolve` reads `loading: true` (see [SSR & Next.js](#ssr--nextjs)). A step's resolve result is cached — re-entering does not re-run it. `reset()` of the flow (or any ancestor) resets navigation to the first step and re-runs the entry lifecycle.
 
 Flow navigation (current step, history) is included in [persist](#persist) snapshots and restored on hydration.
 
@@ -1168,7 +1229,9 @@ cardNumber: {
 },
 ```
 
-The `validate` callback also receives `t` as its third argument. Without a registered translator the functions receive an identity `t` — convenient for tests and SSR without an i18n environment.
+The `validate` callback also receives `t` as its third argument. Without a registered translator the functions receive an identity `t`, so a label function returns its key — convenient for tests.
+
+`useTranslator` registers the function in an effect, after mount: the server HTML and the first client render do not have it yet. To translate from the first render, give the function to the constructor — `new Palistor({ config, translator: t })` — or to `<PalistorProvider translator={t}>`, which hands it to every store created with `usePalistor` below (see [SSR & Next.js](#ssr--nextjs)). `useTranslator` stays as it is and applies after mount.
 
 ---
 
@@ -1218,6 +1281,192 @@ resolve: {
 ```
 
 Changing a context key re-triggers resolvers that depend on it (via `contextDeps` or a tracked `$context.…` path). You can also pass an initial context to the constructor: `new Palistor({ config, context: { accountId } })`.
+
+`useStoreContext` sets the context in an effect, after mount. For the first render — the server one included — the context has to be in the constructor: pass it there, or put the shared keys on `<PalistorProvider context={{ accountId }}>`. `usePalistor` merges the provider's context into the constructor of every store below (the store's own `context` option wins per key) and pushes later changes into the store; `usePalistorContext()` reads the same values in a component (see [SSR & Next.js](#ssr--nextjs)). `useStoreContext` stays as it is and applies after mount.
+
+---
+
+## SSR & Next.js
+
+> 🔗 **Source:** [app/ssr/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr) (`page.cube.tsx`, `SsrProviders.tsx`, `SsrView.tsx`, `ssrConfig.ts`), e2e: [e2e/ssr.spec.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/e2e/ssr.spec.ts) · **Live result:** [Demo → SSR](https://projectint.github.io/palistor/ssr/)
+>
+> The `/ssr` route shows three blocks: a list with server data and a filter (no request after hydration), a list without server data (its skeleton is in the HTML) and a `suspense: true` group (its fallback is in the HTML).
+
+In the Next.js App Router a Client Component renders twice: on the server into HTML, then in the browser during hydration. A store is not serializable, so it is created twice — once per render — from the same props, and both renders must produce the same markup. On the server effects do not run and a store starts no resolver, so a translator registered with `useTranslator` and the rows a resolver would load are not in the HTML: labels come out as translation keys, a list comes out as its skeleton. Give the constructor what the first render needs — context, translator, data — and the HTML arrives complete, and hydration neither mismatches nor repeats a request.
+
+The server page loads the rows and passes them as props. The client view creates its store with `usePalistor` and hands the rows over as `initialData`:
+
+```tsx
+// app/[accountId]/customers/page.tsx — Server Component
+import { getCustomers } from "@/data/customers";
+import { CustomersView } from "./CustomersView";
+
+export default async function Page({ params }: { params: Promise<{ accountId: string }> }) {
+  const { accountId } = await params;
+  const customers = await getCustomers(accountId); // on the server, with the user's cookies
+  // key: another account is another component instance: a new store with the new rows
+  return <CustomersView key={accountId} accountId={accountId} customers={customers} />;
+}
+```
+
+```tsx
+// app/[accountId]/customers/CustomersView.tsx
+"use client";
+import { defineList, useForm, usePalistor, type PalistorRef, type TranslateFn } from "palistor";
+
+interface Customer { id: string; name: string }
+
+const customersConfig = {
+  search: { value: "", placeholder: (t: TranslateFn) => t("customers.search") },
+  customers: defineList<Customer>({
+    template: { id: { value: "" }, name: { value: "" } },
+    resolve: {
+      resolver: async (values, store) => api.getCustomers(store.context.accountId, values.search),
+      deps: ["search"],           // declared: nothing is auto-tracked until the resolver's first run
+    },
+  }),
+};
+
+export function CustomersView({ accountId, customers }: { accountId: string; customers: Customer[] }) {
+  const store = usePalistor(() => ({
+    config: customersConfig,
+    context: { accountId },
+    initialData: { customers },   // the list starts as resolved, without a request
+  }));
+  const form = useForm(store);
+
+  return (
+    <>
+      <input
+        placeholder={form.search.placeholder}
+        value={form.search.value}
+        onChange={(e) => (form.search.value = e.target.value)}
+      />
+      <ul>{form.customers.map((c, i, id) => <CustomerRow key={id} customer={c} />)}</ul>
+    </>
+  );
+}
+
+// A row is read through its own useForm: it re-renders alone when its fields change.
+function CustomerRow({ customer }: { customer: PalistorRef<Customer> }) {
+  return <li>{useForm(customer).name.value}</li>;
+}
+```
+
+Values shared by every store — context, translator, notifier — go to `<PalistorProvider>` in a layout. `usePalistor` merges them into the constructor of each store below:
+
+```tsx
+// app/providers.tsx — a client wrapper rendered by the layout
+"use client";
+import { useTranslations } from "next-intl";
+import { PalistorProvider } from "palistor";
+
+const notifyError = (error: unknown, code?: string) => addToast({ title: code ?? "Error", color: "danger" });
+
+export function Providers({ account, children }: { account: Account; children: React.ReactNode }) {
+  const t = useTranslations();
+  return (
+    <PalistorProvider context={{ account }} translator={t} notifier={notifyError}>
+      {children}
+    </PalistorProvider>
+  );
+}
+```
+
+The HTML now has the translated placeholder and the rows. The resolver of `customers` runs neither on the server nor after hydration — only when `search` changes, or on `reload()`.
+
+Every hook module of the package starts with `"use client"`, so a Server Component file can import `Palistor`, `defineList`, `defineFlow` and types from `"palistor"` — a config module shared by the page and the view, for example. The hooks arrive there as client references and are not executed.
+
+### One store per component instance
+
+Create a store that holds request data inside the component: `usePalistor` builds it once per component instance and returns the same store on every render. A module-level store lives as long as the server process and is shared by every request, so request data must never get into it. That is why `initialData` exists only in the constructor — there is no method that adds it later. `usePalistor` reads `config` and `initialData` once: a component that must start over with new data needs a new `key`.
+
+A module-level store without request data keeps working under SSR as it is: server mode applies to it too.
+
+### Server mode
+
+A store created where `window` is undefined is in server mode: it starts nothing by itself. No eager resolver, no lazy resolver on read, no page fetch, no flow step entry (`onEnter` / `onReady` are not called). Whatever would have started reads `loading: true`, and the store the browser creates runs each resolver once. `useStoreContext`, `useTranslator`, `useNotifier` and `usePersist` work in effects, which the server does not run, so on the server they do nothing.
+
+One consequence outside Next.js: a Node script or a test without a DOM is in server mode too. Start the store explicitly, or turn the mode off:
+
+```typescript
+const store = new Palistor({ config });                 // Node: no `window` → server mode
+store.start();                                          // flow step entry, eager resolvers, every resolver already read
+
+const client = new Palistor({ config, server: false }); // or: behave as in the browser
+```
+
+`store.start()` is idempotent, and after it the store behaves as in the browser. Tests under jsdom are not affected: `window` exists there.
+
+### `loading` on the first render
+
+```tsx
+const customers = useForm(store).customers;
+
+if (customers.loading) return <Skeleton />;
+return <ul>{customers.map((c, i, id) => <CustomerRow key={id} customer={c} />)}</ul>;
+```
+
+Without `initialData` this renders the skeleton on the server and in the client's first render, so the two match. The rule behind it: a resolver that is about to run already reads `loading: true` — an eager one (`lazy: false`) and the active flow step's from the moment the store is created, a lazy one from its first read. Reading `loading` of a group, a list or a flow is such a read: it wakes the lazy resolver exactly like reading `items` or a field does, and so does `isInitialLoading` of a paginated list. The rule is the same in the browser, where `loading` is `true` between the first read and the start of the run.
+
+A resolver that waits for its `contextDeps` reads `loading: false`: it is not about to run. A flow step's `loading` does not wake the step's resolver — the flow starts it on entry. `resolveStatus` stays `"idle"` until the run really starts.
+
+### `suspense: true` on the server
+
+Put a `<Suspense>` boundary above the component that reads a `suspense: true` node. With no data the server has no run to wait for, so it sends the boundary's fallback and leaves the content to the browser:
+
+```tsx
+export function CarView() {
+  const store = usePalistor({ config: carConfig }); // car.resolve.options.suspense: true
+  return (
+    <Suspense fallback={<Spinner />}>
+      <CarCard store={store} /> {/* reads form.car.… — below the boundary */}
+    </Suspense>
+  );
+}
+```
+
+On the server the read throws an error that Next.js treats like `next/dynamic` with `ssr: false`: it sends the fallback, logs nothing and renders the content in the browser. Outside Next.js React sends the fallback as well, but reports the error to the server's `onError` and, during hydration, to `onRecoverableError` — once per boundary.
+
+- **The boundary is required**, as always with `suspense: true`. Without one the error is fatal for the server render.
+- **Call `usePalistor` above the boundary and read the node in a child below it**: a component that suspends before its first commit keeps nothing, so every retry builds a new store and repeats its requests.
+- **After the fallback the browser mounts as it always did.** The first render shows the defaults, and the component suspends only on a re-render after the run has started. A component that reads only the node's children therefore goes fallback → defaults → data; it returns to the fallback only if it also reads the node's own state, such as `loading`.
+- **`initialData` for that node removes the wait**: the content is in the server HTML, and nothing suspends.
+- **Reading only `loading` never suspends**: the component renders its own skeleton, on the server too.
+
+### `initialData`
+
+Pass what the server has already loaded as `initialData`, in the shape of `store.getValues()`. A key the data lacks is left alone, and that node resolves as usual.
+
+```typescript
+const store = new Palistor({
+  config,
+  initialData: {
+    // a group: its values
+    profile: { name: "Ann", email: "ann@example.com" },
+    // a list: an array of rows; nested lists sit inside their rows
+    customers: [{ id: "c1", name: "Acme", orders: [{ id: "o1", amount: 90 }] }],
+    // a paginated list: its first page as the resolver returns it (a bare array works too)
+    invoices: { items: firstPage, total: 240 },
+  },
+});
+```
+
+A node with `resolve` that got data is in the state its resolver would have left by returning the same data: the values, the dirty baseline (`dirty: false`, `reset()` returns to this data), the list membership, `resolveStatus: "resolved"`, `loading: false`. Its resolver is called neither on the server nor after hydration. A flow step that got data fires `onEnter` and then `onReady` at once on its first entry, without a request. Both renders need the same data; in Next.js they get it with the same props.
+
+`initialData` is not `initialValues`: those only override the config defaults, and a node with `resolve` still resolves after them. The data is applied over `initialValues`. A group's own `resolve` counts as answered when the data carries a value for at least one leaf below it, outside lists: `{ customers: [...] }`, a list nested in a subgroup or an empty `{ car: {} }` do not answer the `resolve` of a group or of the root.
+
+Limits:
+
+- **Declare `deps`.** The resolver has not run in the browser, so the reads auto-tracking would have found are unknown until its first real run. Until then the node re-runs only on its declared `resolve.deps`, on a change of a `contextDeps` key, on a change of the list's filter and on `reload()`. If a list must reload when a field changes, name that field in `deps`. A paginated list is keyed on `deps` and the filter (it ignores `contextDeps`); its next page is requested as usual.
+- **The data must be what the store would request right now**: for the initial filter values, the first page (`pagination.initialPage`) and the same context. The context has to be in the constructor or the provider: a `contextDeps` key that arrives later through `useStoreContext` counts as a change and re-runs the resolver right after hydration. A paginated list files the rows under its current query key.
+- **The data is embedded in the HTML.** Props of a Client Component are serialized into the page — pass only what the user may see.
+- **Every row needs an `id`.** A row without one gets a temporary id that differs between the server and the browser (dev warning).
+- **Keys that are not in the config are ignored** (dev warning).
+
+### With `usePersist`
+
+`usePersist` hydrates in an effect, after mount, so the saved draft is laid over the server data: the first render matches the server HTML, then the draft appears and the form is dirty against the server data. This order is intended.
 
 ---
 
@@ -1292,6 +1541,7 @@ type UsersList  = PalistorList<User>;             // typed list proxy
 | `TemplateConfig<TEntity>` / `ListResolver<TEntity>` | Typed list template / resolver |
 | `PersistDriver` / `PersistOptions` | Persistence contracts |
 | `Resolve<T>` / `NotifyFn` / `ResolveErrorContext` | Resolver contracts |
+| `InitialData<TConfig>` / `PalistorOptions` / `PalistorProviderProps` | SSR contracts: the `initialData` shape for a config, constructor options, provider props |
 
 ---
 

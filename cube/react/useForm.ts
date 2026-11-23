@@ -1,3 +1,5 @@
+"use client";
+
 // The one place where a Proxy pays off: the component render boundary. The
 // tracking proxy records which nodes this component read state from (node
 // level, like store's createTrackingProxy); getSnapshot compares those nodes'

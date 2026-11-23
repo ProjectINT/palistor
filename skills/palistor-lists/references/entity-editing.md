@@ -81,7 +81,7 @@ export function EditUser({ user, onDone }: { user: PalistorRef<User>; onDone: ()
 
 | Level | Declared at | Starts | Receives | Result |
 | --- | --- | --- | --- | --- |
-| List resolve | `defineList({ resolve })` | First read of `items` / `length` / `map`, a dependency change, `list.reload()` | Form values, store, `ctx` | The rows of the list |
+| List resolve | `defineList({ resolve })` | First read of `items` / `length` / `map` / `loading`, a dependency change, `list.reload()` | Form values, store, `ctx` | The rows of the list |
 | Template resolve | `resolve` on the edit template group | Mount of `useForm(row, selector)`, once per (row, template) | The entity proxy, store | An object merged into the row |
 | Field resolve | `resolve` on a template leaf (list template or edit template) | First read of that field's `value` or `loading`, per row | The row's values, store | The field's value |
 

@@ -16,6 +16,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { defineList, Palistor } from "@impl";
 import type { TypedListNode, TemplateConfig, ListResolver } from "@impl";
+import { LOADING_ON_FIRST_READ } from "../impl";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function flushPromises() {
@@ -230,7 +231,7 @@ describe("defineList — resolver deduplication", () => {
 // ─── 4. The loading flag ──────────────────────────────────────────────────────
 
 describe("defineList — loading flag", () => {
-  it("loading = false before the first access", () => {
+  it("loading before the first run: false on store, true on Cube (the read makes the run due)", () => {
     const store = new Palistor({
       config: {
         users: defineList({
@@ -240,7 +241,7 @@ describe("defineList — loading flag", () => {
       } as any,
     });
 
-    expect((store.proxy as any).users.loading).toBe(false);
+    expect((store.proxy as any).users.loading).toBe(LOADING_ON_FIRST_READ);
   });
 
   it("loading = true while the resolver runs", async () => {

@@ -6,6 +6,7 @@ export { FieldMap } from "./mapping";
 export { Memo } from "./memo";
 export { Persist, localStorageDriver, sessionStorageDriver, type PersistDriver, type PersistOptions } from "./persist";
 export { Registry, generateTmpId } from "./registry";
+export { applyInitialData } from "./restore";
 export { ResolveState, type ResolveStatus } from "./resolve";
 export { CUBE, cubeOf, STATE_KEYS, LIST_STATE_KEYS, FLOW_STATE_KEYS, type PublicNode } from "./node";
 export { Pager, type PageRequest, type PersistBlob } from "./pagination";

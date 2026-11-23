@@ -12,6 +12,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Palistor, defineList } from "@impl";
 import { CONFIG_NODE, LIST_STATE } from "../../../store/constants";
+import { LOADING_ON_FIRST_READ } from "../impl";
 
 /**
  * Contract shim: store keys subscriptions and versions by its internal objects
@@ -100,9 +101,10 @@ describe("List resolver", () => {
 
     const listProxy = (store.proxy as any).users;
 
-    // Before access: resolve is idle → loading false. loading === (resolveStatus === "pending").
+    // Before access: resolve is idle. store: loading === (resolveStatus === "pending"), so false.
+    // Cube: reading `loading` makes the run due, and a due run reads as loading.
     expect(listProxy.resolveStatus).toBe("idle");
-    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(LOADING_ON_FIRST_READ);
 
     // Accessing items → lazy resolve (deferred queueMicrotask) → the resolver hangs on the gate.
     void listProxy.items;
@@ -158,9 +160,9 @@ describe("List resolver", () => {
     // The per-entity list proxy of owner u1.
     const listProxy = (store.proxy as any).users.items[0].contacts;
 
-    // Before access: no run yet → idle, loading false.
+    // Before access: no run yet → idle. loading: false on store, true on Cube (the read makes the run due).
     expect(listProxy.resolveStatus).toBe("idle");
-    expect(listProxy.loading).toBe(false);
+    expect(listProxy.loading).toBe(LOADING_ON_FIRST_READ);
 
     // Accessing items → lazy resolve (deferred) → the resolver hangs on the gate.
     void listProxy.items;

@@ -14,9 +14,11 @@
 //     untaken branch never blocks a submit started above it.
 //
 // Entering a step: onEnter → the step's resolve if it is idle → onReady once
-// that run lands (right away without a resolve); both get the flow's values
-// and the store, fire-and-forget. Navigation is not a value: it never enters
-// values or payloads. Persist keeps it under `__flows` (persist.ts).
+// that run lands (right away without a resolve, or with a result that came as
+// `initialData`); both get the flow's values and the store, fire-and-forget.
+// In server mode nothing is entered until store.start(). Navigation is not a
+// value: it never enters values or payloads. Persist keeps it under `__flows`
+// (persist.ts).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { isPlainObject, type CubeConfig, type SubmitError, type SubmitResult } from "./config";
@@ -157,6 +159,9 @@ export class FlowCube extends Cube {
   /** `push`: nextStep / goTo put the step being left on the stack; back() has already popped it. */
   private enter(target: number, push: boolean) {
     const prevKey = this.stepKeys[this.index];
+    // Server mode: the step being left is no longer the one store.start() enters.
+    const left = this.hub.held ? this.steps[this.index].rs : undefined;
+    if (left) this.hub.deferred.delete(left);
     this.hub.batch(() => {
       if (push) this.stack.push(prevKey);
       this.index = target;
@@ -170,15 +175,27 @@ export class FlowCube extends Cube {
   /** The active step's entry lifecycle: at construction, after a navigation, a reset, a hydration. */
   enterCurrent(): void {
     const step = this.steps[this.index];
+    const hub = this.hub;
+    // Server mode: no callback, no request. store.start() enters the step; until then its resolve reads as loading.
+    if (hub.held) {
+      if (step.rs?.status === "idle") hub.deferred.add(step.rs);
+      return;
+    }
     const values = this.values;
-    const store = this.hub.store;
+    const store = hub.store;
     fire(step.config.onEnter, values, store);
     const ready = () => fire(step.config.onReady, values, store);
     const rs = step.rs;
     if (!rs) { ready(); return; }
+    // A result that came as initialData has met no entry yet: this one answers it, also when a
+    // dependency has restarted the resolve since (then once that run lands).
+    const state = rs as Partial<ResolveState>;
+    const seeded = state.seeded === true;
+    state.seeded = false;
     // Pending: started by another entry, which fires onReady. Resolved or failed: cached, no second onReady.
-    if (rs.status !== "idle") return;
-    rs.start();
+    if (rs.status !== "idle") {
+      if (!seeded) return;
+    } else rs.start();
     if (rs.promise) void rs.promise.then(ready, () => {});
     else ready();
   }

@@ -3,12 +3,35 @@
  *
  * Runs in both vitest projects: `store` proves the test itself is right,
  * `cube` shows parity. Imports only from "@impl" (see vitest.config.ts).
+ *
+ * The export list is one for both, with one intended difference: Cube adds the
+ * server-rendering wiring (experiments/SsrPlan.md), which store never gets.
  */
 
 import { describe, it, expect } from "vitest";
 import { act, render } from "@testing-library/react";
 import * as impl from "@impl";
 import { Palistor, useForm } from "@impl";
+import { onCube } from "./impl";
+
+/** Runtime names both implementations export. */
+const COMMON = [
+  "Palistor",
+  "defineFieldMapping",
+  "defineFlow",
+  "defineList",
+  "defineStep",
+  "localStorageDriver",
+  "sessionStorageDriver",
+  "useForm",
+  "useNotifier",
+  "usePersist",
+  "useStoreContext",
+  "useTranslator",
+];
+
+/** Cube only: a store per component instance and its provider. */
+const CUBE_ONLY = ["PalistorProvider", "usePalistor", "usePalistorContext"];
 
 const paymentConfig = () => ({
   paymentType: { value: "card", label: "Payment method" },
@@ -28,21 +51,14 @@ const paymentConfig = () => ({
 });
 
 describe("public surface", () => {
+  const names = Object.keys(impl).sort();
+
   it("exports the runtime names of the root entry", () => {
-    expect(Object.keys(impl).sort()).toEqual([
-      "Palistor",
-      "defineFieldMapping",
-      "defineFlow",
-      "defineList",
-      "defineStep",
-      "localStorageDriver",
-      "sessionStorageDriver",
-      "useForm",
-      "useNotifier",
-      "usePersist",
-      "useStoreContext",
-      "useTranslator",
-    ]);
+    expect(names.filter((name) => COMMON.includes(name))).toEqual(COMMON);
+  });
+
+  it("adds nothing to them on store, and exactly the server-rendering wiring on Cube", () => {
+    expect(names.filter((name) => !COMMON.includes(name))).toEqual(onCube ? CUBE_ONLY : []);
   });
 });
 
