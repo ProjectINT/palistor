@@ -3,46 +3,38 @@
   "baseline": "d6fdee2545f2c090eac90793a7be44abded59eac",
   "items": {
     "skill:skills/palistor-field-mapping/SKILL.md": {
-      "fingerprint": "43bcc6084c4adb820735551b72cc53d5504ef245cc31da4d00b31f7e613e3cf9",
+      "fingerprint": "64964ef9380c078846cc7d7c8cd433a7d320b429dd33274ea36ec7f2873bb066",
       "snapshot": {
         "cube/core/mapping.ts": "06d4fde3d1b8a4498424e0ea77813b280ba0afc82604f78201a731e2eee3e4ea",
-        "skills/palistor-field-mapping/SKILL.md": "e7e785988edc2ba48e46c84c582b31039f6b9b6abc723f6e09b490d83f75e625",
+        "skills/palistor-field-mapping/SKILL.md": "821308666d1c55ce5b1f079bdb2b95946fdb0123eec34001771d656ed8308d6f",
         "store/constants.ts": "f890cabc82298b55061c8b7271afe8d52e6fe0941b72828f2091e2fc9b8d9f1b",
         "store/defineFieldMapping.ts": "388c9c0a9e79cbb66894ee765cc8b81fd1c46013787e2fbc255eba6df4efc998"
       },
-      "head": "d6fdee2545f2c090eac90793a7be44abded59eac",
-      "outcome": "updated",
-      "reason": "New skill for input adapters and fieldMapping, split out of the single skill. Corrected against the runtime: with a map active the config must use the mapped names or the constructor throws, duplicate map targets are not rejected, a widened map breaks typing in two different ways, useForm(subtree) does not type-check in a mapped store, an adapter is required even for a mapped spread.",
+      "head": "a0fc80b4366fafc82b9ac4f716611347f7c376ac",
+      "outcome": "no-change",
+      "reason": "Release 0.1.0-cube.1: 'intent validate skills --set-version 0.1.0-cube.1' rewrote metadata.library_version in the five SKILL.md files and re-wrapped their frontmatter scalars (description, purpose) without changing their text; the 'Targets palistor v0.1.0-cube.1' line at the end of skills/palistor/SKILL.md follows the same version. No mapped source file and no guidance text changed since the review recorded for the SSR batch: the report lists only the five SKILL.md files as changed; for skills/palistor-field-mapping/SKILL.md (untouched by the SSR batch) the body is byte-identical to the previous commit and the frontmatter is identical modulo wrapping and the version. Checks at this state: intent validate - 5 skill files pass; npm run typecheck:skills passes; npm run test:skills - 6 files, 40 passed, 10 expected failures. The three planning documents carry no version and stay accurate.",
       "evidence": [
-        "branch feat/intent-skills (working tree) on cube-architecture d6fdee2, palistor 0.1.0-cube.0, @tanstack/intent 0.5.6",
-        "sources read: cube/core/mapping.ts, store/defineFieldMapping.ts, store/constants.ts, mapping types in store/store/types.ts, react/useForm.ts; contract tests cube/contract/sliceH",
-        "intent validate: 4 skill files pass, no no-check fences; strict compile of all plain examples (tests/skills/tsconfig.json): 0 findings; npm run typecheck:skills: pass; 9 compiled fences, 4 expect-error",
-        "task check tests/skills/field-mapping-adapter: 8 pass / 2 expected fail",
-        "fresh consumer session: not run; third-party UI kits are not installed, so kit-specific props in two examples are unchecked"
+        "Changed: skills/palistor-field-mapping/SKILL.md at a0fc80b4366fafc82b9ac4f716611347f7c376ac"
       ]
     },
     "skill:skills/palistor-flows/SKILL.md": {
-      "fingerprint": "11f133ed6fca0e71487fb242cd16abd3ff78418fd729a5fb26361f53dbc4c6a3",
+      "fingerprint": "f048c2bcfc06dba0799b6dc37cbc6bea2629f18b7e91645e918f710dca9af6c9",
       "snapshot": {
         "cube/core/flow.ts": "5e598ac7758d11fd093d5d69b4adef01e084f8aa7a524e378c6c304b367eb819",
         "cube/defineFlow.ts": "2268691db49dda8b28488d025448775dfd6c70288d33f4de156100e54d3b765b",
-        "skills/palistor-flows/SKILL.md": "8e27ee15d9184e268c21c4ab74d218127aa397ecde44dd04d29ddfa716abd6cb",
+        "skills/palistor-flows/SKILL.md": "bc191ece72b845f2e51113e28ffc215c5b99f3fbe68ce7b2ce9fca4c04c67cfc",
         "skills/palistor-flows/references/flow-api.md": "5882149b219d7379d66ab956b875a32b8623ace5f82be054379787250473cbf3",
         "store/flow/defineFlow.ts": "bce9fd63ae7627282aeeb80fb6ecf5f37f7cc47968cecae5d19e6b5b3f4c4f81"
       },
-      "head": "69faf7f937bcff5e8cddc364fee31450f98521a0",
-      "outcome": "updated",
-      "reason": "SKILL.md said the first step is entered when the store is created, \"at module load, on the server too\". Where `window` is not defined no step is entered now: onEnter / onReady are not called and no step resolve runs until store.start(), and the active step's resolve reads `loading: true` meanwhile. The passage and the lifecycle section of flow-api.md were rewritten; flow-api.md also states that a step's `loading` never starts its resolve and that a step whose data came as initialData gets onReady right after onEnter. A pointer to palistor-ssr was added.",
+      "head": "a0fc80b4366fafc82b9ac4f716611347f7c376ac",
+      "outcome": "no-change",
+      "reason": "Release 0.1.0-cube.1: 'intent validate skills --set-version 0.1.0-cube.1' rewrote metadata.library_version in the five SKILL.md files and re-wrapped their frontmatter scalars (description, purpose) without changing their text; the 'Targets palistor v0.1.0-cube.1' line at the end of skills/palistor/SKILL.md follows the same version. No mapped source file and no guidance text changed since the review recorded for the SSR batch: the report lists only the five SKILL.md files as changed; for skills/palistor-field-mapping/SKILL.md (untouched by the SSR batch) the body is byte-identical to the previous commit and the frontmatter is identical modulo wrapping and the version. Checks at this state: intent validate - 5 skill files pass; npm run typecheck:skills passes; npm run test:skills - 6 files, 40 passed, 10 expected failures. The three planning documents carry no version and stay accurate.",
       "evidence": [
-        "cube/core/flow.ts (enterCurrent: held -> deferred; seeded -> ready), cube/palistor.ts (constructor, start())",
-        "cube/ssr/serverMode.test.tsx (\"construction starts nothing\", \"runs what was held: each resolver once, onEnter once, onReady after the step's resolve lands\", \"does not run ... the resolve of a step that is not active\")",
-        "cube/ssr/initialDataFlow.test.ts (\"the first step: onEnter then onReady at construction\", \"re-entering the step fires onEnter again, not onReady\")",
-        "cube/core/node.ts (groupNode: a step's `loading` does not call wake)",
-        "Checks at the reviewed state: `npm exec --no -- intent validate skills` - 5 skill files pass, no warnings; `npm run typecheck:skills` passes; `npm run test:skills` - 6 files, 40 passed, 10 expected failures. Fresh consumer session and description activation: not run."
+        "Changed: skills/palistor-flows/SKILL.md at a0fc80b4366fafc82b9ac4f716611347f7c376ac"
       ]
     },
     "skill:skills/palistor-lists/SKILL.md": {
-      "fingerprint": "67bb98386e9ca6219bcd0605b8f529df355318c5525dfdd1e7bac0bd9afb0461",
+      "fingerprint": "0a6e285ebdd341885917e4e9e144593f26b7aa4a96589733503c5b14c12d7672",
       "snapshot": {
         "cube/core/cube.ts": "3dd3e4f2df77c8abde0ca6a3555674b1ff58db48471d8366bb49c53c282c7371",
         "cube/core/filter.ts": "b85b2b79d74249562a63140c04b42bcc24779ba2ced013669a3c0377d0c709f3",
@@ -55,7 +47,7 @@
         "cube/defineList.ts": "185e13b827f31216610477240318f5f6b28e712cac6ad05cdd2fa8a6ed4a62e9",
         "cube/react/useForm.ts": "30518cbb0d933cfb515887f7a0aa97cccab68c395a3f100c4d91179aaa7cf222",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor-lists/SKILL.md": "4e05e4f2a43c7cf6b3d73b90ef24c8cf6bde17cb77dbe04179cbba61b9171048",
+        "skills/palistor-lists/SKILL.md": "ab57c11e3ba11d834c5fb6db57d9c05c3bb1db30dcfdaef08c9fb3cf4fdfdafd",
         "skills/palistor-lists/references/entity-editing.md": "08cb4ac894336e8e82d5391c5873a6bb16e334460c2fc33ce092624a58b588a1",
         "skills/palistor-lists/references/filtering.md": "03d0ac264b766a51965c1560adc8a8ee74a1178a7b36aafba0e79af77eac2827",
         "skills/palistor-lists/references/list-api.md": "f391298ac5636bab9f4c3455b206ba2904644304cf859ec0ce6b4ac938bea21c",
@@ -64,20 +56,15 @@
         "store/pagination/types.ts": "3e3ef8e8f7928b9ca1822746c40ed5fca13fe67a8c9e9cd240a14240b95e2118",
         "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
       },
-      "head": "69faf7f937bcff5e8cddc364fee31450f98521a0",
-      "outcome": "updated",
-      "reason": "A list's `loading` (and a paginated list's `isInitialLoading`) now starts the lazy resolve and reads `true` from that first read, while `resolveStatus` stays \"idle\" until the run starts. SKILL.md said `loading` never starts the load and explained the mistake \"Treating a failed or not-yet-started list as empty\" by an idle list whose `loading` is false on the first render: both passages were rewritten (the mistake still holds for a failed load and for a check of `length` alone). list-api.md (`loading`, `resolveStatus`, row-field `loading`, suspense in a server render), pagination.md (`isFetching` vs `loading`, `isInitialLoading`, the first page as initialData) and entity-editing.md (what starts a list resolve) follow. The no-`window` rule and a pointer to palistor-ssr were added. filtering.md is unchanged: nothing in it depends on `loading` or on what starts a resolve. cube/react/useForm.ts only gained \"use client\"; cube/core/hub.ts added the held / deferred state.",
+      "head": "a0fc80b4366fafc82b9ac4f716611347f7c376ac",
+      "outcome": "no-change",
+      "reason": "Release 0.1.0-cube.1: 'intent validate skills --set-version 0.1.0-cube.1' rewrote metadata.library_version in the five SKILL.md files and re-wrapped their frontmatter scalars (description, purpose) without changing their text; the 'Targets palistor v0.1.0-cube.1' line at the end of skills/palistor/SKILL.md follows the same version. No mapped source file and no guidance text changed since the review recorded for the SSR batch: the report lists only the five SKILL.md files as changed; for skills/palistor-field-mapping/SKILL.md (untouched by the SSR batch) the body is byte-identical to the previous commit and the frontmatter is identical modulo wrapping and the version. Checks at this state: intent validate - 5 skill files pass; npm run typecheck:skills passes; npm run test:skills - 6 files, 40 passed, 10 expected failures. The three planning documents carry no version and stay accurate.",
       "evidence": [
-        "cube/core/node.ts (listNode: `loading` and `isInitialLoading` call wake), cube/core/listCube.ts (`loading`), cube/core/pagination.ts (`due`, `isInitialLoading`, `touch`, `accept`)",
-        "cube/contract/sliceC/listResolve.test.ts, defineList.test.ts, entityFieldResolve.test.tsx, phase5.test.tsx, cube/contract/sliceG/pagination.test.ts (LOADING_ON_FIRST_READ)",
-        "cube/contract/sliceC/listResolveError.test.ts (a failed resolve: loading false, items untouched)",
-        "cube/ssr/serverMode.test.tsx (\"server mode: a paginated list\"), cube/ssr/initialDataLists.test.tsx (the first page as initialData)",
-        "tests/skills/lists-server-list: its mistake now fails 1 check instead of 2 (its `if (list.loading)` covers the first render); `rejects` updated",
-        "Checks at the reviewed state: `npm exec --no -- intent validate skills` - 5 skill files pass, no warnings; `npm run typecheck:skills` passes; `npm run test:skills` - 6 files, 40 passed, 10 expected failures. Fresh consumer session and description activation: not run."
+        "Changed: skills/palistor-lists/SKILL.md at a0fc80b4366fafc82b9ac4f716611347f7c376ac"
       ]
     },
     "skill:skills/palistor/SKILL.md": {
-      "fingerprint": "3f43319ed9daf499a833748fe364db8d7d2af769575fadf9d75a128d5538570d",
+      "fingerprint": "b28df1d26c87ae48ba9c2f45bd5271144760cd7df7f60083f8ad0dd95277c29b",
       "snapshot": {
         "cube/core/config.ts": "d14133efc4ded1888204e64a16d34a732b3427db9f6ee985aaab2b09e51fe4b6",
         "cube/core/cube.ts": "3dd3e4f2df77c8abde0ca6a3555674b1ff58db48471d8366bb49c53c282c7371",
@@ -95,7 +82,7 @@
         "cube/react/useTranslator.ts": "97fbdebfb0adb7aee4720305ece698ffa47a69c949815e0af19a2a7c02312b5c",
         "index.ts": "e89f0234c4483f7829d788d27c56245ffca8f03cc50e9eec808cbf6f922add63",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor/SKILL.md": "d96e1fabc4df1ed282a47d08ee6ff93c560b9d88021f904e481d4ba5c0324cc6",
+        "skills/palistor/SKILL.md": "2703050acf4c2f2e0e0a3d8f5ed5940af301dc9dec3e578d76dc7e68456b5cb3",
         "skills/palistor/references/async-resolve.md": "751831ca090449128ea77902b5f161207694fb0d686c65ca0d1392574d661b07",
         "skills/palistor/references/config-options.md": "318c5fec54c5271c80b6d9d0ab9f5435eb3ade493c6e8770fc8c084b94384f19",
         "skills/palistor/references/integrations.md": "6352c4d962d5ce28b64f18d8a6b6232e657da2f6a14a5a96f947de56ca61af27",
@@ -106,20 +93,15 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
       },
-      "head": "69faf7f937bcff5e8cddc364fee31450f98521a0",
-      "outcome": "updated",
-      "reason": "Three behaviors changed for every consumer. (1) A group resolve reads `loading: true` from the read that starts it (from creation with lazy: false), not only while the run is in flight, and reading `loading` alone now starts a lazy resolve: async-resolve.md (Start, loading, the mistake renamed to \"Waiting for a resolve that never starts\") and proxy-api.md (group `loading`) said the opposite and were rewritten. (2) Where `window` is not defined a store starts nothing until store.start(): added to async-resolve.md and to the store table of proxy-api.md. (3) The constructor takes translator / notifier (and initialData / server): integrations.md and proxy-api.md name them; SKILL.md keeps the module-level store as the default and routes a server-rendered screen to palistor-ssr (Setup, routing table, description, version line). The other changed sources carry no guidance change: cube/core/persist.ts only moved its restore walk to cube/core/restore.ts, cube/core/hub.ts added the held / deferred state behind (2), and the cube/react hooks only gained a \"use client\" directive.",
+      "head": "a0fc80b4366fafc82b9ac4f716611347f7c376ac",
+      "outcome": "no-change",
+      "reason": "Release 0.1.0-cube.1: 'intent validate skills --set-version 0.1.0-cube.1' rewrote metadata.library_version in the five SKILL.md files and re-wrapped their frontmatter scalars (description, purpose) without changing their text; the 'Targets palistor v0.1.0-cube.1' line at the end of skills/palistor/SKILL.md follows the same version. No mapped source file and no guidance text changed since the review recorded for the SSR batch: the report lists only the five SKILL.md files as changed; for skills/palistor-field-mapping/SKILL.md (untouched by the SSR batch) the body is byte-identical to the previous commit and the frontmatter is identical modulo wrapping and the version. Checks at this state: intent validate - 5 skill files pass; npm run typecheck:skills passes; npm run test:skills - 6 files, 40 passed, 10 expected failures. The three planning documents carry no version and stay accurate.",
       "evidence": [
-        "cube/core/node.ts (groupNode: `loading` wakes the resolve), cube/core/cube.ts (`loading` = pending or due), cube/core/resolve.ts (`due`, `touch`, `start`)",
-        "cube/contract/sliceJ/suspense.react.test.tsx and cube/contract/impl.ts (LOADING_ON_FIRST_READ)",
-        "cube/ssr/serverMode.test.tsx (\"store.start()\", \"server: false in Node behaves like the client\", \"a resolve waiting for its contextDeps reads loading: false\")",
-        "cube/palistor.ts (constructor options, start()), cube/react/useTranslator.ts (registers in useEffect), cube/ssr/hydration.test.tsx (\"a label through `translator`\")",
-        "Throwaway probe (jsdom): reading only `group.loading` starts the resolver; `group.values`, `store.getValues()` and `dirty` do not",
-        "Checks at the reviewed state: `npm exec --no -- intent validate skills` - 5 skill files pass, no warnings; `npm run typecheck:skills` passes; `npm run test:skills` - 6 files, 40 passed, 10 expected failures. Fresh consumer session and description activation: not run."
+        "Changed: skills/palistor/SKILL.md at a0fc80b4366fafc82b9ac4f716611347f7c376ac"
       ]
     },
     "planning:skills/_artifacts": {
-      "fingerprint": "2445bdf15e54f1bb04bfe31be6769295ae5822d7c95f28d0b748e7336389e915",
+      "fingerprint": "7bd570bc1b3242a1ee3b02f212433a4541ce6ddbc8a9bbed6a45199d5fc3ba57",
       "snapshot": {
         "cube/core/config.ts": "d14133efc4ded1888204e64a16d34a732b3427db9f6ee985aaab2b09e51fe4b6",
         "cube/core/cube.ts": "3dd3e4f2df77c8abde0ca6a3555674b1ff58db48471d8366bb49c53c282c7371",
@@ -151,16 +133,16 @@
         "skills/_artifacts/domain_map.yaml": "21f4c3ffd3839546c1974ae9b9f2513da5f2f3d91b1a400bd0c0b803b3a62bb2",
         "skills/_artifacts/skill_spec.md": "150e06d26756f25f0b47ec63e73446218f0662e1f4a1894d3b5eb5758eee762a",
         "skills/_artifacts/skill_tree.yaml": "652c261ede64977e4c21e665f96ff363726416811f904752f10380a133003203",
-        "skills/palistor-field-mapping/SKILL.md": "e7e785988edc2ba48e46c84c582b31039f6b9b6abc723f6e09b490d83f75e625",
-        "skills/palistor-flows/SKILL.md": "8e27ee15d9184e268c21c4ab74d218127aa397ecde44dd04d29ddfa716abd6cb",
+        "skills/palistor-field-mapping/SKILL.md": "821308666d1c55ce5b1f079bdb2b95946fdb0123eec34001771d656ed8308d6f",
+        "skills/palistor-flows/SKILL.md": "bc191ece72b845f2e51113e28ffc215c5b99f3fbe68ce7b2ce9fca4c04c67cfc",
         "skills/palistor-flows/references/flow-api.md": "5882149b219d7379d66ab956b875a32b8623ace5f82be054379787250473cbf3",
-        "skills/palistor-lists/SKILL.md": "4e05e4f2a43c7cf6b3d73b90ef24c8cf6bde17cb77dbe04179cbba61b9171048",
+        "skills/palistor-lists/SKILL.md": "ab57c11e3ba11d834c5fb6db57d9c05c3bb1db30dcfdaef08c9fb3cf4fdfdafd",
         "skills/palistor-lists/references/entity-editing.md": "08cb4ac894336e8e82d5391c5873a6bb16e334460c2fc33ce092624a58b588a1",
         "skills/palistor-lists/references/filtering.md": "03d0ac264b766a51965c1560adc8a8ee74a1178a7b36aafba0e79af77eac2827",
         "skills/palistor-lists/references/list-api.md": "f391298ac5636bab9f4c3455b206ba2904644304cf859ec0ce6b4ac938bea21c",
         "skills/palistor-lists/references/pagination.md": "549ae4a85bdd51ff45997a0b59bb0c86174e490fe7b68077756f96584165e4a4",
-        "skills/palistor-ssr/SKILL.md": "533aabf287a2c1f25ce82089778642dd41875e5d9d883e8cc5bee342d0ed8c12",
-        "skills/palistor/SKILL.md": "d96e1fabc4df1ed282a47d08ee6ff93c560b9d88021f904e481d4ba5c0324cc6",
+        "skills/palistor-ssr/SKILL.md": "6e74391c3666de7dd8e9550fd27783055e6cba80dc4aed7855f5f96c352d70d9",
+        "skills/palistor/SKILL.md": "2703050acf4c2f2e0e0a3d8f5ed5940af301dc9dec3e578d76dc7e68456b5cb3",
         "skills/palistor/references/async-resolve.md": "751831ca090449128ea77902b5f161207694fb0d686c65ca0d1392574d661b07",
         "skills/palistor/references/config-options.md": "318c5fec54c5271c80b6d9d0ab9f5435eb3ade493c6e8770fc8c084b94384f19",
         "skills/palistor/references/integrations.md": "6352c4d962d5ce28b64f18d8a6b6232e657da2f6a14a5a96f947de56ca61af27",
@@ -176,18 +158,15 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
       },
-      "head": "69faf7f937bcff5e8cddc364fee31450f98521a0",
-      "outcome": "updated",
-      "reason": "All three records were extended for batch 2 and earlier entries were kept. domain_map.yaml: domain server-rendering, the palistor-ssr entry (covers, 5 tasks, 8 failure modes), the renamed palistor failure mode, new sources for the lists failure mode 1, three tensions, six cross-references, five gaps. skill_spec.md: inventories, the palistor-ssr failure-mode table, tensions, cross-references, gaps, and a \"Batch 2\" section with decisions, every changed passage of the existing skills (before / after / evidence), check outcomes and remaining work. skill_tree.yaml: the palistor-ssr entry, the two changed descriptions and palistor-ssr in the distribution selection (synchronized by intent maintainer sync).",
+      "head": "a0fc80b4366fafc82b9ac4f716611347f7c376ac",
+      "outcome": "no-change",
+      "reason": "Release 0.1.0-cube.1: 'intent validate skills --set-version 0.1.0-cube.1' rewrote metadata.library_version in the five SKILL.md files and re-wrapped their frontmatter scalars (description, purpose) without changing their text; the 'Targets palistor v0.1.0-cube.1' line at the end of skills/palistor/SKILL.md follows the same version. No mapped source file and no guidance text changed since the review recorded for the SSR batch: the report lists only the five SKILL.md files as changed; for skills/palistor-field-mapping/SKILL.md (untouched by the SSR batch) the body is byte-identical to the previous commit and the frontmatter is identical modulo wrapping and the version. Checks at this state: intent validate - 5 skill files pass; npm run typecheck:skills passes; npm run test:skills - 6 files, 40 passed, 10 expected failures. The three planning documents carry no version and stay accurate.",
       "evidence": [
-        "skills/_artifacts/domain_map.yaml and skill_tree.yaml parse as YAML: 5 skills, failure modes 14 / 28 / 13 / 11 / 8, equal to the `### PRIORITY - title` headings of the skill files",
-        "skills/_artifacts/skill_spec.md, section \"Batch 2 - 2026-11-23\"",
-        "intent maintainer sync: package.json files, .claude-plugin, .cursor-plugin and .intent/skill-distribution.json list skills/palistor-ssr; `npm pack --dry-run` lists 15 files under skills/palistor*/ and nothing from skills/_artifacts, tests/ or .intent/",
-        "Checks at the reviewed state: `npm exec --no -- intent validate skills` - 5 skill files pass, no warnings; `npm run typecheck:skills` passes; `npm run test:skills` - 6 files, 40 passed, 10 expected failures. Fresh consumer session and description activation: not run."
+        "Changed: skills/palistor-field-mapping/SKILL.md, skills/palistor-flows/SKILL.md, skills/palistor-lists/SKILL.md, skills/palistor-ssr/SKILL.md, skills/palistor/SKILL.md at a0fc80b4366fafc82b9ac4f716611347f7c376ac"
       ]
     },
     "skill:skills/palistor-ssr/SKILL.md": {
-      "fingerprint": "c69e155c1bfaada51c628752ef2388e1c07cd4abee7feb851b3cb0b71c69f467",
+      "fingerprint": "0739aa369421cc3a215ff11e724d3dd3a41cc490741627b239babf41ceca201c",
       "snapshot": {
         "cube/core/cube.ts": "3dd3e4f2df77c8abde0ca6a3555674b1ff58db48471d8366bb49c53c282c7371",
         "cube/core/flow.ts": "5e598ac7758d11fd093d5d69b4adef01e084f8aa7a524e378c6c304b367eb819",
@@ -201,18 +180,13 @@
         "cube/react/provider.tsx": "53aeb679ea77ad335ecd25591a54f02babc0f08bcfbb23193243051d10c2e6d9",
         "cube/react/usePalistor.ts": "734fcca0b8b67e3c4f195303c03730f04e410356f6d69689f22de23e82ac1112",
         "cube/types.ts": "da4b042e627826fc908eecf4ece8b0c318bde1b58523a26a4312f6f0fe104aca",
-        "skills/palistor-ssr/SKILL.md": "533aabf287a2c1f25ce82089778642dd41875e5d9d883e8cc5bee342d0ed8c12"
+        "skills/palistor-ssr/SKILL.md": "6e74391c3666de7dd8e9550fd27783055e6cba80dc4aed7855f5f96c352d70d9"
       },
-      "head": "69faf7f937bcff5e8cddc364fee31450f98521a0",
-      "outcome": "updated",
-      "reason": "New skill for the task \"render a palistor form, list or wizard on the server in Next.js App Router\": usePalistor (a store per component instance), PalistorProvider / usePalistorContext, the constructor options initialData, translator, notifier and server, what restarts a resolve that got initialData, loading and Suspense in a server render, usePersist over initialData, store.start() for Node. Eight mistakes, each with a source. Written against the runtime in the working tree and the nine cube/ssr test files.",
+      "head": "a0fc80b4366fafc82b9ac4f716611347f7c376ac",
+      "outcome": "no-change",
+      "reason": "Release 0.1.0-cube.1: 'intent validate skills --set-version 0.1.0-cube.1' rewrote metadata.library_version in the five SKILL.md files and re-wrapped their frontmatter scalars (description, purpose) without changing their text; the 'Targets palistor v0.1.0-cube.1' line at the end of skills/palistor/SKILL.md follows the same version. No mapped source file and no guidance text changed since the review recorded for the SSR batch: the report lists only the five SKILL.md files as changed; for skills/palistor-field-mapping/SKILL.md (untouched by the SSR batch) the body is byte-identical to the previous commit and the frontmatter is identical modulo wrapping and the version. Checks at this state: intent validate - 5 skill files pass; npm run typecheck:skills passes; npm run test:skills - 6 files, 40 passed, 10 expected failures. The three planning documents carry no version and stay accurate.",
       "evidence": [
-        "cube/palistor.ts, cube/types.ts, cube/core/restore.ts, cube/core/resolve.ts, cube/core/pagination.ts, cube/core/flow.ts, cube/react/usePalistor.ts, cube/react/provider.tsx at the reviewed working tree (HEAD 69faf7f plus uncommitted SSR work)",
-        "cube/ssr/serverMode.test.tsx, suspense.test.tsx, hydration.test.tsx, usePalistor.test.tsx, initialData.test.tsx, initialDataDeps.test.ts, initialDataLists.test.tsx, initialDataFlow.test.ts, persistOverInitialData.test.tsx",
-        "Strict compile (strict: true, one-off script) of the 5 plain ts / tsx fences: no errors; the expect-error=TS2345 fence is checked by intent validate",
-        "tests/skills/ssr-server-list: the reference solution passes 4 of 4 checks (server HTML with rows and the translated label and no API call; hydration without a mismatch or a request; search; two instances); the mistake (translator through useTranslator) fails the server-HTML check",
-        "Not covered by a cube/ssr test, probed by hand: suspense without a boundary fails the server render; a group with resolve that got initialValues still resolves. Next.js's handling of the bailout digest rests on the comment on clientOnly (cube/core/resolve.ts)",
-        "Checks at the reviewed state: `npm exec --no -- intent validate skills` - 5 skill files pass, no warnings; `npm run typecheck:skills` passes; `npm run test:skills` - 6 files, 40 passed, 10 expected failures. Fresh consumer session and description activation: not run."
+        "Changed: skills/palistor-ssr/SKILL.md at a0fc80b4366fafc82b9ac4f716611347f7c376ac"
       ]
     },
     "source:cube/core/index.ts": {

@@ -464,7 +464,7 @@ here, the installed version differs: see Version below.
 
 ## Version
 
-Targets palistor v0.1.0-cube.0. If the project has another version installed, read the skill shipped
+Targets palistor v0.1.0-cube.1. If the project has another version installed, read the skill shipped
 with that version instead: it is in `node_modules/palistor/skills/`, or run
 `npm exec --no -- intent load palistor#palistor` (and `palistor#palistor-lists`,
 `palistor#palistor-flows`, `palistor#palistor-field-mapping`, `palistor#palistor-ssr` for the other
