@@ -1,0 +1,32 @@
+[
+  {
+    "id": "team-compilers",
+    "name": "Compilers",
+    "members": [
+      { "id": "member-hopper", "name": "Grace Hopper" },
+      { "id": "member-allen", "name": "Frances Allen" },
+      { "id": "member-backus", "name": "John Backus" }
+    ]
+  },
+  {
+    "id": "team-networking",
+    "name": "Networking",
+    "members": [
+      { "id": "member-perlman", "name": "Radia Perlman" },
+      { "id": "member-cerf", "name": "Vint Cerf" }
+    ]
+  },
+  {
+    "id": "team-flight",
+    "name": "Flight software",
+    "members": [
+      { "id": "member-hamilton", "name": "Margaret Hamilton" },
+      { "id": "member-johnson", "name": "Katherine Johnson" }
+    ]
+  },
+  {
+    "id": "team-security",
+    "name": "Security",
+    "members": []
+  }
+]

@@ -1,14 +1,13 @@
 "use client";
 
-import { Suspense, useSyncExternalStore } from "react";
-import Link from "next/link";
-import { useLocale, useTranslations } from "next-intl";
+import { Suspense } from "react";
+import { useTranslations } from "next-intl";
 import { useForm, usePalistor, usePalistorContext } from "@palistor";
 import type { Palistor, PalistorRef } from "@palistor";
 
-import { LocaleSwitcher } from "@/modules/header";
-import { requestCount, subscribeRequests } from "./backend";
-import type { Endpoint, Engineer, Project } from "./backend";
+import type { Engineer, Project } from "./backend";
+import { Block, Counter } from "./shared/Block";
+import { SsrShell } from "./shared/SsrShell";
 import { ssrConfig } from "./ssrConfig";
 
 type SsrStore = Palistor<typeof ssrConfig>;
@@ -18,65 +17,61 @@ type SsrStore = Palistor<typeof ssrConfig>;
  * and in the browser during hydration, each time with a store of its own built
  * from the same props. `usePalistor` makes that store once per component
  * instance; the translator and the context come from <PalistorProvider>
- * (SsrProviders.tsx) and are in place before the first render.
+ * (shared/SsrProviders.tsx) and are in place before the first render.
  */
 export function SsrView({ engineers }: { engineers: Engineer[] }) {
   const t = useTranslations("ssr");
-  const locale = useLocale();
   const { workspace } = usePalistorContext<{ workspace: string }>();
 
   // The server's rows are the result the `engineers` resolver would have
   // returned: the list starts resolved and no request follows hydration.
   const store = usePalistor(() => ({ config: ssrConfig, initialData: { engineers } }));
 
-  const changeLocale = (next: "ru" | "en") => {
-    document.cookie = `NEXT_LOCALE=${next}; path=/; max-age=31536000`;
-    window.location.reload();
-  };
-
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8 px-4">
-      <div className="max-w-3xl mx-auto space-y-6">
-        <header>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{t("title")}</h1>
-              <p className="text-zinc-600 dark:text-zinc-400 mt-1">{t("subtitle")}</p>
-            </div>
-            <LocaleSwitcher locale={locale as "ru" | "en"} onLocaleChange={changeLocale} />
-          </div>
-          <div className="mt-3 flex items-center gap-4 text-sm">
-            <Link href="/" className="text-blue-600 dark:text-blue-400 hover:underline">
-              {t("back")}
-            </Link>
-            <span className="text-zinc-500 dark:text-zinc-400">
-              {t("workspace")}: <span className="font-mono" data-testid="ssr-workspace">{workspace}</span>
-            </span>
-          </div>
-        </header>
+    <SsrShell
+      subtitle={t("subtitle")}
+      aside={
+        <span className="text-zinc-500 dark:text-zinc-400">
+          {t("workspace")}: <span className="font-mono" data-testid="ssr-workspace">{workspace}</span>
+        </span>
+      }
+    >
+      <Block
+        testId="ssr-engineers"
+        title={t("engineers.title")}
+        hint={t("engineers.hint")}
+        footer={<Counter event="engineers" testId="ssr-engineers-requests" />}
+      >
+        <Engineers store={store} />
+      </Block>
 
-        <Block testId="ssr-engineers" endpoint="engineers" title={t("engineers.title")} hint={t("engineers.hint")}>
-          <Engineers store={store} />
-        </Block>
+      <Block
+        testId="ssr-projects"
+        title={t("projects.title")}
+        hint={t("projects.hint")}
+        footer={<Counter event="projects" testId="ssr-projects-requests" />}
+      >
+        <Projects store={store} />
+      </Block>
 
-        <Block testId="ssr-projects" endpoint="projects" title={t("projects.title")} hint={t("projects.hint")}>
-          <Projects store={store} />
-        </Block>
-
-        <Block testId="ssr-summary" endpoint="summary" title={t("summary.title")} hint={t("summary.hint")}>
-          {/* The suspending node is read below the boundary; usePalistor is called above it. */}
-          <Suspense
-            fallback={
-              <p data-testid="ssr-summary-fallback" className="text-sm text-zinc-500 dark:text-zinc-400">
-                {t("summary.fallback")}
-              </p>
-            }
-          >
-            <Summary store={store} />
-          </Suspense>
-        </Block>
-      </div>
-    </div>
+      <Block
+        testId="ssr-summary"
+        title={t("summary.title")}
+        hint={t("summary.hint")}
+        footer={<Counter event="summary" testId="ssr-summary-requests" />}
+      >
+        {/* The suspending node is read below the boundary; usePalistor is called above it. */}
+        <Suspense
+          fallback={
+            <p data-testid="ssr-summary-fallback" className="text-sm text-zinc-500 dark:text-zinc-400">
+              {t("summary.fallback")}
+            </p>
+          }
+        >
+          <Summary store={store} />
+        </Suspense>
+      </Block>
+    </SsrShell>
   );
 }
 
@@ -202,54 +197,5 @@ function Summary({ store }: { store: SsrStore }) {
         {summary.topFocus.value}
       </dd>
     </dl>
-  );
-}
-
-// ─── Shared pieces ───────────────────────────────────────────────────────────
-
-function Block({
-  testId,
-  endpoint,
-  title,
-  hint,
-  children,
-}: {
-  testId: string;
-  /** The fake endpoint this block's resolver calls: its call count is shown under the block. */
-  endpoint: Endpoint;
-  title: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  const t = useTranslations("ssr");
-  const requests = useRequestCount(endpoint);
-
-  return (
-    <section
-      data-testid={testId}
-      className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6"
-    >
-      <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-1">{title}</h2>
-      <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">{hint}</p>
-      {children}
-      <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500">
-        {t("requests")}:{" "}
-        <span data-testid={`${testId}-requests`} className="font-mono">
-          {requests}
-        </span>
-      </p>
-    </section>
-  );
-}
-
-/**
- * Calls of a fake endpoint in this tab. The server never calls one, so its
- * snapshot — also used by the render that hydrates the server's HTML — is 0.
- */
-function useRequestCount(endpoint: Endpoint): number {
-  return useSyncExternalStore(
-    subscribeRequests,
-    () => requestCount(endpoint),
-    () => 0,
   );
 }

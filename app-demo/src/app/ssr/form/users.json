@@ -1,0 +1,36 @@
+[
+  {
+    "id": "usr-1",
+    "name": "Ada Lovelace",
+    "email": "ada@compilers-lab.test",
+    "role": "researcher",
+    "bio": "Wrote the first published program for the Analytical Engine.",
+    "activity": [
+      { "id": "act-1-1", "title": "Note G: Bernoulli numbers", "date": "1843-09-05" },
+      { "id": "act-1-2", "title": "Translation of Menabrea's memoir", "date": "1843-08-14" }
+    ]
+  },
+  {
+    "id": "usr-2",
+    "name": "Edsger Dijkstra",
+    "email": "edsger@compilers-lab.test",
+    "role": "lead",
+    "bio": "Shortest paths, semaphores and structured programming.",
+    "activity": [
+      { "id": "act-2-1", "title": "Go To Statement Considered Harmful", "date": "1968-03-01" },
+      { "id": "act-2-2", "title": "A note on two problems in connexion with graphs", "date": "1959-06-11" },
+      { "id": "act-2-3", "title": "THE multiprogramming system", "date": "1968-05-15" }
+    ]
+  },
+  {
+    "id": "usr-3",
+    "name": "John Backus",
+    "email": "john@compilers-lab.test",
+    "role": "engineer",
+    "bio": "Led the FORTRAN team; the B in BNF.",
+    "activity": [
+      { "id": "act-3-1", "title": "The FORTRAN automatic coding system", "date": "1957-02-26" },
+      { "id": "act-3-2", "title": "Can programming be liberated from the von Neumann style?", "date": "1978-08-01" }
+    ]
+  }
+]

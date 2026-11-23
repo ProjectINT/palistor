@@ -1,0 +1,14 @@
+[
+  { "id": "ms-01", "year": 1843, "event": "Ada Lovelace publishes an algorithm for the Analytical Engine" },
+  { "id": "ms-02", "year": 1936, "event": "Alan Turing describes the universal machine" },
+  { "id": "ms-03", "year": 1945, "event": "ENIAC is completed" },
+  { "id": "ms-04", "year": 1951, "event": "UNIVAC I is delivered to the US Census Bureau" },
+  { "id": "ms-05", "year": 1957, "event": "FORTRAN ships for the IBM 704" },
+  { "id": "ms-06", "year": 1969, "event": "ARPANET carries its first message" },
+  { "id": "ms-07", "year": 1971, "event": "Intel releases the 4004 microprocessor" },
+  { "id": "ms-08", "year": 1972, "event": "C is created at Bell Labs" },
+  { "id": "ms-09", "year": 1983, "event": "ARPANET switches to TCP/IP" },
+  { "id": "ms-10", "year": 1991, "event": "The first website goes online at CERN" },
+  { "id": "ms-11", "year": 1991, "event": "Linux 0.01 is released" },
+  { "id": "ms-12", "year": 2008, "event": "The first Android phone ships" }
+]

@@ -51,7 +51,7 @@ export const ssrConfig = {
   // (c) A group that suspends, also without server data.
   summary: {
     resolve: {
-      // The context comes from <PalistorProvider> (SsrProviders.tsx) through the constructor.
+      // The context comes from <PalistorProvider> (shared/SsrProviders.tsx) through the constructor.
       resolver: async (_values: unknown, store: { context: Record<string, unknown> }) =>
         fetchSummary(store.context.workspace as string),
       contextDeps: ["workspace"],

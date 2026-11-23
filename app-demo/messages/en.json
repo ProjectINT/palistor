@@ -207,6 +207,13 @@
     "back": "← Back to the demo",
     "workspace": "Workspace",
     "requests": "Resolver calls",
+    "nav": {
+      "lists": "Lists & Suspense",
+      "form": "Prefilled form",
+      "catalog": "Pages & nested lists",
+      "flow": "Flow",
+      "runtime": "Server mode & provider"
+    },
     "engineers": {
       "title": "A list with data from the server",
       "hint": "The rows are passed as initialData: they are in the HTML, and the resolver is not called after hydration. Typing in the search sends one request, 300 ms after the last keystroke.",
@@ -227,6 +234,158 @@
       "workspace": "Workspace (from the provider context)",
       "headcount": "Engineers on file",
       "topFocus": "Most common focus"
+    },
+    "form": {
+      "subtitle": "An editable form whose values come from the server. The resolvers' results arrive as initialData, so the HTML is complete and nothing is requested after hydration until a declared dependency changes.",
+      "user": "User",
+      "roles": {
+        "researcher": "Researcher",
+        "lead": "Team lead",
+        "engineer": "Engineer"
+      },
+      "profile": {
+        "title": "A profile prefilled by the server",
+        "hint": "The Server Component reads the profile and passes it as initialData. The group starts in the state its resolver's result would leave: the values are in the HTML, dirty and loading are false, and the resolver is not called after hydration. Edit a field and the group is dirty; reset() returns to the server's values, which stay the dirty baseline until a resolver run replaces them.",
+        "name": "Full name",
+        "email": "Email",
+        "role": "Role",
+        "bio": "Bio",
+        "reset": "Reset to the server's values"
+      },
+      "deps": {
+        "title": "Declared dependencies",
+        "hint": "userId lives outside the profile group and is listed in resolve.deps of the profile and of the activity list. Choose another user: each resolver runs once. reload() runs the list's resolver again (a group has no reload()). A resolve that started from initialData has not run yet, so only its declared deps and contextDeps restart it: what its resolver merely reads is tracked from its first real run on.",
+        "activity": "Recent activity",
+        "reload": "Reload",
+        "empty": "No activity"
+      },
+      "errors": {
+        "title": "Errors reach the provider's notifier",
+        "hint": "Check a box, then reload the activity or choose another user. The request fails, the resolver's onError calls ctx.notify, and that is the notifier of PalistorProvider, which the store got in its constructor: a toast appears. A failed run changes no value: the profile keeps its values, the list keeps its rows and reports resolveStatus error with its error until a run succeeds.",
+        "failProfile": "Fail the next profile request",
+        "failActivity": "Fail the next activity request",
+        "count": "onError calls"
+      },
+      "draft": {
+        "title": "A draft over the server's data",
+        "hint": "A separate store with usePersist over localStorage. The server's HTML and the hydrating render show the server's announcement; after mount usePersist lays the saved draft over it, and the group is dirty against the server's data. Edit, reload the page: the draft comes back, and it starts no resolver. Discard: reset() returns to the server's values, persist.clear() removes the draft.",
+        "titleLabel": "Title",
+        "body": "Text",
+        "discard": "Discard the draft"
+      }
+    },
+    "catalog": {
+      "subtitle": "Lists beyond the plain one: the first page of a paginated list, the first page of a load-more feed and the lists nested in rows come from the server as initialData. They are in the HTML, and hydration requests none of them again.",
+      "year": "Year",
+      "prev": "Prev",
+      "next": "Next",
+      "pageOf": "Page {page} of {count}",
+      "papers": {
+        "title": "Pages, the first one from the server",
+        "hint": "The server passes page 1 as initialData, the way the resolver returns it (items and total): the rows, the page count and the total are in the HTML, and hydration sends no request. Another page is one request; a page the list has already seen, page 1 included, comes from the cache without one.",
+        "total": "{count} papers"
+      },
+      "milestones": {
+        "title": "Load more, the first page from the server",
+        "hint": "pagination.mode: \"infinite\". The server's first page carries nextCursor and hasMore: “Load more” sends one request with that cursor and appends one page. The last page answers hasMore: false, and the feed ends.",
+        "more": "Load more",
+        "end": "The end of the timeline",
+        "shown": "Showing {count} · {pages, plural, one {# page} other {# pages}} loaded"
+      },
+      "talks": {
+        "title": "Pages without server data",
+        "hint": "No initialData. The server requests nothing, but isInitialLoading is already true there, so the HTML has the skeleton; the browser loads page 1 once."
+      },
+      "teams": {
+        "title": "Lists nested in rows",
+        "hint": "Each team's members are a list nested in the team's row. The server sends them inside the rows of initialData: they are in the HTML and are each list's baseline. Add or remove a member and that list is dirty; “Reset to the server's data” calls store.reset() and brings the server's members back. The block has a store of its own, so the reset reaches no other block.",
+        "edited": "edited",
+        "empty": "No members",
+        "newMember": "New member",
+        "add": "Add",
+        "remove": "Remove {name}",
+        "reset": "Reset to the server's data"
+      }
+    },
+    "flow": {
+      "subtitle": "Step flows (defineFlow) under SSR. The server renders each flow's active step but enters none: no onEnter, no resolver. The browser enters it once. A step with server data skips its request; a step without it arrives in the HTML as its loading state.",
+      "next": "Next →",
+      "back": "← Back",
+      "lastStep": "The last step of this flow.",
+      "steps": {
+        "profile": "Profile",
+        "team": "Team",
+        "slot": "Slot",
+        "notes": "Notes"
+      },
+      "onboarding": {
+        "title": "A flow whose first step has server data",
+        "hint": "The profile step's resolve got its result as initialData: the fields are in the HTML, and the server entered no step. The browser enters it once: onEnter, then onReady right away, and its resolver is not called. The team step has no server data: entering it runs its resolver once. Its result is cached, so Back and then Next again request nothing. onEnter counts every entry, onReady fires once per step."
+      },
+      "booking": {
+        "title": "A flow whose first step has no server data",
+        "hint": "No initialData here. In server mode the active step's resolve is held: the step reads loading: true, so the HTML has its skeleton. The browser enters the step: onEnter, its resolver once, then onReady when the result lands."
+      },
+      "profile": {
+        "name": "Full name",
+        "email": "Work email",
+        "nameError": "Enter at least 2 characters",
+        "emailError": "Enter a valid email"
+      },
+      "team": {
+        "loading": "Loading the team…",
+        "mentor": "Mentor",
+        "channel": "Team channel (from the provider context)"
+      },
+      "slot": {
+        "loading": "Looking for a free review slot…",
+        "reviewer": "Reviewer",
+        "startsAt": "Starts"
+      },
+      "notes": {
+        "topic": "What should the review cover?",
+        "topicPlaceholder": "For example: the register allocator"
+      }
+    },
+    "runtime": {
+      "subtitle": "When a store starts its resolvers, where it lives and how the provider's context reaches it: nothing starts during the server render, the browser starts each resolver once, every component instance gets a store of its own, and a nested provider's context is followed live.",
+      "lists": {
+        "lazy": "Lazy list",
+        "lazyRead": "Lazy list, read by this block",
+        "eager": "Eager list (lazy: false)",
+        "noRows": "No rows yet",
+        "date": "Released",
+        "status": "Status"
+      },
+      "serverMode": {
+        "title": "1 · Server mode: nothing starts until store.start()",
+        "hint": "A server render has no window, so its store is in server mode and calls no resolver. This store passes server: true and stays in that mode in the browser as well. Both lists read loading: true (the lazy one because this block reads it, the eager one from the start), resolveStatus stays \"idle\" and nothing is called: the server's HTML and the hydrating render show the same. store.start() runs each held resolve once; a second call starts nothing.",
+        "starts": "store.start() calls"
+      },
+      "client": {
+        "title": "2 · In the browser the constructor starts the store",
+        "hint": "The same lists with the default server option. The server sent the eager list as loading (the skeleton). In the browser the store's constructor calls start(), so the eager list loads right away, although nothing has read its rows. The lazy list waits for its first read, and reading its loading counts as one: this panel reads nothing until you press the button. For a resolve without server data render loading, not resolveStatus: at the same moment the server says \"idle\" and the browser \"pending\".",
+        "unread": "Nothing has read this list yet: no request.",
+        "read": "Read the list"
+      },
+      "instances": {
+        "title": "3 · One store per component instance",
+        "hint": "The page passes two teammates, and one card component renders each, calling usePalistor with its own teammate as initialData. Two instances, two stores: edit one card and the other stays as it was. The data is the store's baseline (Reset returns to it) and the answer of the card's resolver, which is never called. initialData exists only in the constructor: a store at module level lives as long as the server process and is shared by every request, so request data must never get into it.",
+        "name": "Name",
+        "role": "Known for",
+        "edited": "Edited",
+        "asServed": "As the server sent it",
+        "reset": "Reset"
+      },
+      "context": {
+        "title": "4 · The provider's context, live",
+        "hint": "A nested PalistorProvider sets context.region for the store of this block. usePalistorContext() shows the merged context: workspace from the page's provider, region from this one. The mirror's resolve has contextDeps: [\"region\"], so without a region it waits: loading is false, no skeleton, no request. Picking a region starts it; another region re-runs it once, since the resolver read store.context.region. Picking the same region again hands the provider a new object with the same value: compared per key, that is no change, and nothing is sent.",
+        "region": "Region",
+        "picks": "Region picks",
+        "waiting": "No region yet: the resolve waits for its contextDeps.",
+        "host": "Mirror",
+        "latency": "Latency, ms"
+      }
     }
   }
 }

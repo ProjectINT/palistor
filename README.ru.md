@@ -1286,9 +1286,15 @@ resolve: {
 
 ## SSR и Next.js
 
-> 🔗 **Код:** [app/ssr/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr) (`page.cube.tsx`, `SsrProviders.tsx`, `SsrView.tsx`, `ssrConfig.ts`), e2e: [e2e/ssr.spec.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/e2e/ssr.spec.ts) · **Живой результат:** [Демо → SSR](https://projectint.github.io/palistor/ssr/)
+> 🔗 **Код:** [app/ssr/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr) — пять маршрутов, в каждом серверный компонент (`page.cube.tsx`) читает данные и передаёт их клиентскому компоненту с `usePalistor`; провайдер и рамка страницы — в [`shared/`](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr/shared). e2e: [e2e/ssr*.spec.ts](https://github.com/ProjectINT/palistor/tree/main/app-demo/e2e) · **Живой результат:** [Демо → SSR](https://projectint.github.io/palistor/ssr/)
 >
-> Маршрут `/ssr` показывает три блока: список с серверными данными и фильтром (после гидратации запроса нет), список без серверных данных (в HTML — его скелетон) и группу с `suspense: true` (в HTML — её fallback).
+> | Маршрут | Что показывает |
+> |---|---|
+> | [`/ssr`](https://projectint.github.io/palistor/ssr/) | Список с серверными данными и фильтром (после гидратации запроса нет), список без серверных данных (в HTML — его скелетон), группа с `suspense: true` (в HTML — её fallback) |
+> | [`/ssr/form`](https://projectint.github.io/palistor/ssr/form/) | Группа с `resolve`, заполненная через `initialData` (`dirty: false`, `reset()` возвращает к серверным значениям), перезапуск по объявленным `deps` и по `reload()` списка, ошибки резолвера доходят до `notifier` провайдера, черновик `usePersist` ложится поверх серверных данных после монтирования |
+> | [`/ssr/catalog`](https://projectint.github.io/palistor/ssr/catalog/) | Первая страница пагинированного списка как `{ items, total }` (страница 2 — один запрос, страница 1 возвращается из кэша), лента «Показать ещё», которую завершает `hasMore: false`, скелетон `isInitialLoading` у пагинированного списка без серверных данных, вложенные списки в строках |
+> | [`/ssr/flow`](https://projectint.github.io/palistor/ssr/flow/) | Шаг flow с серверными данными (в браузере `onEnter` и `onReady` по одному разу, запроса нет), следующий шаг загружается один раз и остаётся в кэше, flow без данных: состояние загрузки активного шага уже в HTML |
+> | [`/ssr/runtime`](https://projectint.github.io/palistor/ssr/runtime/) | `server: true` и `store.start()`, eager-резолв, который запускает конструктор, один store на экземпляр компонента, вложенный `<PalistorProvider context>` управляет `contextDeps` |
 
 В Next.js App Router клиентский компонент рендерится дважды: на сервере в HTML, затем в браузере при гидратации. Store не сериализуется, поэтому он создаётся дважды — по разу на каждый рендер — из одних и тех же props, и оба рендера должны дать одинаковую разметку. На сервере эффекты не выполняются, а store не запускает резолверы, поэтому транслятора, зарегистрированного через `useTranslator`, и строк, которые загрузил бы резолвер, в HTML нет: вместо подписей — ключи переводов, вместо списка — его скелетон. Передайте в конструктор всё, что нужно первому рендеру, — контекст, транслятор, данные — и HTML придёт полным, а гидратация пройдёт без расхождений и без повторного запроса.
 

@@ -1,0 +1,4 @@
+{
+  "title": "Compilers Lab: the spring release",
+  "body": "The new register allocator ships on Monday. Benchmarks and migration notes are in the wiki."
+}

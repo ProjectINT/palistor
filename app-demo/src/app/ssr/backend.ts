@@ -3,10 +3,11 @@
 // - the Server Component (page.cube.tsx) runs `queryEngineers` against
 //   engineers.json, as it would query a database;
 // - the browser calls the fake endpoints below from the store's resolvers.
-//   They answer from memory after a delay and count their calls — nothing
-//   here touches the network.
+//   They answer from memory after a delay and count their calls
+//   (shared/events.ts) — nothing here touches the network.
 
 import table from "./engineers.json";
+import { fakeRequest } from "./shared/events";
 
 export interface Engineer {
   id: string;
@@ -47,34 +48,12 @@ function summarize(rows: Engineer[], workspace: string): Summary {
 }
 
 // ─── Fake endpoints (browser only) ───────────────────────────────────────────
-
-export type Endpoint = "engineers" | "projects" | "summary";
-
-const calls: Record<Endpoint, number> = { engineers: 0, projects: 0, summary: 0 };
-const listeners = new Set<() => void>();
-
-function request<T>(endpoint: Endpoint, answer: () => T, delay: number): Promise<T> {
-  calls[endpoint] += 1;
-  listeners.forEach((listener) => listener());
-  return new Promise((resolve) => setTimeout(() => resolve(answer()), delay));
-}
+// Counted under the names "engineers", "projects" and "summary" (shared/events.ts).
 
 export const fetchEngineers = (params: { search: string }): Promise<Engineer[]> =>
-  request("engineers", () => queryEngineers(table, params.search), 400);
+  fakeRequest("engineers", () => queryEngineers(table, params.search), 400);
 
-export const fetchProjects = (): Promise<Project[]> => request("projects", () => PROJECTS, 600);
+export const fetchProjects = (): Promise<Project[]> => fakeRequest("projects", () => PROJECTS, 600);
 
 export const fetchSummary = (workspace: string): Promise<Summary> =>
-  request("summary", () => summarize(table, workspace), 800);
-
-/** How many times an endpoint was called in this browser tab (for `useSyncExternalStore`). */
-export function requestCount(endpoint: Endpoint): number {
-  return calls[endpoint];
-}
-
-export function subscribeRequests(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+  fakeRequest("summary", () => summarize(table, workspace), 800);

@@ -1288,9 +1288,15 @@ Changing a context key re-triggers resolvers that depend on it (via `contextDeps
 
 ## SSR & Next.js
 
-> 🔗 **Source:** [app/ssr/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr) (`page.cube.tsx`, `SsrProviders.tsx`, `SsrView.tsx`, `ssrConfig.ts`), e2e: [e2e/ssr.spec.ts](https://github.com/ProjectINT/palistor/blob/main/app-demo/e2e/ssr.spec.ts) · **Live result:** [Demo → SSR](https://projectint.github.io/palistor/ssr/)
+> 🔗 **Source:** [app/ssr/](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr) — five routes, each a Server Component (`page.cube.tsx`) that reads its data and hands it to a client view with `usePalistor`; the provider and the page frame are in [`shared/`](https://github.com/ProjectINT/palistor/tree/main/app-demo/src/app/ssr/shared). e2e: [e2e/ssr*.spec.ts](https://github.com/ProjectINT/palistor/tree/main/app-demo/e2e) · **Live result:** [Demo → SSR](https://projectint.github.io/palistor/ssr/)
 >
-> The `/ssr` route shows three blocks: a list with server data and a filter (no request after hydration), a list without server data (its skeleton is in the HTML) and a `suspense: true` group (its fallback is in the HTML).
+> | Route | What it shows |
+> |---|---|
+> | [`/ssr`](https://projectint.github.io/palistor/ssr/) | A list with server data and a filter (no request after hydration), a list without server data (its skeleton is in the HTML), a `suspense: true` group (its fallback is in the HTML) |
+> | [`/ssr/form`](https://projectint.github.io/palistor/ssr/form/) | A group with `resolve` prefilled through `initialData` (`dirty: false`, `reset()` returns to the server's values), re-runs on declared `deps` and on a list's `reload()`, resolver errors reaching the provider's `notifier`, a `usePersist` draft laid over the server's data after mount |
+> | [`/ssr/catalog`](https://projectint.github.io/palistor/ssr/catalog/) | The first page of a paginated list as `{ items, total }` (page 2 is one request, page 1 comes back from the cache), a "load more" feed ended by `hasMore: false`, the `isInitialLoading` skeleton of a paginated list without server data, lists nested in rows |
+> | [`/ssr/flow`](https://projectint.github.io/palistor/ssr/flow/) | A flow step with server data (`onEnter` and `onReady` once in the browser, no request), a next step that loads once and stays cached, a flow without data whose active step's loading state is in the HTML |
+> | [`/ssr/runtime`](https://projectint.github.io/palistor/ssr/runtime/) | `server: true` and `store.start()`, an eager resolve started by the constructor, one store per component instance, a nested `<PalistorProvider context>` driving `contextDeps` |
 
 In the Next.js App Router a Client Component renders twice: on the server into HTML, then in the browser during hydration. A store is not serializable, so it is created twice — once per render — from the same props, and both renders must produce the same markup. On the server effects do not run and a store starts no resolver, so a translator registered with `useTranslator` and the rows a resolver would load are not in the HTML: labels come out as translation keys, a list comes out as its skeleton. Give the constructor what the first render needs — context, translator, data — and the HTML arrives complete, and hydration neither mismatches nor repeats a request.
 
