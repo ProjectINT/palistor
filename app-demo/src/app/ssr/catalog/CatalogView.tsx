@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
-import type { PagedResult, Palistor, PalistorRef } from "@palistor";
+import type { PagedResult, PalistorList, PalistorRef } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { SsrShell } from "../shared/SsrShell";
@@ -10,13 +10,14 @@ import type { Milestone, Paper, Talk, Team } from "./backend";
 import { catalogConfig } from "./catalogConfig";
 import { Teams } from "./Teams";
 
-type CatalogStore = Palistor<typeof catalogConfig>;
-
 /**
  * The client side of /ssr/catalog: three paginated lists in one store, and
  * the teams block with a store of its own (Teams.tsx). Rendered on the server
  * into HTML and again in the browser during hydration, each time with a store
  * built from the same props.
+ *
+ * Only this component sees the store: each block gets its list as a prop and
+ * hands every row down to a row component.
  */
 export function CatalogView({
   papers,
@@ -33,6 +34,8 @@ export function CatalogView({
   // filed as a fetched page, so the list starts resolved and hydration sends
   // no request. `talks` gets no data and loads in the browser.
   const store = usePalistor(() => ({ config: catalogConfig, initialData: { papers, milestones } }));
+  // Only navigates: reads no state, so paging a list never re-renders the view.
+  const form = useForm(store);
 
   return (
     <SsrShell subtitle={t("subtitle")}>
@@ -42,7 +45,7 @@ export function CatalogView({
         hint={t("papers.hint")}
         footer={<Counter event="catalog.papers" testId="ssr-catalog-papers-requests" />}
       >
-        <Papers store={store} />
+        <Papers papers={form.papers} />
       </Block>
 
       <Block
@@ -51,7 +54,7 @@ export function CatalogView({
         hint={t("milestones.hint")}
         footer={<Counter event="catalog.milestones" testId="ssr-catalog-milestones-requests" />}
       >
-        <Milestones store={store} />
+        <Milestones milestones={form.milestones} />
       </Block>
 
       <Block
@@ -60,7 +63,7 @@ export function CatalogView({
         hint={t("talks.hint")}
         footer={<Counter event="catalog.talks" testId="ssr-catalog-talks-requests" />}
       >
-        <Talks store={store} />
+        <Talks talks={form.talks} />
       </Block>
 
       <Block testId="ssr-catalog-teams" title={t("teams.title")} hint={t("teams.hint")}>
@@ -72,30 +75,30 @@ export function CatalogView({
 
 // ─── (1) Pages by number, first page from the server ─────────────────────────
 
-function Papers({ store }: { store: CatalogStore }) {
+function Papers({ papers }: { papers: PalistorList<Paper> }) {
   const t = useTranslations("ssr.catalog");
-  const papers = useForm(store).papers;
+  const list = useForm(papers);
 
   return (
     <div className="space-y-3">
       {/* While another page loads, the list keeps the rows it shows. */}
-      <ul data-testid="ssr-catalog-papers-rows" className={`space-y-1 ${papers.isFetching ? "opacity-50" : ""}`}>
-        {papers.map((paper, _index, id) => (
+      <ul data-testid="ssr-catalog-papers-rows" className={`space-y-1 ${list.isFetching ? "opacity-50" : ""}`}>
+        {list.map((paper, _index, id) => (
           <PaperRow key={id} paper={paper} />
         ))}
       </ul>
 
       <Pager
         testId="ssr-catalog-papers"
-        page={papers.page!}
-        pageCount={papers.pageCount!}
-        hasPrev={papers.hasPrevPage!}
-        hasNext={papers.hasNextPage!}
-        busy={papers.isFetching!}
-        onPage={(n) => papers.setPage!(n)}
+        page={list.page!}
+        pageCount={list.pageCount!}
+        hasPrev={list.hasPrevPage!}
+        hasNext={list.hasNextPage!}
+        busy={list.isFetching!}
+        onPage={(n) => list.setPage!(n)}
         numbered
       >
-        <span data-testid="ssr-catalog-papers-total">{t("papers.total", { count: papers.total ?? 0 })}</span>
+        <span data-testid="ssr-catalog-papers-total">{t("papers.total", { count: list.total ?? 0 })}</span>
       </Pager>
     </div>
   );
@@ -119,34 +122,34 @@ function PaperRow({ paper }: { paper: PalistorRef<Paper> }) {
 
 // ─── (2) Load more, first page from the server ───────────────────────────────
 
-function Milestones({ store }: { store: CatalogStore }) {
+function Milestones({ milestones }: { milestones: PalistorList<Milestone> }) {
   const t = useTranslations("ssr.catalog.milestones");
-  const milestones = useForm(store).milestones;
+  const list = useForm(milestones);
 
   return (
     <div className="space-y-3">
       <ol data-testid="ssr-catalog-milestones-rows" className="space-y-1">
-        {milestones.map((milestone, _index, id) => (
+        {list.map((milestone, _index, id) => (
           <MilestoneRow key={id} milestone={milestone} />
         ))}
       </ol>
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
-        {milestones.hasNextPage ? (
+        {list.hasNextPage ? (
           <button
             data-testid="ssr-catalog-milestones-more"
-            disabled={milestones.isFetchingNextPage}
-            onClick={() => milestones.loadMore!()}
+            disabled={list.isFetchingNextPage}
+            onClick={() => list.loadMore!()}
             className={BUTTON}
           >
             {t("more")}
-            {milestones.isFetchingNextPage && <Spinner testId="ssr-catalog-milestones-busy" />}
+            {list.isFetchingNextPage && <Spinner testId="ssr-catalog-milestones-busy" />}
           </button>
         ) : (
           <span data-testid="ssr-catalog-milestones-end">{t("end")}</span>
         )}
         <span data-testid="ssr-catalog-milestones-shown" className="ml-auto">
-          {t("shown", { count: milestones.length, pages: milestones.loadedPages!.length })}
+          {t("shown", { count: list.length, pages: list.loadedPages!.length })}
         </span>
       </div>
     </div>
@@ -169,16 +172,16 @@ function MilestoneRow({ milestone }: { milestone: PalistorRef<Milestone> }) {
 
 // ─── (3) Pages by number, no server data ─────────────────────────────────────
 
-function Talks({ store }: { store: CatalogStore }) {
-  const talks = useForm(store).talks;
+function Talks({ talks }: { talks: PalistorList<Talk> }) {
+  const list = useForm(talks);
 
   // Reading `isInitialLoading` asks for the list, like `loading` does: it is
   // true in the server's HTML (the store there holds the run back) and in the
   // browser's first render, so both draw the skeleton.
-  if (talks.isInitialLoading) {
+  if (list.isInitialLoading) {
     return (
       <div data-testid="ssr-catalog-talks-skeleton" className="space-y-1">
-        {Array.from({ length: talks.pageSize! }, (_, i) => (
+        {Array.from({ length: list.pageSize! }, (_, i) => (
           <div key={i} className="h-11 rounded-lg bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
         ))}
       </div>
@@ -187,19 +190,19 @@ function Talks({ store }: { store: CatalogStore }) {
 
   return (
     <div className="space-y-3">
-      <ul data-testid="ssr-catalog-talks-rows" className={`space-y-1 ${talks.isFetching ? "opacity-50" : ""}`}>
-        {talks.map((talk, _index, id) => (
+      <ul data-testid="ssr-catalog-talks-rows" className={`space-y-1 ${list.isFetching ? "opacity-50" : ""}`}>
+        {list.map((talk, _index, id) => (
           <TalkRow key={id} talk={talk} />
         ))}
       </ul>
       <Pager
         testId="ssr-catalog-talks"
-        page={talks.page!}
-        pageCount={talks.pageCount!}
-        hasPrev={talks.hasPrevPage!}
-        hasNext={talks.hasNextPage!}
-        busy={talks.isFetching!}
-        onPage={(n) => talks.setPage!(n)}
+        page={list.page!}
+        pageCount={list.pageCount!}
+        hasPrev={list.hasPrevPage!}
+        hasNext={list.hasNextPage!}
+        busy={list.isFetching!}
+        onPage={(n) => list.setPage!(n)}
       />
     </div>
   );

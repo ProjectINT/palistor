@@ -2,9 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
+import type { PalistorList } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { track } from "../shared/events";
+import type { Build, Release } from "./backend";
 import { BuildRow, ReleaseRow } from "./lists";
 import { heldConfig } from "./runtimeConfig";
 import { Button, Chip, Note, Panel } from "./ui";
@@ -19,10 +21,8 @@ import { Button, Chip, Note, Panel } from "./ui";
 export function ServerModeBlock() {
   const t = useTranslations("ssr.runtime");
   const store = usePalistor(() => ({ config: heldConfig, server: true }));
+  // Only navigates: the panels below get their lists and read them.
   const form = useForm(store);
-  // Reading the lazy list wakes it; in server mode that only marks it for start().
-  const releases = form.releases;
-  const builds = form.builds;
 
   const start = () => {
     track("runtime.held.start");
@@ -38,38 +38,14 @@ export function ServerModeBlock() {
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Panel testId="runtime-held-releases" title={t("lists.lazyRead")}>
-          <div className="flex flex-wrap gap-2">
-            <Chip name="loading" value={String(releases.loading)} testId="runtime-held-releases-loading" />
-            <Chip name="resolveStatus" value={releases.resolveStatus} testId="runtime-held-releases-status" />
-          </div>
-          {releases.length === 0 ? (
-            <Note>{t("lists.noRows")}</Note>
-          ) : (
-            <ul className="space-y-1">
-              {releases.map((release, _index, id) => (
-                <ReleaseRow key={id} release={release} testId="runtime-held-release" />
-              ))}
-            </ul>
-          )}
+          <HeldReleases releases={form.releases} />
           <div className="text-xs text-zinc-400 dark:text-zinc-500">
             <Counter event="runtime.held.releases" testId="runtime-held-releases-requests" />
           </div>
         </Panel>
 
         <Panel testId="runtime-held-builds" title={t("lists.eager")}>
-          <div className="flex flex-wrap gap-2">
-            <Chip name="loading" value={String(builds.loading)} testId="runtime-held-builds-loading" />
-            <Chip name="resolveStatus" value={builds.resolveStatus} testId="runtime-held-builds-status" />
-          </div>
-          {builds.length === 0 ? (
-            <Note>{t("lists.noRows")}</Note>
-          ) : (
-            <ul className="space-y-1">
-              {builds.map((build, _index, id) => (
-                <BuildRow key={id} build={build} testId="runtime-held-build" />
-              ))}
-            </ul>
-          )}
+          <HeldBuilds builds={form.builds} />
           <div className="text-xs text-zinc-400 dark:text-zinc-500">
             <Counter event="runtime.held.builds" testId="runtime-held-builds-requests" />
           </div>
@@ -82,5 +58,52 @@ export function ServerModeBlock() {
         </Button>
       </div>
     </Block>
+  );
+}
+
+function HeldReleases({ releases }: { releases: PalistorList<Release> }) {
+  const t = useTranslations("ssr.runtime");
+  // Reading the lazy list wakes it; in server mode that only marks it for start().
+  const list = useForm(releases);
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        <Chip name="loading" value={String(list.loading)} testId="runtime-held-releases-loading" />
+        <Chip name="resolveStatus" value={list.resolveStatus} testId="runtime-held-releases-status" />
+      </div>
+      {list.length === 0 ? (
+        <Note>{t("lists.noRows")}</Note>
+      ) : (
+        <ul className="space-y-1">
+          {list.map((release, _index, id) => (
+            <ReleaseRow key={id} release={release} testId="runtime-held-release" />
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function HeldBuilds({ builds }: { builds: PalistorList<Build> }) {
+  const t = useTranslations("ssr.runtime");
+  const list = useForm(builds);
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        <Chip name="loading" value={String(list.loading)} testId="runtime-held-builds-loading" />
+        <Chip name="resolveStatus" value={list.resolveStatus} testId="runtime-held-builds-status" />
+      </div>
+      {list.length === 0 ? (
+        <Note>{t("lists.noRows")}</Note>
+      ) : (
+        <ul className="space-y-1">
+          {list.map((build, _index, id) => (
+            <BuildRow key={id} build={build} testId="runtime-held-build" />
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

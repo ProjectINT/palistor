@@ -1,7 +1,10 @@
+"use client";
+
+import { useForm } from "@palistor";
 import type { FieldProxyNode } from "@palistor";
 
-// Small presentational pieces shared by the blocks of /ssr/form (native
-// controls in the zinc palette of the other /ssr routes).
+// Small pieces shared by the blocks of /ssr/form (native controls in the zinc
+// palette of the other /ssr routes).
 
 export const LABEL_CLASS = "block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1";
 
@@ -18,7 +21,11 @@ export function buttonClass(tone: "primary" | "neutral" | "danger"): string {
   return `px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed ${tones[tone]}`;
 }
 
-/** A text field bound to a store leaf: its label comes from the store (translated on the server too). */
+/**
+ * One field, handed down by its section: its own useForm, so a keystroke
+ * re-renders this component alone. The label comes from the store
+ * (translated on the server too).
+ */
 export function TextField({
   field,
   testId,
@@ -30,23 +37,25 @@ export function TextField({
   type?: "text" | "email";
   multiline?: boolean;
 }) {
+  const f = useForm(field);
+
   return (
     <label className="block">
-      <span className={LABEL_CLASS}>{field.label}</span>
+      <span className={LABEL_CLASS}>{f.label}</span>
       {multiline ? (
         <textarea
           data-testid={testId}
           rows={3}
-          value={field.value}
-          onChange={(e) => field.onValueChange(e.target.value)}
+          value={f.value}
+          onChange={(e) => f.onValueChange(e.target.value)}
           className={INPUT_CLASS}
         />
       ) : (
         <input
           data-testid={testId}
           type={type}
-          value={field.value}
-          onChange={(e) => field.onValueChange(e.target.value)}
+          value={f.value}
+          onChange={(e) => f.onValueChange(e.target.value)}
           className={INPUT_CLASS}
         />
       )}

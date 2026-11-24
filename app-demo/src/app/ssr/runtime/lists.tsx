@@ -4,14 +4,10 @@
 // own useForm, so it re-renders alone when its fields change.
 
 import { useForm } from "@palistor";
-import type { Palistor, PalistorRef } from "@palistor";
+import type { PalistorRef } from "@palistor";
 
 import type { Build, Release } from "./backend";
-import type { heldConfig } from "./runtimeConfig";
 import { Row } from "./ui";
-
-/** Blocks 1 and 2 build their stores from configs of the same shape. */
-export type StatusStore = Palistor<typeof heldConfig>;
 
 export function ReleaseRow({ release, testId }: { release: PalistorRef<Release>; testId: string }) {
   const row = useForm(release);

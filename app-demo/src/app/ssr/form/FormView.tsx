@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
-import type { Palistor, PalistorRef } from "@palistor";
+import type { FieldProxyNode, PalistorList, PalistorProxy, PalistorRef } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { SsrShell } from "../shared/SsrShell";
@@ -12,8 +12,6 @@ import type { Activity, Announcement, FailingEndpoint, Profile, UserOption } fro
 import { DraftBlock } from "./DraftBlock";
 import { profileConfig } from "./formConfig";
 import { Flag, INPUT_CLASS, LABEL_CLASS, TextField, buttonClass } from "./ui";
-
-type ProfileStore = Palistor<typeof profileConfig>;
 
 export interface FormViewProps {
   /** The options of the user selector. */
@@ -30,6 +28,10 @@ export interface FormViewProps {
  * in the browser to hydrate it — each time with a store built from the same
  * props. The translator and the notifier come from <PalistorProvider>
  * (shared/SsrProviders.tsx) through the constructor.
+ *
+ * The only component of blocks 1–3 that sees the store: it hands each block
+ * the nodes it shows, and every component below is on the node its parent
+ * gave it — a group, a list, a row or a single field.
  */
 export function FormView({ users, userId, profile, activity, announcement }: FormViewProps) {
   const t = useTranslations("ssr.form");
@@ -37,6 +39,8 @@ export function FormView({ users, userId, profile, activity, announcement }: For
   // The resolvers' results, from the server: the profile and the list start
   // resolved, and `userId` gets its value (and dirty baseline) too.
   const store = usePalistor(() => ({ config: profileConfig, initialData: { userId, profile, activity } }));
+  // Only navigates: reads no state, so an edit below never re-renders the view.
+  const form = useForm(store);
 
   return (
     <SsrShell subtitle={t("subtitle")}>
@@ -46,7 +50,7 @@ export function FormView({ users, userId, profile, activity, announcement }: For
         hint={t("profile.hint")}
         footer={<Counter event="form.profile" testId="ssr-form-profile-requests" />}
       >
-        <ProfileForm store={store} />
+        <ProfileForm profile={form.profile} />
       </Block>
 
       <Block
@@ -55,7 +59,7 @@ export function FormView({ users, userId, profile, activity, announcement }: For
         hint={t("deps.hint")}
         footer={<Counter event="form.activity" testId="ssr-form-activity-requests" />}
       >
-        <Dependencies store={store} users={users} />
+        <Dependencies userId={form.userId} activity={form.activity} users={users} />
       </Block>
 
       <Block
@@ -64,7 +68,7 @@ export function FormView({ users, userId, profile, activity, announcement }: For
         hint={t("errors.hint")}
         footer={<Counter event="form.errors" testId="ssr-form-errors-count" label={t("errors.count")} />}
       >
-        <Failures store={store} />
+        <Failures activity={form.activity} />
       </Block>
 
       <DraftBlock announcement={announcement} />
@@ -74,46 +78,32 @@ export function FormView({ users, userId, profile, activity, announcement }: For
 
 // ─── 1. A group prefilled by the server ──────────────────────────────────────
 
-function ProfileForm({ store }: { store: ProfileStore }) {
+function ProfileForm({ profile }: { profile: PalistorProxy<Profile> }) {
   const t = useTranslations("ssr.form");
-  const profile = useForm(store).profile;
-  const role = profile.role;
+  // Reads the group's own state (loading, dirty): re-renders when it flips, not on every keystroke.
+  const p = useForm(profile);
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Flag name="loading" value={profile.loading} testId="ssr-form-profile-loading" />
-        <Flag name="dirty" value={profile.dirty} testId="ssr-form-profile-dirty" />
+        <Flag name="loading" value={p.loading} testId="ssr-form-profile-loading" />
+        <Flag name="dirty" value={p.dirty} testId="ssr-form-profile-dirty" />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <TextField field={profile.name} testId="ssr-form-name" />
-        <TextField field={profile.email} testId="ssr-form-email" type="email" />
+        <TextField field={p.name} testId="ssr-form-name" />
+        <TextField field={p.email} testId="ssr-form-email" type="email" />
       </div>
 
-      <label className="block">
-        <span className={LABEL_CLASS}>{role.label}</span>
-        <select
-          data-testid="ssr-form-role"
-          value={role.value}
-          onChange={(e) => role.onValueChange(e.target.value)}
-          className={INPUT_CLASS}
-        >
-          {ROLES.map((value) => (
-            <option key={value} value={value}>
-              {t(`roles.${value}`)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <RoleField field={p.role} />
 
-      <TextField field={profile.bio} testId="ssr-form-bio" multiline />
+      <TextField field={p.bio} testId="ssr-form-bio" multiline />
 
       <button
         type="button"
         data-testid="ssr-form-reset"
-        disabled={!profile.dirty}
-        onClick={() => profile.reset()}
+        disabled={!p.dirty}
+        onClick={() => p.reset()}
         className={buttonClass("neutral")}
       >
         {t("profile.reset")}
@@ -122,56 +112,99 @@ function ProfileForm({ store }: { store: ProfileStore }) {
   );
 }
 
-// ─── 2. Declared dependencies and reload() ───────────────────────────────────
-
-function Dependencies({ store, users }: { store: ProfileStore; users: UserOption[] }) {
-  const t = useTranslations("ssr.form.deps");
-  const form = useForm(store);
-  const userId = form.userId;
-  const activity = form.activity;
+function RoleField({ field }: { field: FieldProxyNode<string> }) {
+  const t = useTranslations("ssr.form");
+  const role = useForm(field);
 
   return (
-    <div className="space-y-4">
-      <label className="block">
-        <span className={LABEL_CLASS}>{userId.label}</span>
-        <select
-          data-testid="ssr-form-user"
-          value={userId.value}
-          onChange={(e) => userId.onValueChange(e.target.value)}
-          className={INPUT_CLASS}
-        >
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
-      </label>
+    <label className="block">
+      <span className={LABEL_CLASS}>{role.label}</span>
+      <select
+        data-testid="ssr-form-role"
+        value={role.value}
+        onChange={(e) => role.onValueChange(e.target.value)}
+        className={INPUT_CLASS}
+      >
+        {ROLES.map((value) => (
+          <option key={value} value={value}>
+            {t(`roles.${value}`)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t("activity")}</h3>
-          <div className="flex items-center gap-2">
-            <Flag name="resolveStatus" value={activity.resolveStatus} testId="ssr-form-activity-status" />
-            <button
-              type="button"
-              data-testid="ssr-form-reload"
-              onClick={() => activity.reload()}
-              className={buttonClass("primary")}
-            >
-              {t("reload")}
-            </button>
-          </div>
+// ─── 2. Declared dependencies and reload() ───────────────────────────────────
+
+/** Lays out two nodes of the form and reads neither: the user selector and the list that depends on it. */
+function Dependencies({
+  userId,
+  activity,
+  users,
+}: {
+  userId: FieldProxyNode<string>;
+  activity: PalistorList<Activity>;
+  users: UserOption[];
+}) {
+  return (
+    <div className="space-y-4">
+      <UserField field={userId} users={users} />
+      <ActivityList activity={activity} />
+    </div>
+  );
+}
+
+function UserField({ field, users }: { field: FieldProxyNode<string>; users: UserOption[] }) {
+  const userId = useForm(field);
+
+  return (
+    <label className="block">
+      <span className={LABEL_CLASS}>{userId.label}</span>
+      <select
+        data-testid="ssr-form-user"
+        value={userId.value}
+        onChange={(e) => userId.onValueChange(e.target.value)}
+        className={INPUT_CLASS}
+      >
+        {users.map((user) => (
+          <option key={user.id} value={user.id}>
+            {user.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ActivityList({ activity }: { activity: PalistorList<Activity> }) {
+  const t = useTranslations("ssr.form.deps");
+  const list = useForm(activity);
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t("activity")}</h3>
+        <div className="flex items-center gap-2">
+          <Flag name="resolveStatus" value={list.resolveStatus} testId="ssr-form-activity-status" />
+          <button
+            type="button"
+            data-testid="ssr-form-reload"
+            onClick={() => list.reload()}
+            className={buttonClass("primary")}
+          >
+            {t("reload")}
+          </button>
         </div>
-        <ul data-testid="ssr-form-activity-rows" className="space-y-1">
-          {activity.map((row, _index, id) => (
-            <ActivityRow key={id} row={row} />
-          ))}
-        </ul>
-        {activity.length === 0 && (
-          <p className="text-zinc-400 dark:text-zinc-500 text-center py-4">{t("empty")}</p>
-        )}
       </div>
+      <ul data-testid="ssr-form-activity-rows" className="space-y-1">
+        {list.map((row, _index, id) => (
+          <ActivityRow key={id} row={row} />
+        ))}
+      </ul>
+      {list.length === 0 && (
+        <p className="text-zinc-400 dark:text-zinc-500 text-center py-4">{t("empty")}</p>
+      )}
     </div>
   );
 }
@@ -201,10 +234,10 @@ function useFailNext(endpoint: FailingEndpoint): boolean {
   );
 }
 
-function Failures({ store }: { store: ProfileStore }) {
+/** The list node block 2 shows, handed here too: this block connects to it on its own and shows its `error`. */
+function Failures({ activity }: { activity: PalistorList<Activity> }) {
   const t = useTranslations("ssr.form.errors");
-  const activity = useForm(store).activity;
-  const error = activity.error;
+  const error = useForm(activity).error;
 
   return (
     <div className="space-y-3">

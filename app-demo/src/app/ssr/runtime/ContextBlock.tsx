@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { PalistorProvider, useForm, usePalistor, usePalistorContext } from "@palistor";
+import type { PalistorProxy } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { track } from "../shared/events";
-import { REGIONS, type Region } from "./backend";
+import { REGIONS, type Mirror as MirrorValues, type Region } from "./backend";
 import { mirrorConfig } from "./runtimeConfig";
 import { Button, Chip, Note, Row, Skeleton } from "./ui";
 
@@ -61,11 +62,11 @@ export function ContextBlock() {
 }
 
 function Mirror() {
-  const t = useTranslations("ssr.runtime.context");
   // The provider's context, merged with the providers above: what the store below gets in its constructor.
   const context = usePalistorContext<{ workspace?: string; region?: Region | null }>();
   const store = usePalistor(() => ({ config: mirrorConfig }));
-  const mirror = useForm(store).mirror;
+  // Only navigates: the group goes down to <MirrorStatus>, which reads it.
+  const form = useForm(store);
 
   return (
     <div className="space-y-3">
@@ -75,27 +76,38 @@ function Mirror() {
         <Chip name="region" value={String(context.region)} testId="runtime-context-region" />
       </div>
 
+      <MirrorStatus mirror={form.mirror} />
+    </div>
+  );
+}
+
+function MirrorStatus({ mirror }: { mirror: PalistorProxy<MirrorValues> }) {
+  const t = useTranslations("ssr.runtime.context");
+  const m = useForm(mirror);
+
+  return (
+    <>
       <div className="flex flex-wrap gap-2">
-        <Chip name="loading" value={String(mirror.loading)} testId="runtime-mirror-loading" />
+        <Chip name="loading" value={String(m.loading)} testId="runtime-mirror-loading" />
       </div>
 
-      {mirror.loading ? (
+      {m.loading ? (
         <Skeleton testId="runtime-mirror-skeleton" rows={1} />
-      ) : mirror.host.value === "" ? (
+      ) : m.host.value === "" ? (
         // Waiting for its contextDeps: not loading, nothing requested.
         <Note testId="runtime-mirror-waiting">{t("waiting")}</Note>
       ) : (
         <ul className="space-y-1">
           <Row testId="runtime-mirror">
             <span>
-              {mirror.host.label}: <span data-testid="runtime-mirror-host" className="font-mono">{mirror.host.value}</span>
+              {m.host.label}: <span data-testid="runtime-mirror-host" className="font-mono">{m.host.value}</span>
             </span>
             <span className="text-zinc-500 dark:text-zinc-400">
-              {mirror.latency.label}: <span className="font-mono">{mirror.latency.value}</span>
+              {m.latency.label}: <span className="font-mono">{m.latency.value}</span>
             </span>
           </Row>
         </ul>
       )}
-    </div>
+    </>
   );
 }

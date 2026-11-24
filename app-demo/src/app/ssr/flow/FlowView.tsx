@@ -2,14 +2,17 @@
 
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
-import type { Palistor, StepStatus } from "@palistor";
+import type { ConfigProxy, FieldProxyNode, PalistorProxy, StepStatus } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { SsrShell } from "../shared/SsrShell";
-import { MENTORS, type Profile } from "./backend";
+import { MENTORS, type Profile, type Slot, type Team } from "./backend";
 import { flowConfig } from "./flowConfig";
 
-type FlowStore = Palistor<typeof flowConfig>;
+// A whole flow's type comes from the config (its steps are part of it); a step
+// and a field are typed by their values.
+type OnboardingFlow = ConfigProxy<typeof flowConfig>["onboarding"];
+type BookingFlow = ConfigProxy<typeof flowConfig>["booking"];
 
 /**
  * The client side of /ssr/flow. It renders on the server into HTML and again
@@ -17,6 +20,9 @@ type FlowStore = Palistor<typeof flowConfig>;
  * from the same props. The server's store is in server mode and enters no
  * step; the browser's enters the active step of each flow once the view has
  * committed (usePalistor calls store.start() in an effect).
+ *
+ * Only this component sees the store. It hands each block its flow; a flow
+ * hands its active step down, and a step its fields.
  */
 export function FlowView({ profile }: { profile: Profile }) {
   const t = useTranslations("ssr.flow");
@@ -24,6 +30,8 @@ export function FlowView({ profile }: { profile: Profile }) {
   // A flow's initialData is keyed by step: the profile step starts resolved,
   // so entering it fires onEnter and onReady without a request.
   const store = usePalistor(() => ({ config: flowConfig, initialData: { onboarding: { profile } } }));
+  // Only navigates: reads no state, so a step change or a keystroke below never re-renders it.
+  const form = useForm(store);
 
   return (
     <SsrShell subtitle={t("subtitle")}>
@@ -38,7 +46,7 @@ export function FlowView({ profile }: { profile: Profile }) {
           </>
         }
       >
-        <Onboarding store={store} />
+        <Onboarding flow={form.onboarding} />
       </Block>
 
       <Block
@@ -47,7 +55,7 @@ export function FlowView({ profile }: { profile: Profile }) {
         hint={t("booking.hint")}
         footer={<StepCounters step="slot" label={t("steps.slot")} />}
       >
-        <Booking store={store} />
+        <Booking flow={form.booking} />
       </Block>
     </SsrShell>
   );
@@ -55,11 +63,11 @@ export function FlowView({ profile }: { profile: Profile }) {
 
 // ─── (1) A flow whose first step has server data ─────────────────────────────
 
-function Onboarding({ store }: { store: FlowStore }) {
+function Onboarding({ flow }: { flow: OnboardingFlow }) {
   const t = useTranslations("ssr.flow");
-  const flow = useForm(store).onboarding;
-  const current = flow.steps.current;
-  const last = flow.currentStepIndex === flow.steps.length - 1;
+  const onboarding = useForm(flow);
+  const current = onboarding.steps.current;
+  const last = onboarding.currentStepIndex === onboarding.steps.length - 1;
 
   return (
     <div>
@@ -67,166 +75,146 @@ function Onboarding({ store }: { store: FlowStore }) {
       <StepIndicator
         testId="flow-onboarding-steps"
         steps={[
-          { key: "profile", label: t("steps.profile"), status: flow.steps.profile.status },
-          { key: "team", label: t("steps.team"), status: flow.steps.team.status },
+          { key: "profile", label: t("steps.profile"), status: onboarding.steps.profile.status },
+          { key: "team", label: t("steps.team"), status: onboarding.steps.team.status },
         ]}
       />
 
       <div
         data-testid="flow-onboarding-step"
-        data-step={flow.currentStepKey}
-        data-loading={String(flow.loading)}
+        data-step={onboarding.currentStepKey}
+        data-loading={String(onboarding.loading)}
         className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-4"
       >
-        {/* Only the active step is rendered: reading a field of a step that was never entered would wake its resolve. */}
-        {flow.currentStepKey === "profile" && <ProfileStep store={store} />}
-        {flow.currentStepKey === "team" && <TeamStep store={store} />}
+        {/* Only the active step is rendered: reading a field of a step that was never entered would wake its resolve.
+            Handing a step down reads nothing of it. */}
+        {onboarding.currentStepKey === "profile" && <ProfileStep step={onboarding.steps.profile} />}
+        {onboarding.currentStepKey === "team" && <TeamStep step={onboarding.steps.team} />}
       </div>
 
       <FlowNav
         testId="flow-onboarding"
-        canGoBack={flow.canGoBack}
-        onBack={() => flow.back()}
+        canGoBack={onboarding.canGoBack}
+        onBack={() => onboarding.back()}
         // step.submit() validates the step; its onSubmit calls nextStep() (flowConfig.ts).
         next={last ? null : { disabled: current.loading || current.submitting, onClick: () => void current.submit() }}
-        history={flow.history}
+        history={onboarding.history}
       />
     </div>
   );
 }
 
-function ProfileStep({ store }: { store: FlowStore }) {
-  const step = useForm(store).onboarding.steps.profile;
+function ProfileStep({ step }: { step: PalistorProxy<Profile> }) {
+  const profile = useForm(step);
 
   return (
     <div className="space-y-3">
-      <TextField
-        testId="flow-profile-name"
-        label={step.name.label}
-        required={step.name.isRequired}
-        value={step.name.value}
-        onChange={step.name.onValueChange}
-        error={step.name.errorMessage}
-      />
-      <TextField
-        testId="flow-profile-email"
-        label={step.email.label}
-        required={step.email.isRequired}
-        value={step.email.value}
-        onChange={step.email.onValueChange}
-        error={step.email.errorMessage}
-      />
+      <TextField testId="flow-profile-name" field={profile.name} />
+      <TextField testId="flow-profile-email" field={profile.email} />
     </div>
   );
 }
 
-function TeamStep({ store }: { store: FlowStore }) {
+function TeamStep({ step }: { step: PalistorProxy<Team> }) {
   const t = useTranslations("ssr.flow");
-  const step = useForm(store).onboarding.steps.team;
+  const team = useForm(step);
 
   // Entered in the browser: the resolver runs once; a later entry finds the result cached.
-  if (step.loading) return <StepSkeleton testId="flow-team-skeleton" label={t("team.loading")} />;
+  if (team.loading) return <StepSkeleton testId="flow-team-skeleton" label={t("team.loading")} />;
 
   return (
     <div className="space-y-3">
-      <label className="block">
-        <span className={LABEL_CLASS}>{step.mentor.label}</span>
-        <select
-          data-testid="flow-team-mentor"
-          value={step.mentor.value}
-          onChange={(e) => step.mentor.onValueChange(e.target.value)}
-          className={INPUT_CLASS}
-        >
-          {MENTORS.map((mentor) => (
-            <option key={mentor} value={mentor}>
-              {mentor}
-            </option>
-          ))}
-        </select>
-      </label>
-      <TextField
-        testId="flow-team-channel"
-        label={step.channel.label}
-        value={step.channel.value}
-        readOnly={step.channel.isReadOnly}
-      />
+      <MentorField field={team.mentor} />
+      <TextField testId="flow-team-channel" field={team.channel} />
     </div>
+  );
+}
+
+function MentorField({ field }: { field: FieldProxyNode<string> }) {
+  const mentor = useForm(field);
+
+  return (
+    <label className="block">
+      <span className={LABEL_CLASS}>{mentor.label}</span>
+      <select
+        data-testid="flow-team-mentor"
+        value={mentor.value}
+        onChange={(e) => mentor.onValueChange(e.target.value)}
+        className={INPUT_CLASS}
+      >
+        {MENTORS.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
 // ─── (2) A flow whose first step has no server data ──────────────────────────
 
-function Booking({ store }: { store: FlowStore }) {
+function Booking({ flow }: { flow: BookingFlow }) {
   const t = useTranslations("ssr.flow");
-  const flow = useForm(store).booking;
-  const current = flow.steps.current;
-  const last = flow.currentStepIndex === flow.steps.length - 1;
+  const booking = useForm(flow);
+  const current = booking.steps.current;
+  const last = booking.currentStepIndex === booking.steps.length - 1;
 
   return (
     <div>
       <StepIndicator
         testId="flow-booking-steps"
         steps={[
-          { key: "slot", label: t("steps.slot"), status: flow.steps.slot.status },
-          { key: "notes", label: t("steps.notes"), status: flow.steps.notes.status },
+          { key: "slot", label: t("steps.slot"), status: booking.steps.slot.status },
+          { key: "notes", label: t("steps.notes"), status: booking.steps.notes.status },
         ]}
       />
 
       <div
         data-testid="flow-booking-step"
-        data-step={flow.currentStepKey}
-        data-loading={String(flow.loading)}
+        data-step={booking.currentStepKey}
+        data-loading={String(booking.loading)}
         className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-4"
       >
-        {flow.currentStepKey === "slot" && <SlotStep store={store} />}
-        {flow.currentStepKey === "notes" && <NotesStep store={store} />}
+        {booking.currentStepKey === "slot" && <SlotStep step={booking.steps.slot} />}
+        {booking.currentStepKey === "notes" && <NotesStep step={booking.steps.notes} />}
       </div>
 
       <FlowNav
         testId="flow-booking"
-        canGoBack={flow.canGoBack}
-        onBack={() => flow.back()}
+        canGoBack={booking.canGoBack}
+        onBack={() => booking.back()}
         next={last ? null : { disabled: current.loading || current.submitting, onClick: () => void current.submit() }}
-        history={flow.history}
+        history={booking.history}
       />
     </div>
   );
 }
 
-function SlotStep({ store }: { store: FlowStore }) {
+function SlotStep({ step }: { step: PalistorProxy<Slot> }) {
   const t = useTranslations("ssr.flow");
-  const step = useForm(store).booking.steps.slot;
+  const slot = useForm(step);
 
   // Server mode holds the active step's resolve: `loading` is already true in the
   // server's HTML, and in the browser's first render the run is in flight.
-  if (step.loading) return <StepSkeleton testId="flow-slot-skeleton" label={t("slot.loading")} />;
+  if (slot.loading) return <StepSkeleton testId="flow-slot-skeleton" label={t("slot.loading")} />;
 
   return (
     <dl data-testid="flow-slot-content" className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-      <dt className="text-zinc-500 dark:text-zinc-400">{step.reviewer.label}</dt>
+      <dt className="text-zinc-500 dark:text-zinc-400">{slot.reviewer.label}</dt>
       <dd data-testid="flow-slot-reviewer" className="font-medium text-zinc-900 dark:text-zinc-100">
-        {step.reviewer.value}
+        {slot.reviewer.value}
       </dd>
-      <dt className="text-zinc-500 dark:text-zinc-400">{step.startsAt.label}</dt>
+      <dt className="text-zinc-500 dark:text-zinc-400">{slot.startsAt.label}</dt>
       <dd data-testid="flow-slot-starts-at" className="font-medium text-zinc-900 dark:text-zinc-100">
-        {step.startsAt.value}
+        {slot.startsAt.value}
       </dd>
     </dl>
   );
 }
 
-function NotesStep({ store }: { store: FlowStore }) {
-  const step = useForm(store).booking.steps.notes;
-
-  return (
-    <TextField
-      testId="flow-notes-topic"
-      label={step.topic.label}
-      placeholder={step.topic.placeholder}
-      value={step.topic.value}
-      onChange={step.topic.onValueChange}
-    />
-  );
+function NotesStep({ step }: { step: PalistorProxy<{ topic: string }> }) {
+  return <TextField testId="flow-notes-topic" field={useForm(step).topic} />;
 }
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
@@ -355,37 +343,23 @@ function StepSkeleton({ testId, label }: { testId: string; label: string }) {
   );
 }
 
-function TextField({
-  testId,
-  label,
-  value,
-  onChange,
-  error,
-  placeholder,
-  required,
-  readOnly,
-}: {
-  testId: string;
-  label: string | undefined;
-  value: string;
-  onChange?: (value: string) => void;
-  error?: string;
-  placeholder?: string;
-  required?: boolean;
-  readOnly?: boolean;
-}) {
+/** One field of a step: its own useForm, so a keystroke re-renders this component alone. */
+function TextField({ testId, field }: { testId: string; field: FieldProxyNode<string> }) {
+  const f = useForm(field);
+  const error = f.errorMessage;
+
   return (
     <label className="block">
       <span className={LABEL_CLASS}>
-        {label}
-        {required && <span className="text-red-500"> *</span>}
+        {f.label}
+        {f.isRequired && <span className="text-red-500"> *</span>}
       </span>
       <input
         data-testid={testId}
-        value={value}
-        onChange={onChange && ((e) => onChange(e.target.value))}
-        readOnly={readOnly || !onChange}
-        placeholder={placeholder}
+        value={f.value}
+        onChange={(e) => f.onValueChange(e.target.value)}
+        readOnly={f.isReadOnly}
+        placeholder={f.placeholder}
         aria-invalid={error ? true : undefined}
         className={INPUT_CLASS}
       />

@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
+import type { PalistorList } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
-import { BuildRow, ReleaseRow, type StatusStore } from "./lists";
+import type { Build, Release } from "./backend";
+import { BuildRow, ReleaseRow } from "./lists";
 import { clientConfig } from "./runtimeConfig";
 import { Button, Chip, Note, Panel, Skeleton } from "./ui";
 
@@ -17,15 +19,16 @@ import { Button, Chip, Note, Panel, Skeleton } from "./ui";
 export function EagerBlock() {
   const t = useTranslations("ssr.runtime");
   const store = usePalistor(() => ({ config: clientConfig }));
-  // Nothing here reads the lazy list until the button is pressed: reading its
-  // `loading` would be a read too.
+  // Only navigates: handing a list down is no read of it, so the lazy list
+  // stays unread until <Releases> mounts — reading its `loading` would be a read too.
+  const form = useForm(store);
   const [reading, setReading] = useState(false);
 
   return (
     <Block testId="runtime-client" title={t("client.title")} hint={t("client.hint")}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Panel testId="runtime-client-builds" title={t("lists.eager")}>
-          <Builds store={store} />
+          <Builds builds={form.builds} />
           <div className="text-xs text-zinc-400 dark:text-zinc-500">
             <Counter event="runtime.client.builds" testId="runtime-client-builds-requests" />
           </div>
@@ -33,7 +36,7 @@ export function EagerBlock() {
 
         <Panel testId="runtime-client-releases" title={t("lists.lazy")}>
           {reading ? (
-            <Releases store={store} />
+            <Releases releases={form.releases} />
           ) : (
             <>
               <Note testId="runtime-client-releases-unread">{t("client.unread")}</Note>
@@ -51,20 +54,20 @@ export function EagerBlock() {
   );
 }
 
-function Builds({ store }: { store: StatusStore }) {
-  const builds = useForm(store).builds;
+function Builds({ builds }: { builds: PalistorList<Build> }) {
+  const list = useForm(builds);
 
   // The hydrating render reads what the server's did: the resolve is held on
   // both sides (`loading: true`, `resolveStatus: "idle"`), so the skeleton
   // hydrates without a mismatch. The hook's effect then starts the run.
   return (
     <>
-      <Chip name="loading" value={String(builds.loading)} testId="runtime-client-builds-loading" />
-      {builds.loading ? (
+      <Chip name="loading" value={String(list.loading)} testId="runtime-client-builds-loading" />
+      {list.loading ? (
         <Skeleton testId="runtime-client-builds-skeleton" rows={3} />
       ) : (
         <ul className="space-y-1">
-          {builds.map((build, _index, id) => (
+          {list.map((build, _index, id) => (
             <BuildRow key={id} build={build} testId="runtime-client-build" />
           ))}
         </ul>
@@ -73,14 +76,14 @@ function Builds({ store }: { store: StatusStore }) {
   );
 }
 
-function Releases({ store }: { store: StatusStore }) {
-  const releases = useForm(store).releases;
+function Releases({ releases }: { releases: PalistorList<Release> }) {
+  const list = useForm(releases);
 
-  return releases.loading ? (
+  return list.loading ? (
     <Skeleton testId="runtime-client-releases-skeleton" />
   ) : (
     <ul className="space-y-1">
-      {releases.map((release, _index, id) => (
+      {list.map((release, _index, id) => (
         <ReleaseRow key={id} release={release} testId="runtime-client-release" />
       ))}
     </ul>

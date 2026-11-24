@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
 import type { PalistorEntityProxy, PalistorList, PalistorRef } from "@palistor";
@@ -20,19 +20,19 @@ type TeamProxy = PalistorEntityProxy<TeamRow> & { members: PalistorList<Member> 
  * A store of its own: `store.reset()` is the form reset (the one that restores
  * the membership of nested lists), and it should not reach the lists of the
  * other blocks. `usePalistor` gives every component instance its own store.
+ *
+ * Four levels, each on the node its parent handed down: the teams list, a
+ * team row, the row's `members` list, a member row.
  */
 export function Teams({ teams }: { teams: Team[] }) {
   const t = useTranslations("ssr.catalog.teams");
   const store = usePalistor(() => ({ config: teamsConfig, initialData: { teams } }));
+  // Only navigates; the store stays here for the full reset below.
   const form = useForm(store);
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        {form.teams.map((team, _index, id) => (
-          <TeamCard key={id} team={team} />
-        ))}
-      </div>
+      <TeamCards teams={form.teams} />
       <button
         data-testid="ssr-catalog-teams-reset"
         onClick={() => store.reset()}
@@ -44,28 +44,53 @@ export function Teams({ teams }: { teams: Team[] }) {
   );
 }
 
-function TeamCard({ team }: { team: PalistorRef<TeamRow> }) {
-  const t = useTranslations("ssr.catalog.teams");
-  const row = useForm(team) as TeamProxy;
-  const members = row.members;
-  const [draft, setDraft] = useState("");
+function TeamCards({ teams }: { teams: PalistorList<TeamRow> }) {
+  const list = useForm(teams);
 
-  const add = (event: React.FormEvent) => {
-    event.preventDefault();
-    const name = draft.trim();
-    if (!name) return;
-    members.add({ name }); // no id: the row gets a temporary one
-    setDraft("");
-  };
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {list.map((team, _index, id) => (
+        <TeamCard key={id} team={team} />
+      ))}
+    </div>
+  );
+}
+
+function TeamCard({ team }: { team: PalistorRef<TeamRow> }) {
+  const row = useForm(team) as TeamProxy;
 
   return (
     <div
       data-testid="ssr-catalog-team"
       className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 space-y-2"
     >
+      <Members
+        members={row.members}
+        heading={<h3 className="font-semibold text-zinc-900 dark:text-zinc-100">{row.name.value}</h3>}
+      />
+    </div>
+  );
+}
+
+/** The list nested in a team row: its rows, its `dirty`, adding and removing. */
+function Members({ members, heading }: { members: PalistorList<Member>; heading: ReactNode }) {
+  const t = useTranslations("ssr.catalog.teams");
+  const list = useForm(members);
+  const [draft, setDraft] = useState("");
+
+  const add = (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = draft.trim();
+    if (!name) return;
+    list.add({ name }); // no id: the row gets a temporary one
+    setDraft("");
+  };
+
+  return (
+    <>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">{row.name.value}</h3>
-        {members.dirty && (
+        {heading}
+        {list.dirty && (
           <span data-testid="ssr-catalog-team-dirty" className="text-xs text-amber-600 dark:text-amber-400">
             ● {t("edited")}
           </span>
@@ -73,11 +98,11 @@ function TeamCard({ team }: { team: PalistorRef<TeamRow> }) {
       </div>
 
       <ul className="space-y-1">
-        {members.map((member, _index, id) => (
-          <MemberRow key={id} member={member} onRemove={() => members.remove(id)} />
+        {list.map((member, _index, id) => (
+          <MemberRow key={id} member={member} onRemove={() => list.remove(id)} />
         ))}
       </ul>
-      {members.length === 0 && (
+      {list.length === 0 && (
         <p data-testid="ssr-catalog-team-empty" className="text-sm text-zinc-400 dark:text-zinc-500">
           {t("empty")}
         </p>
@@ -101,7 +126,7 @@ function TeamCard({ team }: { team: PalistorRef<TeamRow> }) {
           {t("add")}
         </button>
       </form>
-    </div>
+    </>
   );
 }
 
