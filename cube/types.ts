@@ -17,7 +17,7 @@ import type {
 } from "../store/store/types";
 import type { NotifyFn } from "../store/resolvePipeline/";
 import type { InferFlowSteps } from "../store/flow/defineFlow";
-import type { FieldProxyNode, RawStoreProxyMarker } from "../store/store/types";
+import type { FieldProxyNode, RawStoreProxyMarker, SortProxyNode } from "../store/store/types";
 import type {
   useForm as StoreUseForm,
   _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first as RawNodeError,
@@ -191,15 +191,25 @@ type ForbidRawLeaf<T> = T extends RawStoreProxyMarker ? RawNodeError : T;
  * are not a `FieldProxyNode`), like a group there when the map renames a prop
  * groups have. Both work at run time.
  *
+ * One more after it: a list's **sort** node (`list.sort`, a `sort` block),
+ * handed down like a field — the component follows the sort state.
+ *
  * @example
  * ```tsx
  * function TextField({ field }: { field: FieldProxyNode<string> }) {
  *   const f = useForm(field); // its own tracking scope over one field
  *   return <input value={f.value} onChange={(e) => f.onValueChange(e.target.value)} />;
  * }
+ *
+ * function SortHeader({ sort, column }: { sort: SortProxyNode<ProductKey>; column: ProductKey }) {
+ *   const s = useForm(sort); // re-renders when the sort changes, not when a row does
+ *   return <button onClick={() => s.toggle(column)}>{column} {s.dirOf(column)}</button>;
+ * }
  * ```
  */
-export type UseForm = typeof StoreUseForm & (<T extends FieldProxyNode<any>>(input: ForbidRawLeaf<T>) => T);
+export type UseForm = typeof StoreUseForm &
+  (<T extends FieldProxyNode<any>>(input: ForbidRawLeaf<T>) => T) &
+  (<K extends string>(input: SortProxyNode<K>) => SortProxyNode<K>);
 
 // ─── <PalistorProvider> ──────────────────────────────────────────────────────
 

@@ -90,7 +90,7 @@ export class FieldMap {
   }
 
   private node(node: unknown): unknown {
-    if (Array.isArray(node)) return node.map((el) => this.node(el)); // a list: [template, options?]
+    if (Array.isArray(node)) return node.map((el, i) => (i === 1 ? this.listOptions(el) : this.node(el))); // a list: [template, options?]
     if (!isStructure(node)) return node;
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(node)) {
@@ -109,6 +109,17 @@ export class FieldMap {
       out[key] = CONFIG_PROPS.has(key) ? value : this.node(value);
     }
     return out;
+  }
+
+  /**
+   * A list's options: as any node, except the `sort` block, kept as it is.
+   * Its keys are template leaf paths (child identity, never remapped) and its
+   * values sort options (`by`, `compare`, `param`), not field-state names.
+   */
+  private listOptions(options: unknown): unknown {
+    if (!isStructure(options) || Array.isArray(options) || !("sort" in options)) return this.node(options);
+    const { sort, ...rest } = options;
+    return { ...(this.node(rest) as Record<string, unknown>), sort };
   }
 
   /**

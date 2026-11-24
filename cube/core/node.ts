@@ -148,7 +148,8 @@ export const FLOW_STATE_KEYS: ReadonlySet<string> = new Set([
 
 /**
  * store: LIST_SPREAD_KEYS, plus FILTER_SPREAD_KEYS (`filter`, `values` — the
- * visible items, `fullLength`) on a list with a filter block, plus the
+ * visible items, `fullLength`) on a list with a filter block, plus `sort`
+ * (Cube only) on a list with a sort block, plus the
  * pagination surface on a list with `resolve.pagination` (PAGINATION_SPREAD_KEYS,
  * then INFINITE_SPREAD_KEYS for an infinite list, CHAIN_SPREAD_KEYS for
  * cursor / infinite). `length` is own but not enumerable, second in key
@@ -185,6 +186,8 @@ function listNode(l: ListCube, proto: object): PublicNode {
       ["fullLength", { get() { l.touch(); return l.fullLength; } }],
     );
   }
+  const sort = l.sort;
+  if (sort) desc.push(["sort", { get: () => sort.node }]);
   const pg = l.pager;
   if (pg) {
     desc.push(
@@ -230,6 +233,18 @@ export const LIST_STATE_KEYS: ReadonlySet<string> = new Set([
   "page", "pageSize", "pageCount", "total", "serverTotal", "hasNextPage", "hasPrevPage", "isFetching",
   "isInitialLoading", "isPreviousData", "isStaleFromStorage", "pendingAdds", "scrollAnchor",
   "isFetchingNextPage", "loadedPages", "continuationLost",
+]);
+
+/**
+ * Every member of `list.sort`: a read of any of them through useForm tracks
+ * the sort (its state moves on toggle / set / clear / reset). A set of its
+ * own, not STATE_KEYS: a group may have children named `key`, `by` or `dir`.
+ * The actions are in it too, so a component that only calls `toggle` follows
+ * the sort, not every change of the store.
+ */
+export const SORT_STATE_KEYS: ReadonlySet<string> = new Set([
+  "by", "key", "dir", "keys", "dirOf", "sortDescriptor",
+  "toggle", "set", "clear", "reset", "refresh", "onSortChange",
 ]);
 
 // ── Prototypes: the off-spread names, children by config ───────────────────

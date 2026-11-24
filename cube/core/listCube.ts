@@ -5,6 +5,7 @@ import type { Hub } from "./hub";
 import type { PublicNode } from "./node";
 import { Pager } from "./pagination";
 import { clientOnly } from "./resolve";
+import { SortCube, warnNestedSorts, type SortRequest } from "./sort";
 import { track, untracked } from "./track";
 
 /**
@@ -19,9 +20,10 @@ import { track, untracked } from "./track";
  * same template, useForm(entity, template)) shows the same one, as store's
  * one ListState per owner and list node did.
  *
- * A root list may carry a filter (filter.ts). Then `items`, `length`, `map`
- * and iteration show the visible rows; `getById`, `getValues`, `dirty` and the
- * list's value in the form stay on the full membership.
+ * A root list may carry a filter (filter.ts) and a sort (sort.ts). Then
+ * `items`, `length`, `map` and iteration show the visible rows — the client
+ * filter over the sort's order snapshot; `getById`, `getValues`, `dirty` and
+ * the list's value in the form stay on the full membership, in its order.
  *
  * A list with `resolve.pagination` (root or per-entity) keeps a page cache
  * (pagination.ts): its membership is the projection of the current window,
@@ -39,6 +41,8 @@ export class ListCube extends Cube {
   private shownIds?: string[];
   /** `defineList({ filter })` on a root list. A per-entity list ignores it (warned at construction, as store). */
   readonly filter?: FilterCube;
+  /** `defineList({ sort })` on a root list. A per-entity list ignores it (warned at construction, like a filter). */
+  readonly sort?: SortCube;
   /** The template declares lists: every row owns some, and their edits count towards this list's `dirty`. */
   private readonly rowsOwnLists: boolean;
 
@@ -58,8 +62,11 @@ export class ListCube extends Cube {
     }
     if (!this.item) {
       warnNestedFilters(this.template, `${this.path}[]`);
+      warnNestedSorts(this.template, `${this.path}[]`);
       const block = config[1]?.filter;
       if (block) this.filter = new FilterCube(block as Values, this, hub);
+      const sort = config[1]?.sort;
+      if (sort) this.sort = new SortCube(sort, this, resolve, hub);
     }
     hub.lists.add(this);
   }
@@ -71,7 +78,11 @@ export class ListCube extends Cube {
   get pager(): Pager | undefined { return this.state.pager; }
 
   private get ids(): string[] { return this.state.ids; }
-  private set ids(v: string[]) { this.state.ids = v; }
+  /** Every membership change goes through here: the sort's order snapshot follows it (an id that left goes, a new one is appended). */
+  private set ids(v: string[]) {
+    this.state.ids = v;
+    this.sort?.sync(v);
+  }
   private get initialIds(): string[] { return this.state.initialIds; }
   private set initialIds(v: string[]) { this.state.initialIds = v; }
   /** Membership was ever set. store: an untouched per-entity list had no state and added no key to values. */
@@ -107,20 +118,26 @@ export class ListCube extends Cube {
   get fullLength() { track(this); return this.ids.length; }
 
   /**
-   * The ids the list shows: the client filter's projection over the
-   * membership (re-run when the membership, a filter field or any registry
-   * row moves), the membership itself otherwise. Tracked.
+   * The ids the list shows: the client filter's projection over the client
+   * sort's order snapshot of the membership. The projection re-runs when the
+   * membership, a filter field or any registry row moves; the order only
+   * when the snapshot does (sort.ts), so a value edit leaves an unfiltered
+   * sorted list's ids — and its items array — as they were. The membership
+   * itself without either. Tracked.
    */
   visibleIds(): string[] {
     track(this);
-    const f = this.filter;
-    if (!f?.hasClient) return this.ids;
+    const f = this.filter?.hasClient ? this.filter : undefined;
+    const s = this.sort?.client ? this.sort : undefined;
+    if (!f && !s) return this.ids;
     return this.memo("visible", () => {
       track(this);
+      const base = s ? s.ordered(this.ids) : this.ids;
+      if (!f) return base;
       track(this.hub.registry);
-      const next = f.project(this.ids, this.initialIds, (id) => this.hub.registry.get(id));
+      const next = f.project(base, this.initialIds, (id) => this.hub.registry.get(id));
       const prev = this.shownIds;
-      return (this.shownIds = next !== this.ids && prev && sameIds(prev, next) ? prev : next);
+      return (this.shownIds = next !== base && prev && sameIds(prev, next) ? prev : next);
     });
   }
 
@@ -266,6 +283,7 @@ export class ListCube extends Cube {
       this.ids = ids;
       this.touched = true;
       this.bump();
+      this.sort?.resort(); // a new membership (a resolve lands through here too): the order from its values
     });
   }
 
@@ -292,6 +310,7 @@ export class ListCube extends Cube {
     if (this.pager) return this.pager.rekey(oldId, newId);
     let hit = false;
     const swap = (arr: string[]) => (arr.includes(oldId) ? ((hit = true), arr.map((x) => (x === oldId ? newId : x))) : arr);
+    this.sort?.rekey(oldId, newId); // the row keeps its place in the order
     this.ids = swap(this.ids);
     this.initialIds = swap(this.initialIds);
     if (hit) this.bump();
@@ -321,6 +340,7 @@ export class ListCube extends Cube {
       this.initialIds = [...next];
       this.touched = true;
       this.bump();
+      this.sort?.resort(); // initialData is a resolve's result, a persisted draft a membership: both are ordered as they land
     });
   }
 
@@ -378,10 +398,18 @@ export class ListCube extends Cube {
     }
   }
 
-  /** The resolver's third argument: the filter at launch (store passed it always, empty without a block). */
+  /**
+   * The resolver's third argument: the filter at launch (store passed it
+   * always, empty without a block) and the sort (always; empty without a
+   * server sort). `queryKey` is the filter's server key, as before.
+   */
   resolveContext(): unknown {
-    return this.filter?.launch() ?? { filter: { values: {}, params: undefined, key: "" }, queryKey: "" };
+    const { filter, queryKey } = this.filter?.launch() ?? { filter: { values: {}, params: undefined, key: "" }, queryKey: "" };
+    return { filter, sort: this.sortRequest(), queryKey };
   }
+
+  /** `ctx.sort` of a resolver run (a paginated list's too). */
+  sortRequest(): SortRequest { return this.sort?.request() ?? { by: [], key: "" }; }
 
   override snapshotValue() {
     track(this);
@@ -395,7 +423,8 @@ export class ListCube extends Cube {
   protected override signature(): unknown[] {
     track(this);
     const sig: unknown[] = [this.version, this.loading, this.error, this.resolveStatus, this.dirty];
-    if (this.filter?.hasClient) sig.push(this.visibleIds()); // a keystroke in a `where` field re-renders the rows
+    // A keystroke in a `where` field, or a new sort order, re-renders the rows.
+    if (this.filter?.hasClient || this.sort?.client) sig.push(this.visibleIds());
     return sig;
   }
 }

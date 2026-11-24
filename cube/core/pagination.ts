@@ -939,7 +939,7 @@ export class Pager {
           },
         });
         const store = Object.create(hub.store as object, { context: { value: context } });
-        const ctx = { filter: filterCtx, page: req, queryKey: fam.queryKeyHash };
+        const ctx = { filter: filterCtx, page: req, sort: this.list.sortRequest(), queryKey: fam.queryKeyHash };
         const raw = await untracked(() => resolve.resolver(values, store, ctx));
 
         return hub.batch(() => {

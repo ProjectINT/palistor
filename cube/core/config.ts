@@ -64,7 +64,7 @@ export interface CubeConfig {
   [child: string]: unknown;
 }
 
-export type ListConfig = [CubeConfig, { resolve?: ResolveConfig; filter?: unknown }?];
+export type ListConfig = [CubeConfig, { resolve?: ResolveConfig; filter?: unknown; sort?: unknown }?];
 
 /** Service keys of a config node (store/constants.ts CONFIG_PROPS); never children. */
 export const CONFIG_PROPS = new Set<string>([

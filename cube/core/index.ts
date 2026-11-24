@@ -8,7 +8,8 @@ export { Persist, localStorageDriver, sessionStorageDriver, type PersistDriver, 
 export { Registry, generateTmpId } from "./registry";
 export { applyInitialData } from "./restore";
 export { ResolveState, type ResolveStatus } from "./resolve";
-export { CUBE, cubeOf, STATE_KEYS, LIST_STATE_KEYS, FLOW_STATE_KEYS, type PublicNode } from "./node";
+export { CUBE, cubeOf, STATE_KEYS, LIST_STATE_KEYS, FLOW_STATE_KEYS, SORT_STATE_KEYS, type PublicNode } from "./node";
+export { SortCube } from "./sort";
 export { Pager, type PageRequest, type PersistBlob } from "./pagination";
 export { Observer, Signal, observe, track, untracked, type Source } from "./track";
 export { CONFIG_PROPS } from "./config";

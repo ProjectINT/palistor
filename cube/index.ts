@@ -11,6 +11,16 @@
  * takes `translator` / `notifier` / `server` / `initialData` and its instances
  * have `start()`. `useForm` has one overload more: a field handed down as a
  * prop. Their types live in cube/types.ts.
+ *
+ * The second intended divergence, list sorting (experiments/SortPlan.md,
+ * decision 15): the `sort` block of `defineList`, `list.sort`, `ctx.sort`.
+ * Their types (`SortBlock`, `SortFieldConfig`, `SortProxyNode`, `SortRequest`,
+ * `SortKey`, `SortDirection`) are declared in store/store/types.ts, because
+ * `ListProxyNode` and `ListResolveContext` live there, but only Cube runs
+ * them: on the store implementation `defineList` drops the block,
+ * `list.sort` is undefined and `ctx.sort` is not passed. For the same reason
+ * this entry exports `ListResolveContext` with `sort` required (the store's
+ * `ListResolveContextWithSort`), and `useForm` takes a sort node.
  */
 
 import type { FieldMapping } from "../store/store/types";
@@ -82,7 +92,6 @@ export type {
   TemplateConfig,
   InferEntity,
   ListProxyNode,
-  ListResolveContext,
   FilterBlock,
   FilterFieldConfig,
   FilterProxyNode,
@@ -90,8 +99,16 @@ export type {
   PageMode,
   PageRequest,
   PagedResult,
+  SortBlock,
+  SortDirection,
+  SortFieldConfig,
+  SortKey,
+  SortProxyNode,
+  SortRequest,
 } from "../store/store/types";
 export type { Palistor as PalistorProxy } from "../store/store/types";
+// Cube always passes `ctx.sort`; the store's own ListResolveContext keeps it optional (it builds the object without one).
+export type { ListResolveContextWithSort as ListResolveContext } from "../store/store/types";
 
 // The store's class type, extended: the constructor also takes the server-rendering
 // options and instances have start(). Still assignable wherever the store's
@@ -115,7 +132,7 @@ export const useNotifier = cubeUseNotifier as unknown as typeof StoreUseNotifier
 // React hooks
 // ============================================================================
 
-/** The store's overloads plus a field handed down as a prop (cube/types.ts, `UseForm`). */
+/** The store's overloads plus a field and a list's sort node handed down as a prop (cube/types.ts, `UseForm`). */
 export const useForm = cubeUseForm as unknown as UseForm;
 export const usePersist = cubeUsePersist as unknown as typeof StoreUsePersist;
 export const useTranslator = cubeUseTranslator as unknown as typeof StoreUseTranslator;

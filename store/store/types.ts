@@ -312,11 +312,26 @@ export interface ListResolveContext {
   };
   /** Page request — present iff the list declares `resolve.pagination`. */
   page?: PageRequest;
-  /** Reserved seam — the future `sort` block. */
-  sort?: unknown;
+  /**
+   * The sort the server applies (`sort` block, Cube only). The Cube core
+   * always passes it — `{ by: [], key: "" }` without a server sort — and the
+   * package entry types it as required ({@link ListResolveContextWithSort}).
+   * Optional here only because the store implementation, which has no sort,
+   * builds this object without it.
+   */
+  sort?: SortRequest;
   queryKey: string;
   /** Reserved seam — resolver cancellation. */
   signal?: AbortSignal;
+}
+
+/**
+ * {@link ListResolveContext} as the Cube core passes it: `sort` is always
+ * there. The package entry exports this type under the name
+ * `ListResolveContext`, and a `defineList` resolver receives it.
+ */
+export interface ListResolveContextWithSort extends ListResolveContext {
+  sort: SortRequest;
 }
 
 /**
@@ -489,6 +504,144 @@ export interface ListResolveConfig {
   };
 }
 
+// ─── Sort (author-facing, Cube only) ─────────────────────────────────────────
+//
+// The store implementation has no sort: its defineList drops the block and
+// `list.sort` is undefined there (cube/index.ts lists the divergence).
+
+/** A sort direction. */
+export type SortDirection = "asc" | "desc";
+
+/** Levels left for {@link SortKey} to descend (a self-referencing entity type stays finite). */
+type SortDepth = [never, 0, 1, 2, 3];
+
+type SortPaths<T, D extends number> = [D] extends [never]
+  ? never
+  : { [K in keyof T & string]-?: SortPath<K, T[K], D> }[keyof T & string];
+
+/** An `unknown` / `any` value is taken for a leaf: nothing says it is a group. */
+type SortPath<K extends string, V, D extends number> = unknown extends V ? K : SortNode<K, NonNullable<V>, D>;
+
+type SortNode<K extends string, V, D extends number> = V extends ReadonlyArray<unknown>
+  ? never // a nested list (or an array value)
+  : V extends Date
+    ? K
+    : V extends (...args: any[]) => any
+      ? never
+      : V extends object
+        ? `${K}.${SortPaths<V, SortDepth[D]>}`
+        : K;
+
+/**
+ * The keys a list of `TEntity` sorts by: every leaf of the entity, a leaf in a
+ * nested group as a dotted path (`"address.city"`); arrays (nested lists) are
+ * left out. `string` for an untyped entity.
+ *
+ * @example
+ * ```ts
+ * interface Customer { id: string; name: string; address: { city: string }; orders: Order[] }
+ * type K = SortKey<Customer>; // "id" | "name" | "address.city"
+ * ```
+ */
+export type SortKey<TEntity> = 0 extends 1 & TEntity
+  ? string
+  : string extends keyof TEntity
+    ? string
+    : SortPaths<TEntity, 4>;
+
+/**
+ * One field of a list's `sort` block (its key is a leaf of the template, a
+ * dotted path for a leaf in a group):
+ * - `true` — by the field's value (numbers as numbers, strings by locale with
+ *   "2" before "10", `false` before `true`, dates by time; empty values last
+ *   in both directions);
+ * - `{ by }` — by a value computed from the row (client sort);
+ * - `{ compare }` — by your own order of two rows (client sort);
+ * - `{ param }` — the name the resolver gets for this key (server sort; default: the key).
+ */
+export type SortFieldConfig<TEntity = Record<string, unknown>> =
+  | true
+  | { by: (row: TEntity) => unknown; compare?: never; param?: never }
+  | { compare: (a: TEntity, b: TEntity) => number; by?: never; param?: never }
+  | { param: string; by?: never; compare?: never };
+
+/**
+ * A list's `sort` block (Cube only): `true` — every template leaf sorts by its
+ * value — or fields ({@link SortFieldConfig}) plus `$` options. A block that
+ * names at least one field sorts only by the named ones.
+ *
+ * A list without `resolve.pagination` holds all its rows and sorts them
+ * itself (`{ by }` / `{ compare }` allowed); a paginated list, or one with
+ * `$server: true`, sends the sort to its resolver (`{ param }` allowed).
+ * Config that can never apply throws when the store is created.
+ */
+export type SortBlock<TEntity = Record<string, unknown>> =
+  | true
+  | (SortBlockFields<TEntity> & {
+      /** The sort at creation, and what `list.sort.reset()` returns to: `"key"` or `"-key"` (descending). */
+      $default?: SortKey<TEntity> | `-${SortKey<TEntity>}`;
+      /** The resolver sorts a list that is not paginated (it returns "the first N in this order"). */
+      $server?: boolean;
+      /** Locale of the string comparison (client sort). Set it under SSR: the server's default locale may differ from the browser's. */
+      $locale?: string | readonly string[];
+    });
+
+type SortBlockFields<TEntity> = string extends SortKey<TEntity>
+  ? { [field: string]: unknown }
+  : { [K in SortKey<TEntity>]?: SortFieldConfig<TEntity> };
+
+/**
+ * What the resolver gets as `ctx.sort`: the sort the server applies, first
+ * entry first. A client sort never reaches the resolver: `by` is empty and
+ * `key` is `""` then (and on a list without a `sort` block).
+ */
+export interface SortRequest {
+  by: Array<{ key: string; param: string; dir: SortDirection }>;
+  /** The request identity of `by`: `""` without a server sort. */
+  key: string;
+}
+
+/**
+ * The `list.sort` node (lists with a `sort` block only): the state and the
+ * actions — no row is reachable here. Pass it down as a prop and resolve it
+ * with `useForm(props.sort)`: that component re-renders when the sort changes.
+ *
+ * @template K the sortable keys (`SortKey<TEntity>` on a typed list).
+ */
+export interface SortProxyNode<K extends string = string> {
+  /** The sort, first entry first; empty without a sort. */
+  readonly by: ReadonlyArray<{ readonly key: K; readonly dir: SortDirection }>;
+  /** The first entry's key, or `null`. */
+  readonly key: K | null;
+  /** The first entry's direction, or `null`. */
+  readonly dir: SortDirection | null;
+  /** The sortable keys. */
+  readonly keys: readonly K[];
+  /** The direction `key` is sorted in, or `null`. */
+  dirOf(key: K): SortDirection | null;
+  /** none → asc → desc → back to `$default` (to no sort without one). An unknown key throws. */
+  toggle(key: K): void;
+  /** Sort by `key` (default `"asc"`). */
+  set(key: K, dir?: SortDirection): void;
+  /** No sort: the list's own order. */
+  clear(): void;
+  /** Back to `$default` (no sort without one). */
+  reset(): void;
+  /**
+   * Order the rows again by their current values. The order is computed when
+   * the sort changes, a load lands and on `setItems`; in between an added row
+   * stays at the end and an edited one stays in place.
+   */
+  refresh(): void;
+  /** React Aria / HeroUI `sortDescriptor`; `undefined` without a sort. */
+  readonly sortDescriptor: { column: K; direction: "ascending" | "descending" } | undefined;
+  /** React Aria / HeroUI `onSortChange`: a press on the sorted column's header follows the `toggle` cycle. */
+  readonly onSortChange: (descriptor: { column: string | number; direction: "ascending" | "descending" }) => void;
+}
+
+/** The sort keys of a list of `TItem`: typed for a `defineList<TEntity>` list, `string` otherwise. */
+type ListSortKey<TItem> = TItem extends PalistorRef<infer E> ? SortKey<E> : string;
+
 /**
  * List-level configuration (second element of a ListNode array).
  * The resolver and other list-level options go here.
@@ -500,6 +653,8 @@ export interface ListConfig {
    * resolver can still be filtered client-side (an all-`where` block).
    */
   filter?: FilterBlock<any>;
+  /** Declared sort block (Cube only — the store implementation ignores it). */
+  sort?: SortBlock<any>;
 }
 
 /**
@@ -561,6 +716,13 @@ export interface ListProxyNode<TItem> {
   readonly values?: ReadonlyArray<TItem>;
   /** Size of the FULL loaded membership (`length` is the visible set). */
   readonly fullLength?: number;
+  /**
+   * Sort controls (lists with a `sort` block only; Cube only — undefined on
+   * the store implementation). The visible rows (`items`, `map`, `length`,
+   * iteration) follow the sort; `getById`, `getValues()` and `dirty` keep the
+   * list's own order.
+   */
+  readonly sort?: SortProxyNode<ListSortKey<TItem>>;
   readonly loading: boolean;
   /** true when list membership changed since init/last resolve. */
   readonly dirty: boolean;
@@ -658,7 +820,7 @@ export type TypedListNode<TEntity extends Record<string, any>> =
 
 /** Typed list resolver — a bare array, or a {@link PagedResult} for paginated lists. */
 export type ListResolver<TEntity extends Record<string, any>> =
-  (values: any, store: ProxyStore<any>, ctx: ListResolveContext) => Promise<TEntity[] | PagedResult<TEntity>>;
+  (values: any, store: ProxyStore<any>, ctx: ListResolveContextWithSort) => Promise<TEntity[] | PagedResult<TEntity>>;
 
 /** Typed template: each Entity key → ConfigNode with the matching value type. */
 export type TemplateConfig<TEntity extends Record<string, any>> = {

@@ -5,6 +5,7 @@ import type {
   ListResolveConfig,
   FilterBlock,
   PaginationConfig,
+  SortBlock,
 } from "./store/types";
 
 interface DefineListConfig<TEntity extends Record<string, any>> {
@@ -16,6 +17,12 @@ interface DefineListConfig<TEntity extends Record<string, any>> {
    * that declares `where` filters client-side and never issues a request.
    */
   filter?: FilterBlock<TEntity>;
+  /**
+   * Declared sort block (Cube only; this implementation drops it): `true`
+   * sorts by any template leaf, or name the sortable fields. Controls are on
+   * `list.sort`.
+   */
+  sort?: SortBlock<TEntity>;
   resolve?: {
     resolver: ListResolver<TEntity>;
     deps?: string[];
