@@ -21,7 +21,7 @@ metadata:
     conventions (fieldMapping — Ant/MUI/Chakra), debugging form state."
   type: core
   library: palistor
-  library_version: '0.1.0-cube.1'
+  library_version: '0.1.1-cube.2'
 sources:
   - 'ProjectINT/palistor:index.ts'
   - 'ProjectINT/palistor:cube/index.ts'
@@ -491,7 +491,7 @@ here, the installed version differs: see Version below.
 
 ## Version
 
-Targets palistor v0.1.0-cube.1. If the project has another version installed, read the skill shipped
+Targets palistor v0.1.1-cube.2. If the project has another version installed, read the skill shipped
 with that version instead: it is in `node_modules/palistor/skills/`, or run
 `npm exec --no -- intent load palistor#palistor` (and `palistor#palistor-lists`,
 `palistor#palistor-flows`, `palistor#palistor-field-mapping`, `palistor#palistor-ssr` for the other

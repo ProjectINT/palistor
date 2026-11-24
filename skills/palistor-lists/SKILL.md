@@ -21,7 +21,7 @@ metadata:
     separate template, and filtering or paginating the list.'
   type: sub-skill
   library: palistor
-  library_version: '0.1.0-cube.1'
+  library_version: '0.1.1-cube.2'
 sources:
   - 'ProjectINT/palistor:cube/defineList.ts'
   - 'ProjectINT/palistor:cube/core/listCube.ts'

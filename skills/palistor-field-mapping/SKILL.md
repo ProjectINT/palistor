@@ -19,7 +19,7 @@ metadata:
     with correct typing of the renamed props.'
   type: sub-skill
   library: palistor
-  library_version: '0.1.0-cube.1'
+  library_version: '0.1.1-cube.2'
 sources:
   - 'ProjectINT/palistor:cube/core/mapping.ts'
   - 'ProjectINT/palistor:store/defineFieldMapping.ts'

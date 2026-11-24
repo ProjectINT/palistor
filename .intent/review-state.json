@@ -3,41 +3,39 @@
   "baseline": "d6fdee2545f2c090eac90793a7be44abded59eac",
   "items": {
     "skill:skills/palistor-field-mapping/SKILL.md": {
-      "fingerprint": "2f829b775b986e0faed2622d9053071aa52e296c43b4d9638c98aaa763674e86",
+      "fingerprint": "b72c724fcd72668273c966893edafe62627b5225a6a95f3fbfbb66f8e735e2c5",
       "snapshot": {
         "cube/core/mapping.ts": "06d4fde3d1b8a4498424e0ea77813b280ba0afc82604f78201a731e2eee3e4ea",
-        "skills/palistor-field-mapping/SKILL.md": "7e13c33ac374e29c6e5ecc4de8bcfc2b1d5e4d1d844f1fd41a4413c604fe8357",
+        "skills/palistor-field-mapping/SKILL.md": "9401427fa0c7c7263b7b18751f78a578ef1a41f5253da142a182a62c0c7aff5d",
         "store/constants.ts": "f890cabc82298b55061c8b7271afe8d52e6fe0941b72828f2091e2fc9b8d9f1b",
         "store/defineFieldMapping.ts": "388c9c0a9e79cbb66894ee765cc8b81fd1c46013787e2fbc255eba6df4efc998"
       },
-      "head": "69dc215886d6e86e29f50d42eea465c52f859380",
-      "outcome": "updated",
-      "reason": "The new field overload of useForm takes a FieldProxyNode; a field of a mapped store has renamed props and is not one, so useForm(field) does not compile there with any rename (it runs). The skill named only groups; 'Type adapter and subtree props' and the mistake 'useForm(subtree) in a mapped store' now name the field too.",
+      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
+      "outcome": "no-change",
+      "reason": "Release bump to 0.1.1-cube.2 only: intent validate --set-version rewrote metadata.library_version (and the \"Targets palistor\" line in skills/palistor/SKILL.md); guidance unchanged, no source change since the last recorded review.",
       "evidence": [
-        "cube/types.ts (UseForm), cube/react/nodeProps.test.tsx (type checks, 'Known gap: a leaf of a mapped store', pinned with @ts-expect-error). Checks on the working tree (69dc215 + this batch): `intent validate skills` 5 files pass; strict compile of the new examples against the package entry passes; `npm run typecheck:cube`, `typecheck:skills`, `build` pass; `npm run test:cube` 88 files / 1172 tests pass; `npm test` (store project with the contract) 167 files / 2234 pass; `npm run test:skills` 46 checks pass on the reference solutions, 12 named checks fail on the mistakes as expected. Fresh consumer session: not run for this batch (unverified)."
+        "git diff limited to library_version/Targets lines; intent validate passed 5/5; npm run typecheck:skills and npm run test:skills green (46 passed, 12 expected fail)."
       ]
     },
     "skill:skills/palistor-flows/SKILL.md": {
-      "fingerprint": "78fe3d3e3e3c80e988a866174db775576f5c95ee84bffaf1f61efcf0bf19767c",
+      "fingerprint": "e33794102a9ce3a891184961a111dd56c85175197c76837b0bcf61bfb2d07b34",
       "snapshot": {
         "cube/core/flow.ts": "c4b4b0fa8aa0f75cb39f7917493886e2c55105ac23361b00a10f387f475bab1c",
         "cube/defineFlow.ts": "2268691db49dda8b28488d025448775dfd6c70288d33f4de156100e54d3b765b",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
-        "skills/palistor-flows/SKILL.md": "cb03210ccbfb9b1c6c98f7fdf7dc3c9f61a3bdd72dd7a501492fc8033c4cf6e5",
+        "skills/palistor-flows/SKILL.md": "6024538e09b94ad8c313552fe96aedad755824d397c53d1d318b003d9c98e699",
         "skills/palistor-flows/references/flow-api.md": "cb851933afdb9924fc92098cdbed18b67365f8372b83c1ab215b39a028ebb0c9",
         "store/flow/defineFlow.ts": "bce9fd63ae7627282aeeb80fb6ecf5f37f7cc47968cecae5d19e6b5b3f4c4f81"
       },
-      "head": "fe3820074ac7247388ace7e1c42b1bf3de7d38ab",
-      "outcome": "updated",
-      "reason": "One claim changed. Old: the first step of a flow is entered when the store is created, in the browser. New: that holds for new Palistor(); in a usePalistor store the first step is entered after the component's first commit (store.start() in the hook's effect), and a render React throws away never runs onEnter (SKILL.md 'Run code when a step opens'; references/flow-api.md loading row and 'Step entry lifecycle'). cube/react/usePalistor.ts was added to the skill's sources for that reason. Navigation, validation, branching and reset guidance is unchanged: cube/core/flow.ts changed in comments only.",
+      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
+      "outcome": "no-change",
+      "reason": "Release bump to 0.1.1-cube.2 only: intent validate --set-version rewrote metadata.library_version (and the \"Targets palistor\" line in skills/palistor/SKILL.md); guidance unchanged, no source change since the last recorded review.",
       "evidence": [
-        "cube/ssr/usePalistor.test.tsx: 'the render starts nothing and reads what a server render reads; the effect starts everything once' (onEnter 0 during the render, 1 after), 'an eager resolver runs once when an external store changes during an interruptible render', 'new Palistor() outside the hook is not held: in the browser its constructor starts it'",
-        "cube/core/flow.ts (enterCurrent: held stores enter nothing); git diff of cube/core/flow.ts is three comment lines",
-        "Checks at this state (2026-11-24, working tree on fe38200): intent validate - 5 skill files pass; npm run typecheck:skills passes (strict); npm run test:skills - 6 files, 40 passed, 10 expected failures; every TypeScript example added or changed in the batch was compiled under tests/skills/tsconfig.json (6 temporary files, deleted). No fresh consumer session and no description-activation run were done for this batch (limitation): the descriptions did not change."
+        "git diff limited to library_version/Targets lines; intent validate passed 5/5; npm run typecheck:skills and npm run test:skills green (46 passed, 12 expected fail)."
       ]
     },
     "skill:skills/palistor-lists/SKILL.md": {
-      "fingerprint": "536e6eab1cf74b0d64dfcaec3812f7ea3d48efaf90e58f2aa79e32cabd241069",
+      "fingerprint": "58d1741bf1fe9ec992d53507d7b97621801dfb6e5c3e585afcccc79412b3eb3e",
       "snapshot": {
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
         "cube/core/filter.ts": "b85b2b79d74249562a63140c04b42bcc24779ba2ced013669a3c0377d0c709f3",
@@ -51,7 +49,7 @@
         "cube/react/useForm.ts": "6999c27f6ba3e6a6f999e12d3a5b0c4f35f7fa9a35a2ff0c2dd519d69284632b",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor-lists/SKILL.md": "2a0a5fb8d1846b055837cabd7aad856628b0789999cf054dc01c2b8e3b9c1eb5",
+        "skills/palistor-lists/SKILL.md": "a380b3e21d1113bc7e2f6ec3226523ff31e0b9f8a4e69e7895ac0355ee627e4f",
         "skills/palistor-lists/references/entity-editing.md": "e145b654f3d67b60af057c861c4e2213523fdd658c4284691faa3f0d51ee7fa6",
         "skills/palistor-lists/references/filtering.md": "03d0ac264b766a51965c1560adc8a8ee74a1178a7b36aafba0e79af77eac2827",
         "skills/palistor-lists/references/list-api.md": "51edbe0785176a56e099598fd9fff79ce11aefbfbfb1a6bdf10386a5b8b23eb5",
@@ -60,15 +58,15 @@
         "store/pagination/types.ts": "3e3ef8e8f7928b9ca1822746c40ed5fca13fe67a8c9e9cd240a14240b95e2118",
         "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
       },
-      "head": "69dc215886d6e86e29f50d42eea465c52f859380",
+      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
       "outcome": "no-change",
-      "reason": "Its tracked source cube/react/useForm.ts changed in a doc comment only (the sentence about useForm(subtree) names a group, a field, a list or a row); no code changed. The skill's claims are about rows: useForm(row) with a PalistorRef and the two-argument form resolve through the store's overloads, which stay first and unchanged; the field overload is appended last.",
+      "reason": "Release bump to 0.1.1-cube.2 only: intent validate --set-version rewrote metadata.library_version (and the \"Targets palistor\" line in skills/palistor/SKILL.md); guidance unchanged, no source change since the last recorded review.",
       "evidence": [
-        "git diff cube/react/useForm.ts (comment lines 149-151 only); cube/types.ts (UseForm: `typeof StoreUseForm & (...)`); npm test and npm run test:cube pass (slice C of the contract, the lists, included); `intent validate skills` passes."
+        "git diff limited to library_version/Targets lines; intent validate passed 5/5; npm run typecheck:skills and npm run test:skills green (46 passed, 12 expected fail)."
       ]
     },
     "skill:skills/palistor/SKILL.md": {
-      "fingerprint": "27dd94e4e19785bf59bec8b56e95145688cf612ecd5db7bc4cf4de6ae7c874ca",
+      "fingerprint": "b3f7ff2867d51f7af15288a5d1616f6159443b16ac8c94c1096a60e52097a400",
       "snapshot": {
         "cube/core/config.ts": "587b6265dadc7d158a53b7a35d0ac91b43265d7efab9d5087a45451a4dd47c21",
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
@@ -87,7 +85,7 @@
         "cube/types.ts": "0feb9188264cff1bc4d7569813fc3e9e61bc9a0dfd4dcb0ab0f4d8e114603203",
         "index.ts": "e89f0234c4483f7829d788d27c56245ffca8f03cc50e9eec808cbf6f922add63",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor/SKILL.md": "34fcd88003ba722bc8b53b9351c211a0b4cf8a98a4c1ec00a2593e4db469c732",
+        "skills/palistor/SKILL.md": "658b06afdd2421941f807184aec52050deeef122413c57fcb36c89e445b046e8",
         "skills/palistor/references/async-resolve.md": "02dd1ce2b253b4a06c6125206bc9c265e54cf72cc4e2825d9866cee2049d600e",
         "skills/palistor/references/config-options.md": "b93f57bdda71385a371e683a70c3e9a4c06d1677b86ffe4796bf96716f1f34cf",
         "skills/palistor/references/integrations.md": "5531b9a2a7dfa4d66cd9a59784ef275bfd23d5e4878eb898de62ee733af075fe",
@@ -98,15 +96,15 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
       },
-      "head": "69dc215886d6e86e29f50d42eea465c52f859380",
-      "outcome": "updated",
-      "reason": "cube/types.ts adds the type UseForm: the store's useForm overloads plus one for a field (FieldProxyNode<T> in, the same type out); cube/index.ts exports useForm with it; cube/react/useForm.ts changed in a comment only. No run-time change. The skill taught one level of splitting (a section gets a group, fields spread inside it); 'Split rendering into child components' now teaches a component tree that mirrors the config on every level down to a one-field component, as the maintainer asked, and references/typescript.md and references/proxy-api.md state the field prop type and its mapped-store limit. `sources` gains cube/types.ts.",
+      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
+      "outcome": "no-change",
+      "reason": "Release bump to 0.1.1-cube.2 only: intent validate --set-version rewrote metadata.library_version (and the \"Targets palistor\" line in skills/palistor/SKILL.md); guidance unchanged, no source change since the last recorded review.",
       "evidence": [
-        "cube/types.ts (UseForm), cube/react/useForm.ts (resolveInput), cube/react/nodeProps.test.tsx (4 tests and the type checks), cube/contract/sliceA/useForm.test.tsx ('useForm(subtree) — child components with independent subscriptions'). Checks on the working tree (69dc215 + this batch): `intent validate skills` 5 files pass; strict compile of the new examples against the package entry passes; `npm run typecheck:cube`, `typecheck:skills`, `build` pass; `npm run test:cube` 88 files / 1172 tests pass; `npm test` (store project with the contract) 167 files / 2234 pass; `npm run test:skills` 46 checks pass on the reference solutions, 12 named checks fail on the mistakes as expected. Fresh consumer session: not run for this batch (unverified)."
+        "git diff limited to library_version/Targets lines; intent validate passed 5/5; npm run typecheck:skills and npm run test:skills green (46 passed, 12 expected fail)."
       ]
     },
     "planning:skills/_artifacts": {
-      "fingerprint": "3117496a914406289efbe6660cbdeade3ea9b0da6b6dad2a73ede937cae689bc",
+      "fingerprint": "de44bbc0fbcebca41eda768e4444f6aafe213d5a111d96dd2a659df44b3079e0",
       "snapshot": {
         "cube/core/config.ts": "587b6265dadc7d158a53b7a35d0ac91b43265d7efab9d5087a45451a4dd47c21",
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
@@ -138,16 +136,16 @@
         "skills/_artifacts/domain_map.yaml": "b9c807f08d97ffed9ccb7e45067e312c4bbeeae8a4b20c1a23de11ae5a1a1a9c",
         "skills/_artifacts/skill_spec.md": "72936c95a5b9d9e1931adceac2400844608a86bdfad84c6f73fd41c6e12049f7",
         "skills/_artifacts/skill_tree.yaml": "165f7fbaffb3365de360ebda0a5b8546d38a72a3d321633f270715244639d712",
-        "skills/palistor-field-mapping/SKILL.md": "7e13c33ac374e29c6e5ecc4de8bcfc2b1d5e4d1d844f1fd41a4413c604fe8357",
-        "skills/palistor-flows/SKILL.md": "cb03210ccbfb9b1c6c98f7fdf7dc3c9f61a3bdd72dd7a501492fc8033c4cf6e5",
+        "skills/palistor-field-mapping/SKILL.md": "9401427fa0c7c7263b7b18751f78a578ef1a41f5253da142a182a62c0c7aff5d",
+        "skills/palistor-flows/SKILL.md": "6024538e09b94ad8c313552fe96aedad755824d397c53d1d318b003d9c98e699",
         "skills/palistor-flows/references/flow-api.md": "cb851933afdb9924fc92098cdbed18b67365f8372b83c1ab215b39a028ebb0c9",
-        "skills/palistor-lists/SKILL.md": "2a0a5fb8d1846b055837cabd7aad856628b0789999cf054dc01c2b8e3b9c1eb5",
+        "skills/palistor-lists/SKILL.md": "a380b3e21d1113bc7e2f6ec3226523ff31e0b9f8a4e69e7895ac0355ee627e4f",
         "skills/palistor-lists/references/entity-editing.md": "e145b654f3d67b60af057c861c4e2213523fdd658c4284691faa3f0d51ee7fa6",
         "skills/palistor-lists/references/filtering.md": "03d0ac264b766a51965c1560adc8a8ee74a1178a7b36aafba0e79af77eac2827",
         "skills/palistor-lists/references/list-api.md": "51edbe0785176a56e099598fd9fff79ce11aefbfbfb1a6bdf10386a5b8b23eb5",
         "skills/palistor-lists/references/pagination.md": "dae73e30551ed54523fd77193868479bfc65456f36aa7d560bd5bfd16941db28",
-        "skills/palistor-ssr/SKILL.md": "a957bb18e14634341649a604c49c847423f11670405f11f64c9f865374f4d7da",
-        "skills/palistor/SKILL.md": "34fcd88003ba722bc8b53b9351c211a0b4cf8a98a4c1ec00a2593e4db469c732",
+        "skills/palistor-ssr/SKILL.md": "33ffbd885a297e4df3f820fc6a028c4341aff33dcd1364e3b0607db7cf8a2342",
+        "skills/palistor/SKILL.md": "658b06afdd2421941f807184aec52050deeef122413c57fcb36c89e445b046e8",
         "skills/palistor/references/async-resolve.md": "02dd1ce2b253b4a06c6125206bc9c265e54cf72cc4e2825d9866cee2049d600e",
         "skills/palistor/references/config-options.md": "b93f57bdda71385a371e683a70c3e9a4c06d1677b86ffe4796bf96716f1f34cf",
         "skills/palistor/references/integrations.md": "5531b9a2a7dfa4d66cd9a59784ef275bfd23d5e4878eb898de62ee733af075fe",
@@ -163,15 +161,15 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "9ac5c245ab3ef2f204d3e11820558fadfc0b5b1a1da3d7b23ecadeafa561efdc"
       },
-      "head": "69dc215886d6e86e29f50d42eea465c52f859380",
-      "outcome": "updated",
-      "reason": "Batch 5 recorded in all three documents. domain_map.yaml: header, the palistor entry (covers and task: a node as a prop on every level, a group or a field), the palistor-ssr entry (who reads the context), the module-level tension, the mapped-store gap and its failure-mode source. skill_spec.md: inventory rows of palistor and palistor-ssr, the tension row, the reference-files size note, two 'Remaining Gaps' rows (typing gaps; the /ssr demo passes the store), and a new 'Batch 5' section (input, evidence, decisions incl. the superseded batch-4 rule and its reason, guidance changed, check outcomes, remaining work). skill_tree.yaml: palistor sources gain cube/types.ts (through `intent maintainer sync`). Prior batches, decisions and open gaps are kept.",
+      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
+      "outcome": "no-change",
+      "reason": "Planning records already describe the five skills; the release bump changed only skill metadata versions, not scope, tasks or decisions.",
       "evidence": [
-        "skills/_artifacts/{domain_map.yaml,skill_spec.md,skill_tree.yaml} in this working tree; `intent maintainer sync` ran; `intent validate skills` passes. Checks on the working tree (69dc215 + this batch): `intent validate skills` 5 files pass; strict compile of the new examples against the package entry passes; `npm run typecheck:cube`, `typecheck:skills`, `build` pass; `npm run test:cube` 88 files / 1172 tests pass; `npm test` (store project with the contract) 167 files / 2234 pass; `npm run test:skills` 46 checks pass on the reference solutions, 12 named checks fail on the mistakes as expected. Fresh consumer session: not run for this batch (unverified)."
+        "git diff of skills/palistor*/SKILL.md touches only library_version and the Targets line."
       ]
     },
     "skill:skills/palistor-ssr/SKILL.md": {
-      "fingerprint": "80eafb64e99aee77bc06af33523ec7aadfe75dd1f1ebb8e5acbc427621277f78",
+      "fingerprint": "cbf13409a409367703229da985344c673689d7b0186e01fc06be866b189fcf22",
       "snapshot": {
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
         "cube/core/flow.ts": "c4b4b0fa8aa0f75cb39f7917493886e2c55105ac23361b00a10f387f475bab1c",
@@ -185,13 +183,13 @@
         "cube/react/provider.tsx": "53aeb679ea77ad335ecd25591a54f02babc0f08bcfbb23193243051d10c2e6d9",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
         "cube/types.ts": "0feb9188264cff1bc4d7569813fc3e9e61bc9a0dfd4dcb0ab0f4d8e114603203",
-        "skills/palistor-ssr/SKILL.md": "a957bb18e14634341649a604c49c847423f11670405f11f64c9f865374f4d7da"
+        "skills/palistor-ssr/SKILL.md": "33ffbd885a297e4df3f820fc6a028c4341aff33dcd1364e3b0607db7cf8a2342"
       },
-      "head": "69dc215886d6e86e29f50d42eea465c52f859380",
-      "outcome": "updated",
-      "reason": "No run-time change (cube/types.ts: the field overload of useForm). 'Share one store across the app' had every reader take the store from the app's context (useForm(useAppStore())); the maintainer rejected that shape. Now the entry of each client subtree reads the context once and hands nodes down as props (a field to AccountBadge and TextField, a group to AccountSection); the mistake 'usePalistor called in every component' points at the new shape.",
+      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
+      "outcome": "no-change",
+      "reason": "Release bump to 0.1.1-cube.2 only: intent validate --set-version rewrote metadata.library_version (and the \"Targets palistor\" line in skills/palistor/SKILL.md); guidance unchanged, no source change since the last recorded review.",
       "evidence": [
-        "cube/ssr/usePalistor.test.tsx (describe 'usePalistor: one store handed down through a React context', 5 tests, one new: 'the store is read from the context once per client subtree, the nodes go down as props'), cube/react/nodeProps.test.tsx, tests/skills/ssr-app-store (6 checks pass on the solution; the mistake fails its 2 named checks; a throwaway subject with a context-reading leaf fails the sixth). Checks on the working tree (69dc215 + this batch): `intent validate skills` 5 files pass; strict compile of the new examples against the package entry passes; `npm run typecheck:cube`, `typecheck:skills`, `build` pass; `npm run test:cube` 88 files / 1172 tests pass; `npm test` (store project with the contract) 167 files / 2234 pass; `npm run test:skills` 46 checks pass on the reference solutions, 12 named checks fail on the mistakes as expected. Fresh consumer session: not run for this batch (unverified)."
+        "git diff limited to library_version/Targets lines; intent validate passed 5/5; npm run typecheck:skills and npm run test:skills green (46 passed, 12 expected fail)."
       ]
     },
     "source:cube/core/index.ts": {
