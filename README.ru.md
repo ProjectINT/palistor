@@ -151,7 +151,7 @@ const store = new Palistor({
 
 Исходники стенда — в [`app-demo/`](./app-demo). Под каждым разделом ниже — ссылки на конкретный код примера и соответствующий таб.
 
-> Живой стенд собирается из `main`. Маршруты серверного рендера (`/ssr`, `/ssr/form`, `/ssr/catalog`, `/ssr/flow`, `/ssr/runtime` — см. [SSR и Next.js](#ssr-и-nextjs)) появятся на нём вместе с 0.1. До тех пор запустите стенд локально: `npm ci` в корне репозитория и в `app-demo/`, затем `npm run dev` в `app-demo/` и откройте [localhost:3001/palistor/](http://localhost:3001/palistor/).
+> Живой стенд собирается из `main`. Маршруты серверного рендера (`/ssr`, `/ssr/form`, `/ssr/catalog`, `/ssr/flow`, `/ssr/runtime` — см. [SSR и Next.js](#ssr-и-nextjs)) и маршруты списков (`/lists`, `/lists/orders`, `/lists/customers`, `/lists/feeds` — см. [Списки и сущности](#списки-и-сущности)) появятся на нём вместе с 0.1. До тех пор запустите стенд локально: `npm ci` в корне репозитория и в `app-demo/`, затем `npm run dev` в `app-demo/` и откройте [localhost:3001/palistor/](http://localhost:3001/palistor/).
 
 ---
 
@@ -170,7 +170,8 @@ const store = new Palistor({
 | **Dirty tracking** | Флаги изменений у поля, группы и списка; baseline сдвигается после resolve и `reset(values)` |
 | **Async-резолверы** | Загрузка данных на группе, поле и списке с авто-трекингом зависимостей (в том числе чтений после `await`), retry, оптимистичными значениями и React Suspense |
 | **Списки и сущности** | Нормализованный реестр сущностей, API списков с `add / remove / setItems`, per-entity шаблоны, вложенные списки |
-| **Фильтрация** | Блок `filter` у списка: серверные поля перезапрашивают данные (с debounce), клиентские фильтруют уже загруженные строки |
+| **Фильтрация** | Блок `filter` у списка: серверные поля перезапрашивают данные (с debounce), клиентские фильтруют уже загруженные строки; в режиме «Применить» поля остаются черновиком до `filter.apply()` |
+| **Сортировка** | Блок `sort` у списка: нажатие на заголовок сортирует загруженные строки в браузере или передаёт сортировку резолверу списка с пагинацией — один запрос на изменение |
 | **Пагинация** | Кэш уровня страниц — переход на свежую закэшированную страницу не вызывает резолвер; режимы `paged` / `infinite` / `cursor`, persist окна, вложенные списки |
 | **Flows** | Пошаговые мастера через `defineFlow` / `defineStep`: навигация, ветвление, валидация по шагам |
 | **Field mapping** | Переименование пропсов состояния поля под конвенцию вашего UI-кита (`isRequired` → `required`, …) |
@@ -618,6 +619,7 @@ const entity  = useForm(item, (s) => s.editForm); // привязка entity к 
 | `useForm(groupProp)` | Секция с независимыми ре-рендерами; проп типизируется как `PalistorProxy<T>` |
 | `useForm(fieldProp)` | Компонент одного поля; проп типизируется как `FieldProxyNode<T>`, возвращается тот же узел |
 | `useForm(rowProp)` | Строка списка (`PalistorRef<T>`), см. [Списки и сущности](#списки-и-сущности) |
+| `useForm(filterProp)` / `useForm(sortProp)` | Панель фильтров или заголовок колонки: проп — `list.filter` (`FilterProxyNode`) или `list.sort` (`SortProxyNode<K>`), возвращается тот же узел. См. [Фильтрация](#фильтрация), [Сортировка](#сортировка) |
 | `useForm(entityProxy, templateSelector)` | Отображение/редактирование entity из списка через template (bind при mount, unbind при unmount) |
 
 Узел в пропсе привязан к своему store и к своему месту в дереве: дочернему компоненту не нужен импорт store, а какой узел он показывает, решает родитель. Цепочка может быть любой глубины, см. [Компонент на узел](#компонент-на-узел).
@@ -943,6 +945,8 @@ form.users.dirty         // boolean — состав изменился vs. base
 form.users.error         // unknown | null — ошибка последнего resolve
 form.users.resolveStatus // "idle" | "pending" | "resolved" | "error"
 form.users.getValues()   // Array<plain object>
+form.users.filter        // управление фильтром — у списка с блоком `filter` (см. «Фильтрация»)
+form.users.sort          // управление сортировкой — у списка с блоком `sort` (см. «Сортировка»)
 
 // Перезапуск резолвера (игнорирует дедуп по resolved; no-op без резолвера)
 form.users.reload();
@@ -961,7 +965,7 @@ form.users.getById("user-id");                            // → узел эле
 
 `add(id)` игнорирует id, которого нет в реестре (per-entity список бросает ошибку), и никогда не добавляет id дважды; `setItems` из повторяющихся id оставляет первый. Публичный тип `setItems` принимает id; строки принимаются в рантайме.
 
-У списка с [фильтром](#фильтрация) `items`, `length`, `map` и итерация показывают видимые строки; `getById`, `getValues()`, `dirty` и `store.getValues()` работают с полным составом. У [списка с пагинацией](#пагинация) они охватывают текущее окно, а `dirty` — все закэшированные страницы.
+У списка с [фильтром](#фильтрация) или [сортировкой](#сортировка) `items`, `length`, `map` и итерация показывают видимые строки в видимом порядке; `getById`, `getValues()`, `dirty` и `store.getValues()` работают с полным составом в его собственном порядке. У [списка с пагинацией](#пагинация) они охватывают текущее окно, а `dirty` — все закэшированные страницы.
 
 `dirty` списка считается по составу: состав списка отличается от загруженного — или строка списка владеет вложенным списком, который грязен по тому же правилу, на любой глубине. Поэтому `add` / `remove` / `setItems` во вложенном списке делают грязными сам вложенный список, строку, которая им владеет, список, в который входит эта строка, и форму (`form.dirty`). Значения полей строки в этом не участвуют: правка поля делает грязной строку, а не список. `store.reset()` отменяет правки внутри вложенных списков и в списках с пагинацией; обычный корневой список сохраняет собственные `add` / `remove` / `setItems` (его `reload()` снова делает baseline загруженные строки). Успешный `submit()` сам по себе не сдвигает baseline ни у какого узла: вложенная цепочка становится чистой после `afterSubmit: (_result, { reset }) => reset()` корня (при `store.submit()`), после `store.reset()` или после `reload()` вложенного списка; собственный `reset()` группы вложенные списки не трогает.
 
@@ -1008,7 +1012,7 @@ function UserItem({ user }: { user: PalistorRef<User> }) {
 
 ### Фильтрация
 
-> 🔗 **Код:** [cube/contract/sliceE/](./cube/contract/sliceE) — описанное здесь поведение в виде тестов
+> 🔗 **Код:** [cube/contract/sliceE/](./cube/contract/sliceE) — описанное здесь поведение в виде тестов; клиентские поля — в [app/lists/productsConfig.ts](./app-demo/src/app/lists/productsConfig.ts), серверные — в [app/lists/orders/ordersConfig.ts](./app-demo/src/app/lists/orders/ordersConfig.ts) · **Живой результат:** [Демо → /lists](https://projectint.github.io/palistor/lists/), [/lists/orders](https://projectint.github.io/palistor/lists/orders/) (на живом демо появятся вместе с 0.1 — см. [Демо](#демо); локально — по адресу `/palistor/lists/`)
 
 Список принимает блок `filter` рядом со своим `resolve`. **Серверное поле** передаётся резолверу, и его изменение запрашивает данные заново; **клиентское поле** (`where`) фильтрует уже загруженные строки и никогда ничего не запрашивает.
 
@@ -1044,18 +1048,237 @@ function CarFilters() {
 }
 ```
 
-- **Поля.** Поле принимает словарь листа (`value`, `label`, `formatter`, вычисляемые флаги, `onChange`…) плюс `where` (клиентское поле), `param` (переименовать серверный параметр) и `debounce` (мс). Литерал — сокращение: `search: ""` — это `{ value: "" }`. Поле, у которого `value` — функция, производное: только для чтения, не отправляется, активным не считается. Опции блока: `$all(row, filterValues)` — ещё одно клиентское правило, выполняется последним; `$toParams(filterValues, context)` — собрать параметры самостоятельно.
+- **Поля.** Поле принимает словарь листа (`value`, `label`, `formatter`, вычисляемые флаги, `onChange`…) плюс `where` (клиентское поле), `param` (переименовать серверный параметр), `debounce` (мс) и `apply` (см. [Режим «Применить»](#режим-применить)). Литерал — сокращение: `search: ""` — это `{ value: "" }`. Поле, у которого `value` — функция, производное: только для чтения, не отправляется, активным не считается. Опции блока: `$all(row, filterValues)` — ещё одно клиентское правило, выполняется последним (когда именно — см. «Клиентские поля»); `$toParams(filterValues, context)` — собрать параметры самостоятельно; `$apply: "manual"` — см. [Режим «Применить»](#режим-применить).
 - **Элементы управления.** `list.filter.<поле>` — узел поля: `value`, `onValueChange`, `label`… Запись выполняет formatter → setter → `onChange`. `filter.set(patch)` записывает несколько полей (formatters выполняются, setters и `onChange` — нет), `filter.reset()` возвращает объявленные значения по умолчанию, `filter.clear(field?)` записывает пустое значение. `filter.values` — обычный снимок; `isActive` / `activeCount` считают непустые поля; `isPending` равен `true`, пока изменение ждёт debounce.
-- **Серверные поля.** После изменения резолвер запускается один раз; с `debounce` ждёт запуск (а не значение), таймер перезапускается при каждом изменении, а ввод с откатом в пределах задержки не отправляет ничего. Изменение без debounce — или `set` / `reset` / `clear` — отправляется сразу и несёт текущие значения отложенных полей. Первый запуск никогда не откладывается. Резолвер получает `ctx.filter`: `values` (все поля), `params` (серверные поля под их именами `param` или то, что вернул `$toParams`) и `key`.
-- **Клиентские поля.** `where(row, value)` получает сырую строку и пропускается, пока поле пустое; правила складываются (И). Строка, добавленная локально, видна до следующего resolve.
+- **Серверные поля.** После изменения резолвер запускается один раз; с `debounce` ждёт запуск (а не значение), таймер перезапускается при каждом изменении, а ввод с откатом в пределах задержки не отправляет ничего. Изменение без debounce — или `set` / `reset` / `clear` — отправляется сразу и несёт текущие значения отложенных полей. Первый запуск никогда не откладывается. Резолвер получает `ctx.filter`: `values` (все поля), `params` (серверные поля под их именами `param` или то, что вернул `$toParams`) и `key`. Идентичность запроса — `key`, а у списка с пагинацией и ключ запроса — строится из сырых значений серверных полей, а не из того, что вернул `$toParams`: два значения, которые `$toParams` превращает в одинаковые параметры (`"acme"` и `"acme "` после trim), — всё равно два запроса.
+- **Клиентские поля.** `where(row, value)` получает сырую строку и пропускается, пока поле пустое; правила складываются (И). Строка, добавленная локально, видна до следующего resolve. `$all` выполняется, только если в блоке есть клиентское поле, то есть поле с `where`: полю, которое читает только `$all`, всё равно нужен `where: () => true`, иначе оно серверное, и каждое его изменение вызывает резолвер.
 - **Что показывает список.** `items`, `map`, `length` и итерация — видимые строки, `fullLength` — полное число; `getById`, `getValues()`, `dirty`, `store.getValues()` и submit работают с полным составом.
 - **Вне формы.** Фильтра нет в `getValues()`, в `store.proxy.values`, в payload submit, в сохранённых черновиках и в `values` резолвера; `store.reset()` его не трогает, а его `onChange` не всплывает к форме.
 - **Пагинация.** Серверные поля входят в ключ запроса: изменение начинает с первой страницы одним запросом, а при `maxCachedQueries > 1` возврат к прежнему фильтру отдаётся из кэша. Клиентские поля фильтруют только текущее окно.
-- **Ограничения.** Фильтр у списка, вложенного в строку, игнорируется (предупреждение в консоли). Блок типизирован нестрого: аннотируйте параметры `where`, `$all`, `$toParams`.
+- **Ограничения.** Фильтр у списка, вложенного в строку, игнорируется (предупреждение в консоли). Поле не может называться как член `list.filter` — `values`, `set`, `reset`, `clear`, `isActive`, `activeCount`, `isPending`, `apply`, `revert`, `isDraft`, `applied`: store бросает ошибку при создании. Блок типизирован нестрого: аннотируйте параметры `where`, `$all`, `$toParams`.
+
+#### Режим «Применить»
+
+> 🔗 **Код:** [app/lists/customers/customersConfig.ts](./app-demo/src/app/lists/customers/customersConfig.ts), [FilterPanel.tsx](./app-demo/src/app/lists/customers/FilterPanel.tsx); тесты: [cube/core/filterApply.test.ts](./cube/core/filterApply.test.ts) · **Живой результат:** [Демо → /lists/customers](https://projectint.github.io/palistor/lists/customers/) (вместе с 0.1, как выше)
+
+С `$apply: "manual"` поля блока становятся черновиком: ввод меняет поле и его input, но не строки и не запросы. `filter.apply()` применяет черновик — по кнопке «Применить» или по Enter в поиске, — а `filter.revert()` его отбрасывает. Поле может переопределить режим блока своим `apply: "auto"` или `apply: "manual"`.
+
+```typescript
+type Role = "admin" | "user";
+interface Customer { id: string; name: string; role: string }
+
+const customers = defineList<Customer>({
+  template: { id: { value: "" }, name: { value: "" }, role: { value: "" } },
+  filter: {
+    $apply: "manual",                                   // поля — черновик до filter.apply()
+    search: "",
+    role: { value: null as Role | null, param: "role_id" },
+    quick: { value: "", apply: "auto", debounce: 300 }, // исключение: применяется само при изменении
+  },
+  resolve: {
+    pagination: { pageSize: 20 },
+    resolver: async (_values: unknown, _store: unknown, ctx: ListResolveContext) => api.customers(ctx.filter.params, ctx.page!),
+  },
+});
+```
+
+```tsx
+function FilterPanel({ filter }: { filter: FilterProxyNode }) {
+  const f = useForm(filter);
+
+  return (
+    <form onSubmit={(event) => { event.preventDefault(); f.apply(); }}> {/* Enter в поле отправляет форму */}
+      <TextField field={f.search} />                        {/* показывает черновик */}
+      <RoleSelect field={f.role} />
+      <button type="submit" disabled={!f.isDraft}>Применить</button>
+      <button type="button" disabled={!f.isDraft} onClick={() => f.revert()}>Отмена</button>
+      {f.isActive && <span>Фильтров: {f.activeCount}</span>} {/* считает применённые значения */}
+    </form>
+  );
+}
+```
+
+- **Черновик и применённые значения.** `filter.<поле>.value` и `filter.values` показывают черновик. Всё, что действует на список, читает применённые значения: клиентские правила (`where`, `$all`), `ctx.filter` (`values`, `params`, `key`), `$toParams`, `isActive` и `activeCount`. `filter.applied` — снимок применённых значений, новый объект на каждое изменение. Производное поле следует за обоими: в `values` оно считается от черновика, в `applied` и для списка — от применённых значений.
+- **`apply()`** переносит черновик в применённые значения: одно уведомление и не больше одного запроса. Если применять нечего, не происходит ничего, даже уведомления. Список с пагинацией возвращается на первую страницу. Идущий debounce автоматического поля останавливается, и его значение уходит тем же запросом.
+- **`revert()`** записывает в поля применённые значения — без formatter, без `onChange`, без запроса. Идущий debounce продолжается.
+- **`isDraft`** — черновик какого-то ручного поля отличается от его применённого значения; сравнение такое же, как у `dirty` (`null` равен `undefined`, объекты и массивы — по содержимому).
+- **`set` / `reset` / `clear`** у ручных полей пишут черновик; применяет его только `apply()`. Крестик на чипе, который снимает один применённый фильтр, — это `filter.clear("role"); filter.apply();`: один запрос, который применит и остальной черновик, если он есть.
+- **Смешанный блок.** Поле с `apply: "auto"` применяется при изменении, со своим `debounce`, и его запрос несёт применённые значения ручных полей, а не их черновик. В автоматическом блоке поле с `apply: "manual"` — единственный черновик.
+- **`initialData`** отвечает применённым значениям: черновик ничего не запрашивает, а первый запрос уходит с тем `apply()`, который их меняет (или с изменением автоматического поля).
+- **Автоматический режим** (без `$apply`): `apply()` и `revert()` ничего не делают, `isDraft` равен `false`, а `applied` — это `values`. Эти четыре члена неперечислимы: их нет ни в `Object.keys(filter)`, ни в спреде фильтра.
+- **Ошибки при создании.** `debounce` на ручном поле (ввод в нём ничего не отправляет, так что опция никогда не сработает), `apply` на производном поле, режим, отличный от `"manual"` / `"auto"`, и `$apply: "manual"`, который не достаётся ни одному полю, бросают ошибку при создании store.
+- **Типы.** `useForm(filter)` принимает `list.filter`, переданный пропсом (`FilterProxyNode`), и возвращает тот же узел; компонент перерисовывается по собственному состоянию фильтра (`isDraft`, `applied`, `isActive`, …).
+
+### Сортировка
+
+> 🔗 **Код:** клиентская сортировка — [app/lists/productsConfig.ts](./app-demo/src/app/lists/productsConfig.ts), [ProductsTable.tsx](./app-demo/src/app/lists/ProductsTable.tsx); серверная сортировка в таблице HeroUI — [app/lists/orders/](./app-demo/src/app/lists/orders); тесты: [cube/core/sort.test.ts](./cube/core/sort.test.ts), [sortServer.test.ts](./cube/core/sortServer.test.ts) · **Живой результат:** [Демо → /lists](https://projectint.github.io/palistor/lists/), [/lists/orders](https://projectint.github.io/palistor/lists/orders/), [/lists/feeds](https://projectint.github.io/palistor/lists/feeds/) (на живом демо появятся вместе с 0.1 — см. [Демо](#демо); локально — по адресу `/palistor/lists/`)
+
+Список принимает блок `sort` рядом с `filter`. `sort: true` делает сортируемым любое поле шаблона, а `list.sort` хранит состояние и действия. Базовый случай — нажатие на заголовок колонки:
+
+```typescript
+interface Product { id: string; title: string; price: number; inStock: boolean; rating: number | null }
+
+const products = defineList<Product>({
+  template: {
+    id: { value: "" }, title: { value: "" }, price: { value: 0 },
+    inStock: { value: true }, rating: { value: null },
+  },
+  sort: true, // любое поле шаблона сортируется по своему значению
+  resolve: { resolver: async () => api.products() },
+});
+```
+
+```tsx
+import type { ReactNode } from "react";
+import { useForm, type PalistorList, type SortKey, type SortProxyNode } from "palistor";
+
+type ProductKey = SortKey<Product>; // "id" | "title" | "price" | "inStock" | "rating"
+
+function ProductsTable({ products }: { products: PalistorList<Product> }) {
+  const list = useForm(products);
+  const sort = list.sort!; // в типе необязателен: он есть только у списка с блоком
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <SortHeader sort={sort} column="title">Название</SortHeader>
+          <SortHeader sort={sort} column="price">Цена</SortHeader>
+        </tr>
+      </thead>
+      <tbody>{list.map((row, _index, id) => <ProductRow key={id} product={row} />)}</tbody>
+    </table>
+  );
+}
+
+function SortHeader({ sort, column, children }: { sort: SortProxyNode<ProductKey>; column: ProductKey; children: ReactNode }) {
+  const s = useForm(sort);     // своя область: смена сортировки перерисовывает заголовки, а не строки
+  const dir = s.dirOf(column); // "asc" | "desc" | null
+
+  return (
+    <th aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}>
+      <button onClick={() => s.toggle(column)}>
+        {children}{dir === "asc" ? " ▲" : dir === "desc" ? " ▼" : ""}
+      </button>
+    </th>
+  );
+}
+```
+
+`toggle(column)` проходит по кругу: нет сортировки → по возрастанию → по убыванию → снова исходное состояние, то есть собственный порядок списка или `$default`, если он задан. У этого списка нет пагинации: он держит все строки и сортирует их в браузере, резолвер при смене сортировки не вызывается. Компонент таблицы перерисовывается, когда меняется порядок, заголовки — когда меняется сортировка; строка — только когда меняются её собственные значения.
+
+```typescript
+const sort = list.sort!;
+
+sort.by               // [{ key, dir }] — пустой без сортировки
+sort.key              // ключ первой записи или null
+sort.dir              // "asc" | "desc" | null
+sort.keys             // сортируемые ключи
+sort.dirOf("price")   // "asc" | "desc" | null
+sort.toggle("price"); // нет → asc → desc → обратно к $default (без него — без сортировки)
+sort.set("price", "desc"); // направление по умолчанию — "asc"
+sort.clear();         // без сортировки: собственный порядок списка
+sort.reset();         // обратно к $default (без него — без сортировки)
+sort.refresh();       // заново упорядочить строки по текущим значениям (клиентская сортировка)
+sort.sortDescriptor   // таблица React Aria / HeroUI, см. ниже
+sort.onSortChange
+```
+
+Опции блока:
+
+```typescript
+interface Customer { id: string; firstName: string; lastName: string; priority: "low" | "high" | "urgent"; createdAt: string }
+
+const RANK = { low: 0, high: 1, urgent: 2 };
+
+const customers = defineList<Customer>({
+  template: {
+    id: { value: "" }, firstName: { value: "" }, lastName: { value: "" },
+    priority: { value: "low" }, createdAt: { value: "" },
+  },
+  sort: {
+    $default: "-createdAt", // сортировка при создании и после reset(); "-" — по убыванию
+    $locale: "ru",          // локаль сравнения строк (при SSR задавайте обязательно)
+    createdAt: true,        // по значению поля: ISO-строка сортируется по времени
+    lastName: { by: (row: Customer) => `${row.lastName} ${row.firstName}` },                  // по значению, вычисленному из строки
+    priority: { compare: (a: Customer, b: Customer) => RANK[a.priority] - RANK[b.priority] }, // свой порядок двух строк
+  },
+  resolve: { resolver: async () => api.customers() },
+});
+```
+
+- **Блок.** `true` или объект: ключ, который начинается с `$`, — опция, любой другой — поле. Если блок не называет ни одного поля (`true` или только опции), сортируемым становится любой лист шаблона, а лист во вложенной группе задаётся путём (`"address.city"`); если называет, сортируемы только названные. Поле — это `true` (по значению), `{ by }` (по значению, вычисленному из строки) или `{ compare }` (свой порядок двух строк; `"desc"` его переворачивает). `$default` — `"key"` или `"-key"`: сортировка, с которой список начинает, куда возвращает третье нажатие `toggle` и что восстанавливает `reset()`.
+- **Ошибки при создании.** Конфиг, который не может сработать, бросает ошибку при создании store: неизвестная `$`-опция или опция поля, `$default` по несортируемому ключу, сортировка по значению по ключу, который не является листом шаблона, `by` вместе с `compare`, `{ param }` у списка, который сортирует сам, а у списка, который сортирует сервер, — `{ by }`, `{ compare }` и `$locale`; `$server: false` у списка с пагинацией и `$server: true` у списка без резолвера. `toggle`, `set` и `onSortChange` бросают ошибку на несортируемом ключе.
+- **Сравнение.** Числа — как числа; строки — через `Intl.Collator` с `numeric: true` и `sensitivity: "base"`: «Товар 2» раньше «Товар 10», регистр и диакритика не важны; `false` раньше `true`; значения разных типов — как текст. Пустые значения — `null`, `undefined`, `""`, `NaN`, ключ, которого нет в строке, — стоят в конце в обе стороны. Сортировка устойчивая: равные строки сохраняют порядок списка в обе стороны — `"desc"` меняет знак сравнения, а не переворачивает результат, — а пустые остаются в конце. `Date` в строке реестра не сохраняется: держите даты ISO-строками или метками времени либо возвращайте `Date` из `by`.
+- **Порядок — снимок.** Строки упорядочиваются, когда меняется сортировка (`toggle`, `set`, `clear`, `reset`, `onSortChange`), когда приходит resolve, когда `setItems` или восстановление (`initialData`, сохранённый черновик) заменяет состав, и по `sort.refresh()`. Между этими моментами значения не сравниваются: строка, которая появилась в списке (`add`, строка из realtime-обновления), встаёт в конец, правка значения строку не двигает (`items` остаётся тем же массивом), удалённая строка уходит, остальные стоят на местах, `store.rekey` сохраняет место строки. Поэтому заголовок может показывать ▲ над строкой, которая уже стоит не на своём месте: вызывайте `sort.refresh()` после сохранения правки в отсортированной колонке, после пачки realtime-обновлений или по кнопке «Пересортировать». `refresh()`, которому нечего двигать, никого не уведомляет.
+- **Проекция.** Видимые строки — это сортировка поверх фильтра поверх состава: клиентский фильтр сужает упорядоченные строки и сохраняет их порядок. `items`, `map`, `length` и итерация идут по ней; `getById`, `getValues()`, `dirty`, `store.getValues()` и submit сохраняют собственный порядок списка, поэтому сортировка никогда не делает список грязным. Страницы на клиенте — `list.items.slice((page - 1) * size, page * size)`: фильтр, затем сортировка, затем страница, по всем строкам.
+- **Вне формы.** Сортировки нет в `getValues()`, в payload submit, в сохранённых черновиках и в `values` резолвера; `store.reset()` её не трогает.
+- **SSR.** Без `$locale` коллатор берёт локаль среды по умолчанию. У сервера и браузера она может быть разной, и тогда строки не из ASCII встают в разном порядке, а гидратация падает. При SSR задавайте `$locale` списку, который сортируется в браузере.
+- **Ограничения.** Одна колонка за раз: `set` и `toggle` заменяют сортировку. Только корневые списки: `sort` у списка, вложенного в строку, игнорируется (предупреждение в консоли).
+- **Типы.** `list.sort` в типе списка необязателен (`list.sort!`), как и `filter`. У списка `defineList<Product>` это `SortProxyNode<SortKey<Product>>`, так что `toggle("nope")` — ошибка типа. `SortKey<T>` — листья `T`, вложенные — путём через точку, массивы не входят; у плоской сущности это то же, что `keyof Product & string`. Ключи блока проверяются так же, а `by` / `compare` получают строку уже типизированной. Поле с `{ by }` или `{ compare }` в типах должно называться как лист сущности, хотя в рантайме подходит любое имя. `useForm(sort)` принимает узел, переданный пропсом, и возвращает тот же `SortProxyNode<K>`; `store.proxy.products.sort`, переданный в `useForm`, бросает ошибку, как любой сырой узел.
+
+**Таблица HeroUI / React Aria.** `sortDescriptor` и `onSortChange` имеют ту форму, которую ждёт `Table`. Здесь это список `orders` из [Серверной сортировки](#серверная-сортировка) ниже; список, который сортируется в браузере, подключается так же:
+
+```tsx
+import { Table, TableBody, TableCell, TableColumn, TableHeader, TableRow } from "@heroui/react";
+
+function OrdersTable({ orders }: { orders: PalistorList<Order> }) {
+  const list = useForm(orders);
+  const sort = list.sort!;
+
+  return (
+    <Table aria-label="Заказы" sortDescriptor={sort.sortDescriptor} onSortChange={sort.onSortChange}>
+      <TableHeader>
+        <TableColumn key="title" allowsSorting>Название</TableColumn>
+        <TableColumn key="amount" allowsSorting>Сумма</TableColumn>
+      </TableHeader>
+      <TableBody>
+        {list.map((order, _index, id) => (
+          // строка остаётся TableRow; OrderCell вызывает useForm(order)
+          <TableRow key={id}>
+            <TableCell><OrderCell order={order} column="title" /></TableCell>
+            <TableCell><OrderCell order={order} column="amount" /></TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+```
+
+`sortDescriptor` равен `undefined`, пока ничего не отсортировано, и остаётся одним объектом на одно состояние. `onSortChange` следует циклу `toggle`: нажатие на отсортированную колонку запрашивает другое направление, а нажатие после убывания возвращает к `$default` (без него — к отсутствию сортировки); нажатие на другую колонку сортирует её в том направлении, которое прислал React Aria. Тело `Table` из HeroUI — коллекция React Aria, и свой компонент строки она не принимает: оставьте `TableRow` / `TableCell`, а `useForm(row)` вызывайте в компоненте внутри ячейки.
+
+#### Серверная сортировка
+
+Список, который держит одну страницу, не может отсортировать строки сам. Список с `resolve.pagination` передаёт сортировку резолверу; `$server: true` делает то же для списка без пагинации, чей резолвер возвращает «первые N в этом порядке». Блок и `list.sort` те же; поле принимает `true` или `{ param }` — имя для сервера, по умолчанию равное ключу.
+
+```typescript
+interface Order { id: string; title: string; amount: number; createdAt: string }
+
+const orders = defineList<Order>({
+  template: { id: { value: "" }, title: { value: "" }, amount: { value: 0 }, createdAt: { value: "" } },
+  sort: { $default: "-createdAt", title: true, amount: true, createdAt: { param: "created_at" } },
+  resolve: {
+    pagination: { pageSize: 20 },
+    resolver: async (_values: unknown, _store: unknown, ctx: ListResolveContext) => {
+      const order = ctx.sort.by.map((s) => (s.dir === "desc" ? `-${s.param}` : s.param)); // ["-created_at"]
+      const r = await api.orders({ order, offset: ctx.page!.offset, limit: ctx.page!.pageSize });
+      return { items: r.rows, total: r.count };
+    },
+  },
+});
+```
+
+- **`ctx.sort`** — это `{ by: [{ key, param, dir }], key }`, где `key` — идентичность запроса для `by`. Когда ничего не отсортировано, у списка, который сортирует сам, и у списка без блока это `{ by: [], key: "" }`: `ctx.sort` получает каждый резолвер списка, и `ListResolveContext` пакета объявляет его обязательным. `ctx.queryKey` у списка без серверной сортировки остаётся прежним.
+- **Один запрос на изменение.** Список с `$server: true` запускает резолвер заново; изменения во время идущего запуска дают ещё один запуск после него, с последним состоянием. Список с пагинацией добавляет сортировку в ключ запроса и возвращается на первую страницу одним запросом; при `maxCachedQueries > 1` сортировка, которая ещё в кэше, возвращается без запроса, `keepPreviousData` держит строки на экране (`isPreviousData`), а список `infinite` начинает окно заново. Список, который ещё не загружался, ничего не отправляет: его первая загрузка уже несёт текущую сортировку.
+- **Порядок сервера.** Список показывает строки в том порядке, в котором они пришли, и сам их не переставляет: `refresh()` здесь ничего не делает, а добавленная строка стоит там, куда её поставил `add`.
+- **Вместе с фильтром.** Сортировка и серверные поля фильтра — одна идентичность запроса. Смена сортировки, пока идёт debounce поля фильтра, отправляет один запрос, в котором уже есть ожидающее значение, и когда debounce истекает, больше ничего не уходит. Две записи в одном обработчике — два запроса: `filter.set({ … })` или `filter.apply()`, а за ним `sort.toggle(…)` отправляют дважды — публичного способа объединить их нет.
+- **`initialData`** отвечает сортировке, с которой store начинает (`$default`): передайте строки в этом порядке, и после создания ничего не запрашивается; смена сортировки — один запрос (первой страницы).
+- **Persist.** Сортировка не сохраняется никогда. Окно списка с пагинацией, сохранённое при другой сортировке, не восстанавливается: store начинает с `$default` и запрашивает его.
 
 ### Пагинация
 
-> 🔗 **Исходник:** [modules/lists-demo/OrdersSection.tsx](./app-demo/src/modules/lists-demo/OrdersSection.tsx) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
+> 🔗 **Код:** [modules/lists-demo/OrdersSection.tsx](./app-demo/src/modules/lists-demo/OrdersSection.tsx); `prefetch`, `setPageSize`, `keepPreviousData`, `maxCachedQueries` — в [app/lists/orders/](./app-demo/src/app/lists/orders); `infinite`, `maxPages`, сохранённое окно, `cursor` и `suspense` — в [app/lists/feeds/](./app-demo/src/app/lists/feeds) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists), [/lists/orders](https://projectint.github.io/palistor/lists/orders/), [/lists/feeds](https://projectint.github.io/palistor/lists/feeds/) (маршруты `/lists` — вместе с 0.1, см. [Демо](#демо))
 
 Список загружает **по одной странице** и кэширует каждую увиденную. Добавьте блок `pagination` в
 `resolve` — его наличие и есть единственный переключатель. Резолвер получает запрос страницы как
@@ -1084,7 +1307,7 @@ const orders = defineList<Order>({
 
 **Переход на закэшированную страницу, пока она свежа, никогда не вызывает резолвер** — это синхронная проекция
 (после `staleTime` страница показывается и перепроверяется в фоне). Резолвер вызывается только при
-промахе, устаревшей странице или изменении того, что он прочитал (поиск, фильтры, `store.context`, …):
+промахе, устаревшей странице или изменении того, что он прочитал (поиск, фильтры, серверная сортировка, `store.context`, …):
 это новый *ключ запроса*, старые страницы инвалидируются и первая страница запрашивается ровно один раз.
 Запись тех же значений без изменения — строгий no-op.
 
@@ -1182,7 +1405,7 @@ function Orders() {
 | `maxCachedQueries` / `gcTime` | `1` / `Infinity` | сколько ключей запроса хранить (возврат к старому фильтру ⇒ кэш) и как долго |
 | `maxCachedPages` | `Infinity` | LRU-лимит страниц на запрос (видимое окно не вытесняется) |
 | `maxPages` | `Infinity` | `infinite`: окно держит не больше стольких страниц — старые уходят из памяти, offset продолжения сохраняется |
-| `keepPreviousData` | `false` | держать строки предыдущего запроса, пока грузится первая страница нового |
+| `keepPreviousData` | `false` | держать строки предыдущего запроса, пока грузится первая страница нового (`isPreviousData`). При этом `page`, `pageCount`, `total` и `hasNextPage` уже описывают новый запрос — страница 1, total ещё неизвестен, — поэтому пока `isPreviousData`, прячьте пейджер или отключайте его |
 | `persist` | `{ maxPages: 3 }` | что попадает в storage: ограниченный хвост, `"window"` (всё + якорь скролла) или `false` |
 | `persistPendingAdds` | `"keep"` | неотправленные добавления переживают перезагрузку (`"drop"` — выбросить) |
 | `revalidateOnHydrate` | `"first"` | что перепроверяет восстановленное просроченное окно после отрисовки (`"none"` \| `"first"` \| `"all"`) |
@@ -1191,9 +1414,15 @@ function Orders() {
 **Persist.** С `usePersist` / `store.persist` текущая страница корневого списка (а для `infinite` —
 хвост окна) восстанавливается после перезагрузки и отдаётся без запроса — но только если сохранённый
 запрос совпадает с живыми значениями и контекстом (окно, сохранённое для tenant A, никогда не отдаётся
-tenant B). При `persist: "window"` вызывайте `list.setScrollAnchor(id)` из IntersectionObserver и
-читайте `list.scrollAnchor` после гидрации, чтобы восстановить скролл. Список с пагинацией, вложенный в
-строку, возвращается вместе со строками владельца, а кэш его страниц запрашивается заново.
+tenant B), и только если восстановление успевает до первого запроса списка: `await store.persist.enable(…)`
+до того, как кто-то прочитает список. `usePersist` гидратирует в эффекте, асинхронно, поэтому у store из
+`usePalistor` — он стартует после первого коммита и запрашивает страницу, которую прочитал рендер, —
+сначала уходит один запрос, а восстановленное окно затем занимает место его результата. При
+`persist: "window"` вызывайте `list.setScrollAnchor(id)` из IntersectionObserver и читайте
+`list.scrollAnchor` после гидрации, чтобы восстановить скролл. `setScrollAnchor` не меняет состояние,
+поэтому якорь попадает в storage со следующим изменением store; чтобы сохранить его сразу, вызовите после
+него `store.persist.flush()`. Список с пагинацией, вложенный в строку, возвращается вместе со строками
+владельца, а кэш его страниц запрашивается заново.
 
 **Вложенные списки.** Тот же блок `pagination` на списке внутри шаблона сущности пагинирует **каждый
 per-entity экземпляр независимо** (`user.orders.setPage(2)`) — со своим кэшем и ключом запроса.
@@ -1934,8 +2163,8 @@ const store = new Palistor({
 
 Ограничения:
 
-- **Объявляйте `deps`.** В браузере резолвер ещё не запускался, поэтому чтения, которые нашёл бы авто-трекинг, неизвестны до первого настоящего запуска. До тех пор узел перезапускается только по объявленным `resolve.deps`, при изменении ключа из `contextDeps`, при изменении фильтра списка и по `reload()` списка. У группы `reload()` нет: её перезапускают только объявленные `deps` и `contextDeps`. Если список должен перезагружаться при изменении поля — укажите это поле в `deps`. Ключ запроса списка с пагинацией строится из `deps` и фильтра (`contextDeps` он не учитывает; ключ контекста указывайте в `deps` как `"$context.accountId"`); следующая страница запрашивается как обычно. Типы resolve списка не объявляют `contextDeps`: у обычного списка в рантайме он работает, но нужно приведение типа.
-- **Данные должны быть теми, которые store запросил бы прямо сейчас**: для начальных значений фильтра, первой страницы (`pagination.initialPage`) и того же контекста. Контекст должен быть в конструкторе или в провайдере: ключ из `contextDeps`, который приходит позже через `useStoreContext`, считается изменением и перезапускает резолвер сразу после гидратации. Список с пагинацией кладёт строки под текущий ключ запроса.
+- **Объявляйте `deps`.** В браузере резолвер ещё не запускался, поэтому чтения, которые нашёл бы авто-трекинг, неизвестны до первого настоящего запуска. До тех пор узел перезапускается только по объявленным `resolve.deps`, при изменении ключа из `contextDeps`, при изменении фильтра или серверной сортировки списка и по `reload()` списка. У группы `reload()` нет: её перезапускают только объявленные `deps` и `contextDeps`. Если список должен перезагружаться при изменении поля — укажите это поле в `deps`. Ключ запроса списка с пагинацией строится из `deps`, фильтра и серверной сортировки (`contextDeps` он не учитывает; ключ контекста указывайте в `deps` как `"$context.accountId"`); следующая страница запрашивается как обычно. Типы resolve списка не объявляют `contextDeps`: у обычного списка в рантайме он работает, но нужно приведение типа.
+- **Данные должны быть теми, которые store запросил бы прямо сейчас**: для начальных значений фильтра, `$default` серверной сортировки, первой страницы (`pagination.initialPage`) и того же контекста. Контекст должен быть в конструкторе или в провайдере: ключ из `contextDeps`, который приходит позже через `useStoreContext`, считается изменением и перезапускает резолвер сразу после гидратации. Список с пагинацией кладёт строки под текущий ключ запроса.
 - **Данные встраиваются в HTML.** Пропсы клиентского компонента сериализуются в страницу — передавайте только то, что пользователю можно видеть.
 - **Каждой строке нужен `id`.** Строка без него получает временный id, который на сервере и в браузере разный (предупреждение в dev: `initialData: a row of list "…" has no id`).
 - **Ключи, которых нет в конфиге, игнорируются** (предупреждение в dev: `initialData: "…" is not in the config; ignored`). Ключи внутри строк не проверяются.
@@ -2039,8 +2268,10 @@ type UsersList  = PalistorList<User>;             // типизированны�
 | `MaybeTranslatable<TResult, TValues>` | Константа или `(t, values) => string` — `label`, `placeholder` |
 | `DeepPartialValues<T>` | Глубокий partial значений: `initialValues`, патчи `setter`, `setValues` |
 | `TranslateFn` | Совместим с next-intl `t`, i18next `t`, любым `(...args) => string` |
-| `TemplateConfig<TEntity>` / `ListResolver<TEntity>` / `ListResolveContext` | Типизированный шаблон / резолвер списка / третий аргумент резолвера (`filter`, `page`, `queryKey`) |
-| `FilterBlock<TEntity>` / `FilterFieldConfig<TEntity>` / `FilterProxyNode` | Блок `filter` списка, одно поле фильтра, элементы управления `list.filter` |
+| `TemplateConfig<TEntity>` / `ListResolver<TEntity>` / `ListResolveContext` | Типизированный шаблон / резолвер списка / третий аргумент резолвера (`filter`, `sort`, `page`, `queryKey`; `sort` обязателен) |
+| `FilterBlock<TEntity>` / `FilterFieldConfig<TEntity>` / `FilterProxyNode` | Блок `filter` списка (с `$apply`), одно поле фильтра (с `apply`), элементы управления `list.filter` (с `apply()`, `revert()`, `isDraft`, `applied`) — тип пропса панели фильтров |
+| `SortBlock<TEntity>` / `SortFieldConfig<TEntity>` / `SortProxyNode<K>` | Блок `sort` списка, одно поле сортировки (`true`, `{ by }`, `{ compare }`, `{ param }`), элементы управления `list.sort` — тип пропса заголовка колонки |
+| `SortKey<TEntity>` / `SortDirection` / `SortRequest` | Ключи, по которым сортируется список `TEntity` (его листья, вложенные — как `"address.city"`), `"asc" \| "desc"`, `ctx.sort` резолвера |
 | `PaginationConfig` / `PageMode` / `PageRequest` / `PagedResult<T>` | Блок `pagination`, его режим, запрос `ctx.page`, то, что возвращает резолвер с пагинацией |
 | `PersistDriver` / `PersistOptions` / `PersistManager` | Контракты персистенции |
 | `Resolve<T>` / `ResolveStatus` / `NotifyFn` / `ResolveErrorContext` | Контракты резолверов. `Resolve<T>` объявляет `onError` обязательным. `ResolveErrorContext` объявлен как `{ notify }`, хотя `onError` получает ещё и `t`: в обычном объекте конфига аннотируйте параметр как `{ notify, t }: { notify: NotifyFn; t: TranslateFn }`; там, где resolve типизирован, приводите тип: `ctx as ResolveErrorContext & { t: TranslateFn }` |
@@ -2064,6 +2295,8 @@ type UsersList  = PalistorList<User>;             // типизированны�
 | **Полный `store.reset()` сохраняет данные строк.** Вложенные списки и поля строк, чей resolve уже отработал, возвращаются к загруженным данным и заново не запрашиваются. | Чтобы загрузить заново, вызовите `reload()` вложенного списка. |
 | **`PersistManager` — только тип.** В 0.0.x `palistor/store/persist` экспортировал его как класс; `new PersistManager(…)` и `instanceof PersistManager` больше не компилируются. | Используйте `store.persist`: методы те же. |
 | **Внутренностей store больше нет.** TypeScript-тип экземпляра по-прежнему перечисляет члены класса 0.0.x (`nodes`, `services`, `groupDepsMap`, `recompute()`, …); у store 0.1 ни одного из них нет. | Пользуйтесь только описанным выше API. |
+| **Ещё четыре зарезервированных имени полей фильтра.** Поле фильтра с именем `apply`, `revert`, `isDraft` или `applied` бросает ошибку при создании store: теперь это члены `list.filter`. (0.0.x и пререлизы 0.1 до `0.1.1-cube.2` включительно такие поля принимали.) | Переименуйте поле. |
+| **`ctx.sort` в контексте резолвера списка.** Каждый резолвер списка получает `ctx.sort` — `{ by: [], key: "" }` без серверной сортировки, — и `ListResolveContext` пакета объявляет его обязательным. Сам резолвер не меняется; код, который собирает контекст вручную, например тест, вызывающий резолвер напрямую, без него больше не компилируется. | Добавьте в собранный вручную контекст `sort: { by: [], key: "" }`. |
 
 **Ничего делать не нужно**
 
@@ -2072,6 +2305,7 @@ type UsersList  = PalistorList<User>;             // типизированны�
 - `useForm(field)` типизирован: компонент, который получает пропсом одно поле, объявляет его как `FieldProxyNode<T>` вместо `any` (сам вызов работал всегда). См. [Компонент на узел](#компонент-на-узел).
 - Список с пагинацией больше не пишет предупреждение `pagination invariant … has no cached page` при смене ключа запроса.
 - Новое: `usePalistor`, `<PalistorProvider>`, `usePalistorContext`, опции конструктора `translator`, `notifier`, `initialData` и `server`, `store.start()` — см. [SSR и Next.js](#ssr-и-nextjs). И пять [скиллов для агентов](#скиллы-для-агентов) в пакете.
+- Новое: сортировка списков — блок `sort`, `list.sort`, `ctx.sort` (см. [Сортировка](#сортировка)) — и режим «Применить» у фильтра — `$apply` / `apply`, `filter.apply()`, `revert()`, `isDraft`, `applied` (см. [Режим «Применить»](#режим-применить)). Список без блока `sort` и фильтр без `$apply` ведут себя как раньше. В линии 0.0.x нет ни того, ни другого: её `defineList` отбрасывает блок `sort`, а фильтр бросает ошибку на `$apply` как на неизвестной опции.
 - С раннего пререлиза 0.1 (`0.1.0-cube.1`): store из `usePalistor` стартует после первого коммита, а не в конструкторе; в первом рендере eager-список читает `resolveStatus: "idle"` (было `"pending"`), а eager-группа с `suspense: true` показывает значения по умолчанию, а не fallback.
 
 **Исправлено в 0.1**

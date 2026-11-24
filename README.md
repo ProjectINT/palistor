@@ -153,7 +153,7 @@ Each tab is a separate framework feature, and every one has a direct deep link:
 
 The playground sources live in [`app-demo/`](./app-demo). Each section below links to the specific example code and its live tab.
 
-> The live playground is deployed from `main`. The server-rendering routes (`/ssr`, `/ssr/form`, `/ssr/catalog`, `/ssr/flow`, `/ssr/runtime` — see [SSR & Next.js](#ssr--nextjs)) reach it together with 0.1. Until then run the playground locally: `npm ci` in the repository root and in `app-demo/`, then `npm run dev` in `app-demo/` and open [localhost:3001/palistor/](http://localhost:3001/palistor/).
+> The live playground is deployed from `main`. The server-rendering routes (`/ssr`, `/ssr/form`, `/ssr/catalog`, `/ssr/flow`, `/ssr/runtime` — see [SSR & Next.js](#ssr--nextjs)) and the list routes (`/lists`, `/lists/orders`, `/lists/customers`, `/lists/feeds` — see [Lists & entities](#lists--entities)) reach it together with 0.1. Until then run the playground locally: `npm ci` in the repository root and in `app-demo/`, then `npm run dev` in `app-demo/` and open [localhost:3001/palistor/](http://localhost:3001/palistor/).
 
 ---
 
@@ -172,7 +172,8 @@ Palistor's philosophy is to provide a complete toolkit for generating any fronte
 | **Dirty tracking** | Per-field, per-group and per-list change flags; the baseline moves after a resolve and `reset(values)` |
 | **Async resolvers** | Data loading on groups, fields and lists with auto-tracked dependencies (reads after `await` included), retry, optimistic values and React Suspense |
 | **Lists & entities** | Normalized entity registry, list API with `add / remove / setItems`, per-entity templates, nested lists |
-| **Filtering** | A `filter` block on a list: server fields re-fetch (with debounce), client fields filter the loaded rows |
+| **Filtering** | A `filter` block on a list: server fields re-fetch (with debounce), client fields filter the loaded rows; an "Apply" mode keeps the fields a draft until `filter.apply()` |
+| **Sorting** | A `sort` block on a list: a header click sorts the loaded rows in the browser, or sends the sort to the resolver of a paginated list — one request per change |
 | **Pagination** | Page-level cache — switching to a fresh cached page never calls the resolver; `paged` / `infinite` / `cursor` modes, persisted windows, nested lists |
 | **Flows** | Step wizards via `defineFlow` / `defineStep`: navigation, branching, per-step validation |
 | **Field mapping** | Rename field-state props to your UI kit's convention (`isRequired` → `required`, …) |
@@ -620,6 +621,7 @@ Returns the store's nodes wrapped in a tracking scope. The component re-renders 
 | `useForm(groupProp)` | A section with independent re-renders; the prop is typed `PalistorProxy<T>` |
 | `useForm(fieldProp)` | A one-field component; the prop is typed `FieldProxyNode<T>`, and the same node comes back |
 | `useForm(rowProp)` | A row of a list (`PalistorRef<T>`), see [Lists & entities](#lists--entities) |
+| `useForm(filterProp)` / `useForm(sortProp)` | A filter panel or a sort header: the prop is `list.filter` (`FilterProxyNode`) or `list.sort` (`SortProxyNode<K>`), and the same node comes back. See [Filtering](#filtering), [Sorting](#sorting) |
 | `useForm(entityProxy, templateSelector)` | Render/edit a list entity through a template (binds on mount, unbinds on unmount) |
 
 A node in a prop is bound to its store and to its place in the tree: the child needs no store import, and the parent decides which node the child shows. The chain can be any depth, see [One component per node](#one-component-per-node).
@@ -945,6 +947,8 @@ form.users.dirty         // boolean — membership changed vs. baseline, here or
 form.users.error         // unknown | null — error thrown by the last resolve
 form.users.resolveStatus // "idle" | "pending" | "resolved" | "error"
 form.users.getValues()   // Array<plain object>
+form.users.filter        // filter controls — a list with a `filter` block (see Filtering)
+form.users.sort          // sort controls — a list with a `sort` block (see Sorting)
 
 // Re-run the resolver (ignores the resolved-state dedup; no-op without a resolver)
 form.users.reload();
@@ -963,7 +967,7 @@ form.users.getById("user-id");                            // → item node | und
 
 `add(id)` ignores an id that is not in the registry (a per-entity list throws) and never appends an id twice; `setItems` keeps the first of duplicate ids. The public type of `setItems` takes ids; rows are accepted at runtime.
 
-On a list with a [filter](#filtering), `items`, `length`, `map` and iteration show the visible rows; `getById`, `getValues()`, `dirty` and `store.getValues()` keep the full membership. On a [paginated](#pagination) list they cover the current window, while `dirty` covers every cached page.
+On a list with a [filter](#filtering) or a [sort](#sorting), `items`, `length`, `map` and iteration show the visible rows in the visible order; `getById`, `getValues()`, `dirty` and `store.getValues()` keep the full membership in its own order. On a [paginated](#pagination) list they cover the current window, while `dirty` covers every cached page.
 
 A list is `dirty` by composition: its membership differs from the loaded one, or a row of it owns a nested list that is dirty the same way, at any depth. So `add` / `remove` / `setItems` inside a nested list makes dirty the nested list, the row that owns it, the list that row belongs to, and the form (`form.dirty`). A row's field values take no part: editing a field makes the row dirty, not the list. `store.reset()` undoes the edits made inside nested lists and on paginated lists; a plain root list keeps its own `add` / `remove` / `setItems` (its `reload()` makes the loaded rows the baseline again). A successful `submit()` alone moves no baseline, for any kind of node: a nested chain is clean after the root's `afterSubmit: (_result, { reset }) => reset()` (on `store.submit()`), after `store.reset()`, or after the nested list's `reload()`; a group's own `reset()` leaves nested lists alone.
 
@@ -1010,7 +1014,7 @@ lists and per-entity nested lists.
 
 ### Filtering
 
-> 🔗 **Source:** [cube/contract/sliceE/](./cube/contract/sliceE) — the behavior described here, as tests
+> 🔗 **Source:** [cube/contract/sliceE/](./cube/contract/sliceE) — the behavior described here, as tests; client fields in [app/lists/productsConfig.ts](./app-demo/src/app/lists/productsConfig.ts), server fields in [app/lists/orders/ordersConfig.ts](./app-demo/src/app/lists/orders/ordersConfig.ts) · **Live result:** [Demo → /lists](https://projectint.github.io/palistor/lists/), [/lists/orders](https://projectint.github.io/palistor/lists/orders/) (they reach the live demo with 0.1 — see [Demo](#demo); locally under `/palistor/lists/`)
 
 A list takes a `filter` block next to its `resolve`. A **server field** is sent to the resolver and changing it fetches again; a **client field** (`where`) filters the rows already loaded and never fetches.
 
@@ -1046,18 +1050,237 @@ function CarFilters() {
 }
 ```
 
-- **Fields.** A field takes the leaf vocabulary (`value`, `label`, `formatter`, computed flags, `onChange`…) plus `where` (client field), `param` (rename the server param) and `debounce` (ms). A literal is a shorthand: `search: ""` is `{ value: "" }`. A field whose `value` is a function is derived: read-only, not sent, not counted as active. Block options: `$all(row, filterValues)` — one more client rule, run last; `$toParams(filterValues, context)` — build the params yourself.
+- **Fields.** A field takes the leaf vocabulary (`value`, `label`, `formatter`, computed flags, `onChange`…) plus `where` (client field), `param` (rename the server param), `debounce` (ms) and `apply` (see ["Apply" mode](#apply-mode)). A literal is a shorthand: `search: ""` is `{ value: "" }`. A field whose `value` is a function is derived: read-only, not sent, not counted as active. Block options: `$all(row, filterValues)` — one more client rule, run last (see Client fields for when it runs); `$toParams(filterValues, context)` — build the params yourself; `$apply: "manual"` — see ["Apply" mode](#apply-mode).
 - **The controls.** `list.filter.<field>` is a field node: `value`, `onValueChange`, `label`… A write runs formatter → setter → `onChange`. `filter.set(patch)` writes several fields (formatters run, setters and `onChange` don't), `filter.reset()` returns to the declared defaults, `filter.clear(field?)` writes the empty value. `filter.values` is a plain snapshot; `isActive` / `activeCount` count the non-empty fields; `isPending` is `true` while a debounced change waits.
-- **Server fields.** After a change the resolver runs once; with `debounce` the run (not the value) waits, the timer restarts on every change, and typing then reverting within the delay sends nothing. A change without debounce — or `set` / `reset` / `clear` — sends at once, carrying the current values of the debounced fields too. The first run is never delayed. The resolver gets `ctx.filter`: `values` (every field), `params` (server fields under their `param` names, or what `$toParams` returned) and `key`.
-- **Client fields.** `where(row, value)` gets the raw row and is skipped while its field is empty; the rules add up (AND). A row added locally stays visible until the next resolve.
+- **Server fields.** After a change the resolver runs once; with `debounce` the run (not the value) waits, the timer restarts on every change, and typing then reverting within the delay sends nothing. A change without debounce — or `set` / `reset` / `clear` — sends at once, carrying the current values of the debounced fields too. The first run is never delayed. The resolver gets `ctx.filter`: `values` (every field), `params` (server fields under their `param` names, or what `$toParams` returned) and `key`. The request identity — `key`, and the query key of a paginated list — is built from the raw values of the server fields, not from what `$toParams` returns: two values that `$toParams` turns into the same params (`"acme"` and `"acme "` trimmed) are still two requests.
+- **Client fields.** `where(row, value)` gets the raw row and is skipped while its field is empty; the rules add up (AND). A row added locally stays visible until the next resolve. `$all` runs only when the block has a client field, one that declares `where`: a field that only `$all` reads still needs `where: () => true`, otherwise it is a server field and every change calls the resolver.
 - **What the list shows.** `items`, `map`, `length` and iteration show the visible rows, `fullLength` the full count; `getById`, `getValues()`, `dirty`, `store.getValues()` and submit keep the full membership.
 - **Outside the form.** The filter is not in `getValues()`, `store.proxy.values`, submit payloads, persisted drafts or the resolver's `values`; `store.reset()` leaves it alone, and its `onChange` does not bubble to the form.
 - **Pagination.** The server fields are part of the query key: a change starts again from the first page with one fetch, and with `maxCachedQueries > 1` going back to an earlier filter is served from the cache. Client fields filter only the current window.
-- **Limits.** A filter on a list nested in a row is ignored (console warning). The block is loosely typed: annotate the parameters of `where`, `$all`, `$toParams`.
+- **Limits.** A filter on a list nested in a row is ignored (console warning). A field cannot take the name of a member of `list.filter` — `values`, `set`, `reset`, `clear`, `isActive`, `activeCount`, `isPending`, `apply`, `revert`, `isDraft`, `applied`: the store throws when it is created. The block is loosely typed: annotate the parameters of `where`, `$all`, `$toParams`.
+
+#### "Apply" mode
+
+> 🔗 **Source:** [app/lists/customers/customersConfig.ts](./app-demo/src/app/lists/customers/customersConfig.ts), [FilterPanel.tsx](./app-demo/src/app/lists/customers/FilterPanel.tsx); tests: [cube/core/filterApply.test.ts](./cube/core/filterApply.test.ts) · **Live result:** [Demo → /lists/customers](https://projectint.github.io/palistor/lists/customers/) (with 0.1, as above)
+
+`$apply: "manual"` makes the fields of the block a draft: typing changes the field and its input, but neither the rows nor the requests. `filter.apply()` applies the drafts — an "Apply" button, Enter in a search box — and `filter.revert()` drops them. A field can override the block's mode with its own `apply: "auto"` or `apply: "manual"`.
+
+```typescript
+type Role = "admin" | "user";
+interface Customer { id: string; name: string; role: string }
+
+const customers = defineList<Customer>({
+  template: { id: { value: "" }, name: { value: "" }, role: { value: "" } },
+  filter: {
+    $apply: "manual",                                   // the fields are a draft until filter.apply()
+    search: "",
+    role: { value: null as Role | null, param: "role_id" },
+    quick: { value: "", apply: "auto", debounce: 300 }, // the exception: applied as it changes
+  },
+  resolve: {
+    pagination: { pageSize: 20 },
+    resolver: async (_values: unknown, _store: unknown, ctx: ListResolveContext) => api.customers(ctx.filter.params, ctx.page!),
+  },
+});
+```
+
+```tsx
+function FilterPanel({ filter }: { filter: FilterProxyNode }) {
+  const f = useForm(filter);
+
+  return (
+    <form onSubmit={(event) => { event.preventDefault(); f.apply(); }}> {/* Enter in a field submits */}
+      <TextField field={f.search} />                        {/* shows the draft */}
+      <RoleSelect field={f.role} />
+      <button type="submit" disabled={!f.isDraft}>Apply</button>
+      <button type="button" disabled={!f.isDraft} onClick={() => f.revert()}>Cancel</button>
+      {f.isActive && <span>Filters: {f.activeCount}</span>} {/* counts the applied values */}
+    </form>
+  );
+}
+```
+
+- **Draft and applied.** `filter.<field>.value` and `filter.values` show the drafts. Whatever acts on the list reads the applied values: the client rules (`where`, `$all`), `ctx.filter` (`values`, `params`, `key`), `$toParams`, `isActive` and `activeCount`. `filter.applied` is a snapshot of the applied values, one object per change. A derived field follows both: in `values` it is computed from the drafts, in `applied` and on the list from the applied values.
+- **`apply()`** moves the drafts into the applied values: one notification and at most one request. With nothing to apply it does nothing, not even a notification. A paginated list goes back to its first page. A debounce of an automatic field that is still running stops, and its value goes out in the same request.
+- **`revert()`** writes the applied values back into the fields — no formatter, no `onChange`, no request. A running debounce goes on.
+- **`isDraft`** — a manual field's draft differs from its applied value, compared as `dirty` compares (`null` equals `undefined`, objects and arrays by content).
+- **`set` / `reset` / `clear`** write the drafts of manual fields; only `apply()` applies them. A chip that drops one applied filter is `filter.clear("role"); filter.apply();` — one request, which also applies any other draft.
+- **A mixed block.** A field with `apply: "auto"` applies as it changes, its `debounce` included, and its request carries the applied values of the manual fields, not their drafts. In an automatic block, a field with `apply: "manual"` is the only draft.
+- **`initialData`** answers the applied values: a draft requests nothing, and the first request goes out with the `apply()` that changes them (or with a change of an automatic field).
+- **Automatic mode** (no `$apply`): `apply()` and `revert()` do nothing, `isDraft` is `false` and `applied` is `values`. The four members are not enumerable: `Object.keys(filter)` and a spread of the filter do not list them.
+- **Construction errors.** `debounce` on a manual field (typing in it sends nothing, so the option could never apply), `apply` on a derived field, a mode other than `"manual"` / `"auto"`, and a `$apply: "manual"` that reaches no field throw when the store is created.
+- **Typing.** `useForm(filter)` takes `list.filter` handed down as a prop (`FilterProxyNode`) and returns the same node; the component re-renders on the filter's own state (`isDraft`, `applied`, `isActive`, …).
+
+### Sorting
+
+> 🔗 **Source:** client sort — [app/lists/productsConfig.ts](./app-demo/src/app/lists/productsConfig.ts), [ProductsTable.tsx](./app-demo/src/app/lists/ProductsTable.tsx); server sort with a HeroUI `Table` — [app/lists/orders/](./app-demo/src/app/lists/orders); tests: [cube/core/sort.test.ts](./cube/core/sort.test.ts), [sortServer.test.ts](./cube/core/sortServer.test.ts) · **Live result:** [Demo → /lists](https://projectint.github.io/palistor/lists/), [/lists/orders](https://projectint.github.io/palistor/lists/orders/), [/lists/feeds](https://projectint.github.io/palistor/lists/feeds/) (they reach the live demo with 0.1 — see [Demo](#demo); locally under `/palistor/lists/`)
+
+A list takes a `sort` block next to its `filter`. `sort: true` makes every field of the template sortable, and `list.sort` holds the state and the actions. The base case is a click on a column header:
+
+```typescript
+interface Product { id: string; title: string; price: number; inStock: boolean; rating: number | null }
+
+const products = defineList<Product>({
+  template: {
+    id: { value: "" }, title: { value: "" }, price: { value: 0 },
+    inStock: { value: true }, rating: { value: null },
+  },
+  sort: true, // every field of the template sorts by its value
+  resolve: { resolver: async () => api.products() },
+});
+```
+
+```tsx
+import type { ReactNode } from "react";
+import { useForm, type PalistorList, type SortKey, type SortProxyNode } from "palistor";
+
+type ProductKey = SortKey<Product>; // "id" | "title" | "price" | "inStock" | "rating"
+
+function ProductsTable({ products }: { products: PalistorList<Product> }) {
+  const list = useForm(products);
+  const sort = list.sort!; // optional in the type: only a list with a block has it
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <SortHeader sort={sort} column="title">Title</SortHeader>
+          <SortHeader sort={sort} column="price">Price</SortHeader>
+        </tr>
+      </thead>
+      <tbody>{list.map((row, _index, id) => <ProductRow key={id} product={row} />)}</tbody>
+    </table>
+  );
+}
+
+function SortHeader({ sort, column, children }: { sort: SortProxyNode<ProductKey>; column: ProductKey; children: ReactNode }) {
+  const s = useForm(sort);     // its own scope: a sort change re-renders the headers, not the rows
+  const dir = s.dirOf(column); // "asc" | "desc" | null
+
+  return (
+    <th aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}>
+      <button onClick={() => s.toggle(column)}>
+        {children}{dir === "asc" ? " ▲" : dir === "desc" ? " ▼" : ""}
+      </button>
+    </th>
+  );
+}
+```
+
+`toggle(column)` steps through none → ascending → descending → back to where the list started: its own order, or `$default` when the block has one. This list has no pagination, so it holds all its rows and sorts them in the browser: a sort change calls no resolver. The table component re-renders when the order changes, the headers when the sort does; a row re-renders only when its own values change.
+
+```typescript
+const sort = list.sort!;
+
+sort.by               // [{ key, dir }] — empty without a sort
+sort.key              // the first entry's key, or null
+sort.dir              // "asc" | "desc" | null
+sort.keys             // the sortable keys
+sort.dirOf("price")   // "asc" | "desc" | null
+sort.toggle("price"); // none → asc → desc → back to $default (to no sort without one)
+sort.set("price", "desc"); // the direction defaults to "asc"
+sort.clear();         // no sort: the list's own order
+sort.reset();         // back to $default (no sort without one)
+sort.refresh();       // order the rows again by their current values (client sort)
+sort.sortDescriptor   // React Aria / HeroUI Table, see below
+sort.onSortChange
+```
+
+The options of the block:
+
+```typescript
+interface Customer { id: string; firstName: string; lastName: string; priority: "low" | "high" | "urgent"; createdAt: string }
+
+const RANK = { low: 0, high: 1, urgent: 2 };
+
+const customers = defineList<Customer>({
+  template: {
+    id: { value: "" }, firstName: { value: "" }, lastName: { value: "" },
+    priority: { value: "low" }, createdAt: { value: "" },
+  },
+  sort: {
+    $default: "-createdAt", // the sort at creation and after reset(); "-" is descending
+    $locale: "en",          // the locale of the string comparison (set it under SSR)
+    createdAt: true,        // by the field's value: an ISO string sorts by time
+    lastName: { by: (row: Customer) => `${row.lastName} ${row.firstName}` },                  // by a value computed from the row
+    priority: { compare: (a: Customer, b: Customer) => RANK[a.priority] - RANK[b.priority] }, // your own order of two rows
+  },
+  resolve: { resolver: async () => api.customers() },
+});
+```
+
+- **The block.** `true`, or an object: a key that starts with `$` is an option, any other key is a field. A block that names no field (`true`, or only options) makes every leaf of the template sortable, a leaf in a nested group by its path (`"address.city"`); a block that names fields sorts only by those. A field is `true` (by its value), `{ by }` (by a value computed from the row) or `{ compare }` (your own order of two rows; `"desc"` reverses it). `$default` is `"key"` or `"-key"`: the sort the list starts with, where the third press of `toggle` returns, and what `reset()` restores.
+- **Construction errors.** Config that can never apply throws when the store is created: an unknown `$` option or field option, `$default` on a key that does not sort, a sort by value on a key that is not a leaf of the template, `by` together with `compare`, `{ param }` on a list that sorts itself, and on a list the server sorts `{ by }`, `{ compare }` or `$locale`; `$server: false` on a paginated list and `$server: true` on a list without a resolver. `toggle`, `set` and `onSortChange` throw on a key that does not sort.
+- **The comparison.** Numbers as numbers; strings through `Intl.Collator` with `numeric: true` and `sensitivity: "base"` — "Item 2" before "Item 10", case and accents ignored; `false` before `true`; values of different types as text. Empty values — `null`, `undefined`, `""`, `NaN`, a key the row lacks — go last in both directions. The sort is stable: equal rows keep the list's order in both directions — `"desc"` negates the comparison instead of reversing the result — and empty values stay last. A `Date` does not survive in a row of the registry: keep dates as ISO strings or timestamps, or return a `Date` from `by`.
+- **The order is a snapshot.** The rows are put in order when the sort changes (`toggle`, `set`, `clear`, `reset`, `onSortChange`), when a resolve lands, when `setItems` or a restore (`initialData`, a persisted draft) replaces the membership, and on `sort.refresh()`. In between no value is compared: a row that joins the list (`add`, a row from a realtime update) goes to the end, a value edit moves no row (`items` keeps its array), a removed row leaves and the rest stay in place, `store.rekey` keeps the row's place. So the header can show ▲ above a row that no longer fits: call `sort.refresh()` after saving an edit to a sorted column, after a batch of realtime updates, or from a "Re-sort" button. A `refresh()` with nothing to move notifies nothing.
+- **A projection.** The visible rows are the sort over the filter over the membership: the client filter narrows the ordered rows and keeps their order. `items`, `map`, `length` and iteration follow it; `getById`, `getValues()`, `dirty`, `store.getValues()` and submit keep the list's own order, so a sort never makes a list dirty. Pages on the client are `list.items.slice((page - 1) * size, page * size)`: filter, then sort, then the page, over all the rows.
+- **Outside the form.** The sort is not in `getValues()`, submit payloads, persisted drafts or the resolver's `values`; `store.reset()` leaves it alone.
+- **SSR.** Without `$locale` the collator takes the default locale of the environment. The server and the browser may have different ones, and then non-ASCII strings come out in a different order and hydration fails. Under SSR give a list that sorts in the browser a `$locale`.
+- **Limits.** One column at a time: `set` and `toggle` replace the sort. Root lists only: a `sort` on a list nested in a row is ignored (console warning).
+- **Typing.** `list.sort` is optional in the list type (`list.sort!`), as `filter` is. On a `defineList<Product>` list it is `SortProxyNode<SortKey<Product>>`, so `toggle("nope")` is a type error. `SortKey<T>` is the leaves of `T`, nested ones as dotted paths, arrays left out; for a flat entity it equals `keyof Product & string`. The keys of the block are checked the same way, and `by` / `compare` get the row typed. A field with `{ by }` or `{ compare }` must be named after a leaf of the entity in the types, although any name works at run time. `useForm(sort)` takes the node handed down as a prop and returns the same `SortProxyNode<K>`; `store.proxy.products.sort` passed to `useForm` throws, like any raw node.
+
+**HeroUI / React Aria `Table`.** `sortDescriptor` and `onSortChange` have the shapes `Table` takes. Here they sit on the `orders` list of [Server-side sorting](#server-side-sorting) below; a list sorted in the browser plugs in the same way:
+
+```tsx
+import { Table, TableBody, TableCell, TableColumn, TableHeader, TableRow } from "@heroui/react";
+
+function OrdersTable({ orders }: { orders: PalistorList<Order> }) {
+  const list = useForm(orders);
+  const sort = list.sort!;
+
+  return (
+    <Table aria-label="Orders" sortDescriptor={sort.sortDescriptor} onSortChange={sort.onSortChange}>
+      <TableHeader>
+        <TableColumn key="title" allowsSorting>Title</TableColumn>
+        <TableColumn key="amount" allowsSorting>Amount</TableColumn>
+      </TableHeader>
+      <TableBody>
+        {list.map((order, _index, id) => (
+          // the row stays a TableRow; OrderCell calls useForm(order)
+          <TableRow key={id}>
+            <TableCell><OrderCell order={order} column="title" /></TableCell>
+            <TableCell><OrderCell order={order} column="amount" /></TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+```
+
+`sortDescriptor` is `undefined` while nothing is sorted, and one object per state. `onSortChange` follows the `toggle` cycle: a press on the sorted column asks for the other direction, and the press after descending returns to `$default` (no sort without one); a press on another column sorts it in the direction React Aria sends. The body of a HeroUI `Table` is a React Aria collection and does not take a row component of your own: keep `TableRow` / `TableCell` and call `useForm(row)` in a component inside the cell.
+
+#### Server-side sorting
+
+A list that holds one page cannot sort its rows itself. A list with `resolve.pagination` sends its sort to the resolver; `$server: true` does the same for a list without pagination whose resolver returns "the first N in this order". The block and `list.sort` are the same; a field takes `true` or `{ param }` — the name the server gets, the key by default.
+
+```typescript
+interface Order { id: string; title: string; amount: number; createdAt: string }
+
+const orders = defineList<Order>({
+  template: { id: { value: "" }, title: { value: "" }, amount: { value: 0 }, createdAt: { value: "" } },
+  sort: { $default: "-createdAt", title: true, amount: true, createdAt: { param: "created_at" } },
+  resolve: {
+    pagination: { pageSize: 20 },
+    resolver: async (_values: unknown, _store: unknown, ctx: ListResolveContext) => {
+      const order = ctx.sort.by.map((s) => (s.dir === "desc" ? `-${s.param}` : s.param)); // ["-created_at"]
+      const r = await api.orders({ order, offset: ctx.page!.offset, limit: ctx.page!.pageSize });
+      return { items: r.rows, total: r.count };
+    },
+  },
+});
+```
+
+- **`ctx.sort`** is `{ by: [{ key, param, dir }], key }`, `key` being the request identity of `by`. It is `{ by: [], key: "" }` when nothing is sorted, for a list that sorts itself and for a list without a block: every list resolver gets it, and the package's `ListResolveContext` declares it required. `ctx.queryKey` of a list without a server sort is what it was before.
+- **One request per change.** A list with `$server: true` runs its resolver again; changes made while a run is in flight cause one more run after it, with the latest state. A paginated list adds the sort to its query key and goes back to its first page with one request; with `maxCachedQueries > 1` a sort still in the cache comes back without a request, `keepPreviousData` keeps the rows on screen (`isPreviousData`), and an `infinite` list starts its window over. A list that has not loaded yet sends nothing: its first load carries the current sort.
+- **The server's order.** The list shows the rows in the order they came and never reorders them: `refresh()` does nothing here, and an added row stays where `add` put it.
+- **With a filter.** The sort and the server fields of the filter make one request identity. A sort change while a filter field's debounce is running sends one request that carries the pending value too, and nothing more when the debounce runs out. Two writes in one handler are two requests: `filter.set({ … })` or `filter.apply()` followed by `sort.toggle(…)` sends twice — there is no public way to batch them.
+- **`initialData`** answers the sort the store starts with (`$default`): pass the rows in that order, and nothing is requested after construction; a sort change is one request (for the first page).
+- **Persist.** The sort is never saved. A paginated list's window saved under another sort is not restored: the store starts at `$default` and fetches it.
 
 ### Pagination
 
-> 🔗 **Source:** [modules/lists-demo/OrdersSection.tsx](./app-demo/src/modules/lists-demo/OrdersSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
+> 🔗 **Source:** [modules/lists-demo/OrdersSection.tsx](./app-demo/src/modules/lists-demo/OrdersSection.tsx); `prefetch`, `setPageSize`, `keepPreviousData`, `maxCachedQueries` in [app/lists/orders/](./app-demo/src/app/lists/orders); `infinite`, `maxPages`, a persisted window, `cursor` and `suspense` in [app/lists/feeds/](./app-demo/src/app/lists/feeds) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists), [/lists/orders](https://projectint.github.io/palistor/lists/orders/), [/lists/feeds](https://projectint.github.io/palistor/lists/feeds/) (the `/lists` routes with 0.1 — see [Demo](#demo))
 
 A list fetches **one page at a time** and caches every page it has seen. Add a `pagination` block to
 `resolve` — its presence is the only switch. The resolver gets the page request as `ctx.page` and
@@ -1086,7 +1309,7 @@ const orders = defineList<Order>({
 
 **Switching to a cached page that is still fresh never calls the resolver** — it is a synchronous
 projection (past `staleTime` the page is shown and revalidated in the background). Only a miss, a
-stale page or a change in what the resolver read (search, filters, `store.context`, …) does: that is a
+stale page or a change in what the resolver read (search, filters, a server sort, `store.context`, …) does: that is a
 new *query key*, so the old pages are invalidated and the first page is fetched exactly once. The same values
 written back unchanged are a strict no-op.
 
@@ -1183,7 +1406,7 @@ page is refetched.
 | `maxCachedQueries` / `gcTime` | `1` / `Infinity` | how many query keys are retained (flip back to an old filter ⇒ cache hit) and for how long |
 | `maxCachedPages` | `Infinity` | LRU cap on cached pages per query (the visible window is never evicted) |
 | `maxPages` | `Infinity` | `infinite`: the window keeps at most this many pages — the oldest leave memory, the continuation offset survives |
-| `keepPreviousData` | `false` | keep the previous query's rows on screen while the first page of the new one loads |
+| `keepPreviousData` | `false` | keep the previous query's rows on screen while the first page of the new one loads (`isPreviousData`). Meanwhile `page`, `pageCount`, `total` and `hasNextPage` already describe the new query — page 1, no total yet — so hide or disable the pager while `isPreviousData` |
 | `persist` | `{ maxPages: 3 }` | what reaches storage: a bounded tail, `"window"` (everything + the scroll anchor), or `false` |
 | `persistPendingAdds` | `"keep"` | un-flushed optimistic adds survive a reload (`"drop"` to discard) |
 | `revalidateOnHydrate` | `"first"` | what a restored, expired window revalidates after paint (`"none"` \| `"first"` \| `"all"`) |
@@ -1192,9 +1415,14 @@ page is refetched.
 **Persist.** With `usePersist` / `store.persist` the current page (and, for `infinite`, the tail of the
 window) of a root list is restored on reload and served without a request — but only when the saved
 query still matches the live values and context (a window saved for tenant A is never served to tenant
-B). With `persist: "window"` call `list.setScrollAnchor(id)` from an IntersectionObserver and read
-`list.scrollAnchor` after hydrate to restore the scroll position. A paginated list nested in a row comes
-back with its owner's rows, and its page cache is fetched again.
+B), and only when the restore lands before the list's first fetch: `await store.persist.enable(…)`
+before anything reads the list. `usePersist` hydrates in an effect, asynchronously, so on a `usePalistor`
+store — which starts after the first commit and fetches the page the render read — one request goes
+out first, and the restored window then takes the place of its result. With `persist: "window"` call
+`list.setScrollAnchor(id)` from an IntersectionObserver and read `list.scrollAnchor` after hydrate to
+restore the scroll position. `setScrollAnchor` changes no state, so the anchor reaches storage with the
+next change of the store; call `store.persist.flush()` after it to save it now. A paginated list nested
+in a row comes back with its owner's rows, and its page cache is fetched again.
 
 **Nested lists.** The same `pagination` block on a list inside an entity template paginates **each
 per-entity instance independently** (`user.orders.setPage(2)`), with its own cache and query key. The
@@ -1934,8 +2162,8 @@ A node with `resolve` that got data is in the state its resolver would have left
 
 Limits:
 
-- **Declare `deps`.** The resolver has not run in the browser, so the reads auto-tracking would have found are unknown until its first real run. Until then the node re-runs only on its declared `resolve.deps`, on a change of a `contextDeps` key, on a change of the list's filter and on the list's `reload()`. A group has no `reload()`: it is re-run only by its declared `deps` and `contextDeps`. If a list must reload when a field changes, name that field in `deps`. A paginated list is keyed on `deps` and the filter (it ignores `contextDeps`; name a context key in `deps` as `"$context.accountId"`); its next page is requested as usual. The list resolve types do not declare `contextDeps`: on a plain list it works at runtime, but needs a cast.
-- **The data must be what the store would request right now**: for the initial filter values, the first page (`pagination.initialPage`) and the same context. The context has to be in the constructor or the provider: a `contextDeps` key that arrives later through `useStoreContext` counts as a change and re-runs the resolver right after hydration. A paginated list files the rows under its current query key.
+- **Declare `deps`.** The resolver has not run in the browser, so the reads auto-tracking would have found are unknown until its first real run. Until then the node re-runs only on its declared `resolve.deps`, on a change of a `contextDeps` key, on a change of the list's filter or server sort and on the list's `reload()`. A group has no `reload()`: it is re-run only by its declared `deps` and `contextDeps`. If a list must reload when a field changes, name that field in `deps`. A paginated list is keyed on `deps`, the filter and the server sort (it ignores `contextDeps`; name a context key in `deps` as `"$context.accountId"`); its next page is requested as usual. The list resolve types do not declare `contextDeps`: on a plain list it works at runtime, but needs a cast.
+- **The data must be what the store would request right now**: for the initial filter values, the `$default` of a server sort, the first page (`pagination.initialPage`) and the same context. The context has to be in the constructor or the provider: a `contextDeps` key that arrives later through `useStoreContext` counts as a change and re-runs the resolver right after hydration. A paginated list files the rows under its current query key.
 - **The data is embedded in the HTML.** Props of a Client Component are serialized into the page — pass only what the user may see.
 - **Every row needs an `id`.** A row without one gets a temporary id that differs between the server and the browser (dev warning: `initialData: a row of list "…" has no id`).
 - **Keys that are not in the config are ignored** (dev warning: `initialData: "…" is not in the config; ignored`). Keys inside rows are not checked.
@@ -2039,8 +2267,10 @@ type UsersList  = PalistorList<User>;             // typed list node
 | `MaybeTranslatable<TResult, TValues>` | Constant or `(t, values) => string` — `label`, `placeholder` |
 | `DeepPartialValues<T>` | Deep-partial values: `initialValues`, `setter` patches, `setValues` |
 | `TranslateFn` | Compatible with next-intl `t`, i18next `t`, any `(...args) => string` |
-| `TemplateConfig<TEntity>` / `ListResolver<TEntity>` / `ListResolveContext` | Typed list template / resolver / the resolver's third argument (`filter`, `page`, `queryKey`) |
-| `FilterBlock<TEntity>` / `FilterFieldConfig<TEntity>` / `FilterProxyNode` | A list's `filter` block, one filter field, the `list.filter` controls |
+| `TemplateConfig<TEntity>` / `ListResolver<TEntity>` / `ListResolveContext` | Typed list template / resolver / the resolver's third argument (`filter`, `sort`, `page`, `queryKey`; `sort` is required) |
+| `FilterBlock<TEntity>` / `FilterFieldConfig<TEntity>` / `FilterProxyNode` | A list's `filter` block (with `$apply`), one filter field (with `apply`), the `list.filter` controls (with `apply()`, `revert()`, `isDraft`, `applied`) — the prop type of a filter panel |
+| `SortBlock<TEntity>` / `SortFieldConfig<TEntity>` / `SortProxyNode<K>` | A list's `sort` block, one sort field (`true`, `{ by }`, `{ compare }`, `{ param }`), the `list.sort` controls — the prop type of a sort header |
+| `SortKey<TEntity>` / `SortDirection` / `SortRequest` | The keys a list of `TEntity` sorts by (its leaves, nested ones as `"address.city"`), `"asc" \| "desc"`, the resolver's `ctx.sort` |
 | `PaginationConfig` / `PageMode` / `PageRequest` / `PagedResult<T>` | The `pagination` block, its mode, the `ctx.page` request, what a paginated resolver returns |
 | `PersistDriver` / `PersistOptions` / `PersistManager` | Persistence contracts |
 | `Resolve<T>` / `ResolveStatus` / `NotifyFn` / `ResolveErrorContext` | Resolver contracts. `Resolve<T>` declares `onError` as required. `ResolveErrorContext` is declared as `{ notify }` although `onError` also gets `t`: in a plain config object annotate the parameter as `{ notify, t }: { notify: NotifyFn; t: TranslateFn }`; where the resolve is typed, cast `ctx as ResolveErrorContext & { t: TranslateFn }` |
@@ -2064,6 +2294,8 @@ type UsersList  = PalistorList<User>;             // typed list node
 | **A full `store.reset()` keeps row data.** Nested lists and row fields whose resolve had completed return to the loaded data and are not requested again. | Call the nested list's `reload()` to fetch it again. |
 | **`PersistManager` is a type only.** `palistor/store/persist` exported it as a class in 0.0.x; `new PersistManager(…)` and `instanceof PersistManager` no longer compile. | Use `store.persist`: the same methods. |
 | **The store's internals are gone.** The TypeScript instance type still lists members of the 0.0.x class (`nodes`, `services`, `groupDepsMap`, `recompute()`, …); none of them exists on a 0.1 store. | Use only the API documented above. |
+| **Four more reserved filter field names.** A filter field named `apply`, `revert`, `isDraft` or `applied` throws when the store is created: they are members of `list.filter` now. (0.0.x and the 0.1 prereleases up to `0.1.1-cube.2` accepted them.) | Rename the field. |
+| **`ctx.sort` in the list resolver context.** Every list resolver gets `ctx.sort` — `{ by: [], key: "" }` without a server sort — and the package's `ListResolveContext` declares it required. A resolver does not change; code that builds the context by hand, such as a test that calls a resolver directly, no longer compiles without it. | Add `sort: { by: [], key: "" }` to the hand-built context. |
 
 **No action needed**
 
@@ -2072,6 +2304,7 @@ type UsersList  = PalistorList<User>;             // typed list node
 - `useForm(field)` is typed: a component that gets one field as a prop types it `FieldProxyNode<T>` instead of `any` (the call always worked). See [One component per node](#one-component-per-node).
 - A paginated list no longer warns `pagination invariant … has no cached page` when its query key changes.
 - New: `usePalistor`, `<PalistorProvider>`, `usePalistorContext`, the constructor options `translator`, `notifier`, `initialData` and `server`, `store.start()` — see [SSR & Next.js](#ssr--nextjs). And five [agent skills](#agent-skills) inside the package.
+- New: list sorting — the `sort` block, `list.sort`, `ctx.sort` (see [Sorting](#sorting)) — and the filter's "Apply" mode — `$apply` / `apply`, `filter.apply()`, `revert()`, `isDraft`, `applied` (see ["Apply" mode](#apply-mode)). A list without a `sort` block and a filter without `$apply` behave as before. The 0.0.x line has neither: its `defineList` drops a `sort` block, and its filter throws on `$apply` as an unknown option.
 - From an earlier 0.1 prerelease (`0.1.0-cube.1`): a `usePalistor` store starts after the first commit, not in its constructor; in the first render an eager list reads `resolveStatus: "idle"` (was `"pending"`), and an eager `suspense: true` group shows its defaults, not the fallback.
 
 **Fixed in 0.1**
