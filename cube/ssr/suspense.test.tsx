@@ -214,6 +214,28 @@ describe("suspense: true in server mode, nothing to wait for", () => {
   });
 });
 
+describe("suspense: true after store.start() in Node", () => {
+  // Server mode ends with start(): a node read for the first time after it has a run coming, so it
+  // renders the defaults and suspends on that run, as in the browser — it is not left to a client.
+  it("a group and a list read for the first time after start(): no bailout error, the read starts the run", async () => {
+    const car = carStore();
+    const users = usersStore();
+    car.store.start();
+    users.store.start();
+
+    const carOut = await stream(carPage(car.store));
+    const usersOut = await stream(usersPage(users.store));
+    await flush();
+
+    expect(carOut.errors).toEqual([]);
+    expect(carOut.html).not.toContain(CLIENT_RENDERED);
+    expect(usersOut.errors).toEqual([]);
+    expect(usersOut.html).not.toContain(CLIENT_RENDERED);
+    expect(car.resolver).toHaveBeenCalledTimes(1);
+    expect(users.resolver).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("suspense: true with server: false in Node", () => {
   it("a group: no bailout error; the first read renders the defaults and starts the run, as on the client", async () => {
     const { store, resolver } = carStore({ server: false });

@@ -13,7 +13,7 @@
 // gets the ids as membership and baseline, then each item's own lists.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { childKeys, isLeafConfig, isPlainObject, type CubeConfig, type Values } from "./config";
+import { hasLists, isLeafConfig, isPlainObject, type CubeConfig, type Values } from "./config";
 import type { Cube } from "./cube";
 import type { Hub } from "./hub";
 import type { ListCube } from "./listCube";
@@ -135,7 +135,12 @@ function restoreList(hub: Hub, list: ListCube, value: unknown, ctx: Restore) {
     const blob = list.item ? undefined : ctx.blobs?.[list.path];
     ctx.seeds.push(() => {
       if (filed) pager.accept({ ...page, items: bodies });
-      else pager.seed(ids, blob);
+      else {
+        pager.seed(ids, blob);
+        // A per-entity list owns its rows whichever way they come (add, a fetched page, restore()).
+        const owner = list.item;
+        if (owner) for (const id of ids) hub.registry.setOwner(id, owner.entityId!, list.config);
+      }
       if (!nested) return;
       for (const [id, row] of items) {
         const view = untracked(() => list.getById(id));
@@ -171,19 +176,4 @@ function rowData(row: Values, config: CubeConfig): Values {
     out[k] = isPlainObject(sub) && !isLeafConfig(sub) && isPlainObject(v) ? rowData(v, sub as CubeConfig) : v;
   }
   return out;
-}
-
-const withLists = new WeakMap<CubeConfig, boolean>();
-
-/** A template with a list somewhere below: only then do its rows need a second look (most lists: never). */
-function hasLists(template: CubeConfig): boolean {
-  let hit = withLists.get(template);
-  if (hit === undefined) {
-    hit = childKeys(template, true).some((k) => {
-      const sub = template[k];
-      return Array.isArray(sub) || (isPlainObject(sub) && !isLeafConfig(sub) && hasLists(sub as CubeConfig));
-    });
-    withLists.set(template, hit);
-  }
-  return hit;
 }

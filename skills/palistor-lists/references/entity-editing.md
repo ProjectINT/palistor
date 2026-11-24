@@ -85,6 +85,8 @@ export function EditUser({ user, onDone }: { user: PalistorRef<User>; onDone: ()
 | Template resolve | `resolve` on the edit template group | Mount of `useForm(row, selector)`, once per (row, template) | The entity proxy, store | An object merged into the row |
 | Field resolve | `resolve` on a template leaf (list template or edit template) | First read of that field's `value` or `loading`, per row | The row's values, store | The field's value |
 
+Every level's `onError(error, { notify, t })` gets the store's notifier and its current translator. `t` is not in the declared context type yet: in a plain config object such as `editUserForm` annotate it in full, `{ notify, t }: { notify: NotifyFn; t: TranslateFn }` (both types are exported by `palistor`); inside `defineList` use the cast shown in [list API](list-api.md). Source: `cube/core/resolve.test.ts` ("onError gets the store's translator").
+
 ### Template resolve
 
 - `form.loading` is `true` while it runs. On failure `onError` is called and `loading` goes back to `false`.
@@ -100,6 +102,7 @@ export function EditUser({ user, onDone }: { user: PalistorRef<User>; onDone: ()
 - Its result becomes the field's dirty baseline. An `undefined` result leaves the field untouched.
 - `options.retry: { attempts, delay }` retries before `onError`.
 - One resolve state is shared by every view of the row: the list row and an open edit form show the same `loading` and trigger one request.
+- A full `store.reset()` requests nothing. A field whose resolve has its result stays resolved, and its next read does not call the resolver; one that was in flight or had failed when the reset came starts over on its next read. Source: `cube/contract/sliceC/entityFieldResolve.test.tsx` ("store.reset() runs nothing by itself; the next read re-runs on store, keeps the loaded result on Cube"), `cube/core/hub.ts` (`resetEntities`).
 - Do not read the resolved field itself inside its resolver: the result changes what was read, so the resolver restarts until the restart cap stops it.
 
 ## Submit a row

@@ -8,7 +8,8 @@
 //   step's resolve is held and reads `loading: true`, unless initialData
 //   answered it (cube/ssr/serverMode.test.tsx, cube/ssr/initialDataFlow.test.ts
 //   "in server mode").
-// - In the browser the constructor enters each flow's active step (start()):
+// - In the browser usePalistor starts the store after the first commit, and
+//   start() enters each flow's active step:
 //   onEnter → the step's resolve if it is idle → onReady once that run lands,
 //   right away when the result came as initialData (initialDataFlow.test.ts).
 // - A step's resolve result is cached: a later entry fires onEnter only

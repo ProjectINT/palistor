@@ -91,6 +91,8 @@ translator re-renders the components whose translated texts changed. The hook re
 first render, so that render — and any HTML rendered on the server — shows the keys; the
 `translator` constructor option does not have that gap.
 
+A resolver's `onError` gets the same `t` in its second argument, next to `notify` (below).
+
 ## Show load errors — `useNotifier`
 
 ```tsx
@@ -106,9 +108,13 @@ export function NotifyBridge() {
 }
 ```
 
-The registered function is what a resolver's `onError(error, { notify })` receives. You choose its
-signature; with none registered `notify` does nothing. It is not called for validation errors or for
-a failing `onSubmit`.
+The registered function is what a resolver's `onError(error, { notify, t })` receives as `notify`.
+You choose its signature; with none registered `notify` does nothing. It is not called for
+validation errors or for a failing `onSubmit`. `t` is the store's current translator, so the config
+words the message itself, without a hook: `notify(t("errors.loadProfile"))`. The exported
+`ResolveErrorContext` type does not list `t` yet: for the forms that compile under `strict` see
+"Typing `onError`" in the async resolve reference. Source: `cube/core/resolve.test.ts`
+("onError gets the store's translator").
 
 ## Give callbacks outside data — `useStoreContext`
 

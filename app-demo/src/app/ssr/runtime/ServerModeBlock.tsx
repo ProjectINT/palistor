@@ -12,8 +12,9 @@ import { Button, Chip, Note, Panel } from "./ui";
 /**
  * Block 1. A store in server mode starts nothing by itself. A store made
  * during the server render is in that mode (no `window`); this one passes
- * `server: true`, so the browser keeps it there too and the button plays the
- * part of the start that never comes on the server.
+ * `server: true`, the manual mode of `usePalistor`: the hook does not start
+ * it, so the browser keeps it held too and the button plays the part of the
+ * start that never comes on the server.
  */
 export function ServerModeBlock() {
   const t = useTranslations("ssr.runtime");

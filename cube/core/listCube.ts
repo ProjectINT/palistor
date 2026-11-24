@@ -1,4 +1,4 @@
-import { childKeys, isLeafConfig, type CubeConfig, type ListConfig, type Values } from "./config";
+import { childKeys, hasLists, isLeafConfig, type CubeConfig, type ListConfig, type Values } from "./config";
 import { Cube, registerList } from "./cube";
 import { FilterCube, warnNestedFilters } from "./filter";
 import type { Hub } from "./hub";
@@ -39,11 +39,14 @@ export class ListCube extends Cube {
   private shownIds?: string[];
   /** `defineList({ filter })` on a root list. A per-entity list ignores it (warned at construction, as store). */
   readonly filter?: FilterCube;
+  /** The template declares lists: every row owns some, and their edits count towards this list's `dirty`. */
+  private readonly rowsOwnLists: boolean;
 
   constructor(config: ListConfig, parent: Cube, key: string, hub: Hub) {
     super(config as unknown as CubeConfig, parent, key, hub, undefined, "list");
     this.template = config[0];
     rejectComputed(this.template, `${this.path}[]`);
+    this.rowsOwnLists = hasLists(this.template);
     this.state = this.item ? hub.entityListState(this.item.entityId!, config) : new ListState();
     this.state.cubes.add(this);
     const resolve = config[1]?.resolve;
@@ -75,8 +78,9 @@ export class ListCube extends Cube {
   get touched(): boolean { return this.state.touched; }
   set touched(v: boolean) { this.state.touched = v; }
 
-  /** A shared membership changed: every view of it moves. */
+  /** A shared membership changed: every view of it moves; a per-entity list also moves the lists above it. */
   override bump() {
+    if (this.item) this.hub.nestedMoved(this.state);
     const cubes = this.state.cubes;
     if (cubes.size <= 1) return super.bump();
     for (const c of cubes) c.bumpOwn();
@@ -151,10 +155,22 @@ export class ListCube extends Cube {
     return (c.values ??= c.items.map((i) => i.values));
   }
 
-  /** store: dirty by composition, the ids differ from the loaded ones; paginated: any cached page differs from its baseline. */
+  /**
+   * Dirty by composition: the ids differ from the loaded ones (paginated: any
+   * cached page differs from its baseline), or a row owns a list that is
+   * dirty the same way, at any depth. The owning row, this list and the form
+   * therefore all show an edit made inside a nested list (store stopped at
+   * the nested list and its row). A row's field values take no part, as in store.
+   */
   override get dirty(): boolean {
     track(this);
-    return this.pager ? this.pager.isDirty() : !sameIds(this.ids, this.initialIds);
+    if (this.state.dirty) return true;
+    if (!this.rowsOwnLists) return false;
+    return this.memo("rowsDirty", () => {
+      track(this);
+      track(this.hub.nested);
+      return this.hub.rowsOwnDirty(this.state);
+    });
   }
 
   /** Paginated: some page of the current query is in flight (several can be), or the first fetch is due. */
@@ -177,7 +193,7 @@ export class ListCube extends Cube {
     rs.touch();
     const resolve = (this.config as unknown as ListConfig)[1]?.resolve;
     if (resolve?.options?.suspense !== true) return;
-    if (this.hub.held && rs.due) throw clientOnly(this.path);
+    if (this.hub.server && rs.due) throw clientOnly(this.path);
     if (rs.status !== "pending" || !rs.promise) return;
     if (this.pager && (this.ids.length > 0 || this.pager.isPreviousData)) return;
     throw rs.promise;
@@ -392,12 +408,29 @@ interface Snapshot { ids: string[]; items: Cube[]; nodes?: PublicNode[]; values?
  * (owner id, list config) until the owner is deleted.
  */
 export class ListState {
+  /** @param ownerId A per-entity membership: the entity that owns it (moves on store.rekey). Undefined for a root list. */
+  constructor(public ownerId?: string) {}
+
   ids: string[] = [];
   initialIds: string[] = [];
   touched = false;
   pager?: Pager;
   /** The list cubes showing it (one per view of the owner). */
   readonly cubes = new Set<ListCube>();
+  /** A per-entity membership whose owner entity was deleted (hub.deleteEntity). */
+  orphan = false;
+
+  /** The composition differs from the loaded one; paginated: on any cached page of the current query. */
+  get dirty(): boolean { return this.pager ? this.pager.isDirty() : !sameIds(this.ids, this.initialIds); }
+
+  /** The rows `dirty` answers for: the membership; paginated: every cached page of the current query. */
+  memberIds(): Iterable<string> { return this.pager ? this.pager.cachedIds() : this.ids; }
+
+  hasMember(id: string): boolean {
+    if (!this.pager) return this.ids.includes(id);
+    for (const member of this.memberIds()) if (member === id) return true;
+    return false;
+  }
 }
 
 /** store: a template is a rule set shared by every item; a computed value there would never run. */

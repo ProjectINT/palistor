@@ -415,7 +415,7 @@ export class Cube implements Source {
   get submitting(): boolean { track(this); return this.submittingFlag; }
 
   /**
-   * A resolve in flight or due (about to start, or held back by server mode):
+   * A resolve in flight or due (about to start, or held back until store.start()):
    * the cube's own, or (an entity cube) its template resolve. An entity field
    * without one reads false, as in store.
    */
@@ -436,9 +436,19 @@ export class Cube implements Source {
     if (this.kind === "leaf" || this.config.validate || this.config.isRequired !== undefined) sig.push(this.isInvalid, this.errorMessage);
     if (this.kind === "leaf") sig.push(this.value); // a group's value is its stable values object
     for (const k of COMPUTED_FIELDS) if (typeof this.config[k] === "function") sig.push(this[k]); // static ones never change
-    if (this.rs) sig.push(this.loading, this.error);
+    if (this.rs) {
+      sig.push(this.loading, this.error);
+      // A `suspense: true` group: the run starting is a change of its own. A reader that saw it due
+      // (`loading` already true — an eager resolve of a held store) re-renders and suspends.
+      if (this.suspends) sig.push(this.rs.status === "pending");
+    }
     if (this.entityId !== undefined) sig.push(this.entityId, this.loading);
     return sig;
+  }
+
+  /** A form group whose pending resolve throws its promise to React Suspense (an entity cube never suspends, as in store). */
+  private get suspends(): boolean {
+    return this.kind === "group" && !this.item && this.config.resolve?.options?.suspense === true;
   }
 
   /**
@@ -548,7 +558,7 @@ export class Cube implements Source {
       } catch (e) {
         st.status = "error";
         st.error = e;
-        try { r.onError?.(e, { notify: hub.notify }); } catch { /* onError must not break the store */ }
+        try { r.onError?.(e, hub.errorContext); } catch { /* onError must not break the store */ }
         hub.batch(() => this.bump());
       }
     })();
@@ -602,7 +612,7 @@ export class Cube implements Source {
    * Back to the baseline (or to `values`, which become the new baseline);
    * errors hidden again. A form leaf resets its group, an entity field resets
    * itself (store's entity-leaf onReset). The root reset also restores every
-   * per-entity list and restarts entity field resolves, as store's did.
+   * per-entity list; entity resolves keep a result they have (hub.resetEntities).
    */
   reset(values?: Values): void {
     if (this.kind === "leaf") {
@@ -675,9 +685,9 @@ export class Cube implements Source {
     const rs = this.rs;
     if (!rs) return;
     rs.touch();
-    if (this.kind !== "group" || this.item || this.config.resolve?.options?.suspense !== true) return;
+    if (!this.suspends) return;
     if (rs.status === "pending" && rs.promise) throw rs.promise;
-    if (this.hub.held && rs.due) throw clientOnly(this.path);
+    if (this.hub.server && rs.due) throw clientOnly(this.path);
   }
 
   /** A read of `loading`: wakes a lazy resolve and never suspends. */

@@ -21,7 +21,7 @@ export default async function CatalogPage() {
   ]);
 
   const papers = queryPapers(paperTable, { offset: 0, pageSize: PAPERS_PAGE_SIZE }); // { items, total }
-  const milestones = queryMilestones(milestoneTable, null, MILESTONES_PAGE_SIZE); // { items, nextCursor, hasMore }
+  const milestones = queryMilestones(milestoneTable, null, MILESTONES_PAGE_SIZE); // { items, nextCursor }
 
   return (
     <SsrProviders>

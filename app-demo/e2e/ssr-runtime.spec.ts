@@ -4,8 +4,9 @@ import { test, expect, type Page } from "./fixtures";
 // how the provider's context reaches it. Four blocks, each with its own store:
 //   1. runtime-held      — `server: true` in the browser too: a read lazy list
 //                          and an eager list are held until store.start();
-//   2. runtime-client    — the same lists, default `server`: the constructor
-//                          starts the eager one, the lazy one waits for a read;
+//   2. runtime-client    — the same lists, default `server`: usePalistor starts
+//                          the eager one after the first commit, the lazy one
+//                          waits for a read;
 //   3. runtime-instances — one card component twice, a store per instance,
 //                          each with its own initialData;
 //   4. runtime-context   — a nested <PalistorProvider context={{ region }}>:
@@ -105,7 +106,7 @@ test("hydration is clean; after it only the eager list of the default store has 
   const consoleLines = collectConsole(page);
   await openRuntime(page);
 
-  // 2. The constructor started the eager list: one call, the skeleton gives way to the rows.
+  // 2. The hook started the store after the commit, and with it the eager list: one call, the skeleton gives way to the rows.
   await expect(byId(page, "runtime-client-builds-requests")).toHaveText("1");
   await expect(byId(page, "runtime-client-build")).toHaveText([/#412/, /#411/, /#410/]);
   await expect(byId(page, "runtime-client-builds-skeleton")).toHaveCount(0);

@@ -26,7 +26,8 @@ function make(options: CubeOptions | (() => CubeOptions), provided: Provided): M
   const translator = own.translator ?? provided.translator;
   const notifier = own.notifier ?? provided.notifier;
   // The store gets its own copy: store.context is never the provider's object, nor the hook's record.
-  const store = new CubePalistor({ ...own, context: { ...context }, translator, notifier });
+  // Built held: a render starts nothing, since React may run it again or throw it away. The effect starts the store.
+  const store = new CubePalistor({ ...own, context: { ...context }, translator, notifier }, true);
   return { store, options: own, given: { context, translator, notifier } };
 }
 
@@ -46,8 +47,18 @@ function changedKeys(prev: Record<string, unknown>, next: Record<string, unknown
  * provider's values go into its constructor. So that render's output — the
  * server's HTML too — is already translated, a resolver's first run sees the
  * context, and `initialData` is in place; no effect is needed for any of it.
- * The hook starts nothing itself: whether resolvers run is the constructor's
- * `server` option (default `typeof window === "undefined"`).
+ *
+ * **Nothing starts during a render.** The store is built held, and an effect
+ * calls `store.start()` once the component has committed: the flows enter
+ * their first step, the eager resolves start, and so does every resolve the
+ * render read. Until then those read `loading: true` with `resolveStatus:
+ * "idle"` — what the server's HTML shows, so the first client render matches
+ * it. A render React throws away (a transition interrupted by another store's
+ * change, a suspended mount) leaves a store that has requested nothing. On
+ * the server no effect runs and nothing starts. With `server: true` in the
+ * options the hook does not start the store at all: `store.start()` is yours
+ * to call. A store made with `new Palistor()` is not held: in the browser its
+ * constructor starts it.
  *
  * **Options or a function.** `usePalistor(() => options)` calls the function
  * once per store, so a `config()` builder does not run on every render.
@@ -57,8 +68,9 @@ function changedKeys(prev: Record<string, unknown>, next: Record<string, unknown
  * filled once. Under `<StrictMode>` in development React still renders the
  * component twice and mounts its effects twice, but the options function is
  * called once and one store is built: eager resolves and a flow's first
- * `onEnter` start once, and nothing is sent to the store twice. A render that
- * React never commits is not an instance: its store is dropped (see Suspense).
+ * `onEnter` start once (`start()` does nothing the second time), and nothing
+ * is sent to the store twice. A render that React never commits is not an
+ * instance: its store is dropped, and it has started nothing.
  *
  * **Merge with the provider.** `context` is `{ ...provider, ...options.context }`
  * (the store's own keys win); `translator` and `notifier` are the option when
@@ -84,10 +96,12 @@ function changedKeys(prev: Record<string, unknown>, next: Record<string, unknown
  *
  * **Unmount** resets nothing: the store goes away with the component.
  *
- * **Suspense.** A component that suspends before its first commit keeps
- * nothing, this store included: every retry builds a new store, which starts
- * its requests again. Call `usePalistor` above the `<Suspense>` boundary and
- * read a `suspense: true` node in a child below it.
+ * **Suspense.** The first render of a `suspense: true` node without data
+ * shows its default values (`loading: true`); the component suspends on the
+ * run the start brings, whether it reads the node itself or a child does. A
+ * component that suspends before its first commit for another reason keeps
+ * nothing, this store included: every retry builds a new store (the options
+ * function runs again), and none of them requests anything.
  *
  * @example
  * ```tsx
@@ -126,6 +140,7 @@ export function usePalistor(options: CubeOptions | (() => CubeOptions)): unknown
   const translator = own.translator ?? provided.translator;
   const notifier = own.notifier ?? provided.notifier;
 
+  // Declared before the start below: what starts already has the current translator, notifier and context.
   useEffect(() => {
     // The translator and the notifier first: a context change can start a resolver, which may use both.
     if (given.translator !== translator) {
@@ -142,6 +157,13 @@ export function usePalistor(options: CubeOptions | (() => CubeOptions)): unknown
       store.setContext(patch);
     }
   }, [store, given, providedContext, ownContext, translator, notifier]);
+
+  // The component has committed: this store is the instance's. start() is idempotent (StrictMode
+  // mounts effects twice). `server: true` is the manual mode: the caller starts the store.
+  const manual = made.options.server === true;
+  useEffect(() => {
+    if (!manual) store.start();
+  }, [store, manual]);
 
   return store;
 }

@@ -261,10 +261,15 @@
       },
       "errors": {
         "title": "Errors reach the provider's notifier",
-        "hint": "Check a box, then reload the activity or choose another user. The request fails, the resolver's onError calls ctx.notify, and that is the notifier of PalistorProvider, which the store got in its constructor: a toast appears. A failed run changes no value: the profile keeps its values, the list keeps its rows and reports resolveStatus error with its error until a run succeeds.",
+        "hint": "Check a box, then reload the activity or choose another user. The request fails, the resolver's onError builds the message with ctx.t — the store's translator, so the toast is in the page's language — and calls ctx.notify, the notifier of PalistorProvider, which the store got in its constructor: a toast appears. A failed run changes no value: the profile keeps its values, the list keeps its rows and reports resolveStatus error with its error until a run succeeds.",
         "failProfile": "Fail the next profile request",
         "failActivity": "Fail the next activity request",
-        "count": "onError calls"
+        "count": "onError calls",
+        "toast": {
+          "profile": "Could not load the profile: {message}",
+          "activity": "Could not load the activity: {message}",
+          "announcement": "Could not load the announcement: {message}"
+        }
       },
       "draft": {
         "title": "A draft over the server's data",
@@ -287,7 +292,7 @@
       },
       "milestones": {
         "title": "Load more, the first page from the server",
-        "hint": "pagination.mode: \"infinite\". The server's first page carries nextCursor and hasMore: “Load more” sends one request with that cursor and appends one page. The last page answers hasMore: false, and the feed ends.",
+        "hint": "pagination.mode: \"infinite\". The server's first page carries nextCursor: “Load more” sends one request with that cursor and appends one page. The last page answers nextCursor: null, and the feed ends, although that page is full.",
         "more": "Load more",
         "end": "The end of the timeline",
         "shown": "Showing {count} · {pages, plural, one {# page} other {# pages}} loaded"
@@ -359,12 +364,12 @@
       },
       "serverMode": {
         "title": "1 · Server mode: nothing starts until store.start()",
-        "hint": "A server render has no window, so its store is in server mode and calls no resolver. This store passes server: true and stays in that mode in the browser as well. Both lists read loading: true (the lazy one because this block reads it, the eager one from the start), resolveStatus stays \"idle\" and nothing is called: the server's HTML and the hydrating render show the same. store.start() runs each held resolve once; a second call starts nothing.",
+        "hint": "A server render has no window, so its store is in server mode and calls no resolver. This store passes server: true: usePalistor then leaves the start to the caller, and the store stays held in the browser as well. Both lists read loading: true (the lazy one because this block reads it, the eager one from the start), resolveStatus stays \"idle\" and nothing is called: the server's HTML and the hydrating render show the same. store.start() runs each held resolve once; a second call starts nothing.",
         "starts": "store.start() calls"
       },
       "client": {
-        "title": "2 · In the browser the constructor starts the store",
-        "hint": "The same lists with the default server option. The server sent the eager list as loading (the skeleton). In the browser the store's constructor calls start(), so the eager list loads right away, although nothing has read its rows. The lazy list waits for its first read, and reading its loading counts as one: this panel reads nothing until you press the button. For a resolve without server data render loading, not resolveStatus: at the same moment the server says \"idle\" and the browser \"pending\".",
+        "title": "2 · In the browser usePalistor starts the store after the first commit",
+        "hint": "The same lists with the default server option. The server sent the eager list as loading (the skeleton), and the browser's first render shows exactly that: usePalistor builds the store held and calls start() in an effect, once the component has committed. Then the eager list loads, although nothing has read its rows. A render React throws away therefore requests nothing. The lazy list waits for its first read, and reading its loading counts as one: this panel reads nothing until you press the button. A store made with new Palistor() is not held: in the browser its constructor starts it.",
         "unread": "Nothing has read this list yet: no request.",
         "read": "Read the list"
       },

@@ -44,10 +44,15 @@ export class Palistor {
   /** @internal The reverse map (external → internal). */
   readonly externalToInternal: Record<string, string>;
 
-  constructor(options: PalistorOptions) {
+  /**
+   * @param hold @internal usePalistor: the store is built held whatever the
+   * mode, and the hook calls `start()` once the component has committed.
+   */
+  constructor(options: PalistorOptions, hold = false) {
     const hub = this.hub;
     hub.store = this;
-    hub.held = options.server ?? typeof window === "undefined";
+    hub.server = options.server ?? typeof window === "undefined";
+    hub.held = hub.server || hold;
     const map = new FieldMap(options.fieldMapping ?? {});
     this.fieldMapping = options.fieldMapping ?? {};
     this.externalToInternal = map.e2i;
@@ -65,7 +70,7 @@ export class Palistor {
     hub.settle();
     for (const rs of hub.resolving) if (!rs.lazy && rs.status === "idle") hub.deferred.add(rs);
     if (hub.held) {
-      // Server mode: the active steps' resolves are marked as the ones start() runs; nothing is called.
+      // Held: the active steps' resolves are marked as the ones start() runs; nothing is called.
       for (const flow of hub.flows) flow.enterCurrent();
     } else this.start();
   }
@@ -73,15 +78,17 @@ export class Palistor {
   /**
    * Runs what the store starts by itself: every flow enters its active step
    * (onEnter → resolve → onReady), then the eager resolves start, as in store.
-   * Outside server mode the constructor calls it. In server mode it is the
-   * explicit start (a script or a test in Node) and also runs every resolve
-   * that was read or asked to run meanwhile. Idempotent.
+   * The constructor calls it, except for a held store. In server mode it is
+   * the explicit start (a script or a test in Node); for a usePalistor store
+   * the hook calls it after the first commit. It also runs every resolve that
+   * was read or asked to run meanwhile. Idempotent.
    */
   start(): void {
     const hub = this.hub;
     if (hub.started) return;
     hub.started = true;
     hub.held = false;
+    hub.server = false;
     for (const flow of hub.flows) flow.enterCurrent();
     const due = [...hub.deferred];
     hub.deferred.clear();

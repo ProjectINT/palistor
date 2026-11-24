@@ -131,7 +131,7 @@ the field's `formatter`.
 | `MaybeComputed<T, TValues>` | `T` or `(values) => T`: the type of flags and `value` in a config |
 | `MaybeTranslatable<T, TValues>` | `T` or `(t, values) => T`: the type of `label` and other texts |
 | `TranslateFn` | The translator accepted by `useTranslator` (next-intl, i18next, any `(...args) => string`) |
-| `Resolve<T>`, `NotifyFn`, `ResolveErrorContext` | A `resolve` block, the notifier, the second argument of `onError` |
+| `Resolve<T>`, `NotifyFn`, `ResolveErrorContext` | A `resolve` block, the notifier, the second argument of `onError`. The type declares `notify` only; at runtime the argument also carries `t`, the store's translator: see "Typing `onError`" in the async resolve reference |
 | `PersistDriver`, `PersistOptions` | Draft storage contracts |
 | `Unsubscribe` | Return type of `subscribeGlobal` |
 

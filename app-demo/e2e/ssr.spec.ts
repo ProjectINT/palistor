@@ -194,24 +194,18 @@ test("client navigation from the home page: the same page without a server rende
   await expect(page.getByRole("heading", { name: "Palistor Demo", level: 1 })).toBeVisible();
 });
 
-// Open question (Cube, usePalistor): on a client navigation the store can be
-// built twice, and each lazy resolver then runs twice (the counters read 2).
-//
-// Mechanism: the navigation mounts the page in a transition. A read during
-// that render schedules the lazy resolve on a microtask (cube/core/resolve.ts,
-// `touch`). If the render yields before it commits, the run starts, the store
-// changes under React's useSyncExternalStore check (cube/react/useForm.ts) and
-// React renders the page again from scratch. The uncommitted render's hook
-// state is gone — the lazy ref in cube/react/usePalistor.ts too — so a second
-// store is built and starts the same requests; the first store's are wasted.
-//
-// Observed (doubled / navigations), timing dependent:
-//   client navigation, dev server,        4 browsers in parallel:  8 / 48
-//   client navigation, production export, 6 browsers in parallel:  5 / 90
-//   client navigation, either,            1 browser:               0 / 27
-//   hydration (dev + production export),  6 browsers in parallel:  0 / 162
-// The list with initialData makes no request in either case.
-test.fixme("client navigation: each resolver runs once", async ({ page, openTab }) => {
+// A client navigation mounts the page in a transition, which React may render
+// more than once: when the render yields before it commits and a store read
+// through useSyncExternalStore changes meanwhile, React renders the page again
+// from scratch, and the uncommitted render's hook state — the store of
+// usePalistor too — is gone. A store that started its requests in the
+// constructor repeated them then (measured before the fix, doubled /
+// navigations: 8 / 48 on the dev server with 4 browsers in parallel, 5 / 90 on
+// the production export with 6). usePalistor now builds the store held and
+// starts it in an effect after the commit, so a render that is thrown away has
+// requested nothing (cube/ssr/usePalistor.test.tsx, "a render React throws
+// away starts nothing"; e2e/ssr-navigation.spec.ts walks every route this way).
+test("client navigation: each resolver runs once", async ({ page, openTab }) => {
   await openTab("form");
   await page.getByRole("link", { name: "SSR demo →" }).click();
   await settled(page);

@@ -3,7 +3,7 @@ import { test, expect, type Locator, type Page } from "./fixtures";
 // Route /ssr/catalog: lists beyond the overview's plain list, under SSR.
 //   (1) papers     — paged list, page 1 from the server as { items, total };
 //   (2) milestones — infinite ("load more") list, first page from the server
-//                    with nextCursor / hasMore;
+//                    with nextCursor (null ends the feed);
 //   (3) talks      — paged list without server data (skeleton, client load);
 //   (4) teams      — rows with a nested `members` list, all from the server,
 //                    in a store of their own (add / remove / reset).
@@ -120,7 +120,7 @@ test("server HTML has the translations, the first pages, the nested rows and the
   expect(html).toMatch(/<button data-testid="ssr-catalog-papers-next" class=/);
   expect(html).not.toContain('data-testid="ssr-catalog-papers-busy"');
 
-  // (2) The first page of the feed, and "Load more" (hasMore: true).
+  // (2) The first page of the feed, and "Load more" (a nextCursor leads on).
   for (const event of MILESTONES.slice(0, 4)) {
     expect(html).toMatch(new RegExp(`<li data-testid="ssr-catalog-milestone"[^>]*>.*?<span[^>]*>${escapeRegExp(event)}</span>`));
   }
@@ -219,7 +219,7 @@ test("pages: a new page is one request, a page seen before (the server's page 1 
   await expect(requests(page, "talks")).toHaveText("1");
 });
 
-test("load more: one request per click appends one page, from the server's cursor; hasMore: false ends the feed", async ({ page, pageErrors }) => {
+test("load more: one request per click appends one page, from the server's cursor; nextCursor: null ends the feed", async ({ page, pageErrors }) => {
   void pageErrors;
   await openCatalog(page);
   await settled(page);
@@ -234,7 +234,7 @@ test("load more: one request per click appends one page, from the server's curso
   await expect(shown).toHaveText("Showing 8 · 2 pages loaded");
   await expect(requests(page, "milestones")).toHaveText("1");
 
-  // The last page answers hasMore: false: no more "Load more".
+  // The last page is full (4 of 4) and answers nextCursor: null: the feed ends, no more "Load more".
   await more.click();
   await expect(rows).toHaveCount(12);
   await expect(rows.last()).toHaveText(new RegExp(`${escapeRegExp(MILESTONES[11])}$`));

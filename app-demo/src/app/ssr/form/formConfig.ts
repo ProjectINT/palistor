@@ -11,11 +11,20 @@ import type { Activity } from "./backend";
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * What `onError` gets next to the error on Cube: the notifier and the store's
+ * current translator. The declared `ResolveErrorContext` is still the store
+ * implementation's (`{ notify }`) and gets `t` in 0.1, hence the cast below.
+ */
+type ErrorContext = ResolveErrorContext & { t: TranslateFn };
+
 /** The resolvers' `onError`: counted (the "onError calls" counter), then handed to the notifier. */
-const reportTo = (what: string) => (error: unknown, { notify }: ResolveErrorContext) => {
+const reportTo = (what: "profile" | "activity" | "announcement") => (error: unknown, ctx: ResolveErrorContext) => {
   track("form.errors");
-  // ctx.notify is the notifier of <PalistorProvider> (shared/SsrProviders.tsx), given to the store's constructor.
-  notify(`Could not load ${what}: ${messageOf(error)}`);
+  // ctx.t is the store's translator (the provider's, shared/SsrProviders.tsx): the toast is in the page's
+  // language, and a config needs no hook for it. ctx.notify is the provider's notifier.
+  const { notify, t } = ctx as ErrorContext;
+  notify(t(`ssr.form.errors.toast.${what}`, { message: messageOf(error) }));
 };
 
 /** The values a resolver of this config reads (its first argument is the whole form). */
@@ -33,7 +42,7 @@ export const profileConfig = {
       resolver: async (values: SelectedUser) => fetchProfile(values.userId),
       // Declared: a resolve that got initialData has not run, so nothing is auto-tracked yet.
       deps: ["userId"],
-      onError: reportTo("the profile"),
+      onError: reportTo("profile"),
     },
     name: { value: "", label: (t: TranslateFn) => t("ssr.form.profile.name") },
     email: { value: "", label: (t: TranslateFn) => t("ssr.form.profile.email") },
@@ -47,7 +56,7 @@ export const profileConfig = {
     resolve: {
       resolver: async (values: SelectedUser) => fetchActivity(values.userId),
       deps: ["userId"],
-      onError: reportTo("the activity"),
+      onError: reportTo("activity"),
     },
   }),
 };
@@ -58,7 +67,7 @@ export const draftConfig = {
     resolve: {
       // Never called on this page: the server's data answers it, and a draft does not start it.
       resolver: async () => fetchAnnouncement(),
-      onError: reportTo("the announcement"),
+      onError: reportTo("announcement"),
     },
     title: { value: "", label: (t: TranslateFn) => t("ssr.form.draft.titleLabel") },
     body: { value: "", label: (t: TranslateFn) => t("ssr.form.draft.body") },

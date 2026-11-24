@@ -1,16 +1,20 @@
 /**
  * usePalistor, PalistorProvider, usePalistorContext (experiments/SsrPlan.md,
- * Stage 2), Cube only. The hook keeps one store per committed component
- * instance and builds it in the render that first reaches it, from its options
- * and the nearest provider, so the translator, the notifier and the context
- * are in the constructor: that render needs no effect. After mount an effect
- * sends a changed context, translator or notifier to the same store.
+ * Stages 2 and 5а), Cube only. The hook keeps one store per committed
+ * component instance and builds it in the render that first reaches it, from
+ * its options and the nearest provider, so the translator, the notifier and
+ * the context are in the constructor: that render needs no effect. The store
+ * is built held: nothing starts during a render, and an effect calls
+ * `store.start()` after the commit, so a render React throws away has
+ * requested nothing. After mount an effect sends a changed context,
+ * translator or notifier to the same store.
  *
  * jsdom: the stores are in client mode (server mode is cube/ssr/serverMode).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { StrictMode, Suspense, useEffect, type ReactNode } from "react";
+import { StrictMode, Suspense, startTransition, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { act, render, renderHook } from "@testing-library/react";
+import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import {
   Palistor,
@@ -24,6 +28,7 @@ import {
   useTranslator,
   type InitialData,
   type PalistorOptions,
+  type PalistorRef,
   type ProxyStore,
 } from "../index";
 
@@ -457,8 +462,183 @@ describe("usePalistor: changes after mount reach the store", () => {
   });
 });
 
+describe("usePalistor: the store starts after the commit", () => {
+  /** An eager group, a lazy list and a flow: what a constructor in the browser starts, and what a read starts. */
+  function startConfig() {
+    const eager = vi.fn(async () => ({ brand: "BMW" }));
+    const rows = vi.fn(async () => [{ id: "u1", name: "Ann" }]);
+    const onEnter = vi.fn();
+    const config = {
+      car: { resolve: { resolver: eager, onError: vi.fn(), options: { lazy: false } }, brand: { value: "" } },
+      users: defineList<{ id: string; name: string }>({
+        template: { id: { value: "" }, name: { value: "" } },
+        resolve: { resolver: rows, onError: vi.fn() },
+      }),
+      wizard: defineFlow({ steps: [defineStep("first", { note: { value: "" as string }, onEnter }), defineStep("second", {})] }),
+    };
+    return { config, eager, rows, onEnter, calls: () => [eager, rows, onEnter].map((fn) => fn.mock.calls.length) };
+  }
+
+  it("the render starts nothing and reads what a server render reads; the effect starts everything once", async () => {
+    const { config, calls } = startConfig();
+    const firstRender: unknown[] = [];
+    function View() {
+      const store = usePalistor(() => ({ config }));
+      const form = useForm(store);
+      const frame = {
+        car: form.car.loading,
+        users: [form.users.loading, form.users.resolveStatus, form.users.length],
+        called: calls(),
+      };
+      if (firstRender.length === 0) firstRender.push(frame);
+      return <output>{form.car.brand.value}/{form.users.length}</output>;
+    }
+
+    // The same markup a server render of this component gives (no effect runs there).
+    expect(renderToString(<View />)).toBe("<output>/<!-- -->0</output>");
+    firstRender.length = 0;
+
+    const { container } = render(<View />);
+    // Due, not running: `loading` is already true, the status is still idle, no resolver and no onEnter was called.
+    expect(firstRender).toEqual([{ car: true, users: [true, "idle", 0], called: [0, 0, 0] }]);
+    expect(calls()).toEqual([1, 1, 1]); // render() returns after the effects
+
+    await act(flush);
+    expect(container.textContent).toBe("BMW/1");
+    expect(calls()).toEqual([1, 1, 1]);
+  });
+
+  it("server: true is the manual mode: the hook starts nothing, store.start() does", async () => {
+    const { config, calls } = startConfig();
+    let store!: Palistor<typeof config>;
+    function View() {
+      store = usePalistor(() => ({ config, server: true }));
+      const form = useForm(store);
+      return <output>{String(form.users.loading)}/{form.users.length}</output>;
+    }
+
+    const { container, rerender } = render(<View />);
+    await act(flush);
+    rerender(<View />);
+    await act(flush);
+    expect(calls()).toEqual([0, 0, 0]);
+    expect(container.textContent).toBe("true/0");
+
+    await act(async () => { store.start(); await flush(); });
+    expect(calls()).toEqual([1, 1, 1]);
+    expect(container.textContent).toBe("false/1");
+  });
+
+  it("new Palistor() outside the hook is not held: in the browser its constructor starts it", () => {
+    const { config, eager, onEnter } = startConfig();
+    new Palistor({ config });
+    expect([eager, onEnter].map((fn) => fn.mock.calls.length)).toEqual([1, 1]);
+  });
+
+  it("what a child's effect asks for before the start is not lost: the start runs it", async () => {
+    const { config, rows, calls } = startConfig();
+    // A child's effects run before its parent's: this one reaches the store while it is still held.
+    function Reloader({ store }: { store: Palistor<typeof config> }) {
+      useEffect(() => { store.proxy.users.reload(); }, [store]);
+      return null;
+    }
+    function View() {
+      const store = usePalistor(() => ({ config }));
+      return <><Reloader store={store} /><output>{useForm(store).users.length}</output></>;
+    }
+
+    const { container } = render(<View />);
+    await act(flush);
+    expect(container.textContent).toBe("1");
+    expect(rows).toHaveBeenCalledTimes(1);
+    expect(calls()).toEqual([1, 1, 1]);
+  });
+});
+
+describe("usePalistor: a render React throws away starts nothing", () => {
+  /** A store outside React, read through useSyncExternalStore (a router, a request counter, another state library). */
+  function externalStore<V>(initial: V) {
+    let value = initial;
+    const listeners = new Set<() => void>();
+    return {
+      get: () => value,
+      set(next: V) { value = next; listeners.forEach((l) => l()); },
+      subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; },
+    };
+  }
+  const task = (ms = 0) => new Promise<void>((r) => setTimeout(r, ms));
+
+  it("an eager resolver runs once when an external store changes during an interruptible render", async () => {
+    const ticker = externalStore(0);
+    const eager = vi.fn(async () => ({ brand: "BMW" }));
+    const lazy = vi.fn(async () => ({ name: "Ann" }));
+    const onEnter = vi.fn();
+    const stores = new Set<unknown>();
+    const options = vi.fn(() => ({
+      config: {
+        car: { resolve: { resolver: eager, onError: vi.fn(), options: { lazy: false } }, brand: { value: "" } },
+        user: { resolve: { resolver: lazy, onError: vi.fn() }, name: { value: "" } },
+        wizard: defineFlow({ steps: [defineStep("first", { note: { value: "" as string }, onEnter }), defineStep("second", {})] }),
+      },
+    }));
+    function Page() {
+      const store = usePalistor(options);
+      stores.add(store);
+      const tick = useSyncExternalStore(ticker.subscribe, ticker.get, ticker.get);
+      const form = useForm(store);
+      return <output>{tick}:{form.car.brand.value}/{form.user.name.value}</output>;
+    }
+    /** Longer than one slice of React's work loop: the transition yields to the event loop after it. */
+    function Slow() {
+      const until = performance.now() + 40;
+      while (performance.now() < until) { /* a heavy sibling */ }
+      return null;
+    }
+    let show!: () => void;
+    function App() {
+      const [shown, setShown] = useState(false);
+      show = () => startTransition(() => setShown(true));
+      return shown ? <><Page /><Slow /><Slow /><Slow /></> : null;
+    }
+
+    // Inside act() React finishes every render in one go; the yield is the point, so this test uses the real scheduler.
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const actEnvironment = env.IS_REACT_ACT_ENVIRONMENT;
+    env.IS_REACT_ACT_ENVIRONMENT = false;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      root.render(<App />);
+      await task(20);
+      show(); // a client navigation mounts a page the same way: in a transition
+
+      // The page has rendered and React has yielded before committing it: something outside moves.
+      let moved = false;
+      for (let i = 0; i < 200 && container.textContent === ""; i++) {
+        await task();
+        if (!moved && stores.size === 1 && container.textContent === "") { moved = true; ticker.set(1); }
+      }
+      await task(20);
+
+      expect(moved).toBe(true);
+      // React saw the store move under the render and rendered the page again from scratch:
+      // the first pass committed nothing and kept no hook state, so a second store was built.
+      expect(stores.size).toBe(2);
+      expect(container.textContent).toBe("1:BMW/Ann");
+      // Only the committed instance's store starts anything.
+      expect({ eager: eager.mock.calls.length, lazy: lazy.mock.calls.length, onEnter: onEnter.mock.calls.length })
+        .toEqual({ eager: 1, lazy: 1, onEnter: 1 });
+    } finally {
+      root.unmount();
+      await task();
+      env.IS_REACT_ACT_ENVIRONMENT = actEnvironment;
+    }
+  });
+});
+
 describe("usePalistor and Suspense", () => {
-  it("the store is made above the boundary and the suspense node is read below it: one store, one request", async () => {
+  /** An eager `suspense: true` group; the resolver answers a macrotask later. */
+  function carConfig() {
     const resolver = vi.fn(async () => {
       await flush();
       return { brand: "BMW" };
@@ -466,51 +646,148 @@ describe("usePalistor and Suspense", () => {
     const config = {
       car: { resolve: { resolver, onError: vi.fn(), options: { lazy: false, suspense: true } }, brand: { value: "" } },
     };
-    const options = vi.fn(() => ({ config }));
+    return { config, resolver, options: vi.fn(() => ({ config })) };
+  }
+  const fallback = (container: HTMLElement) => container.querySelector("i")?.textContent ?? null;
+
+  it("an eager suspense node: the first render shows the defaults, the start brings the fallback; one store, one request", async () => {
+    const { config, resolver, options } = carConfig();
+    const frames: string[] = [];
     function Brand({ store }: { store: Palistor<typeof config> }) {
-      return <b>{useForm(store).car.brand.value}</b>;
+      const car = useForm(store).car;
+      const loading = car.loading; // the node's own state: this reader follows the run
+      const text = `${String(loading)}:${car.brand.value}`;
+      frames.push(text);
+      return <b>{text}</b>;
     }
-    // Read in Car itself, the pending eager resolve would suspend Car before its first commit:
-    // React keeps no state of such a render, and every retry would build a store and call the resolver.
     function Car() {
       const store = usePalistor(options);
       return <Suspense fallback={<i>loading</i>}><Brand store={store} /></Suspense>;
     }
 
     const { container } = render(<Car />);
-    expect(container.innerHTML).toBe("<i>loading</i>");
+    // Held, the store had no run to throw: the defaults committed, then the effect started it.
+    expect(frames).toEqual(["true:"]);
+    expect(fallback(container)).toBe("loading");
 
     await act(flush);
     await act(flush);
-    expect(container.innerHTML).toBe("<b>BMW</b>");
+    expect(fallback(container)).toBeNull();
+    expect(container.textContent).toBe("false:BMW");
     expect(options).toHaveBeenCalledTimes(1);
     expect(resolver).toHaveBeenCalledTimes(1);
   });
 
-  it("a render that suspends before its first commit keeps no store: the retry builds another one", async () => {
-    const options = vi.fn(() => ({ config: titleConfig() }));
+  it("the component that owns the store may read the node itself: it suspends after its commit, and nothing is rebuilt", async () => {
+    const { resolver, options } = carConfig();
+    // Started by the constructor, the pending run suspended this component before its first commit:
+    // React kept no state of it, and every retry built a store and called the resolver.
+    function Car() {
+      const car = useForm(usePalistor(options)).car;
+      return <b>{String(car.loading)}:{car.brand.value}</b>;
+    }
+
+    const { container } = render(<Suspense fallback={<i>loading</i>}><Car /></Suspense>);
+    expect(fallback(container)).toBe("loading");
+
+    for (let i = 0; i < 4; i++) await act(flush);
+    expect(fallback(container)).toBeNull();
+    expect(container.textContent).toBe("false:BMW");
+    expect(options).toHaveBeenCalledTimes(1);
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
+  it("a reader of the node's children only is not re-rendered by the start: it keeps the defaults until the data lands", async () => {
+    const { config, resolver, options } = carConfig();
+    function Brand({ store }: { store: Palistor<typeof config> }) {
+      return <b>{useForm(store).car.brand.value}</b>;
+    }
+    function Car() {
+      const store = usePalistor(options);
+      return <Suspense fallback={<i>loading</i>}><Brand store={store} /></Suspense>;
+    }
+
+    const { container } = render(<Car />);
+    expect(container.innerHTML).toBe("<b></b>");
+
+    await act(flush);
+    await act(flush);
+    expect(container.innerHTML).toBe("<b>BMW</b>");
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
+  it("a suspense list is held the same way: an empty first render without an error, then the fallback, then the rows", async () => {
+    const resolver = vi.fn(async () => {
+      await flush();
+      return [{ id: "u1", name: "Ann" }];
+    });
+    const config = {
+      users: defineList<{ id: string; name: string }>({
+        template: { id: { value: "" }, name: { value: "" } },
+        resolve: { resolver, onError: vi.fn(), options: { lazy: false, suspense: true } },
+      }),
+    };
+    const frames: number[] = [];
+    function Row({ user }: { user: PalistorRef<{ id: string; name: string }> }) {
+      return <li>{useForm(user).name.value}</li>;
+    }
+    function Users() {
+      const users = useForm(usePalistor(() => ({ config }))).users;
+      frames.push(users.length);
+      return <ul>{users.map((user, _index, id) => <Row key={id} user={user} />)}</ul>;
+    }
+
+    // In server mode this read throws the "left to the client" error; a store the hook holds in the browser does not.
+    const { container } = render(<Suspense fallback={<i>loading</i>}><Users /></Suspense>);
+    expect(frames).toEqual([0]);
+    expect(fallback(container)).toBe("loading");
+
+    await act(flush);
+    await act(flush);
+    expect(fallback(container)).toBeNull();
+    expect(container.textContent).toBe("Ann");
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
+  it("a render that suspends before its first commit keeps no store: the retry builds another one, and only that one starts", async () => {
+    const eager = vi.fn(async () => ({ brand: "BMW" }));
+    const lazy = vi.fn(async () => ({ name: "Ann" }));
+    const onEnter = vi.fn();
+    const options = vi.fn(() => ({
+      config: {
+        car: { resolve: { resolver: eager, onError: vi.fn(), options: { lazy: false } }, brand: { value: "" } },
+        user: { resolve: { resolver: lazy, onError: vi.fn() }, name: { value: "" } },
+        wizard: defineFlow({ steps: [defineStep("first", { note: { value: "" as string }, onEnter }), defineStep("second", {})] }),
+      },
+    }));
     const rendered: unknown[] = [];
     let release!: () => void;
     let gate: Promise<void> | null = new Promise<void>((resolve) => { release = resolve; });
     function Title() {
       const store = usePalistor(options);
       rendered.push(store);
-      if (gate) throw gate; // suspends this component itself, as reading an eager `suspense: true` node here would
-      return <output>{useForm(store).title.value}</output>;
+      const form = useForm(store);
+      const text = `${form.car.brand.value}/${form.user.name.value}`; // the lazy resolve is read by the dropped render too
+      if (gate) throw gate; // suspends this component before its first commit
+      return <output>{text}</output>;
     }
 
     const { container } = render(<Suspense fallback={<i>loading</i>}><Title /></Suspense>);
     expect(container.innerHTML).toBe("<i>loading</i>");
     const dropped = rendered[0];
+    await act(flush);
+    // The dropped render's store: nothing requested, no step entered.
+    expect([eager, lazy, onEnter].map((fn) => fn.mock.calls.length)).toEqual([0, 0, 0]);
 
     await act(async () => {
       gate = null;
       release();
       await flush();
     });
-    expect(container.innerHTML).toBe("<output></output>");
+    expect(container.innerHTML).toBe("<output>BMW/Ann</output>");
     expect(options.mock.calls.length).toBeGreaterThan(1);
     expect(rendered[rendered.length - 1]).not.toBe(dropped); // the committed instance has its own store
+    expect([eager, lazy, onEnter].map((fn) => fn.mock.calls.length)).toEqual([1, 1, 1]);
   });
 });
 

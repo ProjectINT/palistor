@@ -23,7 +23,7 @@ import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { Palistor, useForm } from "@impl";
 import { CONFIG_NODE, LIST_STATE } from "../../../store/constants";
-import { LOADING_ON_FIRST_READ } from "../impl";
+import { LOADING_ON_FIRST_READ, onCube } from "../impl";
 
 /**
  * Contract shim: store keys subscriptions and versions by its internal objects
@@ -415,7 +415,9 @@ describe("entity field resolve — lifecycle", () => {
     expect((store.proxy as any).users.items[0].isActive.value).toBe(true);
   });
 
-  it("store.reset() clears the field resolve states: the next read re-runs, nothing runs by itself", async () => {
+  // store: a full reset clears every field resolve state, so the next read runs the resolver again.
+  // Cube (Stage 5а, on purpose): a resolve that has its result keeps it, the reset requests nothing.
+  it("store.reset() runs nothing by itself; the next read re-runs on store, keeps the loaded result on Cube", async () => {
     const { store, fieldResolve } = makeListStore();
     await flushPromises(5);
     await readAndFlush(() => (store.proxy as any).users.items[0].isActive.value);
@@ -429,7 +431,7 @@ describe("entity field resolve — lifecycle", () => {
     // The resolved value is the baseline, so skipIfResolved would skip: force a run with a default value.
     store.set({ id: "u1", isActive: false });
     await readAndFlush(() => (store.proxy as any).users.items[0].isActive.value);
-    expect(fieldResolve.resolver).toHaveBeenCalledTimes(2);
+    expect(fieldResolve.resolver).toHaveBeenCalledTimes(onCube ? 1 : 2);
   });
 
   it("reset() of a subgroup does not clear entity resolve states", async () => {

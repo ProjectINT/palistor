@@ -1,4 +1,4 @@
-import type { CubeConfig, NotifyFn, ResolveConfig, Translate, Values } from "./config";
+import type { CubeConfig, NotifyFn, ResolveConfig, ResolveErrorContext, Translate, Values } from "./config";
 import { Cube } from "./cube";
 import { ListState, type ListCube } from "./listCube";
 import { idOf, Registry } from "./registry";
@@ -56,6 +56,17 @@ export class Hub {
   private readonly entityViews = new Map<string, Map<CubeConfig, Cube>>();
   /** Per-entity list membership (and page cache) per (owner id, list config), shared by every view of the owner. */
   private readonly entityLists = new Map<string, Map<object, ListState>>();
+  /** The per-entity memberships that are dirty right now, kept by `nestedMoved`. Empty for most forms, most of the time. */
+  readonly dirtyNested = new Set<ListState>();
+  /**
+   * What `dirty` of a list whose rows own lists depends on, next to its own
+   * membership (ListCube.dirty). It moves when `dirtyNested` changes, and with
+   * every per-entity list while that set is not empty (a membership between a
+   * dirty list and the lists above it may have changed). While nothing nested
+   * is dirty it stays put: loading a thousand nested lists costs the lists
+   * above them nothing.
+   */
+  readonly nested = new Signal();
   /** State-version sequence, so versions of different cubes never repeat. */
   stateSeq = 0;
 
@@ -69,22 +80,35 @@ export class Hub {
   readonly translator = new Signal();
   notifier: NotifyFn | null = null;
   readonly notify: NotifyFn = (...args) => this.notifier?.(...args);
+  /** The second argument of a `resolve.onError`: both members are stable references that follow setNotifier / setTranslator. */
+  get errorContext(): ResolveErrorContext { return { notify: this.notify, t: this.translate }; }
 
   context: Record<string, unknown> = {};
   private readonly contextKeys = new Map<string, Signal>();
 
   /**
-   * Server mode before store.start(): nothing runs by itself — no resolver, no
-   * page fetch, no flow entry. The check sits where a run begins
-   * (ResolveState.start, Pager.fetch, FlowCube.enterCurrent), not at the callers.
+   * Before store.start(): nothing runs by itself — no resolver, no page fetch,
+   * no flow entry. Server mode, and a usePalistor store until its first commit
+   * (a render React may throw away starts nothing). The check sits where a run
+   * begins (ResolveState.start, Pager.fetch, FlowCube.enterCurrent), not at the
+   * callers.
    */
   held = false;
-  /** store.start() ran (in the constructor outside server mode). */
+  /**
+   * Held by server mode (the `server` option; by default no `window`): no run
+   * comes in this render at all, so a `suspense: true` node without data
+   * leaves its Suspense boundary to the client. A store usePalistor holds in
+   * the browser is not in server mode: it renders the defaults, then suspends
+   * on the run its start brings.
+   */
+  server = false;
+  /** store.start() ran (in the constructor of a store that is not held). */
   started = false;
   /**
    * What store.start() runs: the eager resolves, the active steps' resolves,
-   * and in server mode every resolve that was read or asked to run. While held
-   * they read as `loading`, as they do on the client's first render.
+   * and every resolve that was read or asked to run while held. Until then
+   * they read as `loading`, the same on the server and in the client's first
+   * render.
    */
   readonly deferred = new Set<Resolving>();
 
@@ -226,7 +250,11 @@ export class Hub {
       }
       const lists = this.entityLists.get(id);
       if (lists) {
-        for (const st of lists.values()) if (st.pager) { st.pager.dispose(); this.resolving.delete(st.pager); }
+        for (const st of lists.values()) {
+          if (st.pager) { st.pager.dispose(); this.resolving.delete(st.pager); }
+          st.orphan = true; // a cube still holding it may bump once more: it no longer counts
+          if (this.dirtyNested.delete(st)) this.nested.bump();
+        }
         this.entityLists.delete(id);
       }
       for (const v of this.registry.delete(id)) v.bumpDeep(); // a mounted useForm(entity) view re-renders on defaults
@@ -244,6 +272,7 @@ export class Hub {
       moveKey(this.entityResolves, oldId, newId);
       moveKey(this.entityViews, oldId, newId);
       moveKey(this.entityLists, oldId, newId);
+      for (const st of this.entityLists.get(newId)?.values() ?? []) st.ownerId = newId;
       for (const v of views) v.bumpDeep();
       this.touch();
     });
@@ -260,12 +289,63 @@ export class Hub {
     return rs;
   }
 
+  /** A per-entity list moved (ListCube.bump): keep `dirtyNested`, and move `nested` when the lists above have something to re-check. */
+  nestedMoved(st: ListState): void {
+    const was = this.dirtyNested.has(st);
+    const now = !st.orphan && st.dirty;
+    if (now && !was) this.dirtyNested.add(st);
+    else if (was && !now) this.dirtyNested.delete(st);
+    if (was !== now || this.dirtyNested.size > 0) this.nested.bump();
+  }
+
+  /**
+   * A row of `list` owns a dirty list, at any depth (ListCube.dirty). The
+   * usual answer takes a look at the owners of the dirty lists: is one of them
+   * a row of this list. Only when a dirty list hangs under a row that is
+   * itself a nested row (lists inside lists) are this list's rows walked down.
+   */
+  rowsOwnDirty(list: ListState): boolean {
+    const dirty = this.dirtyNested;
+    if (dirty.size === 0) return false;
+    let members: Set<string> | null = null;
+    let scanned = 0;
+    let deep = false;
+    for (const st of dirty) {
+      const owner = st.ownerId!;
+      // A hit usually comes at once. Many owners that are not rows here: one set instead of a scan each.
+      if (++scanned > 16) members ??= new Set(list.memberIds());
+      if (members ? members.has(owner) : list.hasMember(owner)) return true;
+      if (this.registry.ownerOf(owner)) deep = true;
+    }
+    if (!deep) return false;
+    for (const id of members ?? list.memberIds()) if (this.ownsDirty(id)) return true;
+    return false;
+  }
+
+  /**
+   * A list owned by entity `id` differs from its baseline, or one owned by a
+   * row of such a list does, at any depth. Read from the shared memberships:
+   * no item cube is built for it.
+   */
+  ownsDirty(id: string, seen?: Set<string>): boolean {
+    const lists = this.entityLists.get(id);
+    if (!lists) return false;
+    const visited = seen ?? new Set<string>();
+    if (visited.has(id)) return false; // a row placed under itself
+    visited.add(id);
+    for (const st of lists.values()) {
+      if (st.dirty) return true;
+      for (const child of st.memberIds()) if (this.ownsDirty(child, visited)) return true;
+    }
+    return false;
+  }
+
   /** The shared membership of an owner's per-entity list. */
   entityListState(ownerId: string, config: object): ListState {
     let byConfig = this.entityLists.get(ownerId);
     if (!byConfig) this.entityLists.set(ownerId, (byConfig = new Map()));
     let st = byConfig.get(config);
-    if (!st) byConfig.set(config, (st = new ListState()));
+    if (!st) byConfig.set(config, (st = new ListState(ownerId)));
     return st;
   }
 
@@ -284,10 +364,15 @@ export class Hub {
 
   /**
    * Full-form reset (store's resetPipeline on the root): every per-entity
-   * list is back to its initial membership, every entity field resolve starts
-   * over on its next read. Root lists keep their membership, as in store. A
-   * paginated list (root or per-entity) undoes its edits page by page and
-   * keeps its navigation, cache and status.
+   * list is back to its initial membership. Root lists keep their membership,
+   * as in store. A paginated list (root or per-entity) undoes its edits page
+   * by page and keeps its navigation, cache and status.
+   *
+   * An entity resolve (a row's field, a per-entity list) that has its result
+   * keeps it: the reset returns to what it loaded and requests nothing, as a
+   * root list's resolve always did. One in flight or failed starts over on
+   * its next read. (store reset them all, so a loaded nested list was fetched
+   * again after every reset.)
    */
   resetEntities(): void {
     const done = new Set<ListState>();
@@ -297,7 +382,18 @@ export class Hub {
       if (list.pager) list.pager.resetEdits();
       else if (list.item) list.resetMembership();
     }
-    for (const byConfig of this.entityResolves.values()) for (const rs of byConfig.values()) rs.reset();
+    // A per-entity membership outlives its views (it lives with the owner): one whose owner is
+    // off screen — on another page of a paginated list — is reset too, or the form would stay dirty.
+    for (const byConfig of this.entityLists.values()) {
+      for (const st of byConfig.values()) {
+        if (done.has(st)) continue;
+        if (st.pager) st.pager.resetEdits();
+        else if (st.dirty) { st.ids = [...st.initialIds]; this.nestedMoved(st); this.touch(); }
+      }
+    }
+    for (const byConfig of this.entityResolves.values()) {
+      for (const rs of byConfig.values()) if (rs.status !== "resolved") rs.reset();
+    }
   }
 
   /** persist.disable() / an account switch: every page cache belongs to the persisted session. */

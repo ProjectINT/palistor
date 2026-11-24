@@ -33,6 +33,7 @@ export const orders = defineList<Order>({
 
 - `ctx.page` is `{ page, pageSize, offset, cursor?, queryKey }`.
 - Return `{ items, total?, nextCursor?, hasMore? }`. `total` drives `pageCount`, `total` and `hasNextPage`. Without it return `hasMore`, or a bare array: the list then assumes there is a next page while pages come back full.
+- In `cursor` and `infinite` modes an explicit `nextCursor: null` means "this was the last page": `hasNextPage` is `false`, `loadMore()` and `nextPage()` request nothing, and in `cursor` mode neither do `setPage(next)` and `prefetch(next)`. The `null` wins over `total`, over `hasMore: true` and over a full page. A page without the field (`undefined`) says nothing and the rule above decides. So a feed that continues by `offset` must leave `nextCursor` out, not send `null`. Source: `cube/core/pagination.test.ts` ("nextCursor: null ends the feed (cursor and infinite)"), `cube/core/pagination.ts` (`pastEnd`, `hasNextPage`).
 - Take the offset, page size and cursor from `ctx.page` only. Do not keep a page number of your own.
 
 ## Modes
@@ -56,7 +57,7 @@ const feed = defineList<Post>({
     pagination: { pageSize: 30, mode: "infinite" },
     resolver: async (values, store, ctx) => {
       const r = await fetchFeed(ctx.page!.cursor, ctx.page!.pageSize);
-      return { items: r.posts, nextCursor: r.next, hasMore: r.next !== null };
+      return { items: r.posts, nextCursor: r.next }; // `next: null` from the API ends the feed
     },
   },
 });
@@ -93,7 +94,7 @@ All of them are typed optional, because they exist only on a paginated list. Pas
 | `pageCount` | From the server total; without one, the number of contiguous cached pages. |
 | `total` | Display total: the server total plus local adds and removes. `undefined` until known. |
 | `serverTotal` | The server total. Moves only on a fetch, `store.delete` or a confirmed add. |
-| `hasNextPage`, `hasPrevPage` | Not affected by local adds. |
+| `hasNextPage`, `hasPrevPage` | Not affected by local adds. `hasNextPage` is `false` after a page that came with `nextCursor: null` (`cursor` / `infinite`). |
 | `isFetching` | Some page of the current query is being fetched. `list.loading` is the same signal plus the first fetch that is about to start. |
 | `isInitialLoading` | Nothing to show and a fetch is running or about to start: choose a skeleton over a spinner. `true` from the first read; reading it starts the lazy first fetch, as reading the rows or `loading` does (`isFetching` does not). |
 | `isPreviousData` | With `keepPreviousData`: the rows on screen belong to the previous query. |
@@ -120,7 +121,7 @@ The query is identified by what the resolver read: form values, `store.context` 
 ## Local edits
 
 - `list.add`, `remove` and `setItems` change the cached page they land on: the current page (`infinite`: the last loaded one). `setItems` is not supported in `infinite` mode and throws in development.
-- `list.dirty` covers every cached page of the current query, so an unsaved add on an off-screen page keeps the list dirty.
+- `list.dirty` covers every cached page of the current query, so an unsaved add on an off-screen page keeps the list dirty. The nested lists of those rows count too: an edit inside one keeps the list dirty while its owner row is off screen, and `store.reset()` clears it without a request. Source: `cube/core/listDirty.test.tsx` ("a nested edit on a cached page that is off screen keeps the list dirty; reset clears it").
 - `store.rekey(tempId, realId)` confirms an added row: it becomes server truth, `serverTotal` grows by one and the row no longer counts as a pending add.
 - `store.delete(id)` takes the row out of every cached page and marks the later pages stale.
 - `store.reset()` rolls back local adds and removes on every cached page. It keeps the current page and sends no request.
@@ -150,7 +151,7 @@ A wrong `pageSize`, `base`, `mode` or `persist.maxPages` throws when the store i
 - With `usePersist` the current page is restored without a request, but only when the saved query matches the live values and context. With `persist: "window"`, call `list.setScrollAnchor(id)` for the first visible row and read `list.scrollAnchor` after a reload to restore the scroll position.
 - Restored unconfirmed rows keep the list dirty. `list.pendingAdds` names them and `list.discardPendingAdds()` removes them. Give temporary rows an id that starts with `_tmp_` (the format `add()` generates), so a restored list can tell them from server rows.
 - `resolve.options.suspense: true` suspends only while the list has nothing to show (the first page, or a new query without `keepPreviousData`). Page changes and `loadMore` keep the rows on screen. In a server render the boundary's fallback is sent and the list renders in the browser.
-- To render the first page on the server from rows a Server Component fetched, pass it to the store as `initialData` — an array, or `{ items, total, nextCursor, hasMore }` as the resolver returns it. Read the `palistor-ssr` skill first: the rows must answer the query the store would send.
+- To render the first page on the server from rows a Server Component fetched, pass it to the store as `initialData` — an array, or `{ items, total, nextCursor, hasMore }` as the resolver returns it; `nextCursor: null` there makes the first page the whole feed (`cube/core/pagination.test.ts`, "a first page given as initialData with nextCursor: null is a complete feed"). Read the `palistor-ssr` skill first: the rows must answer the query the store would send.
 - A paginated list inside a row template paginates each row's instance separately. Its resolver receives the owner row's values, and the owner fields it reads form that instance's query key.
 
 ## Common mistakes
@@ -197,7 +198,7 @@ Wrong: `list.setPage?.(n)` with an unchecked `n` from a URL or an input.
 
 Correct: clamp `n` to `1…list.pageCount` (from `base`), or use `nextPage()` / `prevPage()`, which check `hasNextPage` / `hasPrevPage` themselves.
 
-Why: in `paged` mode `setPage` accepts any page from `base` up: a page past the end is fetched and shown empty. In `cursor` mode `setPage` reaches only a cached page or the next one, and in `infinite` mode it is not a navigation at all; both log a warning and do nothing. Source: `cube/core/pagination.ts` (`setPage`).
+Why: in `paged` mode `setPage` accepts any page from `base` up: a page past the end is fetched and shown empty. In `cursor` mode `setPage` reaches only a cached page or the next one, and in `infinite` mode it is not a navigation at all; both log a warning and do nothing. After a page that came with `nextCursor: null` there is no next one: `setPage` and `prefetch` request nothing. Source: `cube/core/pagination.ts` (`setPage`, `pastEnd`), `cube/core/pagination.test.ts` ("cursor: the page that came with nextCursor: null has no next one; nextPage, setPage and prefetch request nothing").
 
 ### MEDIUM — Using `total` to decide whether more rows exist
 
@@ -205,7 +206,7 @@ Wrong: `list.length < list.total` as the "load more" or "next" condition.
 
 Correct: `list.hasNextPage`.
 
-Why: `total` includes local adds and removes; `hasNextPage` and `serverTotal` follow the server only. Source: `cube/contract/sliceG/pagination.test.ts` (A2, D7), `cube/core/pagination.ts` (`hasNextPage`).
+Why: `total` includes local adds and removes; `hasNextPage` and `serverTotal` follow the server only, and in `cursor` / `infinite` mode a page with `nextCursor: null` ends the feed whatever the total says. Source: `cube/contract/sliceG/pagination.test.ts` (A2, D7), `cube/core/pagination.ts` (`hasNextPage`), `cube/core/pagination.test.ts` ("infinite: null wins over a total and a hasMore that say there is more").
 
 ### MEDIUM — Reading the list's own rows inside its resolver
 

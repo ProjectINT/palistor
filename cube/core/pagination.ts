@@ -326,8 +326,13 @@ export class Pager {
    * boundary reflow — a page short of a removed server row borrows the head
    * of a STALE successor (the row that now sits in its last slot server-side)
    * without writing any entry.
+   *
+   * A window ordinal without a cached page is the normal state of a query
+   * that has not loaded yet: a new key starts empty (`issuing`: the caller
+   * fetches right after), the page is in flight, or its fetch failed. It is
+   * reported only when the pager holds the window for loaded.
    */
-  project() {
+  project(issuing = false) {
     const fam = this.currentFamily();
     if (!fam) { this.list.setWindow([], []); return; }
     const ids: string[] = [];
@@ -335,7 +340,9 @@ export class Pager {
     for (const o of this.windowOrdinals()) {
       const entry = fam.pages.get(o);
       if (!entry) {
-        this.warnOnce(`missing:${o}`, `[palistor] pagination invariant: window ordinal ${o} of list "${this.listPath}" has no cached page.`);
+        if (!issuing && this.status === "resolved" && !fam.inFlight.has(o)) {
+          this.warnOnce(`missing:${o}`, `[palistor] pagination invariant: window ordinal ${o} of list "${this.listPath}" has no cached page.`);
+        }
         continue;
       }
       ids.push(...entry.ids);
@@ -621,6 +628,18 @@ export class Pager {
     return fam.pages.get(o - 1)?.nextCursor;
   }
 
+  /**
+   * cursor / infinite: the page before `o` came with an explicit `nextCursor:
+   * null` — the feed ends there and ordinal `o` does not exist. A resolver
+   * that leaves the field out says nothing (`hasMore`, `total`, a full page
+   * decide). Requesting `o` anyway would send `cursor: null`, the head again.
+   */
+  private pastEnd(fam: Family, o: number): boolean {
+    if (this.mode === "paged" || o <= this.base) return false;
+    const prev = fam.pages.get(o - 1);
+    return prev && !prev.tombstone ? prev.nextCursor === null : fam.cursors.get(o) === null;
+  }
+
   /** infinite: Σ fetchedCount over loaded ordinals and tombstones before `o` (never Σ|ids|: dedup would shift every later offset). */
   private continuationOffset(fam: Family, o: number): number {
     if (this.mode !== "infinite") return (o - this.base) * this.pageSize;
@@ -737,7 +756,10 @@ export class Pager {
     if (!fam || fam.continuationLost) return false;
     if (this.mode === "infinite") {
       if (this.loadedOrdinals.length === 0) return true;
-      const entry = fam.pages.get(Math.max(...this.loadedOrdinals));
+      const last = Math.max(...this.loadedOrdinals);
+      // An explicit `nextCursor: null` ends the feed, whatever the total or a full page suggest.
+      if (this.pastEnd(fam, last + 1)) return false;
+      const entry = fam.pages.get(last);
       if (fam.serverTotal != null) return this.fetchedSoFar(fam) < fam.serverTotal;
       if (!entry) return false;
       if (entry.nextCursor != null) return true;
@@ -746,7 +768,9 @@ export class Pager {
     }
     const entry = fam.pages.get(this.currentPage);
     if (this.mode === "cursor") {
-      if (entry?.nextCursor != null || fam.cursors.has(this.currentPage + 1) || fam.pages.has(this.currentPage + 1)) return true;
+      if (this.pastEnd(fam, this.currentPage + 1)) return false;
+      // A recorded `null` is not a cursor: left by an earlier answer of a page that now says nothing, it decides nothing.
+      if (entry?.nextCursor != null || fam.cursors.get(this.currentPage + 1) != null || fam.pages.has(this.currentPage + 1)) return true;
       if (!entry) return false;
       if (entry.hasMore !== undefined) return entry.hasMore;
       if (fam.serverTotal != null) return this.currentPage < this.base + this.pageCount - 1;
@@ -801,6 +825,12 @@ export class Pager {
     return out;
   }
 
+  /** The ids of every cached page of the current family: the rows `isDirty` answers for. */
+  *cachedIds(): IterableIterator<string> {
+    const fam = this.currentFamily();
+    if (fam) for (const e of fam.pages.values()) yield* e.ids;
+  }
+
   /** The aggregate per-page rollup over every cached page of the current family, in every mode. */
   isDirty(): boolean {
     const fam = this.currentFamily();
@@ -819,7 +849,7 @@ export class Pager {
   fetch(requested: number, force = false, prefetch = false): Promise<unknown> {
     if (this.disposed) return Promise.resolve();
     const hub = this.hub;
-    // Server mode: no request before store.start(), which fetches the current page.
+    // Held: no request before store.start(), which fetches the current page.
     if (hub.held) { hub.deferred.add(this); return Promise.resolve(); }
     const resolve = this.resolve;
     const now = Date.now();
@@ -831,7 +861,7 @@ export class Pager {
     const ordinal = keyChanged ? this.config.initialPage : requested;
     if (keyChanged) {
       if (this.config.keepPreviousData) this.isPreviousData = true;
-      else this.project();
+      else this.project(true);
     }
     // A head-truncated ordinal is never re-fetched in place (only refetch() brings the head back).
     if (this.isTruncated(fam, ordinal)) return Promise.resolve();
@@ -970,7 +1000,7 @@ export class Pager {
           this.status = "error";
           this.error = err;
           release("error");
-          try { resolve.onError?.(err, { notify: hub.notify }); } catch { /* onError must not break the store */ }
+          try { resolve.onError?.(err, hub.errorContext); } catch { /* onError must not break the store */ }
         });
         return undefined;
       } finally {
@@ -1067,7 +1097,7 @@ export class Pager {
       return;
     }
     if (this.config.keepPreviousData) this.isPreviousData = true;
-    else this.project();
+    else this.project(true);
     void this.fetch(this.config.initialPage);
   }
 
@@ -1123,7 +1153,7 @@ export class Pager {
     });
   }
 
-  /** The first fetch is coming: scheduled for the next microtask, or held back by server mode. */
+  /** The first fetch is coming: scheduled for the next microtask, or held back until store.start(). */
   get due(): boolean {
     return this.status === "idle" && !this.disposed && (this.scheduled || (this.hub.held && this.hub.deferred.has(this)));
   }
@@ -1225,6 +1255,7 @@ export class Pager {
       );
       return;
     }
+    if (fam && !entry && this.pastEnd(fam, n)) return; // the feed ended on the previous page
     if (fam && entry && entry.status === "fresh") {
       this.currentPage = n;
       this.loadedOrdinals = [n];
@@ -1272,6 +1303,7 @@ export class Pager {
     if ((entry && this.isFresh(entry, Date.now())) || this.isTruncated(fam, o)) return Promise.resolve();
     const inFlight = fam.inFlight.get(o);
     if (inFlight) return inFlight;
+    if (this.pastEnd(fam, o)) return Promise.resolve(); // the feed ended on the previous page
     const chained = this.mode === "cursor" || fam.cursors.size > 0 || fam.nextCursor != null;
     const unreachable = chained ? this.cursorFor(fam, o) === undefined : this.mode === "infinite" && o > this.nextOrdinal();
     if (unreachable) {

@@ -33,6 +33,7 @@ sources:
   - 'ProjectINT/palistor:cube/core/hub.ts'
   - 'ProjectINT/palistor:cube/core/cube.ts'
   - 'ProjectINT/palistor:cube/react/useForm.ts'
+  - 'ProjectINT/palistor:cube/react/usePalistor.ts'
   - 'ProjectINT/palistor:react/useForm.ts'
   - 'ProjectINT/palistor:store/defineList.ts'
   - 'ProjectINT/palistor:store/store/types.ts'
@@ -95,13 +96,15 @@ function UserRow({ user }: { user: PalistorRef<User> }) {
 
 How it runs:
 
-- The resolve is lazy. It starts on the first read of `list.items`, `list.length`, `list.map` or `list.loading` (also `list.values` on a filtered list and `list.isInitialLoading` on a paginated one), one microtask later. `error` and `resolveStatus` never start it. `resolve.options.lazy: false` starts it when the store is created.
+- The resolve is lazy. It starts on the first read of `list.items`, `list.length`, `list.map` or `list.loading` (also `list.values` on a filtered list and `list.isInitialLoading` on a paginated one), one microtask later. `error` and `resolveStatus` never start it. `resolve.options.lazy: false` starts it without a read, when the store is created.
 - `loading`, `error` and `resolveStatus` (`"idle" | "pending" | "resolved" | "error"`) describe one resolve state. `loading` is `true` from the read that starts the load until the run lands; `resolveStatus` is still `"idle"` during that first render and becomes `"pending"` when the run starts. A failed run leaves the items untouched and `error` set until the next run starts. Branch on `resolveStatus`: `error` holds whatever the resolver threw, so it is `null` after a rejection with no value.
-- Where `window` is not defined (a server render, a Node script or test) no resolver starts until `store.start()`, and `loading` reads `true` meanwhile. To have the rows in server-rendered HTML (Next.js App Router), read the `palistor-ssr` skill.
-- `onError` is the notification channel (a toast through `useNotifier`); `list.error` is the state to render. Use both.
+- Where `window` is not defined (a server render, a Node script or test) no resolver starts until `store.start()`, and `loading` reads `true` meanwhile. A store made with `usePalistor` starts nothing during a render in the browser either: the hook starts it once the component has committed, and until then an eager list also reads `loading: true` with `resolveStatus: "idle"`. To have the rows in server-rendered HTML (Next.js App Router), read the `palistor-ssr` skill.
+- `onError` is the notification channel (a toast through `useNotifier`); `list.error` is the state to render. Use both. Next to `notify`, `onError` gets `t`, the store's translator, for the message; the declared type lacks it, so read it through the cast shown in [list API](references/list-api.md).
 - `map` passes `(row, index, id)`. Use `id` as the React key.
 - A row field is a field proxy like `form.email`: spread it into the adapter from the `palistor` skill (`<Input {...u.name} />`) or bind it by hand as above.
 - Callbacks inside `defineList<TEntity>` (template rules, `resolver`, `onError`) take their parameter types from `TEntity`. A `filter` block and a separate edit template do not: annotate their callback parameters, or a `strict` project fails with TS7006.
+
+Source for the `usePalistor` and `onError` rules: `cube/ssr/usePalistor.test.tsx` ("the render starts nothing and reads what a server render reads; the effect starts everything once"), `cube/core/resolve.test.ts` ("onError gets the store's translator").
 
 ## Core Patterns
 
@@ -157,7 +160,7 @@ export function TaskToolbar() {
 - `list.remove(id)` takes the row out of this list only; the entity stays in the registry and in other lists. `store.delete(id)` removes the entity everywhere.
 - `list.setItems(ids)` replaces the membership. `list.getValues()` returns plain rows for logging or a request body.
 - `store.set(row | rows)` creates or merges rows without touching any list.
-- `list.dirty` means the membership differs from the last loaded one. After `rekey` a plain list stays dirty until the next resolve (`reload()`); a paginated list accepts the confirmed row as server truth and is clean.
+- `list.dirty` means the membership differs from the last loaded one, or a row of the list owns a nested list that is dirty the same way; a row's field values take no part. After `rekey` a plain list stays dirty until the next resolve (`reload()`); a paginated list accepts the confirmed row as server truth and is clean. Source: `cube/contract/sliceC/entityListDirty.test.ts` ("per-entity list dirty reaches the parent list and the form"), `cube/core/listDirty.test.tsx` ("a row's field values still take no part: the list is dirty by composition only").
 
 ### Edit rows in place
 
@@ -166,7 +169,7 @@ Each row is an entity proxy (`useForm(user)` in `UserRow` above): `id`, one fiel
 - A row field validates live through its `validate` rule: `isInvalid` and `errorMessage` update on every write, without a submit.
 - `isRequired` on a template field is exposed as a prop but is not enforced. Write the rule in `validate`.
 - `row.submit()` runs the row's `validate` rules, then the `onSubmit` of the template the row is shown through (declare it on a separate edit template, next pattern). `row.reset()` restores the row's fields to their baseline.
-- The form's own `store.submit()` sends lists as plain rows and does not validate them. `store.reset()` leaves a root list's membership and rows alone.
+- The form's own `store.submit()` sends lists as plain rows and does not validate them. `store.reset()` leaves a root list's membership and rows alone, returns the lists nested in rows to their loaded rows and requests nothing: a nested list or a row field that has loaded stays `resolved`, and its next read does not call the resolver. Details are in [list API](references/list-api.md), "Lists nested inside a row". Source: `cube/contract/sliceC/entityListResolve.test.ts` ("per-entity list resolve and store.reset()"), `cube/contract/sliceC/entityFieldResolve.test.tsx` ("store.reset() runs nothing by itself; the next read re-runs on store, keeps the loaded result on Cube").
 
 ### Edit one entity through a separate form
 
@@ -425,7 +428,7 @@ If a check fails, find the symptom in Common Mistakes before changing the config
 
 ## References
 
-- Read [list API](references/list-api.md) when you need the full member list of a list, a row or a row field, the store's entity methods, the typing helpers, or lists nested inside a row.
+- Read [list API](references/list-api.md) when you need the full member list of a list, a row or a row field, the store's entity methods, the typing helpers, or lists nested inside a row (how they get their rows, `dirty`, reset).
 - Read [entity editing](references/entity-editing.md) when a row needs a separate edit form, per-row or per-field loading, or its own submit.
 - Read [filtering](references/filtering.md) when the list needs search or filter controls.
 - Read [pagination](references/pagination.md) when the list is loaded page by page, with load-more, or by cursor.

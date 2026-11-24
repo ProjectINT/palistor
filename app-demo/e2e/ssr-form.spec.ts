@@ -317,6 +317,28 @@ test("4. a localStorage draft is laid over the server's data after mount; hydrat
   expect(hydrationLines(consoleLines), "hydration messages in the console").toEqual([]);
 });
 
+test("an error toast is in the page's language: onError builds it with the store's translator", async ({ page, pageErrors, baseURL }) => {
+  void pageErrors;
+  await page.context().addCookies([{ name: "NEXT_LOCALE", value: "ru", url: baseURL! }]);
+  await openForm(page);
+  // The provider's translator has switched to Russian after mount; onError's `t` follows it.
+  await expect(page.getByTestId("ssr-form-profile").getByText("Полное имя")).toBeVisible();
+  const toast = page.getByTestId("ssr-toast");
+
+  // A list's onError.
+  await page.getByTestId("ssr-form-fail-activity").check();
+  await page.getByTestId("ssr-form-reload").click();
+  await expect(toast).toHaveText(/Не удалось загрузить активность: 503 Service Unavailable \(simulated\)/);
+
+  // A group's onError.
+  await page.getByTestId("ssr-form-fail-profile").check();
+  await page.getByTestId("ssr-form-user").selectOption("usr-3");
+  await expect(toast.filter({ hasText: "профиль" })).toHaveText(
+    /Не удалось загрузить профиль: 503 Service Unavailable \(simulated\)/,
+  );
+  await expectCounters(page, { profile: 1, activity: 2, errors: 2, announcement: 0 });
+});
+
 test("the store's labels follow the locale after hydration, without a request", async ({ page, pageErrors, baseURL }) => {
   void pageErrors;
   const consoleLines = collectConsole(page);

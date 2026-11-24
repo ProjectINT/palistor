@@ -12,9 +12,9 @@
  *     nothing is requested after construction; a change is one request.
  *  D. The first page under server render and hydration.
  *
- * A query-key change of a paginated list warns "pagination invariant: window
- * ordinal … has no cached page" (not part of initialData): tests that change
- * the key silence console.warn.
+ * None of this warns: a query-key change projects the new key's empty family
+ * right before its first page is requested, which is not a "pagination
+ * invariant" violation (Stage 5а). Sections B and C check console.warn.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "@testing-library/react";
@@ -88,14 +88,39 @@ describe("initialData: nested lists inside rows", () => {
 
   it("the nested data is the list's baseline: an edit is dirty against it, and the form reset returns to it", () => {
     const { store, contactsOf } = nestedStore();
+    /** The nested list, the row that owns it, the list of that row, the form. */
+    const chain = () => [contactsOf("u1").dirty, store.proxy.users.getById("u1").dirty, store.proxy.users.dirty, store.proxy.dirty];
     contactsOf("u1").remove("c2");
     contactsOf("u1").add({ id: "c9", phone: "+9" });
     expect(idsOf(contactsOf("u1"))).toEqual(["c1", "c9"]);
-    expect(contactsOf("u1").dirty).toBe(true);
+    expect(chain()).toEqual([true, true, true, true]);
 
     store.reset();
     expect(idsOf(contactsOf("u1"))).toEqual(["c1", "c2"]);
-    expect(contactsOf("u1").dirty).toBe(false);
+    expect(chain()).toEqual([false, false, false, false]);
+  });
+
+  it("the form reset keeps the server's result: the list stays resolved, and reading it requests nothing", async () => {
+    const { store, resolver, contactsOf } = nestedStore();
+    contactsOf("u1").remove("c2");
+
+    store.reset();
+    expect(contactsOf("u1").resolveStatus).toBe("resolved");
+    expect(contactsOf("u1").loading).toBe(false);
+    expect(idsOf(contactsOf("u1"))).toEqual(["c1", "c2"]);
+    await flush();
+    // Before Stage 5а the reset left the list idle: this read fetched it, and the fetched rows replaced the server's.
+    expect(resolver).not.toHaveBeenCalled();
+    expect(idsOf(contactsOf("u1"))).toEqual(["c1", "c2"]);
+
+    // A list that had no data is still fetched when read, once.
+    void contactsOf("u2").items;
+    await flush();
+    store.reset();
+    void contactsOf("u2").items;
+    await flush();
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(idsOf(contactsOf("u2"))).toEqual(["fetched-u2"]);
   });
 
   it("a nested list that carried data is resolved and never fetched; one that did not is fetched once read", async () => {
@@ -170,8 +195,12 @@ function pagedStore(opts: PagedOptions = {}) {
 
 describe("initialData: the first page of a paginated list", () => {
   let warn: ReturnType<typeof vi.spyOn>;
-  beforeEach(() => { warn = vi.spyOn(console, "warn").mockImplementation(() => {}); });
-  afterEach(() => { warn.mockRestore(); });
+  beforeEach(() => { warn = vi.spyOn(console, "warn"); });
+  afterEach(() => {
+    const warned = warn.mock.calls.map((c: unknown[]) => String(c[0]));
+    warn.mockRestore();
+    expect(warned).toEqual([]);
+  });
 
   /** What a component reads off a paginated list. */
   const read = (list: any) => ({
@@ -324,8 +353,12 @@ describe("initialData: the first page of a paginated list", () => {
 
 describe("initialData: a list with a server filter", () => {
   let warn: ReturnType<typeof vi.spyOn>;
-  beforeEach(() => { warn = vi.spyOn(console, "warn").mockImplementation(() => {}); });
-  afterEach(() => { warn.mockRestore(); });
+  beforeEach(() => { warn = vi.spyOn(console, "warn"); });
+  afterEach(() => {
+    const warned = warn.mock.calls.map((c: unknown[]) => String(c[0]));
+    warn.mockRestore();
+    expect(warned).toEqual([]);
+  });
 
   it("paginated: no request right after construction; a filter change is one request for the first page", async () => {
     const { list, calls } = pagedStore({ filter: true, initialData: { users: { items: FIRST_PAGE, total: 45 } } });

@@ -1,8 +1,10 @@
 # domain_map.yaml
 # Library: palistor
 # Version: 0.1.0-cube.0
-# Date: 2026-11-15, updated 2026-11-23 (batch 2: palistor-ssr; server mode and the `loading` rule)
-# Status: draft (both batches authored by an agent; not yet reviewed by the maintainer)
+# Date: 2026-11-15, updated 2026-11-23 (batch 2: palistor-ssr; server mode and the `loading` rule),
+#       updated 2026-11-24 (batch 3: Stage 5а, fixes after the SSR demo; verified against the working
+#       tree at package.json 0.1.0-cube.1)
+# Status: draft (the three batches were authored by an agent; not yet reviewed by the maintainer)
 #
 # failure_modes list the mistake, its priority and evidence. The wrong and correct
 # patterns and the mechanism live in one place only: the skill file named in
@@ -41,12 +43,12 @@ skills:
     covers:
       - "config tree: leaf (value) and group nodes"
       - "new Palistor({ config, initialValues, context, translator, notifier })"
-      - "store.start() and the no-`window` rule (a store starts nothing by itself in Node)"
+      - "store.start() and the no-`window` rule (a store starts nothing by itself in Node; a usePalistor store starts after its component's first commit: palistor-ssr)"
       - "useForm(store) / useForm(subtree) and the field spread"
       - "validate, isRequired, isVisible, isDisabled, isReadOnly, computed value"
       - "formatter, setter, onChange"
       - "submit / reset / setValues on the root, a group or a field; SubmitResult"
-      - "group resolve (async loading)"
+      - "group resolve (async loading); onError(error, { notify, t }) and its two strict-TypeScript forms; a group has no reload / resolveStatus / error"
       - "usePersist, useTranslator, useNotifier, useStoreContext"
       - "ExtractValues, DeepPartialValues, PalistorProxy, FieldProxyNode"
       - "routing to the four sub-skills"
@@ -138,7 +140,7 @@ skills:
       - mistake: "Waiting for a resolve that never starts"
         priority: MEDIUM
         status: active
-        source: "cube/core/node.ts (groupNode), cube/core/resolve.ts (touch, start), cube/ssr/serverMode.test.tsx (\"store.start()\", \"server: false in Node behaves like the client\")"
+        source: "cube/core/node.ts (groupNode), cube/core/resolve.ts (touch, start), cube/ssr/serverMode.test.tsx (\"store.start()\", \"server: false in Node behaves like the client\"), cube/ssr/usePalistor.test.tsx (\"the render starts nothing and reads what a server render reads; the effect starts everything once\", \"server: true is the manual mode: the hook starts nothing, store.start() does\")"
         documented_in: skills/palistor/references/async-resolve.md
   - name: palistor-lists
     slug: palistor-lists
@@ -153,7 +155,9 @@ skills:
       - "row validation and row submit"
       - "template field resolve and template resolve"
       - "filter block: server and client fields, where, param, debounce, $all, $toParams, list.filter controls"
-      - "resolve.pagination: paged, infinite, cursor; page cache; PagedResult and ctx.page"
+      - "resolve.pagination: paged, infinite, cursor; page cache; PagedResult and ctx.page; nextCursor: null ends a cursor / infinite feed"
+      - "lists nested in a row: filled by their own resolver, add / setItems or initialData (not by the outer resolver); dirty goes up to the owner row, its list and the form; store.reset() returns them to the loaded rows and requests nothing"
+      - "list onError(error, { notify, t }): the cast form inside defineList"
       - "PalistorRef, PalistorList, InferEntity, TemplateConfig, ListResolver"
     tasks:
       - "Render and edit a server-loaded list with loading, error and reload states"
@@ -294,12 +298,12 @@ skills:
       - mistake: "Jumping to a page that does not exist"
         priority: MEDIUM
         status: active
-        source: "cube/core/pagination.ts (setPage)"
+        source: "cube/core/pagination.ts (setPage, pastEnd), cube/core/pagination.test.ts (\"cursor: the page that came with nextCursor: null has no next one; nextPage, setPage and prefetch request nothing\")"
         documented_in: skills/palistor-lists/references/pagination.md
       - mistake: "Using total to decide whether more rows exist"
         priority: MEDIUM
         status: active
-        source: "cube/contract/sliceG/pagination.test.ts (A2, D7), cube/core/pagination.ts (hasNextPage)"
+        source: "cube/contract/sliceG/pagination.test.ts (A2, D7), cube/core/pagination.ts (hasNextPage), cube/core/pagination.test.ts (\"infinite: null wins over a total and a hasMore that say there is more\")"
         documented_in: skills/palistor-lists/references/pagination.md
       - mistake: "Reading the list's own rows inside its resolver"
         priority: MEDIUM
@@ -322,7 +326,7 @@ skills:
       - "nextStep, back, goTo, validate, submit, reset"
       - "step status and the steps collection"
       - "branching through a step isVisible"
-      - "step entry lifecycle: onEnter, resolve, onReady (not entered without `window` until store.start())"
+      - "step entry lifecycle: onEnter, resolve, onReady (not entered without `window` until store.start(); in a usePalistor store the first step is entered after the component's first commit)"
       - "persisted navigation"
       - "FlowProxyNode, FlowStepProxy, FlowStepsProxy, FlowValues, StepStatus, FlowError"
     tasks:
@@ -481,19 +485,23 @@ skills:
     type: sub-skill
     covers:
       - "usePalistor(options | () => options): one store per component instance"
+      - "usePalistor holds the store: nothing starts during a render, store.start() runs in an effect after the first commit; a render React throws away requests nothing; server: true as the manual mode; new Palistor() is not held"
       - "<PalistorProvider context translator notifier> and usePalistorContext"
       - "constructor options initialData, translator, notifier, server"
       - "initialData by node kind: field, group, list, list inside a row, first page of a paginated list, flow step"
-      - "what restarts a resolve that got initialData: declared deps, contextDeps, filter fields, reload()"
+      - "what restarts a resolve that got initialData: declared deps, contextDeps, filter fields, the list's reload() (a group has none)"
+      - "the one exception to 'initialData leaves the resolver's state': rows as initialData fill nested lists, a list's resolver does not"
       - "server mode (no `window`): nothing starts; loading reads true; store.start()"
-      - "suspense: true during a server render (fallback, client render of the boundary)"
+      - "suspense: true during a server render (fallback, client render of the boundary) and in the browser's first render of a usePalistor store (defaults, then the fallback once the store starts)"
+      - "onError(error, { notify, t }): the provider's notifier and translator in a module-level config"
       - "usePersist over initialData"
       - "InitialData<TConfig>, PalistorOptions, PalistorProviderProps"
     tasks:
       - "Render a list or form in the first HTML of a Next.js App Router page from data a Server Component fetched, with no store request on the server and no refetch after hydration"
       - "Have translated labels, the notifier and the store context in place for the first render, through the constructor or a provider"
       - "Create one store per component instance and share context, translator and notifier between stores"
-      - "Choose what a list, group or Suspense boundary without server data shows in the server HTML"
+      - "Choose what a list, group or Suspense boundary without server data shows in the server HTML and in the browser's first render"
+      - "Tell when a usePalistor store starts its resolvers and its first flow step, and what a first render may assert"
       - "Run a store's resolvers in a Node script or a test without a DOM"
     failure_modes:
       - mistake: "A module-level store for request data"
@@ -564,8 +572,16 @@ tensions:
     implication: "Server data passed as initialValues leaves the list empty or the resolve unanswered: the server sends a skeleton and the browser requests the data again. For a typed list it does not compile (TS2345)."
   - name: "Automatic dependency tracking vs initialData"
     skills: [palistor, palistor-lists, palistor-ssr]
-    description: "The core and lists skills say there is nothing to declare: a resolver re-runs on what it read. A resolve that got initialData has not run, so only declared dependencies restart it until its first real run."
+    description: "The core and lists skills say there is nothing to declare: a resolver re-runs on what it read. A resolve that got initialData has not run, so only declared dependencies restart it until its first real run. A list also has reload(); a group has none."
     implication: "A list that started from server rows silently ignores a field its resolver reads unless that field is in deps or is a filter field."
+  - name: "A store that starts in its constructor vs a store that starts after the commit"
+    skills: [palistor, palistor-lists, palistor-flows, palistor-ssr]
+    description: "The core, lists and flows skills say an eager resolve and the first step start when the store is created; that holds for new Palistor() in the browser. A usePalistor store is held until its component has committed."
+    implication: "An agent that expects a called resolver, resolveStatus \"pending\" or onEnter inside the first render of a usePalistor screen, or that lifts the hook above a Suspense boundary to save requests, follows a rule that no longer exists."
+  - name: "initialData vs a resolver's result for nested lists"
+    skills: [palistor-lists, palistor-ssr]
+    description: "initialData (and a restored draft) fills the lists nested in rows from the rows; a list's resolver does not."
+    implication: "An agent that returns nested arrays from the outer list's resolver gets empty nested lists that fetch on their first read."
 
 cross_references:
   - from: palistor
@@ -591,13 +607,13 @@ cross_references:
     reason: "A mapping also renames dirty / loading on lists and rows, never list methods or pagination members."
   - from: palistor
     to: palistor-ssr
-    reason: "Rendering on the server: usePalistor and PalistorProvider replace the module-level store and the effect hooks; the no-`window` rule and store.start() are detailed there."
+    reason: "Rendering on the server: usePalistor and PalistorProvider replace the module-level store and the effect hooks; the no-`window` rule, store.start() and the moment a usePalistor store starts are detailed there."
   - from: palistor-lists
     to: palistor-ssr
-    reason: "Rows a Server Component fetched go to the list through initialData; the first page of a paginated list and the declared-dependency limit are documented there."
+    reason: "Rows a Server Component fetched go to the list through initialData (nested lists included); the first page of a paginated list, the declared-dependency limit and the held first render of a usePalistor store are documented there."
   - from: palistor-flows
     to: palistor-ssr
-    reason: "A wizard rendered on the server enters no step until the browser; a step whose data came as initialData gets onReady right after onEnter."
+    reason: "A wizard rendered on the server enters no step until the browser, and in a usePalistor store not before the component's first commit; a step whose data came as initialData gets onReady right after onEnter."
   - from: palistor-ssr
     to: palistor
     reason: "Assumes config, store, useForm, group resolve options (deps, contextDeps, suspense) and usePersist."
@@ -631,8 +647,8 @@ gaps:
     status: open
   - skill: palistor-lists
     question: "A paginated list logs \"pagination invariant: window ordinal 1 … has no cached page\" on every query-key change."
-    context: "Looks like a Cube runtime defect; not mentioned in the skill."
-    status: open
+    context: "Looks like a Cube runtime defect; not mentioned in the skill. Resolved in Cube on 2026-11-24 (batch 3): the warning is no longer logged for a query-key change (a server filter, deps), from any page, nor after a failed first page; it stays for a window the pager holds for loaded. Evidence: cube/core/pagination.ts (project), cube/core/pagination.test.ts (\"a window page that is not cached yet is not an invariant violation\"); cube/ssr/initialDataDeps.test.ts and cube/ssr/initialDataLists.test.tsx assert that nothing is warned. No guidance changed: the skills never mentioned the warning."
+    status: resolved
   - skill: palistor-lists
     question: "Pagination and filter options not probed at runtime: persistence round-trip, scrollAnchor, keepPreviousData, maxPages, gcTime, revalidateOnHydrate, list Suspense, nested-list pagination."
     context: "Documented from the README, the public types and contract-test titles only."
@@ -659,8 +675,8 @@ gaps:
     status: open
   - skill: palistor-ssr
     question: "metadata.library_version is 0.1.0-cube.0, the current package.json version, but the published 0.1.0-cube.0 has no SSR API."
-    context: "The release that first ships SSR must run `intent validate --set-version <version>` (AGENTS.md, Releasing); until then the skill's version line names a release that lacks usePalistor and initialData."
-    status: open
+    context: "The release that first ships SSR must run `intent validate --set-version <version>` (AGENTS.md, Releasing); until then the skill's version line names a release that lacks usePalistor and initialData. Resolved at a0fc80b (release 0.1.0-cube.1): `intent validate --set-version 0.1.0-cube.1` set the five skills and the \"Targets\" line. Batch 3 reopens the question in another form, see the last gaps of this file."
+    status: resolved
   - skill: palistor-ssr
     question: "No fresh consumer-agent session and no description-activation run were executed for palistor-ssr."
     context: "The task check ssr-server-list passes on the reference solution and rejects the documented mistake; whether an agent that only has the skill completes the task, and whether the description loads on the prompts in tests/skills/discovery.md, is unverified."
@@ -669,3 +685,20 @@ gaps:
     question: "The `loading` and server-mode rules exist in the Cube runtime only."
     context: "store/ keeps the previous behavior (cube/contract/impl.ts, LOADING_ON_FIRST_READ). The skills describe the package entry, which runs on Cube."
     status: open
+  - skill: palistor
+    question: "Batch 3 describes behavior that the tagged v0.1.0-cube.1 does not have, while metadata.library_version and the \"Targets palistor v…\" line still say 0.1.0-cube.1."
+    context: "Stage 5а lives in the working tree after fe38200: v0.1.0-cube.1 starts a usePalistor store in its constructor and lacks the other changes. The release that ships Stage 5а must run `intent validate --set-version <version>` and update the \"Targets\" line (AGENTS.md, Releasing, step 4). The version fields of the planning records were left as they are, as at the previous release."
+    status: open
+  - skill: palistor
+    question: "The exported ResolveErrorContext type has no `t`."
+    context: "It is still the store implementation's `{ notify }`; `t` is passed at runtime (cube/core/hub.ts, errorContext) and joins the type in 0.1 (CubePlan, Phase 4). palistor, palistor-lists and palistor-ssr teach two strict-TypeScript forms: the full annotation in a plain config object, the cast inside defineList and Resolve<T>. Remove both when the type gains `t`."
+    status: open
+  - skill: palistor
+    question: "A group has no reload(), resolveStatus or error."
+    context: "A list has all three; a group API is planned for 0.1. palistor (async-resolve reference) and palistor-ssr state the absence and promise nothing: a group that started from initialData is re-run by its declared deps and contextDeps only."
+    status: open
+  - skill: palistor-lists
+    question: "Three statements of batch 3 have no named test."
+    context: "A list's resolver does not fill the nested lists of its rows (cube/core/listCube.ts, applyResolved; authoring probe: the nested list stays idle and empty, and its own resolver runs on the first read); a draft restored by usePersist fills nested lists (cube/core/restore.ts, restoreItemLists; authoring probe); a nested list's reload() clears dirty along the chain (authoring probe). The first one is also stated in palistor-ssr."
+    status: resolved
+    resolution: "Tests added before handoff of the same batch (2026-11-24): cube/contract/sliceC/entityListResolve.test.ts (\"a root list's resolver and the lists nested in its rows\", both implementations); cube/contract/sliceF/entityListPersist.test.ts (\"round-trip: a reload restores the root and per-entity lists\"); cube/core/listDirty.test.tsx (\"the nested list's reload() makes its rows the baseline: the chain is clean again\"). Cited in skills/palistor-lists/references/list-api.md."

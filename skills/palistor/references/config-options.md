@@ -162,4 +162,5 @@ export async function toggleEmail(next: boolean) {
   every successful resolve and by `reset(values)`. Errors are hidden again.
 - `reset(values)` applies `values` and makes the result the new baseline.
 - `dirty` on a field: the value differs from the baseline (objects and arrays are compared by their
-  JSON). On a group: any field below is dirty.
+  JSON). On a group: any field below is dirty, or a list below is (its membership, or that of a list
+  nested in its rows: the `palistor-lists` skill).

@@ -28,7 +28,7 @@ export const catalogConfig = {
     },
   }),
 
-  // (2) Load more. The server sends the first page with `nextCursor` and `hasMore`.
+  // (2) Load more. The server sends the first page with its `nextCursor`; `null` ends the feed.
   milestones: defineList<Milestone>({
     template: {
       id: { value: "" },

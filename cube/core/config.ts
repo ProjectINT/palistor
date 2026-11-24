@@ -7,12 +7,19 @@ export type Values = Record<string, any>;
 export type Translate = (key: string, ...args: any[]) => string;
 export type NotifyFn = (...args: any[]) => void;
 
+/** What `resolve.onError` gets next to the error (hub.errorContext): one object per store. */
+export interface ResolveErrorContext {
+  notify: NotifyFn;
+  t: Translate;
+}
+
 export interface ResolveConfig {
   /** Leaf → value, group → patch of values, list → array of rows (a list resolver also gets a context). */
   resolver: (values: Values, store: any, ctx?: any) => unknown;
   /** A synchronous placeholder applied when the run starts. Same result shape. Not for lists, as in store. */
   optimisticResolver?: (values: Values) => unknown;
-  onError?: (error: unknown, ctx: { notify: NotifyFn }) => void;
+  /** After the last retry. `notify` is the store's notifier, `t` its current translator (it follows setTranslator). */
+  onError?: (error: unknown, ctx: ResolveErrorContext) => void;
   /** Value paths that restart the resolver even before its first run. */
   deps?: string[];
   /** Context keys that must be non-null before a run starts; until then the resolve waits (idle) for setContext. Not for entity cubes, as in store. */
@@ -92,6 +99,21 @@ export function childKeys(c: CubeConfig, template = false): string[] {
     cache.set(c, keys);
   }
   return keys;
+}
+
+const withLists = new WeakMap<CubeConfig, boolean>();
+
+/** A template with a list somewhere below (its rows own lists): cached, a template is shared by every item. */
+export function hasLists(template: CubeConfig): boolean {
+  let hit = withLists.get(template);
+  if (hit === undefined) {
+    hit = childKeys(template, true).some((k) => {
+      const sub = template[k];
+      return Array.isArray(sub) || (isPlainObject(sub) && !isLeafConfig(sub) && hasLists(sub as CubeConfig));
+    });
+    withLists.set(template, hit);
+  }
+  return hit;
 }
 
 export type SubmitError = { path: string; message: string };

@@ -16,7 +16,7 @@ import { ServerModeBlock } from "./ServerModeBlock";
  * translator, the notifier and `workspace`.
  *
  *   1. ServerModeBlock — server mode and store.start(), made visible in the browser;
- *   2. EagerBlock      — what the browser does instead: the constructor starts the eager resolve;
+ *   2. EagerBlock      — what the browser does instead: usePalistor starts the store after the first commit;
  *   3. InstancesBlock  — one store per component instance, request data as initialData;
  *   4. ContextBlock    — a nested provider's context, followed live.
  */

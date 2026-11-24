@@ -149,9 +149,13 @@ describe("a list resolve that got initialData", () => {
 
 describe("a paginated list that got its first page as initialData", () => {
   let warn: ReturnType<typeof vi.spyOn>;
-  // A query-key change warns "pagination invariant: window ordinal … has no cached page" (not part of initialData).
-  beforeEach(() => { warn = vi.spyOn(console, "warn").mockImplementation(() => {}); });
-  afterEach(() => { warn.mockRestore(); });
+  // A query-key change is not a "pagination invariant" violation: nothing here warns (Stage 5а).
+  beforeEach(() => { warn = vi.spyOn(console, "warn"); });
+  afterEach(() => {
+    const warned = warn.mock.calls.map((c: unknown[]) => String(c[0]));
+    warn.mockRestore();
+    expect(warned).toEqual([]);
+  });
 
   function pagedStore() {
     const calls: Array<{ page: number; search: string; sort: string }> = [];

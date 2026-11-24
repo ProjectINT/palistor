@@ -109,6 +109,7 @@ skills:
       - ProjectINT/palistor:cube/core/hub.ts
       - ProjectINT/palistor:cube/core/cube.ts
       - ProjectINT/palistor:cube/react/useForm.ts
+      - ProjectINT/palistor:cube/react/usePalistor.ts
       - ProjectINT/palistor:react/useForm.ts
       - ProjectINT/palistor:store/defineList.ts
       - ProjectINT/palistor:store/store/types.ts
@@ -144,6 +145,7 @@ skills:
     sources:
       - ProjectINT/palistor:cube/defineFlow.ts
       - ProjectINT/palistor:cube/core/flow.ts
+      - ProjectINT/palistor:cube/react/usePalistor.ts
       - ProjectINT/palistor:store/flow/defineFlow.ts
     references:
       - references/flow-api.md

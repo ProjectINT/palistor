@@ -61,13 +61,14 @@ export function queryPapers(rows: Paper[], page: { offset: number; pageSize: num
 /**
  * Keyset pagination: the page that starts at the row with id `cursor` (the
  * first page for `null`). `nextCursor` is the id of the row after the page;
- * `hasMore: false` on the last page ends the feed.
+ * `nextCursor: null` on the last page ends the feed, also when that page is
+ * full (12 rows by 4 here).
  */
 export function queryMilestones(rows: Milestone[], cursor: string | null, pageSize: number): PagedResult<Milestone> {
   const start = cursor === null ? 0 : Math.max(0, rows.findIndex((row) => row.id === cursor));
   const items = rows.slice(start, start + pageSize);
   const next = start + items.length;
-  return { items, nextCursor: rows[next]?.id ?? null, hasMore: next < rows.length };
+  return { items, nextCursor: rows[next]?.id ?? null };
 }
 
 // The talks exist only in the browser: the server has no data for that list.

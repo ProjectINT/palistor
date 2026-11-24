@@ -15,7 +15,8 @@ type FlowStore = Palistor<typeof flowConfig>;
  * The client side of /ssr/flow. It renders on the server into HTML and again
  * in the browser during hydration, each time with a store of its own built
  * from the same props. The server's store is in server mode and enters no
- * step; the browser's enters the active step of each flow in its constructor.
+ * step; the browser's enters the active step of each flow once the view has
+ * committed (usePalistor calls store.start() in an effect).
  */
 export function FlowView({ profile }: { profile: Profile }) {
   const t = useTranslations("ssr.flow");

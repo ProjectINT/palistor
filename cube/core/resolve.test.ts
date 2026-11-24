@@ -3,7 +3,10 @@
  * Shared behavior is in cube/contract/sliceB and sliceJ.
  */
 import { describe, it, expect, vi } from "vitest";
+import { renderHook, act } from "@testing-library/react";
 import { Palistor } from "../palistor";
+import { defineList } from "../defineList";
+import { useForm } from "../react/useForm";
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
@@ -82,5 +85,89 @@ describe("group loading", () => {
     release({ brand: "T" });
     await flush();
     expect(car.loading).toBe(false);
+  });
+});
+
+describe("onError gets the store's translator", () => {
+  // store: the context is { notify } only, so an error toast could not be translated by the config.
+  type Ctx = { notify: (...args: any[]) => void; t: (key: string, ...args: any[]) => string };
+  const en = (key: string) => `en:${key}`;
+  const de = (key: string) => `de:${key}`;
+  const boom = async (): Promise<never> => { throw new Error("boom"); };
+  /** onError the way a config writes it: the message goes through `t`. */
+  const report = (key: string) => (_error: unknown, { notify, t }: Ctx) => notify(t(key));
+
+  it("a group, a list, a paginated list and a row field: every onError can translate its message", async () => {
+    const notifier = vi.fn();
+    const store = new Palistor({
+      translator: en,
+      notifier,
+      config: {
+        profile: { resolve: { resolver: boom, onError: report("profile") }, name: { value: "" } },
+        users: defineList({
+          template: { id: { value: "" }, score: { value: 0, resolve: { resolver: boom, onError: report("score") } } },
+          resolve: { resolver: boom, onError: report("users") },
+        }) as any,
+        orders: defineList({
+          template: { id: { value: "" } },
+          resolve: { resolver: boom, onError: report("orders"), pagination: { pageSize: 10 } },
+        }) as any,
+      },
+    });
+    const p = store.proxy as any;
+    void p.profile.name.value;
+    void p.users.items;
+    void p.orders.items;
+    await flush();
+    store.set({ id: "u1", score: 0 });
+    p.users.add("u1");
+    void p.users.items[0].score.value;
+    await flush();
+
+    expect(notifier.mock.calls.map((c) => c[0]).sort()).toEqual(["en:orders", "en:profile", "en:score", "en:users"]);
+  });
+
+  it("the template resolve of useForm(entity, template) gets it too", async () => {
+    const notifier = vi.fn();
+    const store = new Palistor({
+      translator: en,
+      notifier,
+      config: {
+        users: [{ id: { value: "" }, name: { value: "" } }],
+        editUser: { name: { value: "" }, resolve: { resolver: boom, onError: report("editUser") } },
+      } as any,
+    });
+    store.set({ id: "u1", name: "Ann" });
+    (store.proxy as any).users.add("u1");
+    renderHook(() => useForm((store.proxy as any).users.items[0], (proxy: any) => proxy.editUser));
+    await act(flush);
+
+    expect(notifier.mock.calls).toEqual([["en:editUser"]]);
+  });
+
+  it("`t` is the current translator: one reference that follows setTranslator, and the key without a translator", async () => {
+    const seen: Ctx[] = [];
+    const store = new Palistor({
+      config: {
+        filter: { value: "" },
+        profile: {
+          resolve: { resolver: boom, deps: ["filter"], onError: (_error: unknown, ctx: Ctx) => { seen.push(ctx); } },
+          name: { value: "" },
+        },
+      },
+    });
+    const p = store.proxy as any;
+    void p.profile.name.value;
+    await flush();
+    expect(seen[0].t("load")).toBe("load"); // no translator: the identity
+
+    store.setTranslator(de);
+    expect(seen[0].t("load")).toBe("de:load"); // a `t` kept from the first error follows the switch
+    p.filter.value = "x";
+    await flush();
+    expect(seen).toHaveLength(2);
+    expect(seen[1].t).toBe(seen[0].t);
+    expect(seen[1].notify).toBe(seen[0].notify);
+    expect(seen[1]).not.toBe(seen[0]); // a context object of its own per call
   });
 });

@@ -15,7 +15,7 @@ A flow node is a group node plus navigation. The group members (`isVisible`, `di
 | `errors` | `ReadonlyArray<FlowError>` | result of the last `validate()` or `submit()`; paths relative to the flow (`account.email`) |
 | `steps` | steps collection | see below |
 | `values` | `FlowValues<S>` | live values of all steps keyed by step key, hidden steps included |
-| `loading` | `boolean` | any step's resolve is pending, or the active step's is about to start (before `store.start()` where `window` is not defined) |
+| `loading` | `boolean` | any step's resolve is pending, or the active step's is about to start (before `store.start()`: where `window` is not defined, or in a `usePalistor` store whose component has not committed yet) |
 | `isInvalid` | `boolean` | live: some visited, visible step has an error (no submit needed) |
 | `nextStep()` | `void` | go to the next visible step; with none ahead start `submit()` without awaiting it |
 | `back()` | `void` | pop the visit stack; no-op when it is empty |
@@ -51,7 +51,7 @@ A step is a group node (fields as children, `values`, `dirty`, `reset()`, `setVa
 
 ## Step entry lifecycle
 
-Entering a step happens at store creation (first step), on `nextStep()` / `back()` / `goTo()`, after a reset that covers the flow, and after hydration onto a different step.
+Entering a step happens at store creation (first step; in a store made with `usePalistor`, after the component's first commit), on `nextStep()` / `back()` / `goTo()`, after a reset that covers the flow, and after hydration onto a different step.
 
 1. `onEnter(flowValues, store)`.
 2. The step's `resolve`, if it has one and its state is idle. Reading `status`, `isInvalid` or `loading` of a step never starts its resolve.
@@ -59,7 +59,7 @@ Entering a step happens at store creation (first step), on `nextStep()` / `back(
 
 Both callbacks are fire-and-forget; their errors are swallowed.
 
-Where `window` is not defined (a server render, a Node script or test) nothing is entered: no `onEnter`, no step `resolve`, no `onReady` until `store.start()`, which enters the active step once. Until then the active step's `resolve` reads `loading: true`.
+Where `window` is not defined (a server render, a Node script or test) nothing is entered: no `onEnter`, no step `resolve`, no `onReady` until `store.start()`, which enters the active step once. Until then the active step's `resolve` reads `loading: true`. A store made with `usePalistor` is held the same way during a render, in the browser too: the hook calls `store.start()` once the component has committed (the `palistor-ssr` skill). `new Palistor()` in the browser enters the first step in its constructor. Source: `cube/ssr/usePalistor.test.tsx` ("usePalistor: the store starts after the commit"), `cube/core/flow.ts` (`enterCurrent`).
 
 A step whose data came with the store's `initialData` option (the `palistor-ssr` skill) has nothing to request: its first entry runs `onEnter` and then `onReady` at once (after the re-run, if one of the step's declared dependencies changed before that entry). A later entry runs `onEnter` only, as for any step that is already resolved.
 

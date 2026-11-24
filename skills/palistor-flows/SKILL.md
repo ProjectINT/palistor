@@ -20,6 +20,7 @@ metadata:
 sources:
   - 'ProjectINT/palistor:cube/defineFlow.ts'
   - 'ProjectINT/palistor:cube/core/flow.ts'
+  - 'ProjectINT/palistor:cube/react/usePalistor.ts'
   - 'ProjectINT/palistor:store/flow/defineFlow.ts'
 requires:
   - palistor
@@ -278,6 +279,7 @@ export function Wizard() {
 A step config accepts `onEnter(flowValues, store)` and `onReady(flowValues, store)` next to everything a group accepts. Entering a step runs `onEnter`, then starts the step's `resolve` if it has one and has not run, then `onReady` once that run settles (also after a failure; without a `resolve`, right after `onEnter`).
 
 - The first step is entered when the store is created (for a module-level store, at module load) — in the browser. Where `window` is not defined (a server render, a Node script or test) no step is entered: `onEnter` and `onReady` are not called and no step `resolve` runs until `store.start()`, and the active step's `resolve` reads `loading: true` meanwhile. A test that expects `onEnter` in a `node` environment calls `store.start()` or creates the store with `new Palistor({ config, server: false })`.
+- In a store made with `usePalistor` the first step is entered after the component's first commit, not during the render: the hook holds the store until then, so a render React throws away never runs `onEnter`. Do not expect `onEnter` to have run inside the first render. Source: `cube/ssr/usePalistor.test.tsx` ("the render starts nothing and reads what a server render reads; the effect starts everything once", "usePalistor: a render React throws away starts nothing", "new Palistor() outside the hook is not held: in the browser its constructor starts it").
 - For a wizard that is rendered on the server (Next.js App Router), or a step whose data a Server Component already fetched, read `palistor-ssr`.
 - Re-entering a step runs `onEnter` again. The resolve result is cached, so the resolver and `onReady` do not run again until the flow is reset.
 - Both callbacks are fire-and-forget: a throw or a rejection is swallowed and never blocks navigation.

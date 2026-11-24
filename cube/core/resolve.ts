@@ -33,7 +33,7 @@ export interface Resolving {
   readonly lazy: boolean;
   /**
    * A first run is coming and there is no result yet: scheduled for the next
-   * microtask, or held back by server mode until store.start(). Reads as
+   * microtask, or held back until store.start() (hub.held). Reads as
    * `loading`, so the server's render and the client's first one agree.
    */
   readonly due: boolean;
@@ -229,7 +229,11 @@ export class ResolveState implements Resolving {
     this.primary.hub.deferred.delete(this);
   }
 
-  /** Full-form reset: back to idle, an in-flight run is dropped, the next read starts over. */
+  /**
+   * Back to idle: an in-flight run is dropped, the next read starts over. A
+   * flow restart does it to every step; a full-form reset to the entity
+   * resolves that have no result to keep (hub.resetEntities).
+   */
   reset() {
     this.run_ = {};
     this.status = "idle";
@@ -246,7 +250,7 @@ export class ResolveState implements Resolving {
   start() {
     const { primary: cube, config } = this;
     const hub = cube.hub;
-    // Server mode: no run before store.start(), which picks this one up.
+    // Held: no run before store.start(), which picks this one up.
     if (hub.held) { hub.deferred.add(this); return; }
     if (!this.contextReady()) { this.park(); return; }
     this.waiting = false;
@@ -320,7 +324,7 @@ export class ResolveState implements Resolving {
     const drift = obs.changed();
     const rerun = this.rerun;
     this.error = lastError;
-    try { config.onError?.(lastError, { notify: hub.notify }); } catch { /* onError must not break the store */ }
+    try { config.onError?.(lastError, hub.errorContext); } catch { /* onError must not break the store */ }
     hub.resolveBatch(() => { this.status = "error"; this.bump(); this.settle(obs); });
     if (rerun || (drift && this.mayRestart())) this.start();
     return undefined;

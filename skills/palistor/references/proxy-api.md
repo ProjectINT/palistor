@@ -31,7 +31,7 @@ type-check on an adapter's props but are `undefined` at runtime unless passed ex
 | `reset(values?)` | `void` | Back to the baseline, or to `values`, which become the new baseline |
 | `setValues(patch)` | `void` | Bulk write: one notification, no `setter` / `onChange` |
 | `submitting` | `boolean` | This node's submit is running |
-| `dirty` | `boolean` | Any field below differs from the baseline |
+| `dirty` | `boolean` | Any field below differs from the baseline, or a list below is dirty: its membership, or that of a list nested in its rows (the `palistor-lists` skill) |
 | `loading` | `boolean` | The group's `resolve` is running or about to run. Reading it starts a lazy resolve, as reading a child does (async resolve reference) |
 | `revalidate` | `boolean` | Errors of this subtree are visible (set by a submit, cleared by `reset`) |
 | `isVisible` | `boolean` | The group's own flag; `true` unless configured |
@@ -87,8 +87,12 @@ The constructor also takes `context`, `translator` and `notifier` (integrations 
 | `context`, `setContext(patch)` | Data for callbacks that is not part of the form (integrations reference) |
 | `setTranslator(t)`, `setNotifier(fn)` | What `useTranslator` / `useNotifier` call (integrations reference) |
 | `persist` | Draft persistence manager (integrations reference) |
-| `start()` | Runs what a store starts by itself: eager resolves, a flow's first step, resolves that were already read. The constructor calls it wherever `window` exists; in a Node script or a test without a DOM call it yourself (async resolve reference). Idempotent |
+| `start()` | Runs what a store starts by itself: eager resolves, a flow's first step, resolves that were already read. The constructor of `new Palistor()` calls it wherever `window` exists; in a Node script or a test without a DOM call it yourself (async resolve reference). For a store made with `usePalistor` the hook calls it once the component has committed (the `palistor-ssr` skill). Idempotent |
 | `set`, `delete`, `rekey`, `invalidate` | List entities: see the `palistor-lists` skill |
 
 `subscribe(node, listener)`, `getVersion()` and `getNodeVersion(node)` exist for `useForm` itself;
 application code does not need them.
+
+Source for `start()` and for the lists in a group's `dirty`: `cube/ssr/usePalistor.test.tsx`
+("usePalistor: the store starts after the commit"), `cube/core/listDirty.test.tsx`
+("three levels: an edit in the deepest list makes every list, row and group above it dirty").

@@ -138,3 +138,34 @@ describe("built-in drivers", () => {
     expect(onError).toHaveBeenCalledWith(quota, "save");
   });
 });
+
+describe("a draft's rows in a paginated nested list", () => {
+  // A per-entity list owns its rows whichever way they come: add(), a fetched page, a hydrated
+  // non-paginated list. The hydrated paginated one left them without an owner, so they did not go
+  // with the owner on store.delete and were invisible to the lists above it.
+  it("are owned by the row the list belongs to", async () => {
+    const driver = memoryDriver();
+    driver.storage.set("s", JSON.stringify({
+      users: [{ id: "u1", name: "Alice", contacts: [{ id: "_tmp_c1", phone: "+1" }] }],
+    }));
+    const store = new Palistor({
+      config: {
+        users: defineList({
+          template: {
+            id: { value: "" },
+            name: { value: "" },
+            contacts: defineList({
+              template: { id: { value: "" }, phone: { value: "" } },
+              resolve: { resolver: async () => ({ items: [], total: 0 }), onError: vi.fn(), pagination: { pageSize: 10 } },
+            }),
+          },
+        }) as any,
+      },
+    });
+    await store.persist.enable({ key: "s", driver });
+
+    expect(store.entityRegistry.ownerOf("_tmp_c1")?.ownerId).toBe("u1");
+    store.delete("u1");
+    expect(store.entityRegistry.has("_tmp_c1")).toBe(false); // the cascade reaches it
+  });
+});

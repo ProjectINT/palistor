@@ -49,7 +49,7 @@ Read the `palistor` skill first: this skill assumes its config → store → `us
 A Client Component renders twice: on the server into HTML, then in the browser during hydration. A store cannot be serialized, so each pass builds its own store from the same props, and both first renders must produce the same markup. Three rules follow:
 
 1. Everything the first render shows goes into the store's constructor: the server's data as `initialData`, the translator, the context. Effects do not run on the server.
-2. The server pass starts nothing. Where `window` is not defined a store calls no resolver, fetches no page and enters no flow step. Data access on the server is the Server Component's job.
+2. No render starts anything. Where `window` is not defined a store calls no resolver, fetches no page and enters no flow step: data access on the server is the Server Component's job. In the browser a `usePalistor` store starts after its component has committed, so its first render shows what the server sent.
 3. A store that holds data of the current request is created per component instance with `usePalistor`, never at module level.
 
 ## Setup
@@ -60,7 +60,7 @@ Three files: the Client Component that owns the store, the Server Component that
 // app/[accountId]/customers/CustomersView.tsx
 "use client";
 import { defineList, useForm, usePalistor } from "palistor";
-import type { PalistorRef, TranslateFn } from "palistor";
+import type { PalistorRef, ResolveErrorContext, TranslateFn } from "palistor";
 
 export interface Customer { id: string; name: string }
 declare function fetchCustomers(accountId: string, search: string): Promise<Customer[]>; // the browser's API client
@@ -74,6 +74,11 @@ const customersConfig = {
       // Never runs on the server. In the browser: when the search changes, or on reload().
       resolver: async (values, store, ctx) =>
         fetchCustomers(String(store.context.accountId), String(ctx.filter.values.search)),
+      // The store's notifier and translator (here the provider's) reach the config: no hook is needed.
+      onError: (error: unknown, ctx: ResolveErrorContext) => {
+        const { notify, t } = ctx as ResolveErrorContext & { t: TranslateFn }; // `t` is not in the declared type yet
+        notify(t("customers.loadFailed"));
+      },
     },
   }),
 };
@@ -143,12 +148,12 @@ How it runs:
 
 - `usePalistor(options)` or `usePalistor(() => options)` returns the same store on every render of that component instance, and two instances get two stores. The function form is called when the store is created, not on every render; prefer it when building the options costs something.
 - The nearest `<PalistorProvider>` is merged into the constructor: `context` is `{ ...provider, ...own }`, `translator` and `notifier` are the store's own option when given, the provider's otherwise. So the first render, the server's included, is translated and resolvers see the context on their first run.
-- On the server the store is in server mode (`server`, default `typeof window === "undefined"`): nothing starts. A resolve that will start in the browser reads `loading: true` on both sides, so the two first renders agree.
-- A node that got `initialData` is in the state its resolver's result would have left: values, `dirty: false`, `resolveStatus: "resolved"`, `loading: false`, and `reset()` returns to this data. Its resolver is not called on the server and not called after hydration.
+- On the server the store is in server mode (`server`, default `typeof window === "undefined"`): nothing starts. In the browser `usePalistor` holds the store until its component has committed, so the first render starts nothing either ("Know when the store starts" below). A resolve that will start reads `loading: true` on both sides (a list also `resolveStatus: "idle"`), so the two first renders agree.
+- A node that got `initialData` is in the state its resolver's result would have left: values, `dirty: false`, `loading: false` (a list also `resolveStatus: "resolved"`), and `reset()` returns to this data without a request. Its resolver is not called on the server and not called after hydration. One exception: rows given as `initialData` also fill the lists nested in them, which a list's resolver never does (next section).
 
 Result to check: "View source" shows the customer names and the translated label; the browser console has no hydration error; the Network tab shows no customers request until the search changes.
 
-Source: `cube/ssr/usePalistor.test.tsx`, `cube/ssr/serverMode.test.tsx`, `cube/ssr/hydration.test.tsx`, `cube/ssr/initialData.test.tsx` ("initialData under server render and hydration").
+Source: `cube/ssr/usePalistor.test.tsx`, `cube/ssr/serverMode.test.tsx`, `cube/ssr/hydration.test.tsx`, `cube/ssr/initialData.test.tsx` ("initialData under server render and hydration"), `cube/ssr/initialDataLists.test.tsx` ("the form reset keeps the server's result: the list stays resolved, and reading it requests nothing").
 
 ## Core Patterns
 
@@ -161,8 +166,8 @@ Source: `cube/ssr/usePalistor.test.tsx`, `cube/ssr/serverMode.test.tsx`, `cube/s
 | Field | its value | the value is also the dirty baseline |
 | Group | an object with some of its fields | the group's `resolve`, when the data carries a value for at least one field below it, sub-groups included. An empty object or data that holds only lists does not count: a group resolver never returns lists |
 | List | an array of rows, each with `id` | the list's `resolve`; the rows are its membership and baseline |
-| List inside a row | the rows under that key of the owner row | that row's list. An owner row without the key loads its list on the first read |
-| Paginated list | an array, or `{ items, total?, nextCursor?, hasMore? }` as the resolver returns it | the first page (`pagination.initialPage`) of the current query, filed as a fetched page. Other pages are fetched as usual |
+| List inside a row | the rows under that key of the owner row | that row's list; an empty array is an answer too. An owner row without the key loads its list on the first read |
+| Paginated list | an array, or `{ items, total?, nextCursor?, hasMore? }` as the resolver returns it | the first page (`pagination.initialPage`) of the current query, filed as a fetched page. Other pages are fetched as usual; `nextCursor: null` says there are none (`cursor` and `infinite` modes) |
 | Flow step | `{ [flowKey]: { [stepKey]: { … } } }` | the step's `resolve`: its first entry runs `onEnter` and then `onReady`, without a request |
 
 ```ts
@@ -201,13 +206,14 @@ export function useOrdersStore(firstPage: { rows: Order[]; count: number }) {
 Rules the types do not show:
 
 - **The data must answer the request the store would send now**: the initial filter values, the first page, this context. The store files the rows under its current query and does not check them; a later filter or page change sends a request as usual.
-- **Only declared dependencies exist until the first real run.** No resolver has run in the browser, so its reads are unknown. A resolve that got data re-runs on a path in `resolve.deps`, on a key in `contextDeps` (group and field resolves; a paginated list ignores it), on a server filter field, and on `reload()`; a paginated list fetches its other pages as usual. A form value or context key the resolver merely reads does not re-run it: list the value in `deps`. After one real run the usual automatic tracking is back.
+- **Only declared dependencies exist until the first real run.** No resolver has run in the browser, so its reads are unknown. A resolve that got data re-runs on a path in `resolve.deps`, on a key in `contextDeps` (group and field resolves; a paginated list ignores it), on a server filter field of the list, and on the list's `reload()`; a paginated list fetches its other pages as usual. A group has no `reload()` (nor `resolveStatus` or `error`: a list has all three), so a group that started from `initialData` is re-run by its declared `deps` and `contextDeps` only. A form value or context key the resolver merely reads does not re-run it: list the value in `deps`. After one real run the usual automatic tracking is back.
+- **Only `initialData` and a restored draft fill a nested list from its owner's row.** A nested array in a row that a list's resolver returns is not a nested list's membership: that list is filled by its own resolver, by `add` / `setItems`, or by `initialData`. This is the one place where `initialData` leaves more than the resolver's result would.
 - **The context must be there from the start too**: in the `usePalistor` options or the provider. A `contextDeps` key that arrives after mount is a change and re-runs the resolver right after hydration.
 - **Read once.** `config`, `initialData`, `initialValues`, `fieldMapping` and `server` are taken when the store is created. New data from the server needs a new component instance: put a `key` on the component.
 - **`initialData` exists in the constructor only.** There is no method that adds it later, which is what keeps request data out of a shared store.
 - **`initialValues` is not a substitute**: those are defaults. A list does not take rows from them and a node with `resolve` still resolves (Common Mistakes).
 
-Source: `cube/ssr/initialData.test.tsx`, `cube/ssr/initialDataLists.test.tsx`, `cube/ssr/initialDataFlow.test.ts`, `cube/ssr/initialDataDeps.test.ts`, `cube/core/restore.ts`.
+Source: `cube/ssr/initialData.test.tsx`, `cube/ssr/initialDataLists.test.tsx` ("a nested list that carried data is resolved and never fetched; one that did not is fetched once read"), `cube/ssr/initialDataFlow.test.ts`, `cube/ssr/initialDataDeps.test.ts`, `cube/core/pagination.test.ts` ("a first page given as initialData with nextCursor: null is a complete feed"), `cube/core/restore.ts` (`restoreItemLists`), `cube/core/listCube.ts` (`applyResolved`), `cube/core/node.ts` (`groupNode`, `listNode`), `cube/contract/sliceC/entityListResolve.test.ts` ("a root list's resolver and the lists nested in its rows"), `cube/contract/sliceF/entityListPersist.test.ts` ("round-trip: a reload restores the root and per-entity lists").
 
 ### Translate and share context from the first render
 
@@ -217,19 +223,35 @@ Source: `cube/ssr/initialData.test.tsx`, `cube/ssr/initialDataLists.test.tsx`, `
 - The context is compared per key: an inline `context={{ locale }}` with the same values is not a change. Keep the translator a stable function: a new one retranslates.
 - `usePalistorContext<T>()` reads the provider's `context` in a component and re-renders it when a key changes. It is the provider's value, not a store's: `store.context` also has the store's own keys.
 - A store made with `new Palistor` is not touched by the provider. `useTranslator`, `useNotifier` and `useStoreContext` still work for it, but they register in an effect, after the first render.
+- Every resolve's `onError(error, { notify, t })` gets the store's notifier and its current translator (`t` follows a later change and returns the key when there is none), so a module-level config words its error toast without a hook: `notify(t("customers.loadFailed"))`. The exported `ResolveErrorContext` type declares only `notify` so far. Under `strict`, inside `defineList` take `ctx: ResolveErrorContext` and cast, as `customersConfig` in Setup does; in a plain config object annotate the parameter in full, as the example in "Run a store without a browser" does.
 
-Source: `cube/ssr/usePalistor.test.tsx` ("the provider's values are in the constructor", "changes after mount reach the store", "PalistorProvider and usePalistorContext"), `cube/react/provider.tsx`.
+Source: `cube/ssr/usePalistor.test.tsx` ("the provider's values are in the constructor", "changes after mount reach the store", "PalistorProvider and usePalistorContext"), `cube/core/resolve.test.ts` ("onError gets the store's translator"), `cube/react/provider.tsx`.
+
+### Know when the store starts
+
+`usePalistor` builds the store held: a render starts nothing, in the browser as on the server. An effect calls `store.start()` once the component has committed.
+
+- Nothing means no eager (`lazy: false`) resolver, no lazy resolver on a read, no page fetch and no flow step entry (`onEnter`, `onReady`). `start()` then enters each flow's active step and starts the eager resolves and every resolve the render read. It is idempotent: under `<StrictMode>` the effect runs twice and everything still starts once.
+- Until then, whatever is going to start reads `loading: true`, and a list reads `resolveStatus: "idle"`. That is what a server render shows, so the browser's first render equals the server's HTML by construction.
+- A render React throws away leaves a store that has requested nothing: a transition interrupted because a store read through `useSyncExternalStore` (a router, another state library) changed meanwhile, or a component that suspends before its first commit. React keeps no hook state of such a render, so the options function runs again and another store is built; only the committed instance's store starts.
+- What a child's effect asks of the store before the hook's own effect (a child's effects run first), for example `list.reload()`, is not lost: the start runs it, once.
+- `server: true` in the options is the manual mode: the hook never starts the store, and `store.start()` is yours to call.
+- A store made with `new Palistor()` is not held: in the browser its constructor starts it.
+- Code written when the hook's store started in its constructor needs one check: eager resolves and the first `onEnter` now run after the first commit, and in the first render an eager list reads `resolveStatus: "idle"`, not `"pending"` (`loading` is `true` either way). Expect no resolver call and no `"pending"` during the first render.
+
+Source: `cube/ssr/usePalistor.test.tsx` ("usePalistor: the store starts after the commit", "usePalistor: a render React throws away starts nothing", "StrictMode (development): React renders the component twice, and still one store is built and what it starts, starts once", "a render that suspends before its first commit keeps no store: the retry builds another one, and only that one starts"), `cube/react/usePalistor.ts`, `cube/palistor.ts` (`start`).
 
 ### Decide what a node without server data shows
 
-A resolve that got no data starts in the browser, after hydration. What the server sends for it:
+A resolve that got no data starts in the browser, once the store has started (after hydration). What is shown until its data lands:
 
-- Default: `loading` is `true` in the server's HTML and in the browser's first render, so `if (list.loading) return <Skeleton />` gives the same skeleton on both sides (`list.isInitialLoading` on a paginated list). `resolveStatus` is `"idle"` on both sides.
-- `resolve.options.suspense: true`: there is no run to wait for on the server, so reading the node's fields or rows there throws, React sends the fallback of the nearest `<Suspense>` boundary and the content renders in the browser. The rest of the page is rendered normally. The boundary is required: without one the error fails the server render.
-- After such a fallback the browser mounts the component as on any first mount: a component that reads only the node's fields shows the defaults until the data lands. To avoid that step pass `initialData` (the node then renders on the server), or return a skeleton on `loading` before reading the fields: reading `loading` alone never triggers the fallback.
+- Default: `loading` is `true` in the server's HTML and in the browser's first render, so `if (list.loading) return <Skeleton />` gives the same skeleton on both sides (`list.isInitialLoading` on a paginated list). A list's `resolveStatus` is `"idle"` on both sides.
+- `resolve.options.suspense: true`, on the server: there is no run to wait for, so reading the node's fields or rows there throws, React sends the fallback of the nearest `<Suspense>` boundary and the content renders in the browser. The rest of the page is rendered normally. The boundary is required: without one the error fails the server render.
+- `suspense: true`, in the browser: a store held by `usePalistor` does not throw that error (one built with `server: true` is in server mode there too, and does until `store.start()`). The first render shows the node's defaults (an empty list) with `loading: true`, since a held store has no run to throw. Once the store starts, a component that read the node's own `loading`, and any reader of a list, re-renders and suspends: the boundary's fallback, then the data. The component that calls `usePalistor` may read the node itself or leave it to a child: it suspends after its commit, React keeps its state, and one store sends one request. A `<Suspense>` boundary is still required above whatever reads the node.
+- A component that reads only a group's fields, never the group's own `loading`, is not re-rendered by the start: it shows the defaults until the data lands and never shows the fallback on a client mount. Read the group's `loading` in that component, or pass `initialData` (the node then renders on the server). Reading `loading` alone never suspends: returning a skeleton on it before the fields are read shows your skeleton instead of the fallback.
 - The thrown error carries the digest Next.js uses for "render this boundary in the browser" (`BAILOUT_TO_CLIENT_SIDE_RENDERING`), so Next sends the fallback without logging. With another server renderer the error reaches the server's `onError`, and hydration reports one recoverable error for the boundary.
 
-Source: `cube/ssr/hydration.test.tsx`, `cube/ssr/suspense.test.tsx`, `cube/contract/sliceC/listResolve.test.ts` (`resolveStatus` and `loading` before the first run), `cube/core/resolve.ts` (`clientOnly`).
+Source: `cube/ssr/usePalistor.test.tsx` ("usePalistor and Suspense"), `cube/ssr/hydration.test.tsx`, `cube/ssr/suspense.test.tsx`, `cube/contract/sliceC/listResolve.test.ts` (`resolveStatus` and `loading` before the first run), `cube/core/resolve.ts` (`clientOnly`), `cube/core/cube.ts` (`touch`: the error is thrown in server mode only).
 
 ### Keep a draft over the server's data
 
@@ -241,7 +263,7 @@ A Node script or a test with a `node` environment has no `window`, so the store 
 
 ```ts
 import { Palistor } from "palistor";
-import type { ResolveErrorContext } from "palistor";
+import type { NotifyFn, TranslateFn } from "palistor";
 
 declare function loadProfile(): Promise<{ name: string }>;
 
@@ -251,7 +273,8 @@ const store = new Palistor({
       name: { value: "" },
       resolve: {
         resolver: async () => loadProfile(),
-        onError: (error: unknown, ctx: ResolveErrorContext) => ctx.notify("Could not load the profile"),
+        // A plain config object: annotate the context in full. Without a translator `t` returns the key.
+        onError: (_error: unknown, { notify, t }: { notify: NotifyFn; t: TranslateFn }) => notify(t("errors.loadProfile")),
         options: { lazy: false },
       },
     },
@@ -262,10 +285,11 @@ store.start(); // runs what the constructor runs in a browser; calling it again 
 ```
 
 - `store.start()` enters each flow's active step and starts the eager resolves and every resolve that was read (or reloaded) before it. A lazy resolve nobody has read still waits for its first read.
-- `new Palistor({ config, server: false })` makes the store behave as in the browser from the start. `server: true` gives a jsdom test the server's behavior.
+- After `start()` the store is out of server mode: a `suspense: true` node read for the first time is not left to the browser. No bail-out error is thrown and the read starts its run, as in the browser.
+- `new Palistor({ config, server: false })` makes the store behave as in the browser from the start. `server: true` gives a jsdom test the server's behavior; in the options of `usePalistor` it also stops the hook from starting the store.
 - `start()` is not a way to load data during a server render: the render does not wait for the resolvers. Fetch in the Server Component and pass `initialData`.
 
-Source: `cube/ssr/serverMode.test.tsx` ("store.start()", "server: false in Node behaves like the client").
+Source: `cube/ssr/serverMode.test.tsx` ("store.start()", "server: false in Node behaves like the client"), `cube/ssr/suspense.test.tsx` ("suspense: true after store.start() in Node"), `cube/ssr/usePalistor.test.tsx` ("server: true is the manual mode: the hook starts nothing, store.start() does").
 
 ## Common Mistakes
 

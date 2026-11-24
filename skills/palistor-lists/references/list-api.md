@@ -6,6 +6,7 @@ Members of a list, of a row and of a row field, the store's entity methods, the 
 
 ```ts
 import { defineList } from "palistor";
+import type { ResolveErrorContext, TranslateFn } from "palistor";
 
 interface User { id: string; name: string }
 declare function fetchUsers(tenant: unknown): Promise<User[]>;
@@ -14,7 +15,11 @@ export const users = defineList<User>({
   template: { id: { value: "" }, name: { value: "" } },
   resolve: {
     resolver: async (values, store, ctx) => fetchUsers(store.context.tenantId),
-    onError: (error, { notify }) => notify("Could not load users"),
+    onError: (error: unknown, ctx: ResolveErrorContext) => {
+      // `t` is the store's translator. The declared context type has only `notify` so far: cast to read it.
+      const { notify, t } = ctx as ResolveErrorContext & { t: TranslateFn };
+      notify(t("users.loadFailed"));
+    },
     deps: [], // paths of values the resolver does not read itself
     options: { lazy: true, suspense: false }, // the defaults
   },
@@ -25,10 +30,10 @@ export const users = defineList<User>({
 | --- | --- |
 | `template` | One leaf config per entity key. `id` is required. Leaf options are the same as for a form field (`validate`, `formatter`, `label`, `isVisible`, …). |
 | `resolve.resolver(values, store, ctx)` | Returns the rows (each with `id`). `values` are the form values without the list's filter, `store.context` is the store context, `ctx` carries `ctx.filter` and, on a paginated list, `ctx.page`. |
-| `resolve.onError(error, { notify })` | Called when the resolver throws. Optional on a list. |
+| `resolve.onError(error, { notify, t })` | Called when the resolver throws. Optional on a list. `notify` is the store's notifier; `t` is its current translator (the key comes back when there is none), so the message needs no hook. A paginated list, a row field and an edit template get the same two. `(error, { notify }) => notify("…")` needs no annotation; `t` is not in the declared type yet, hence the cast above. |
 | `resolve.deps` | Extra dependency paths. Values the resolver reads are tracked automatically. |
-| `resolve.options.lazy` | `true` (default): start on the first read. `false`: start when the store is created. |
-| `resolve.options.suspense` | `true`: `items`, `length`, `map` and `values` throw the pending promise for React `<Suspense>`. In a server render there is no run to wait for: the boundary's fallback is sent and the list renders in the browser (the `palistor-ssr` skill). |
+| `resolve.options.lazy` | `true` (default): start on the first read. `false`: start without a read, when the store is created (in a store made with `usePalistor`: after the component's first commit). |
+| `resolve.options.suspense` | `true`: `items`, `length`, `map` and `values` throw the pending promise for React `<Suspense>`. In a server render there is no run to wait for: the boundary's fallback is sent and the list renders in the browser. In a store made with `usePalistor` the browser's first render is an empty list without an error, then the fallback, then the rows (the `palistor-ssr` skill). |
 | `resolve.pagination` | Page cache, see [pagination](pagination.md). |
 | `filter` | Filter block, see [filtering](filtering.md). Root lists only. |
 
@@ -38,6 +43,8 @@ Template rules:
 - A template key cannot be named `loading`, `submitting`, `submit`, `values` or `dirty`: the row proxy uses those names.
 - The typed template of `defineList<TEntity>` accepts only the keys of `TEntity`. `onSubmit` and a template-level `resolve` belong on a separate edit template, see [entity editing](entity-editing.md).
 - Callbacks inside `defineList<TEntity>` (template rules, `resolver`, `onError`) take their parameter types from `TEntity`, so they need no annotations.
+
+Source for `onError` and the `usePalistor` notes: `cube/core/resolve.test.ts` ("onError gets the store's translator"), `cube/ssr/usePalistor.test.tsx` ("a suspense list is held the same way: an empty first render without an error, then the fallback, then the rows").
 
 ## List members
 
@@ -53,7 +60,7 @@ Read through `useForm(store).users`, or through `store.proxy.users` outside Reac
 | `error` | `unknown \| null` | What the last run threw; `null` after a success, before any run and while a new run is pending. |
 | `resolveStatus` | `"idle" \| "pending" \| "resolved" \| "error"` | Raw resolve status; reading it never starts the resolve. `"idle"` until the run starts (also while `loading` is already `true`), and always on a list without a resolver. |
 | `reload()` | `void` | Run the resolver again. Stable identity; no-op without a resolver or while a run is pending. |
-| `dirty` | `boolean` | The membership differs from the last loaded one. |
+| `dirty` | `boolean` | The membership differs from the last loaded one, or a row owns a nested list that is dirty the same way, at any depth. Row field values take no part. |
 | `add(values)` | returns the row | Upsert the row and append it. A row without `id` gets a `_tmp_…` id. |
 | `add(id)` | `void` | Append a row that is already in the registry. |
 | `remove(id)` | `void` | Take the row out of this list. The entity stays in the registry. |
@@ -72,7 +79,7 @@ A row from `map` or `items`, passed through `useForm(row)`, or the result of `us
 | `id` | `string` | The entity id. Follows `store.rekey`. |
 | one per template key | field proxy | See the next table. |
 | `values` | `Record<string, unknown>` | Current values of the row, `id` included. Use it as a request body. |
-| `dirty` | `boolean` | Any field of the row differs from its baseline. |
+| `dirty` | `boolean` | Any field of the row differs from its baseline, or a nested list the row owns is dirty. |
 | `loading` | `boolean` | The template-level resolve of `useForm(row, selector)` is running; `false` otherwise. |
 | `submitting` | `boolean` | `submit()` is running. |
 | `submit()` | `Promise<SubmitResult>` | Validate the row, then run the template's `onSubmit`. |
@@ -114,8 +121,8 @@ store.invalidate("u3"); // forget that u3's edit templates were loaded
 - `store.getValues()` and the submit payload contain each list as an array of plain rows. Under a client filter they contain all rows, not the visible ones.
 - `store.submit()` does not validate rows. Validate a row with `row.submit()` or read `isInvalid` on its fields.
 - `store.setValues({ users: [...] })` ignores the list key. Change membership through the list.
-- `store.reset()` keeps the membership and the rows of a root list. On a paginated list it rolls back local adds and removes.
-- The form's `dirty` includes the list's `dirty`.
+- `store.reset()` keeps the membership and the rows of a root list. On a paginated list it rolls back local adds and removes. Nested lists return to their loaded rows (last section). It sends no request.
+- The form's `dirty` includes the list's `dirty`, and through it the nested lists of the list's rows.
 
 ## Typing helpers
 
@@ -181,3 +188,9 @@ export function UserContacts({ user }: { user: PalistorRef<User> }) {
 - `add(id)` with an id that is not in the registry throws on a per-row list (a root list ignores it).
 - The row's `values` and `getValues()` contain the nested list once it has been loaded or changed.
 - `resolve.pagination` works per row. A `filter` block on a per-row list is ignored with a console warning.
+- A nested list gets its rows from its own resolver, from `add` / `setItems`, or from the store's `initialData` (the `palistor-ssr` skill; a draft restored by `usePersist` fills it too). The outer list's resolver does not fill it: a nested array in a row that resolver returns is not the nested list's membership.
+- `dirty` goes up. An `add`, `remove` or `setItems` inside a nested list makes dirty that list, the row that owns it, the list this row belongs to and the form (`store.proxy.dirty`), through every level of nesting. A paginated outer list counts the rows of every cached page of the current query, on screen or not. A row's field values still take no part in a list's `dirty`: an edited field makes the row dirty, not the list.
+- `store.reset()` returns every nested list to its loaded rows, also where the row that owns it is off screen (another page of a paginated list), and so clears that `dirty` along the whole chain. It requests nothing: a nested list or a row field whose resolve has its result stays `resolved` with `loading: false`, and the next read does not call the resolver. A resolve that was in flight or had failed when the reset came starts over on its next read. To fetch a nested list again on purpose call its `reload()`.
+- A successful `submit()` moves no baseline, so the chain stays dirty after it. It is clean after a reset from the form's root `afterSubmit` (`afterSubmit: (_result: unknown, { reset }: { reset: () => void }) => reset()`), after `store.reset()`, or after the nested list's `reload()`.
+
+Source: `cube/contract/sliceC/entityListDirty.test.ts` ("per-entity list dirty reaches the parent list and the form"), `cube/core/listDirty.test.tsx` ("dirty of a list whose rows own lists", "a nested edit on a cached page that is off screen keeps the list dirty; reset clears it"), `cube/contract/sliceC/entityListResolve.test.ts` ("per-entity list resolve and store.reset()"), `cube/contract/sliceC/entityFieldResolve.test.tsx` ("store.reset() runs nothing by itself; the next read re-runs on store, keeps the loaded result on Cube"), `cube/ssr/initialDataLists.test.tsx` ("initialData: nested lists inside rows"), `cube/contract/sliceC/entityListResolve.test.ts` ("a root list's resolver and the lists nested in its rows"), `cube/contract/sliceF/entityListPersist.test.ts` ("round-trip: a reload restores the root and per-entity lists"), `cube/core/listDirty.test.tsx` ("the nested list's reload() makes its rows the baseline: the chain is clean again").

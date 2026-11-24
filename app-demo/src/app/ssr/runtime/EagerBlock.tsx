@@ -11,8 +11,8 @@ import { Button, Chip, Note, Panel, Skeleton } from "./ui";
 
 /**
  * Block 2. The same lists with the default `server` option: server mode
- * during the server render (no `window`), the browser's behavior in the
- * browser, where the constructor calls `store.start()` itself.
+ * during the server render (no `window`); in the browser `usePalistor` builds
+ * the store held and calls `store.start()` in an effect after the first commit.
  */
 export function EagerBlock() {
   const t = useTranslations("ssr.runtime");
@@ -54,9 +54,9 @@ export function EagerBlock() {
 function Builds({ store }: { store: StatusStore }) {
   const builds = useForm(store).builds;
 
-  // `loading`, not `resolveStatus`: the server held the resolve ("idle") while
-  // the browser's constructor has already started it ("pending"); `loading` is
-  // true on both sides, so the skeleton hydrates without a mismatch.
+  // The hydrating render reads what the server's did: the resolve is held on
+  // both sides (`loading: true`, `resolveStatus: "idle"`), so the skeleton
+  // hydrates without a mismatch. The hook's effect then starts the run.
   return (
     <>
       <Chip name="loading" value={String(builds.loading)} testId="runtime-client-builds-loading" />
