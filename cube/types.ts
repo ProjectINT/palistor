@@ -17,6 +17,11 @@ import type {
 } from "../store/store/types";
 import type { NotifyFn } from "../store/resolvePipeline/";
 import type { InferFlowSteps } from "../store/flow/defineFlow";
+import type { FieldProxyNode, RawStoreProxyMarker } from "../store/store/types";
+import type {
+  useForm as StoreUseForm,
+  _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first as RawNodeError,
+} from "../react/useForm";
 
 // ─── initialData ─────────────────────────────────────────────────────────────
 
@@ -166,6 +171,35 @@ export interface PalistorConstructor {
   ): Palistor<TConfig, TMapping>;
   readonly prototype: Palistor<any, any>;
 }
+
+// ─── useForm ─────────────────────────────────────────────────────────────────
+
+/** A leaf from `store.proxy` is as raw as a group from it: the same error type as the store's subtree overload. */
+type ForbidRawLeaf<T> = T extends RawStoreProxyMarker ? RawNodeError : T;
+
+/**
+ * `useForm` as the package exports it: the store implementation's overloads
+ * (the store, a group or a list from another `useForm`, a row reference, a
+ * row with a template selector), and after them one more — a **field**. The
+ * hook has always accepted a leaf handed down as a prop; only the type was
+ * missing, so a one-field component had to take `any`.
+ *
+ * The leaf overload comes last on purpose: an argument typed `any` keeps
+ * resolving to the store's first overload, as it did before.
+ *
+ * Not typed yet: a leaf of a store with a `fieldMapping` (its renamed props
+ * are not a `FieldProxyNode`), like a group there when the map renames a prop
+ * groups have. Both work at run time.
+ *
+ * @example
+ * ```tsx
+ * function TextField({ field }: { field: FieldProxyNode<string> }) {
+ *   const f = useForm(field); // its own tracking scope over one field
+ *   return <input value={f.value} onChange={(e) => f.onValueChange(e.target.value)} />;
+ * }
+ * ```
+ */
+export type UseForm = typeof StoreUseForm & (<T extends FieldProxyNode<any>>(input: ForbidRawLeaf<T>) => T);
 
 // ─── <PalistorProvider> ──────────────────────────────────────────────────────
 

@@ -19,11 +19,11 @@ behavior into the config instead of component state, and record the constraints 
 
 | Skill | Type | Domain | What it covers | Failure modes |
 | --- | --- | --- | --- | --- |
-| `palistor` | core | forms | Mental model (config → store → `useForm` → spread), fields and groups, validation, visibility, computed values, submit / reset, group resolve (`onError` with `notify` and `t`), persist, i18n, notifications, store context (hooks and constructor options), `store.start()` and the no-`window` rule, typing, routing to the other skills | 14 |
+| `palistor` | core | forms | Mental model (config → store → `useForm` → spread), a component tree that mirrors the config (a node as a prop on every level, a group or a single field), fields and groups, validation, visibility, computed values, submit / reset, group resolve (`onError` with `notify` and `t`), persist, i18n, notifications, store context (hooks and constructor options), `store.start()` and the no-`window` rule, typing, routing to the other skills | 14 |
 | `palistor-lists` | sub-skill | lists | `defineList`, list and row proxies, list resolve (loading / error / reload), add / remove / temporary ids / rekey, editing a row through a separate template, lists nested in rows (how they get their rows, `dirty` up the chain, reset), filtering, pagination (`nextCursor: null` ends a feed) | 28 |
 | `palistor-flows` | sub-skill | flows | `defineFlow` / `defineStep`, navigation, branching through step `isVisible`, per-step and final validation, step lifecycle, persisted navigation, typing; first-step entry by kind of store (`new Palistor()`: constructor, `usePalistor`: after the first commit) | 13 |
 | `palistor-field-mapping` | sub-skill | ui-integration | The field spread, one adapter per input kind, `fieldMapping` / `defineFieldMapping`, single vocabulary, typing mapped props, limits of renaming | 11 |
-| `palistor-ssr` | sub-skill | server-rendering | `usePalistor` (a store per component instance), `PalistorProvider` / `usePalistorContext`, the constructor options `initialData`, `translator`, `notifier`, `server`, what restarts a resolve that got `initialData`, server mode and `store.start()`, when a `usePalistor` store starts (held until its component has committed; `server: true` as the manual mode), `loading` and Suspense in a server render and in the browser's first render, `usePersist` over `initialData` | 8 |
+| `palistor-ssr` | sub-skill | server-rendering | `usePalistor` (a store per component instance), one store for the whole app (the hook called once in a layout provider; the entry of each client subtree reads it from a React context, nodes go down as props), `PalistorProvider` / `usePalistorContext`, the constructor options `initialData`, `translator`, `notifier`, `server`, what restarts a resolve that got `initialData`, server mode and `store.start()`, when a `usePalistor` store starts (held until its component has committed; `server: true` as the manual mode), `loading` and Suspense in a server render and in the browser's first render, `usePersist` over `initialData` | 9 |
 
 ## Failure Mode Inventory
 
@@ -116,7 +116,7 @@ and the mechanism are written once, in the file named in the last column.
 | 10 | A new adapter for every field | MEDIUM | cube/contract/sliceH/fieldMapping.test.tsx ("componentProps keys are preserved") | `SKILL.md` |
 | 11 | Renaming a prop to a name lists own | MEDIUM | cube/core/mapping.ts (RESERVED_LIST_KEYS) | `SKILL.md` |
 
-### palistor-ssr (8 failure modes)
+### palistor-ssr (9 failure modes)
 
 | # | Mistake | Priority | Source | Documented in |
 | --- | --- | --- | --- | --- |
@@ -128,6 +128,7 @@ and the mechanism are written once, in the file named in the last column.
 | 6 | Server data that answers another request | HIGH | cube/core/pagination.ts (accept), cube/ssr/initialDataLists.test.tsx ("no request right after construction; a filter change is one request for the first page") | `SKILL.md` |
 | 7 | Rows without id | MEDIUM | cube/ssr/initialData.test.tsx ("a row without an id is reported once per list") | `SKILL.md` |
 | 8 | Waiting for a resolver where there is no window | MEDIUM | cube/ssr/serverMode.test.tsx ("construction starts nothing", "store.start()") | `SKILL.md` |
+| 9 | `usePalistor` called in every component that needs the shared store (in the file it follows mistake 1) | HIGH | cube/ssr/usePalistor.test.tsx ("two components with the same config get different stores", "every reader below the provider has the same store: a write through one shows in the other, and the page changing keeps it") | `SKILL.md` |
 
 ## Tensions
 
@@ -137,7 +138,7 @@ and the mechanism are written once, in the file named in the last column.
 | Inferred config vs typed callbacks | all four | The config must stay an inferred literal for precise proxy types, so nothing types callback parameters. Un-annotated callbacks pass `intent validate` (`strict: false`) and fail the consumer build (TS7006) |
 | One vocabulary under a field mapping | `palistor` ↔ `palistor-field-mapping` | Core examples use `isRequired`; with a `fieldMapping` the same config must use the mapped name, or the store throws at module load |
 | Form field rules vs row field rules | `palistor` ↔ `palistor-lists` | A form field validates `isRequired` and hides errors until submit; a row field ignores `isRequired` and validates live |
-| Module-level store vs a store per component instance | `palistor` ↔ `palistor-ssr` | The core skill creates the store at module level. A screen rendered on the server with request data needs `usePalistor`: a module is shared by every request and `initialData` exists only in the constructor |
+| Module-level store vs a store per component instance | `palistor` ↔ `palistor-ssr` | The core skill creates the store at module level. A screen rendered on the server with request data needs `usePalistor`: a module is shared by every request and `initialData` exists only in the constructor. A store the whole app shares is per instance too (one provider in the layout, a React context below it): an agent asked for a "global store" otherwise makes it at module level, or calls `usePalistor` in every component and gets a store per caller. The context replaces the module import for the entry of a client subtree only; an agent that reads it in every component drops the node-as-prop model the core skill teaches |
 | `initialValues` vs `initialData` | `palistor` ↔ `palistor-ssr` | `initialValues` are defaults; `initialData` is a result that also fills lists and marks a resolve as answered. Server data passed as `initialValues` gives a skeleton on the server and a repeated request in the browser |
 | Automatic dependency tracking vs `initialData` | `palistor`, `palistor-lists` ↔ `palistor-ssr` | "Nothing to declare" holds for a resolver that has run. A resolve that got `initialData` has not: until its first real run only `deps`, `contextDeps`, filter fields and the list's `reload()` restart it (a group has no `reload()`) |
 | A store that starts in its constructor vs a store that starts after the commit | `palistor`, `palistor-lists`, `palistor-flows` ↔ `palistor-ssr` | "Starts when the store is created" holds for `new Palistor()` in the browser. A `usePalistor` store is held until its component has committed: an agent that expects a called resolver, `resolveStatus: "pending"` or `onEnter` inside the first render, or that lifts the hook above a `<Suspense>` boundary to save requests, follows a rule that no longer exists |
@@ -163,7 +164,7 @@ and the mechanism are written once, in the file named in the last column.
 | `palistor-lists` | `list-api`, `entity-editing`, `filtering`, `pagination` | Each is an independent sub-task with its own vocabulary and mistakes |
 | `palistor-flows` | `flow-api` | Full member tables, exported types, lifecycle and reset rules |
 | `palistor-field-mapping` | — | Fits in one file |
-| `palistor-ssr` | — | Fits in one file (387 lines after batch 3); the per-node shapes of `initialData` are one table |
+| `palistor-ssr` | — | Fits in one file (387 lines after batch 3, 484 after batch 4, 497 after batch 5); the per-node shapes of `initialData` are one table. The next addition needs a reference file: the limit is 500 lines |
 
 ## Remaining Gaps
 
@@ -183,12 +184,15 @@ Decisions that belong to the maintainer. None blocks the skills; each states wha
 | `palistor-ssr` | A list resolve cannot declare a context dependency: `ListResolveConfig` has `deps` but no `contextDeps`, and a paginated list ignores `contextDeps`. A list that got `initialData` therefore does not reload on a context change; the skill recommends a `key` on the component or `list.reload()` | open |
 | `palistor-ssr` | Statements without a test in `cube/ssr`: `suspense: true` without a `<Suspense>` boundary fails the server render (authoring probe); Next.js sends the fallback without logging because of the digest (comment on `clientOnly`, checked against Next 16; the tests assert the digest, not Next's reaction); a group with `resolve` that got `initialValues` still resolves (authoring probe, order of `seed` and `applyInitialData` in the constructor) | open |
 | `palistor-ssr` | `metadata.library_version` is `0.1.0-cube.0` (the current `package.json` version), but the published `0.1.0-cube.0` has no SSR API. The release that first ships SSR sets the version (`AGENTS.md`, "Releasing") | resolved at `a0fc80b` (release `0.1.0-cube.1`): `intent validate --set-version 0.1.0-cube.1` set the five skills and the "Targets" line. Reopened in another form by batch 3, next row |
-| all | Batch 3 describes behavior of the working tree after `0.1.0-cube.1` (Stage 5а), while `metadata.library_version` and the "Targets palistor v…" line still say `0.1.0-cube.1`. The tagged `v0.1.0-cube.1` starts a `usePalistor` store in its constructor and lacks the other changes. The release that ships Stage 5а must set the version (`AGENTS.md`, "Releasing", step 4) | open |
+| all | Batch 3 describes behavior of the working tree after `0.1.0-cube.1` (Stage 5а), while `metadata.library_version` and the "Targets palistor v…" line still say `0.1.0-cube.1`. The tagged `v0.1.0-cube.1` starts a `usePalistor` store in its constructor and lacks the other changes. The release that ships Stage 5а must set the version (`AGENTS.md`, "Releasing", step 4) | open. At batch 4 `package.json` is `0.1.1-cube.1` (commit `69dc215`, "🔖 0.1.1-cube.1") while the five skills and the "Targets" line still say `0.1.0-cube.1`: the version step was not part of that commit |
+| `palistor-ssr`, `palistor` | Plain Node cannot import the package entry: `dist/index.js` re-exports `./cube/index` without a file extension, so `node -e 'import("palistor")'` fails with `ERR_MODULE_NOT_FOUND` (observed on the `0.1.1-cube.1` tarball by the consumer session of batch 4 and reproduced). A bundler or Vite resolves it, so Next.js and a Vitest `node` environment work. "Run a store without a browser" (`palistor-ssr`) and the no-`window` rule (`palistor`) name "a Node script" next to a test: decide whether the build gets extensions (or a bundle) or the skills say "a script run through a bundler or a TypeScript runner". The skills are unchanged | open |
+| `palistor-ssr` | Should the library ship the app-wide store's plumbing (a typed `createStoreContext`-like helper, or `<StoreProvider store>`)? `experiments/SsrPlan.md` ("Что не делаем") left it out: a typed context in the app is a few lines, and a library provider would add an untyped lookup. The skill and the README teach the app's own context (batch 4). Revisit if the rollout on the consumers shows the same lines repeated | open |
+| `palistor-ssr` | The `/ssr` routes of `app-demo` (the code the README's "SSR & Next.js" section links to) hand the whole `store` to their child blocks, which call `useForm(store).x`; the README and the skills teach a node as a prop since batch 5. The demo was out of scope of that batch: decide whether to align it | open |
 | `palistor`, `palistor-lists`, `palistor-ssr` | The exported `ResolveErrorContext` type is still the store implementation's `{ notify }`; `t` is passed at runtime and joins the type in 0.1 (CubePlan, Phase 4). The skills teach two strict-TypeScript forms: the full annotation in a plain config object, the cast inside `defineList` and `Resolve<T>`. Remove both when the type gains `t` | open |
 | `palistor`, `palistor-ssr` | A group has no `reload()`, `resolveStatus` or `error`; a group API is planned for 0.1. The skills state the absence and promise nothing | open |
 | `palistor-lists`, `palistor-ssr` | Statements of batch 3 that had no named test when the batch was written (authoring probes only): a list's resolver does not fill the nested lists of its rows; a draft restored by `usePersist` fills nested lists; a nested list's `reload()` clears `dirty` along the chain | resolved 2026-11-24, same batch: `cube/contract/sliceC/entityListResolve.test.ts` ("a root list's resolver and the lists nested in its rows", both implementations), `cube/contract/sliceF/entityListPersist.test.ts` ("round-trip: a reload restores the root and per-entity lists"), `cube/core/listDirty.test.tsx` ("the nested list's reload() makes its rows the baseline: the chain is clean again"); cited in `references/list-api.md` |
 | `palistor` | The `loading` and server-mode rules exist in the Cube runtime only; `store/` keeps the previous behavior (`cube/contract/impl.ts`). The skills describe the package entry, which runs on Cube | open |
-| all | Typing gaps documented as workarounds instead of being fixed (library sources were out of scope): un-annotated config callbacks (TS7006), `FormConfig` cannot describe nested groups, `defineStep` narrows inline defaults to literals, `useForm(subtree)` rejected in a mapped store, pagination and filter members optional, raw-array lists untyped, a typed template rejects `onSubmit` / template `resolve`, `store.set` rejects interface-typed objects, `PalistorRef` has no `id`, two-argument `useForm` returns `any` | open |
+| all | Typing gaps documented as workarounds instead of being fixed (library sources were out of scope): un-annotated config callbacks (TS7006), `FormConfig` cannot describe nested groups, `defineStep` narrows inline defaults to literals, `useForm(subtree)` rejected in a mapped store (a group when the map renames a group prop; a field with any rename, also after batch 5 typed `useForm(field)`), pagination and filter members optional, raw-array lists untyped, a typed template rejects `onSubmit` / template `resolve`, `store.set` rejects interface-typed objects, `PalistorRef` has no `id`, two-argument `useForm` returns `any` | open |
 
 ## Recommended Skill File Structure
 
@@ -570,3 +574,162 @@ the false "pagination invariant" warning existed only in these records.
   `proxy-api.md` and the declared-dependency rule of `palistor-ssr`.
 - A task check for a nested list (rows from `initialData`, `dirty` on the form, reset) would be the
   first executable evidence for that part of `palistor-lists`; today it rests on library tests.
+
+### Batch 4 — 2026-11-24: one store for the whole app
+
+- **Source revision:** branch `cube-architecture` at `69dc215`; `package.json` version
+  `0.1.1-cube.1`. No runtime source changed. Tooling: `@tanstack/intent` 0.5.6, TypeScript 5.9.3.
+- **Input:** the maintainer's question ("did the Cube work remove the global store? how is a global
+  store made in Next.js?") and the request to add the recipe to the README and the skill. An update
+  of `palistor-ssr`, with a pointer from `palistor`; no skill was added.
+- **Evidence:** `cube/react/usePalistor.ts` (the store is kept in the component instance that called
+  the hook), `cube/palistor.ts` (constructor: `initialData`, `hold`), and a new describe in
+  `cube/ssr/usePalistor.test.tsx`, "usePalistor: one store handed down through a React context"
+  (four tests: every reader below the provider has the same store and the page changing keeps it;
+  the shared store starts once, after the provider's commit; each server render builds its own
+  store; the provider's HTML hydrates without a mismatch). The statement that a layout stays mounted
+  while its pages change is Next.js behavior, not the library's: the tests and the task check model
+  it as a provider that stays mounted while its children change.
+
+#### Decisions
+
+| Decision | Reason |
+| --- | --- |
+| The recipe lives in `palistor-ssr` ("Share one store across the app"), not in a new skill | It is the per-instance rule applied once, in the layout: same hook, same `initialData`, same start. A request for "a global store in Next.js" must land where the reason (a module is shared by every request) is stated |
+| The store reaches its readers through a React context the app declares; the library adds no provider for a store | The maintainer's earlier decision (`experiments/SsrPlan.md`, "Что не делаем"), kept: the app's own context is typed by the app's config. Recorded as an open question in "Remaining Gaps" |
+| A new failure mode, "`usePalistor` called in every component that needs the shared store", placed right after the module-level mistake | It is the plausible wrong reading of "one store per component instance" for a shared store, and it survives a look at the page source: every copy starts from the same data |
+| The description of `palistor-ssr` names the task ("one global store for a whole server-rendered app") and was shortened elsewhere to stay under 1024 characters | A request for a global store names neither server rendering nor `usePalistor`. Words removed: "has to be", "already", "on behalf of", "the constructor", "during a server render" → "on the server", "for config, store and useForm basics" → "(config, store, useForm)". No task was dropped |
+| `metadata.purpose` unchanged | It describes the skill; the new section is one more case of "create one store per component instance" |
+| `palistor/SKILL.md`: the Setup exception and the routing row name the app-wide store | The core skill is read first and says "create the store at module level"; without the pointer an agent asked for a global store stops there |
+| The example passes `key={account?.id ?? "guest"}` to the provider | `initialData` is read once (existing rule, mistake "Expecting new props to replace the store's data"); a layout re-renders with another account without a page load on sign-in, sign-out and `router.refresh()` |
+| `metadata.library_version`, the "Targets palistor v…" line and the version fields of the planning records untouched | Same rule as batch 3: the release step sets them (`AGENTS.md`, "Releasing") |
+
+#### Guidance changed
+
+| Where | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `palistor-ssr/SKILL.md`, opening rule 3 | A store with request data is created per component instance | Adds: a store the whole app shares is created the same way, once, in the layout | `cube/ssr/usePalistor.test.tsx` ("usePalistor: one store handed down through a React context") |
+| same file, new "Share one store across the app" | — | Provider with the only `usePalistor` call, a typed React context, `useAppStore()`, the layout with a `key`; one store per request on the server and per mounted layout in the browser; read once; starts after the provider's commit; below `<PalistorProvider>`; not importable outside React; when a module-level store stays right | the same describe; "two components with the same config get different stores"; "an options object is read once too"; "new Palistor() outside the hook is not held: in the browser its constructor starts it" |
+| same file, Common Mistakes | 8 mistakes | The module-level mistake points at the new section; new HIGH mistake "`usePalistor` called in every component that needs the shared store" | "two components with the same config get different stores", "every reader below the provider has the same store: a write through one shows in the other, and the page changing keeps it" |
+| same file, `description` | 996 characters | 1018 characters: the global-store task added, wording tightened | `intent validate` |
+| `palistor/SKILL.md`, Setup and the routing table | The exception: a screen rendered on the server with request data | The exception: state with request data in a server-rendered app, one screen's or a store the whole app shares | same |
+| `README.md`, `README.ru.md`, "SSR & Next.js" | "One store per component instance" only | New subsection "One store for the whole app" (the recipe, four consequences, a module-level vs layout-provider table) and a pointer from the `usePalistor` API section | same |
+| `tests/skills/discovery.md` | 4 + 3 prompts for `palistor-ssr` | 5 + 4: a global-store request in a Next.js app loads it; a shared store in a client-only SPA does not | not run |
+
+Verified unchanged: `palistor-lists`, `palistor-flows`, `palistor-field-mapping` and the references
+of `palistor` (none states where a store is created beyond the pointer the core skill already had).
+
+#### Check outcomes
+
+| Check | Result |
+| --- | --- |
+| `npm exec --no -- intent validate skills` | 5 skill files pass |
+| Strict compile of the new examples | The two `tsx` fences of "Share one store across the app" compile with `tests/skills/tsconfig.json` (`strict: true`) against the package entry. Temporary files, removed after the run |
+| New task check `tests/skills/ssr-app-store` | 5 checks pass on the reference solution. The mistake (`usePalistor` in every component) fails the 2 named checks (shared edit, edit kept across a navigation) and passes the other 3: its HTML, hydration and per-request isolation are right, which is why it is easy to ship |
+| Grader of `ssr-app-store` against another wrong solution (throwaway, not in the repository) | A module-level store filled during render: 2 of 5 checks fail (the edit is overwritten when the layout re-renders; a signed-out visitor's HTML shows the previous user) |
+| `npm run typecheck:skills`, `npm run typecheck:cube` | pass |
+| `npm run test:skills` | 7 task checks: 45 checks pass on the reference solutions, 12 named checks fail on the mistakes as expected (before the batch: 6, 40 and 10) |
+| `npm run test:cube` | 87 files, 1167 tests pass (1 todo); `cube/ssr/usePalistor.test.tsx` has 44, the 4 new ones included |
+| `npm pack` (tarball listed) | 15 files under `skills/palistor*/`; nothing from `skills/_artifacts`, `tests/` or `.intent/` |
+| Sizes | `palistor-ssr/SKILL.md` 484 lines, `palistor/SKILL.md` 472 (limit 500). Description of `palistor-ssr`: 1018 characters (limit 1024) |
+| Fresh consumer session for `ssr-app-store` | run once, passed: 5 of 5 checks on the agent's file. Setup: the candidate tarball (`npm pack` of this working tree) unpacked as `node_modules/palistor` of a scratch project outside the repository, `intent install` there (it wrote the project's `AGENTS.md`), the fixture and `task.md`; one Claude Code subagent (general-purpose, no authoring conversation) with the plain task. Observed: `intent list`, then `intent load palistor#palistor-ssr` and `palistor#palistor`; it followed "Share one store across the app" and, on its own, put the `key` inside the provider module and passed only the config's keys as `initialData`. Limits: the subagent ran on the authoring machine and was told, not forced, to stay inside the scratch project; one run is one observation, not a reliability figure; no run without the skill for comparison |
+| Description activation (`tests/skills/discovery.md`) | the prompts were not run. One observation from the consumer session above: given `task.md`, the agent chose `palistor-ssr` first from the `intent list` descriptions |
+
+#### Remaining work
+
+- Maintainer review of the new section, of the shortened description and of the new row in
+  "Remaining Gaps".
+- An activation run of the `palistor-ssr` prompts (`tests/skills/discovery.md`).
+- Findings of the consumer session that were not acted on: the skills carry `0.1.0-cube.1` while the
+  package they ship in is `0.1.1-cube.1`, so the "Targets palistor v…" note points the agent at
+  itself; the `key` is shown on the provider in the layout only, and an app that cannot rely on the
+  layout has to put it inside the provider module (the agent did); plain Node cannot import the
+  package ("Remaining Gaps").
+- `palistor-ssr/SKILL.md` is 16 lines from the limit: the next addition should move the per-node
+  `initialData` rules or the Suspense section into a reference file.
+- The release leftovers of batch 3 still stand: `intent validate --set-version` and the "Targets
+  palistor v…" line.
+
+### Batch 5 — 2026-11-24: a node as a prop on every level; `useForm(field)` typed
+
+- **Source revision:** branch `cube-architecture`, working tree on `69dc215`; `package.json` version
+  `0.1.1-cube.1`. Source change of this batch: `cube/types.ts` (new type `UseForm`), `cube/index.ts`
+  (`useForm` is exported with it). No run-time change. Tooling: `@tanstack/intent` 0.5.6,
+  TypeScript 5.9.3.
+- **Input:** the maintainer's objection to batch 4: every reader took the whole store from a React
+  context (`useForm(useAppStore())`), while the architecture is "the parent hands a node down as a
+  prop, the child resolves it with `useForm(props.node)`". His criteria, as stated in the session:
+  the parent picks the node a component is connected to; the component does not know the store;
+  re-renders stay isolated; the chain goes recursively as deep as the object. He approved a
+  four-level example (order → customer → address → geo, one field component reused on three levels)
+  and the field overload.
+- **Evidence:** `cube/react/useForm.ts` (`resolveInput`: a node from another `useForm` carries its
+  hub and its source node; a raw node throws); the contract, both implementations
+  (`cube/contract/sliceA/useForm.test.tsx`: "a subtree can be passed to a child component as a
+  prop", "useForm(subtree) — child components with independent subscriptions"); a new file
+  `cube/react/nodeProps.test.tsx` (four levels on a `usePalistor` store: an edit re-renders the
+  component of that field and no other; a section that reads a state of its own node follows that
+  node's `dirty`; two instances of the tree never meet; a raw leaf is refused; type checks); in
+  `cube/ssr/usePalistor.test.tsx` the describe of batch 4 now has entries that read the context and
+  children that get nodes, plus one test ("the store is read from the context once per client
+  subtree, the nodes go down as props"). Why a context is needed at all (a layout gets the page as
+  opaque `children`; props from a Server Component are serialized) is Next.js and React behavior,
+  not the library's.
+
+#### Decisions
+
+| Decision | Reason |
+| --- | --- |
+| The app-wide store recipe keeps the app's own context but narrows who reads it: the entry of each client subtree (the first Client Component below a Server Component), once. Below it nodes are props. Supersedes batch 4's "every reader takes the store from the context" | The maintainer's criteria above. Batch 4's shape worked (its tests passed) but tied each component to the app's store and to one path in it; the parent no longer picked the node. The reason for a context is only the Server Component boundary |
+| `useForm` gets one more overload in Cube's types: a field (`FieldProxyNode<T>` in, the same type out). It is the last overload | The call always worked at run time and is in the contract, but had no type: the contract tests cast to `any`, a consumer typed the prop `any`. Approved by the maintainer. Last, so that an argument typed `any` keeps resolving to the store's first overload: existing consumer code compiles unchanged. First intentional difference between the `useForm` types of the two implementations; `store/` and `react/` are not edited (CubePlan rule), the contract stays typed by the store's types and the checks of the overload live in `cube/react/nodeProps.test.tsx` |
+| The multi-level example is taught in the core skill ("Split rendering into child components") and in a new README section ("One component per node"); `palistor-ssr` points there | It is how components are connected with any store. The SSR recipe adds only the boundary rule |
+| A node from a context instead of the store (one context per node) is not documented | Considered in the session: `useForm(useContext(NodeContext))` works, but the context, not the parent, picks the node, and a reader that skips `useForm` goes stale (its reads land in the provider's scope, the provider re-renders, the reader does not: probe on both implementations, not kept) |
+| No library provider for a store, no `useForm(configNode)` | Unchanged from batch 4 (row in "Remaining Gaps"). `useForm(configNode)` was probed and rejected: a config object is not a key under a `fieldMapping`, is ambiguous when mounted twice, and cannot address a row |
+| The task check `ssr-app-store` asks for the entries (`Header`, `SettingsView`) and a shared `TextField` that takes a field; a sixth check mounts `TextField` on a field of another store, outside the provider | Behavior that tells the two shapes apart: a leaf that reads the app's context fails it (verified once with a throwaway subject) |
+| `palistor-ssr`: two bullets merged and three blank or comment lines removed in the rewritten section | The 500-line limit; no rule was dropped |
+| `metadata.library_version`, the "Targets palistor v…" line and the version fields of the planning records untouched | Same rule as batches 3 and 4: the release step sets them (`AGENTS.md`, "Releasing") |
+
+#### Guidance changed
+
+| Where | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `palistor/SKILL.md`, "Split rendering into child components" | One level: a section gets a group; fields spread into the adapter inside the section | The component tree mirrors the config: root → section → nested section → a one-field component (`FieldProxyNode<string>`, `useForm(field)`); the parent picks the node, the child imports no store, where the reads land decides who re-renders; `Source:` line | `cube/react/nodeProps.test.tsx`; `cube/contract/sliceA/useForm.test.tsx`; `cube/types.ts` (`UseForm`) |
+| same file, frontmatter `sources` | — | adds `cube/types.ts` | the overload lives there |
+| `palistor/references/typescript.md`, "Type component props" | A section and an adapter | Adds a one-field component and the statement that nodes are assignable level after level without a cast; the mapped-store limit; the `FieldProxyNode<T>` row of the table | type checks of `cube/react/nodeProps.test.tsx` |
+| `palistor/references/proxy-api.md`, "Re-rendering" | "Give a section its own subscription by calling `useForm(subtree)`" | A group or a single field; the node is bound to its store and its place in the tree; any depth | same |
+| `palistor-ssr/SKILL.md`, "Share one store across the app" | `AccountBadge` reads `useForm(useAppStore())`; "Every reader takes the store from the context" | Why a context is needed (Server Component boundary); entries `Header` and `SettingsView` read it once; `AccountBadge` (a field), `AccountSection` (a group) and `TextField` (a field) get nodes; the rule "one context read per client subtree, in its entry" and what reading the whole store everywhere costs | `cube/ssr/usePalistor.test.tsx` (the describe of batch 4, one test added); `cube/react/nodeProps.test.tsx` |
+| same file, mistake "`usePalistor` called in every component that needs the shared store" | Correct: read the store from a React context | Correct: the entry of each client subtree reads the context and hands nodes down | same |
+| `palistor-field-mapping/SKILL.md`, "Type adapter and subtree props" and mistake "`useForm(subtree)` in a mapped store" | Groups only | Also a mapped field: not accepted with any rename | type checks of `cube/react/nodeProps.test.tsx` ("Known gap") |
+| `README.md`, `README.ru.md` | Quick start step 3 (one level); `useForm(source)` with `useForm(subtreeProp)`; the recipe of batch 4 | New "One component per node" in Concepts (the four-level example, four rules); `useForm(source)` lists a group, a field and a row; the recipe rewritten as in the skill, with a row in its comparison table; TypeScript: the one-field prop, the mapped-store limit; "Migrating to 0.1": `useForm(field)` is typed | same |
+
+Verified unchanged: `palistor-lists` and `palistor-flows` (their rows and steps already go down as
+props and are resolved with `useForm(row)` / `useForm(step)`), and the descriptions and purposes of
+all five skills (no task was added, so `tests/skills/discovery.md` is unchanged by this batch).
+
+#### Check outcomes
+
+| Check | Result |
+| --- | --- |
+| `npm exec --no -- intent validate skills` | 5 skill files pass |
+| Strict compile of the new examples | The `tsx` fences of both rewritten skill sections, of the new `typescript.md` example and of the README's two new examples compile with `tests/skills/tsconfig.json` (`strict: true`) against the package entry. Temporary files, removed after the run |
+| Task check `tests/skills/ssr-app-store` | 6 checks pass on the reference solution; the mistake still fails its 2 named checks. A throwaway subject whose `TextField` reads the app's context (batch 4's shape) fails the sixth check and passes the other 5 |
+| `npm run typecheck:cube`, `npm run typecheck:skills`, `npm run build` | pass; `dist/cube/index.d.ts` declares `useForm: UseForm` |
+| `npm run test:cube` | 88 files, 1172 tests pass (1 todo): `cube/react/nodeProps.test.tsx` adds 4, `cube/ssr/usePalistor.test.tsx` 1 |
+| `npm test` (store project, the contract included) | 167 files, 2234 tests pass (2 todo) |
+| `npm run test:skills` | 7 task checks: 46 checks pass on the reference solutions, 12 named checks fail on the mistakes as expected |
+| Sizes | `palistor/SKILL.md` 498 lines, `palistor-ssr/SKILL.md` 497 (limit 500) |
+| Fresh consumer session for `ssr-app-store` | not run for this batch: the session of batch 4 graded the previous task text. Unverified |
+| Description activation (`tests/skills/discovery.md`) | not run; no description changed |
+
+#### Remaining work
+
+- Maintainer review of the two rewritten sections and of the overload's place (Cube's types now
+  differ from `react/useForm.ts` by one overload).
+- A fresh consumer session for the new `ssr-app-store` task text.
+- `useForm(node)` in a mapped store is still untyped, for a group and for a field ("Remaining
+  Gaps"): a fix belongs to the types work of CubePlan, Phase 4.
+- The `/ssr` routes of `app-demo` pass the store, not nodes ("Remaining Gaps").
+- Both `palistor/SKILL.md` and `palistor-ssr/SKILL.md` are within 3 lines of the limit: the next
+  addition to either moves a section into a reference file first.
+- The release leftovers of batches 3 and 4 still stand: `intent validate --set-version` and the
+  "Targets palistor v…" line.

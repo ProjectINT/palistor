@@ -12,9 +12,12 @@
  * jsdom: the stores are in client mode (server mode is cube/ssr/serverMode).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { StrictMode, Suspense, startTransition, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { act, render, renderHook } from "@testing-library/react";
-import { createRoot } from "react-dom/client";
+import {
+  StrictMode, Suspense, createContext, startTransition, useContext, useEffect, useState, useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { act, fireEvent, render, renderHook } from "@testing-library/react";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import {
   Palistor,
@@ -26,6 +29,7 @@ import {
   usePalistor,
   usePalistorContext,
   useTranslator,
+  type FieldProxyNode,
   type InitialData,
   type PalistorOptions,
   type PalistorRef,
@@ -916,6 +920,143 @@ describe("PalistorProvider and usePalistorContext", () => {
 
     rerender(ui(2)); // the provider's accountId did not change: it is not sent again
     expect(current.a.context).toEqual({ accountId: "written in place", tick: 2 });
+  });
+});
+
+describe("usePalistor: one store handed down through a React context", () => {
+  /**
+   * The shape of an app-wide store: a provider (the layout's) owns the store.
+   * The entry of each client subtree below it — `Header`, `Settings`, `Plan`:
+   * what a Server Component renders — takes the store from a React context of
+   * the app, once; from there the nodes go down as props, and a component
+   * that got one calls `useForm` on it.
+   */
+  function appStore() {
+    const eager = vi.fn(async () => ({ plan: "pro" }));
+    const config = {
+      account: { name: { value: "Guest" } },
+      billing: { resolve: { resolver: eager, onError: vi.fn(), options: { lazy: false } }, plan: { value: "" } },
+    };
+    type AppStore = Palistor<typeof config>;
+    const AppStoreContext = createContext<AppStore | null>(null);
+    const stores = new Set<AppStore>();
+    const firstPlanRender: unknown[] = [];
+    const renders = { provider: 0, header: 0, badge: 0, settings: 0, input: 0 };
+
+    function Provider({ name, children }: { name?: string; children: ReactNode }) {
+      renders.provider++;
+      const store = usePalistor(() => ({ config, initialData: name ? { account: { name } } : undefined }));
+      stores.add(store);
+      return <AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider>;
+    }
+    const useAppStore = () => useContext(AppStoreContext)!;
+    function Header() {
+      renders.header++;
+      const form = useForm(useAppStore()); // the subtree's one context read; it only hands nodes down
+      return <Badge name={form.account.name} />;
+    }
+    function Badge({ name }: { name: FieldProxyNode<string> }) {
+      renders.badge++;
+      return <output data-testid="badge">{useForm(name).value}</output>;
+    }
+    function Settings() {
+      renders.settings++;
+      const form = useForm(useAppStore());
+      return <NameInput name={form.account.name} />;
+    }
+    function NameInput({ name }: { name: FieldProxyNode<string> }) {
+      renders.input++;
+      const field = useForm(name);
+      return <input aria-label="name" value={field.value} onChange={(e) => field.onValueChange(e.target.value)} />;
+    }
+    function Plan({ slot }: { slot: number }) {
+      const { billing } = useForm(useAppStore());
+      const loading = billing.loading;
+      if (firstPlanRender[slot] === undefined) firstPlanRender[slot] = { loading, called: eager.mock.calls.length };
+      return <output data-testid={`plan-${slot}`}>{billing.plan.value}</output>;
+    }
+    return { Provider, Header, Settings, Plan, stores, eager, firstPlanRender, renders };
+  }
+
+  it("every reader below the provider has the same store: a write through one shows in the other, and the page changing keeps it", () => {
+    const { Provider, Header, Settings, stores } = appStore();
+    const app = (page: ReactNode) => <Provider name="Ada"><Header />{page}</Provider>;
+    const { getByTestId, getByLabelText, queryByLabelText, rerender } = render(app(<Settings />));
+
+    fireEvent.change(getByLabelText("name"), { target: { value: "Ada Lovelace" } });
+    expect(getByTestId("badge").textContent).toBe("Ada Lovelace");
+
+    // A client navigation: the provider stays mounted, the page below it changes.
+    rerender(app(<p>orders</p>));
+    expect(queryByLabelText("name")).toBeNull();
+    expect(getByTestId("badge").textContent).toBe("Ada Lovelace");
+
+    rerender(app(<Settings />));
+    expect((getByLabelText("name") as HTMLInputElement).value).toBe("Ada Lovelace");
+    expect(stores.size).toBe(1);
+  });
+
+  it("the store is read from the context once per client subtree, the nodes go down as props: an edit re-renders the readers of that field only", () => {
+    const { Provider, Header, Settings, renders } = appStore();
+    const { getByTestId, getByLabelText } = render(<Provider name="Ada"><Header /><Settings /></Provider>);
+    expect(renders).toEqual({ provider: 1, header: 1, badge: 1, settings: 1, input: 1 });
+
+    fireEvent.change(getByLabelText("name"), { target: { value: "Ada Lovelace" } });
+
+    expect(getByTestId("badge").textContent).toBe("Ada Lovelace");
+    // The provider and both entries only handed nodes down: none of them re-rendered.
+    expect(renders).toEqual({ provider: 1, header: 1, badge: 2, settings: 1, input: 2 });
+  });
+
+  it("the shared store starts once, after the provider's commit: every reader's first render reads loading: true with no resolver called", async () => {
+    const { Provider, Plan, eager, firstPlanRender } = appStore();
+    const { getByTestId } = render(<Provider><Plan slot={0} /><Plan slot={1} /></Provider>);
+
+    expect(firstPlanRender).toEqual([{ loading: true, called: 0 }, { loading: true, called: 0 }]);
+    expect(eager).toHaveBeenCalledTimes(1); // render() returns after the effects: the provider's effect started the store
+
+    await act(flush);
+    expect([getByTestId("plan-0").textContent, getByTestId("plan-1").textContent]).toEqual(["pro", "pro"]);
+    expect(eager).toHaveBeenCalledTimes(1);
+  });
+
+  it("each server render builds its own store: the next request's HTML has nothing of the previous one", () => {
+    const { Provider, Header, stores, eager } = appStore();
+
+    const signedIn = renderToString(<Provider name="Ada"><Header /></Provider>);
+    const signedOut = renderToString(<Provider><Header /></Provider>);
+
+    expect(signedIn).toContain("Ada");
+    expect(signedOut).toContain("Guest");
+    expect(signedOut).not.toContain("Ada");
+    expect(stores.size).toBe(2);
+    expect(eager).not.toHaveBeenCalled(); // no effect runs in a server render: nothing was started
+  });
+
+  it("the provider's HTML hydrates without a mismatch, and the hydrated readers share the store", async () => {
+    const { Provider, Header, Settings } = appStore();
+    const app = () => <Provider name="Ada"><Header /><Settings /></Provider>;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    container.innerHTML = renderToString(app());
+    const recovered: unknown[] = [];
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, app(), { onRecoverableError: (error) => recovered.push(error) });
+      await flush();
+    });
+    const input = container.querySelector("input")!;
+    fireEvent.change(input, { target: { value: "Ada Lovelace" } });
+
+    expect(recovered).toEqual([]);
+    expect(consoleError.mock.calls.filter(([message]) => /hydrat/i.test(String(message)))).toEqual([]);
+    expect(container.querySelector("output")!.textContent).toBe("Ada Lovelace");
+
+    act(() => root.unmount());
+    container.remove();
+    consoleError.mockRestore();
   });
 });
 

@@ -3,8 +3,12 @@
 # Version: 0.1.0-cube.0
 # Date: 2026-11-15, updated 2026-11-23 (batch 2: palistor-ssr; server mode and the `loading` rule),
 #       updated 2026-11-24 (batch 3: Stage 5а, fixes after the SSR demo; verified against the working
-#       tree at package.json 0.1.0-cube.1)
-# Status: draft (the three batches were authored by an agent; not yet reviewed by the maintainer)
+#       tree at package.json 0.1.0-cube.1),
+#       updated 2026-11-24 (batch 4: one store for the whole app; verified at 69dc215, package.json
+#       0.1.1-cube.1),
+#       updated 2026-11-24 (batch 5: a node as a prop on every level, the field overload of useForm;
+#       verified against the working tree on 69dc215, package.json 0.1.1-cube.1)
+# Status: draft (the five batches were authored by an agent; not yet reviewed by the maintainer)
 #
 # failure_modes list the mistake, its priority and evidence. The wrong and correct
 # patterns and the mechanism live in one place only: the skill file named in
@@ -44,7 +48,7 @@ skills:
       - "config tree: leaf (value) and group nodes"
       - "new Palistor({ config, initialValues, context, translator, notifier })"
       - "store.start() and the no-`window` rule (a store starts nothing by itself in Node; a usePalistor store starts after its component's first commit: palistor-ssr)"
-      - "useForm(store) / useForm(subtree) and the field spread"
+      - "useForm(store) / useForm(node from a prop: a group or a single field) and the field spread; the component tree mirrors the config tree, level after level"
       - "validate, isRequired, isVisible, isDisabled, isReadOnly, computed value"
       - "formatter, setter, onChange"
       - "submit / reset / setValues on the root, a group or a field; SubmitResult"
@@ -55,7 +59,7 @@ skills:
     tasks:
       - "Build a form with required, conditional and computed fields and submit it"
       - "Show validation errors only after the first submit attempt"
-      - "Split a form into sections with independent re-rendering"
+      - "Split a form into components that mirror the config, level after level down to one component per field, each re-rendering on its own"
       - "Load data into a form from an API and reload it when an input changes"
       - "Persist a draft, translate labels and report load errors"
       - "Type form values, component props and config callbacks under strict TypeScript"
@@ -461,7 +465,7 @@ skills:
       - mistake: "useForm(subtree) in a mapped store"
         priority: MEDIUM
         status: active
-        source: "react/useForm.ts (overloads)"
+        source: "react/useForm.ts (overloads), cube/types.ts (UseForm), cube/react/nodeProps.test.tsx (type checks)"
         documented_in: skills/palistor-field-mapping/SKILL.md
       - mistake: "Expecting the map to convert values"
         priority: MEDIUM
@@ -487,6 +491,7 @@ skills:
       - "usePalistor(options | () => options): one store per component instance"
       - "usePalistor holds the store: nothing starts during a render, store.start() runs in an effect after the first commit; a render React throws away requests nothing; server: true as the manual mode; new Palistor() is not held"
       - "<PalistorProvider context translator notifier> and usePalistorContext"
+      - "one store for the whole app: usePalistor called once in a provider the layout renders; the entry of each client subtree reads it from a React context of the app once and hands nodes down as props; one store per request on the server, one per mounted layout in the browser"
       - "constructor options initialData, translator, notifier, server"
       - "initialData by node kind: field, group, list, list inside a row, first page of a paginated list, flow step"
       - "what restarts a resolve that got initialData: declared deps, contextDeps, filter fields, the list's reload() (a group has none)"
@@ -500,6 +505,7 @@ skills:
       - "Render a list or form in the first HTML of a Next.js App Router page from data a Server Component fetched, with no store request on the server and no refetch after hydration"
       - "Have translated labels, the notifier and the store context in place for the first render, through the constructor or a provider"
       - "Create one store per component instance and share context, translator and notifier between stores"
+      - "Give a whole server-rendered app one shared store (the signed-in account, a cart, layout state) that the layout fills from the request and the header and every page read"
       - "Choose what a list, group or Suspense boundary without server data shows in the server HTML and in the browser's first render"
       - "Tell when a usePalistor store starts its resolvers and its first flow step, and what a first render may assert"
       - "Run a store's resolvers in a Node script or a test without a DOM"
@@ -508,6 +514,11 @@ skills:
         priority: CRITICAL
         status: active
         source: "cube/palistor.ts (constructor), cube/ssr/usePalistor.test.tsx (\"two components with the same config get different stores\")"
+        documented_in: skills/palistor-ssr/SKILL.md
+      - mistake: "`usePalistor` called in every component that needs the shared store"
+        priority: HIGH
+        status: active
+        source: "cube/ssr/usePalistor.test.tsx (\"two components with the same config get different stores\", \"every reader below the provider has the same store: a write through one shows in the other, and the page changing keeps it\")"
         documented_in: skills/palistor-ssr/SKILL.md
       - mistake: "Translator, notifier or context applied through an effect"
         priority: HIGH
@@ -564,8 +575,8 @@ tensions:
     implication: "Reusing form-field expectations in a list template yields rows that are never invalid."
   - name: "Module-level store vs a store per component instance"
     skills: [palistor, palistor-ssr]
-    description: "The core skill creates the store at module level; a screen rendered on the server with request data needs one store per component instance (usePalistor), because a module is shared by every request and initialData exists only in the constructor."
-    implication: "An agent that keeps the module-level habit on a server-rendered screen either cannot hand over the server's rows or writes one user's rows into a store every request shares."
+    description: "The core skill creates the store at module level; a screen rendered on the server with request data needs one store per component instance (usePalistor), because a module is shared by every request and initialData exists only in the constructor. A store the whole app shares is per instance too: one provider in the layout calls usePalistor and hands the store down through a React context, which only the entry of each client subtree reads; below it nodes are props, as everywhere else."
+    implication: "An agent that keeps the module-level habit on a server-rendered screen either cannot hand over the server's rows or writes one user's rows into a store every request shares. An agent asked for a global store either does the same at module level, or calls usePalistor in every component and gets as many stores as callers."
   - name: "initialValues vs initialData"
     skills: [palistor, palistor-ssr]
     description: "initialValues are defaults for fields; initialData is a result: it also fills lists and marks a resolve as answered."
@@ -658,8 +669,8 @@ gaps:
     context: "Documented as a mistake with the `as string` workaround; a type-level fix would remove it."
     status: open
   - skill: palistor-field-mapping
-    question: "useForm(subtree) does not type-check in a mapped store when the map renames a group prop."
-    context: "Documented with the useForm(store) workaround; runtime is fine."
+    question: "useForm(subtree) does not type-check in a mapped store when the map renames a group prop; useForm(field) does not type-check there with any rename (the field overload of batch 5 takes a FieldProxyNode)."
+    context: "Documented with the useForm(store) workaround; runtime is fine. Pinned by the type checks of cube/react/nodeProps.test.tsx."
     status: open
   - skill: palistor
     question: "No fresh consumer-agent session and no description-activation run were executed for this batch."

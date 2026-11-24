@@ -112,7 +112,18 @@ export function AddressSection({ address }: { address: PalistorProxy<Address> })
 export function TextInput({ value, onValueChange, label }: FieldProxyNode<string>) {
   return <input aria-label={label} value={value} onChange={(e) => onValueChange(e.target.value)} />;
 }
+
+// A one-field component: receives the field itself, subscribes on its own. `useForm` returns the same type.
+export function CityField({ field }: { field: FieldProxyNode<string> }) {
+  const f = useForm(field);
+  return <TextInput {...f} />;
+}
 ```
+
+A node typed from the config is assignable to these props level after level without a cast
+(`form.company` to `PalistorProxy<Company>`, `c.address` to `PalistorProxy<Address>`, `a.city` to
+`FieldProxyNode<string>`). In a store with a `fieldMapping`, `useForm(field)` does not compile
+(the renamed props are not a `FieldProxyNode`), although it runs; see `palistor-field-mapping`.
 
 A number field's `value` reads as `number` but accepts `number | string` on write (and a boolean
 field accepts `boolean | string | number`), because inputs produce strings. The conversion itself is
@@ -126,7 +137,7 @@ the field's `formatter`.
 | `DeepPartialValues<T>` | `initialValues`, `setValues` / `reset` arguments, `setter` patches |
 | `PalistorProxy<T>` | Props that receive a subtree of `useForm(...)`, built from a values interface |
 | `ConfigProxy<typeof config>` | The exact type `useForm(store)` returns, when a prop takes the whole form |
-| `FieldProxyNode<T>` | Props of an input adapter; one field |
+| `FieldProxyNode<T>` | Props of an input adapter (one field's spread), or the prop of a one-field component that calls `useForm(field)` |
 | `GroupProxyNode` | The members every group has (`submit`, `reset`, `values`, `dirty`, …) |
 | `MaybeComputed<T, TValues>` | `T` or `(values) => T`: the type of flags and `value` in a config |
 | `MaybeTranslatable<T, TValues>` | `T` or `(t, values) => T`: the type of `label` and other texts |

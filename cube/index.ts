@@ -9,13 +9,13 @@
  * On top of that list, Cube only (experiments/SsrPlan.md): `usePalistor`,
  * `PalistorProvider`, `usePalistorContext`, and the `Palistor` constructor
  * takes `translator` / `notifier` / `server` / `initialData` and its instances
- * have `start()`. Their types live in cube/types.ts.
+ * have `start()`. `useForm` has one overload more: a field handed down as a
+ * prop. Their types live in cube/types.ts.
  */
 
 import type { FieldMapping } from "../store/store/types";
 import type { localStorageDriver as StoreLocalStorageDriver } from "../store/persist/drivers";
 import type { useNotifier as StoreUseNotifier } from "../react/useNotifier";
-import type { useForm as StoreUseForm } from "../react/useForm";
 import type { usePersist as StoreUsePersist } from "../react/usePersist";
 import type { useTranslator as StoreUseTranslator } from "../react/useTranslator";
 import type { useStoreContext as StoreUseStoreContext } from "../react/useStoreContext";
@@ -23,7 +23,7 @@ import type { defineList as StoreDefineList } from "../store/defineList";
 import type { defineFlow as StoreDefineFlow, defineStep as StoreDefineStep } from "../store/flow/defineFlow";
 import type { defineFieldMapping as StoreDefineFieldMapping } from "../store/defineFieldMapping";
 
-import type { Palistor as PalistorStore, PalistorConstructor } from "./types";
+import type { Palistor as PalistorStore, PalistorConstructor, UseForm } from "./types";
 import { Palistor as CubePalistor } from "./palistor";
 import { useForm as cubeUseForm } from "./react/useForm";
 import { useStoreContext as cubeUseStoreContext } from "./react/useStoreContext";
@@ -115,7 +115,8 @@ export const useNotifier = cubeUseNotifier as unknown as typeof StoreUseNotifier
 // React hooks
 // ============================================================================
 
-export const useForm = cubeUseForm as unknown as typeof StoreUseForm;
+/** The store's overloads plus a field handed down as a prop (cube/types.ts, `UseForm`). */
+export const useForm = cubeUseForm as unknown as UseForm;
 export const usePersist = cubeUsePersist as unknown as typeof StoreUsePersist;
 export const useTranslator = cubeUseTranslator as unknown as typeof StoreUseTranslator;
 export const useStoreContext = cubeUseStoreContext as unknown as typeof StoreUseStoreContext;

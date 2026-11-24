@@ -51,7 +51,9 @@ There is no aggregate validity flag. To know whether a form is valid, submit it 
   observable state of a subscribed node changes.
 - Drilling into children without reading state (`form.address` passed as a prop) subscribes to
   nothing.
-- Give a section its own subscription by calling `useForm(subtree)` in the child component.
+- Give a component its own subscription by calling `useForm(node)` on the node it got as a prop: a
+  group for a section, a single field for a one-field component. The node is bound to its store and
+  its place in the tree, so the chain of props can be any depth.
 
 ## Store (`new Palistor(...)`) — outside React
 

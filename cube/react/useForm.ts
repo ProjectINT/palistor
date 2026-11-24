@@ -147,7 +147,8 @@ function wrapItems(items: PublicNode[], refs: Refs, hub: Hub, cache: WeakMap<obj
 
 /**
  * Connects a component to a store: useForm(store), useForm(subtree) with a
- * subtree from another useForm (an independent tracking scope), or
+ * subtree from another useForm — a group, a field, a list or a row, usually a
+ * prop — (an independent tracking scope over exactly that node), or
  * useForm(entity, templateSelector) to edit a list item through a template
  * (bound on mount, unbound on unmount; the template resolve runs once per
  * entity and template). Re-renders only when the state of a node it read changes.

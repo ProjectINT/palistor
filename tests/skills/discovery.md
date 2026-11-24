@@ -10,7 +10,8 @@ name in the answer is not enough. Repeat ambiguous prompts. Keep the prompts bel
 a description and test fresh phrasings separately.
 
 **Status: not run.** These prompts were written with the skills on 2026-11-15 (`palistor-ssr`: on
-2026-11-23, when the descriptions of `palistor` and `palistor-lists` also got a pointer to it); no
+2026-11-23, when the descriptions of `palistor` and `palistor-lists` also got a pointer to it; its
+prompt 5 and the fourth "should not load" on 2026-11-24, with the app-wide store task); no
 activation run has been recorded yet.
 
 ## palistor
@@ -77,9 +78,11 @@ Should load:
 2. "View source of the orders page shows `orders.title` instead of the heading and an empty table, although the data is there a moment later. Fix the server render."
 3. "After moving the settings form to a Server Component page we get a hydration mismatch warning from the form. Find the cause."
 4. "Our vitest suite runs in the node environment and the store's resolver is never called — the list stays empty in the test."
+5. "Нужен глобальный стор на всё приложение в нашем Next.js (App Router): текущий пользователь приходит с сервера в layout, шапка и страницы читают одно состояние."
 
 Should not load (or not alone):
 
 1. "Add a customers table with a spinner, an error state and a retry button." → `palistor-lists`
 2. "Translate the form labels with our `t()` function." (a client-only app) → `palistor`
 3. "Save the wizard's step so a page reload restores it." → `palistor-flows`
+4. "Our Vite SPA needs one settings store that the sidebar and the settings screen both read." (no server render) → `palistor`

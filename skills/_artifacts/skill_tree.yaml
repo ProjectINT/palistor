@@ -53,6 +53,7 @@ skills:
       - ProjectINT/palistor:index.ts
       - ProjectINT/palistor:cube/index.ts
       - ProjectINT/palistor:cube/palistor.ts
+      - ProjectINT/palistor:cube/types.ts
       - ProjectINT/palistor:cube/core/cube.ts
       - ProjectINT/palistor:cube/core/config.ts
       - ProjectINT/palistor:cube/core/node.ts
@@ -184,21 +185,21 @@ skills:
     slug: palistor-ssr
     domain: server-rendering
     path: skills/palistor-ssr/SKILL.md
-    description: "Use when a palistor form, list or wizard has to be rendered on the
-      server in a Next.js App Router project (or any React server render): the
-      first HTML must already contain the rows or values a Server Component
-      fetched and the translated labels, the server must send no request on
-      behalf of the store, hydration must report no mismatch and the browser
-      must not fetch the same data again. Also use it when the page source shows
-      translation keys or an empty list, when a hydration warning points at a
-      palistor screen, when a store is needed per mounted component instead of
-      one per module, or when a Node script or a test without a DOM never sees
-      its resolver run. Covers usePalistor, PalistorProvider,
-      usePalistorContext, the constructor options initialData, translator,
-      notifier and server, store.start(), and loading and Suspense during a
-      server render. Requires the palistor skill for config, store and useForm
-      basics; the list itself (defineList, filters, pagination) belongs to
-      palistor-lists.\n"
+    description: "Use when a palistor form, list or wizard is rendered on the server
+      in a Next.js App Router project (or any React server render): the first
+      HTML must contain the rows or values a Server Component fetched and the
+      translated labels, the server must send no request for the store,
+      hydration must report no mismatch and the browser must not fetch the same
+      data again. Also use it when the page source shows translation keys or an
+      empty list, when a hydration warning points at a palistor screen, when a
+      store is needed per mounted component, or one global store for a whole
+      server-rendered app (the signed-in user, a cart), instead of one per
+      module, or when a Node script or a test without a DOM never sees its
+      resolver run. Covers usePalistor, PalistorProvider, usePalistorContext,
+      the options initialData, translator, notifier and server, store.start(),
+      loading and Suspense on the server. Requires the palistor skill (config,
+      store, useForm); the list itself (defineList, filters, pagination) belongs
+      to palistor-lists.\n"
     sources:
       - ProjectINT/palistor:cube/palistor.ts
       - ProjectINT/palistor:cube/types.ts

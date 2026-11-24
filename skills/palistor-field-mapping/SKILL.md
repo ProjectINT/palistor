@@ -244,7 +244,7 @@ export function AddressSection() {
 }
 ```
 
-`PalistorProxy<Values, typeof fieldMapping>` types a subtree from a values interface instead of the config. In a mapped store do not call `useForm(subtree)` in children; see Common Mistakes.
+`PalistorProxy<Values, typeof fieldMapping>` types a subtree from a values interface instead of the config. In a mapped store do not call `useForm(subtree)` in children, on a group or on a single field; see Common Mistakes.
 
 ### Know what a map renames
 
@@ -336,7 +336,7 @@ Correct: `new Palistor({ config, fieldMapping })`, or both arguments. Source: `s
 
 ### MEDIUM — `useForm(subtree)` in a mapped store
 
-When the map renames a prop that groups also have (`isRequired`, `isDisabled`, `isReadOnly`, `isVisible`, `isInvalid`, `errorMessage`, `dirty`, `loading`), the subtree overload of `useForm` no longer accepts a mapped group. It works at run time but does not compile:
+When the map renames a prop that groups also have (`isRequired`, `isDisabled`, `isReadOnly`, `isVisible`, `isInvalid`, `errorMessage`, `dirty`, `loading`), the subtree overload of `useForm` no longer accepts a mapped group. A mapped field is not accepted with any rename (`useForm(form.address.city)`): its renamed props are not a `FieldProxyNode`. Both work at run time but do not compile:
 
 ```tsx expect-error=TS2769
 import { Palistor, defineFieldMapping, useForm } from "palistor";
@@ -350,7 +350,7 @@ export function AddressSection() {
 }
 ```
 
-Correct: call `useForm(store)` in the child and drill down (`useForm(store).address`). Each `useForm(store)` call subscribes only to what that component reads, so the child still re-renders independently. Source: `react/useForm.ts` (overloads).
+Correct: call `useForm(store)` in the child and drill down (`useForm(store).address`). Each `useForm(store)` call subscribes only to what that component reads, so the child still re-renders independently. Source: `react/useForm.ts` (overloads), `cube/types.ts` (`UseForm`), `cube/react/nodeProps.test.tsx` (type checks: "a leaf of a mapped store").
 
 ### MEDIUM — Expecting the map to convert values
 

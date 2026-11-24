@@ -26,6 +26,7 @@ sources:
   - 'ProjectINT/palistor:index.ts'
   - 'ProjectINT/palistor:cube/index.ts'
   - 'ProjectINT/palistor:cube/palistor.ts'
+  - 'ProjectINT/palistor:cube/types.ts'
   - 'ProjectINT/palistor:cube/core/cube.ts'
   - 'ProjectINT/palistor:cube/core/config.ts'
   - 'ProjectINT/palistor:cube/core/node.ts'
@@ -48,9 +49,10 @@ All behavior lives in a config object, state lives in a store outside React, com
 ## Setup
 
 One module holds the config, the store and the form. Create the store at module level — one store per
-form — and never call `new Palistor` in a component body. The exception is a screen rendered on the
-server with data of the current request (Next.js App Router): there the store is created per
-component instance with `usePalistor`; read `palistor-ssr` before writing it.
+form — and never call `new Palistor` in a component body. The exception is state that holds data of
+the current request in an app rendered on the server (Next.js App Router), whether one screen's or a
+store the whole app shares: there the store is created per component instance with `usePalistor`;
+read `palistor-ssr` before writing it.
 
 ```tsx
 // orderForm.tsx
@@ -281,34 +283,59 @@ Computed values appear in `getValues()` and in the submit payload like any other
 
 ### Split rendering into child components
 
-Pass a subtree down and call `useForm` on it: the child gets its own tracking scope, and a parent that
-only passes subtrees does not re-render when their fields change. Re-rendering is per node: a component
-re-renders when any state of a field it read changes.
+Mirror the config tree with the component tree. A component gets its node as a prop, calls `useForm`
+on it and hands its children their nodes: a group to a section, a single field to an input. The rule
+is the same on every level, so the chain goes as deep as the config does.
 
 ```tsx
 import { Palistor, useForm } from "palistor";
-import type { PalistorProxy } from "palistor";
+import type { FieldProxyNode, PalistorProxy } from "palistor";
+
+interface Address { city: string; zip: string }
+interface Company { name: string; address: Address }
 
 const profileStore = new Palistor({
-  config: { company: { name: { value: "" }, vatId: { value: "" } } },
+  config: { company: { name: { value: "" }, address: { city: { value: "" }, zip: { value: "" } } } },
 });
 
-function CompanySection({ company }: { company: PalistorProxy<{ name: string; vatId: string }> }) {
-  const c = useForm(company);
-  if (!c.isVisible) return null;
-  return (
-    <fieldset>
-      <TextField {...c.name} />
-      <TextField {...c.vatId} />
-    </fieldset>
-  );
-}
-
+// The root: the only component that sees the store.
 export function ProfileForm() {
   const form = useForm(profileStore);
   return <CompanySection company={form.company} />;
 }
+
+function CompanySection({ company }: { company: PalistorProxy<Company> }) {
+  const c = useForm(company);
+  if (!c.isVisible) return null;
+  return (
+    <fieldset>
+      <Field field={c.name} />
+      <AddressSection address={c.address} />
+    </fieldset>
+  );
+}
+
+function AddressSection({ address }: { address: PalistorProxy<Address> }) {
+  const a = useForm(address);
+  return <><Field field={a.city} /><Field field={a.zip} /></>;
+}
+
+// One component for any string field on any level: an edit re-renders this component alone.
+function Field({ field }: { field: FieldProxyNode<string> }) {
+  return <TextField {...useForm(field)} />;
+}
 ```
+
+- The parent picks the node. A child imports neither the store nor the config: it is typed by the shape
+  of its node, and the node in the prop carries its store.
+- A component that only hands nodes down reads no state and does not re-render when fields below change.
+  `<TextField {...c.name} />` straight in a section reads the field there: the section re-renders with
+  every edit of it. Give the field a component of its own, as above, when that matters.
+- Re-rendering is per node: a component re-renders when any state of a node it read changes.
+  `c.isVisible` above subscribes `CompanySection` to the whole state of `company`, its `dirty` included.
+
+Source: `cube/react/nodeProps.test.tsx`, `cube/contract/sliceA/useForm.test.tsx` ("useForm(subtree)
+— child components with independent subscriptions"), `cube/types.ts` (`UseForm`).
 
 Outside render (event handlers, effects, non-React code) use the store itself:
 `profileStore.getValues()` for a detached snapshot, `profileStore.setValues(patch)` or
@@ -321,7 +348,7 @@ Outside render (event handlers, effects, non-React code) use the store itself:
 | A table or list of same-shaped items, add/remove rows, a list loaded from an API, filters, pagination | `palistor-lists` |
 | A wizard, onboarding, checkout or any Next/Back sequence of steps | `palistor-flows` |
 | Inputs from a UI kit or in-house inputs with other prop names (`required`, `error`, `helperText`) | `palistor-field-mapping` |
-| The form or list must be in the server-rendered HTML (Next.js App Router): data fetched by a Server Component, translated labels, no hydration mismatch | `palistor-ssr` |
+| The form or list must be in the server-rendered HTML (Next.js App Router): data fetched by a Server Component, translated labels, no hydration mismatch. Or a server-rendered app needs one store for all its pages (the signed-in user, a cart) | `palistor-ssr` |
 | Fields, groups, validation, submit, loading data into a form | this skill |
 
 ```text

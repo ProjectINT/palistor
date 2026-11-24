@@ -1,20 +1,20 @@
 ---
 name: palistor-ssr
 description: >
-  Use when a palistor form, list or wizard has to be rendered on the server in a
+  Use when a palistor form, list or wizard is rendered on the server in a
   Next.js App Router project (or any React server render): the first HTML must
-  already contain the rows or values a Server Component fetched and the
-  translated labels, the server must send no request on behalf of the store,
-  hydration must report no mismatch and the browser must not fetch the same data
-  again. Also use it when the page source shows translation keys or an empty
-  list, when a hydration warning points at a palistor screen, when a store is
-  needed per mounted component instead of one per module, or when a Node script
-  or a test without a DOM never sees its resolver run. Covers usePalistor,
-  PalistorProvider, usePalistorContext, the constructor options initialData,
-  translator, notifier and server, store.start(), and loading and Suspense
-  during a server render. Requires the palistor skill for config, store and
-  useForm basics; the list itself (defineList, filters, pagination) belongs to
-  palistor-lists.
+  contain the rows or values a Server Component fetched and the translated
+  labels, the server must send no request for the store, hydration must report
+  no mismatch and the browser must not fetch the same data again. Also use it
+  when the page source shows translation keys or an empty list, when a hydration
+  warning points at a palistor screen, when a store is needed per mounted
+  component, or one global store for a whole server-rendered app (the signed-in
+  user, a cart), instead of one per module, or when a Node script or a test
+  without a DOM never sees its resolver run. Covers usePalistor,
+  PalistorProvider, usePalistorContext, the options initialData, translator,
+  notifier and server, store.start(), loading and Suspense on the server.
+  Requires the palistor skill (config, store, useForm); the list itself
+  (defineList, filters, pagination) belongs to palistor-lists.
 metadata:
   purpose: 'Render palistor forms, lists and wizards on the server in Next.js App
     Router: create one store per component instance with usePalistor, hand it
@@ -50,7 +50,7 @@ A Client Component renders twice: on the server into HTML, then in the browser d
 
 1. Everything the first render shows goes into the store's constructor: the server's data as `initialData`, the translator, the context. Effects do not run on the server.
 2. No render starts anything. Where `window` is not defined a store calls no resolver, fetches no page and enters no flow step: data access on the server is the Server Component's job. In the browser a `usePalistor` store starts after its component has committed, so its first render shows what the server sent.
-3. A store that holds data of the current request is created per component instance with `usePalistor`, never at module level.
+3. A store that holds data of the current request is created per component instance with `usePalistor`, never at module level. A store the whole app shares is created the same way, once, in the layout ("Share one store across the app").
 
 ## Setup
 
@@ -227,6 +227,100 @@ Source: `cube/ssr/initialData.test.tsx`, `cube/ssr/initialDataLists.test.tsx` ("
 
 Source: `cube/ssr/usePalistor.test.tsx` ("the provider's values are in the constructor", "changes after mount reach the store", "PalistorProvider and usePalistorContext"), `cube/core/resolve.test.ts` ("onError gets the store's translator"), `cube/react/provider.tsx`.
 
+### Share one store across the app
+
+An app-wide store (the signed-in account, a cart, layout state the header and every page read) is not a module-level store on a server: the module is evaluated once per server process, so every request would share it. Create the store once, in a Client Component the root layout renders.
+
+Components still get their nodes as props and call `useForm` on them (`palistor` skill, "Split rendering into child components"). One thing is new: a Server Component cannot hand a node down, since the layout gets the page as opaque `children` and a node is not serializable. So the store crosses that boundary through a React context of your own, and only there. The entry of each client subtree (the first Client Component below a Server Component) reads the context once; from it the nodes go down as props.
+
+```tsx
+// app/AppStore.tsx
+"use client";
+import { createContext, useContext, type ReactNode } from "react";
+import { useForm, usePalistor, type FieldProxyNode, type Palistor, type PalistorProxy } from "palistor";
+
+export interface Account { id: string; name: string }
+const appConfig = { account: { id: { value: "" }, name: { value: "Guest" } }, sidebarOpen: { value: true } }; // module level: no request data
+
+type AppStore = Palistor<typeof appConfig>;
+const AppStoreContext = createContext<AppStore | null>(null);
+
+export function AppStoreProvider({ account, children }: { account: Account | null; children: ReactNode }) {
+  // The only usePalistor call for this store.
+  const store = usePalistor(() => ({
+    config: appConfig,
+    initialData: account ? { account } : undefined, // the request's data; only keys the config declares
+  }));
+  return <AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider>;
+}
+
+/** For the entry of a client subtree: a component a Server Component renders. */
+export function useAppStore(): AppStore {
+  const store = useContext(AppStoreContext);
+  if (!store) throw new Error("useAppStore: <AppStoreProvider> is missing above this component");
+  return store;
+}
+
+// An entry (the layout renders it): its subtree's one context read. It reads no state, so it never re-renders.
+export function Header() {
+  const form = useForm(useAppStore());
+  return <header><AccountBadge name={form.account.name} /></header>;
+}
+// Below an entry a component knows neither the store nor the context: it is on the node its parent gave it.
+function AccountBadge({ name }: { name: FieldProxyNode<string> }) {
+  return <span>{useForm(name).value}</span>;
+}
+
+// Another entry (the settings page renders it). Nodes go down level after level, as deep as the config.
+export function SettingsView() {
+  const form = useForm(useAppStore());
+  return <AccountSection account={form.account} />;
+}
+function AccountSection({ account }: { account: PalistorProxy<Account> }) {
+  const a = useForm(account);
+  return <TextField field={a.name} />;
+}
+function TextField({ field }: { field: FieldProxyNode<string> }) {
+  const f = useForm(field);
+  return <input value={f.value} onChange={(event) => f.onValueChange(event.target.value)} />;
+}
+```
+
+```tsx
+// app/layout.tsx — a Server Component
+import type { ReactElement, ReactNode } from "react";
+
+interface Account { id: string; name: string }
+declare function getAccount(): Promise<Account | null>; // your server-side data access; null for a signed-out visitor
+declare function AppStoreProvider(props: { account: Account | null; children: ReactNode }): ReactElement; // the file above
+declare function Header(): ReactElement;
+
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const account = await getAccount();
+  return (
+    <html lang="en">
+      <body>
+        <AppStoreProvider key={account?.id ?? "guest"} account={account}>
+          <Header />
+          {children}
+        </AppStoreProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+- **One `usePalistor` call, in the provider.** A second `usePalistor` with the same config is a second store (Common Mistakes).
+- **One context read per client subtree, in its entry.** No prop can reach `Header` or `SettingsView`: Server Components render them. Every component below gets its node as a prop and calls `useForm` on it. Do not read the whole store from the context in each component: it works, but ties the component to this app's store and to one path in it, so its parent no longer decides which node it shows and it cannot be reused on another node.
+- **One store per request on the server, one per session in the browser.** Each request renders its own provider. In the browser Next.js keeps a layout mounted while the pages inside it change, so the store, and what the user typed into it, outlives client navigations. A full page load builds a new store from that request's data.
+- **The data is read once**, like every `initialData`. A layout that can re-render with another account without a page load (sign-in, sign-out, `router.refresh()`) needs the `key` shown above: signing in or out is then another provider instance, so another store.
+- **It starts like any `usePalistor` store**: after the provider has committed. Until then every reader below sees `loading: true` for whatever is going to start, on the server and in the browser's first render. Below `<PalistorProvider>`, when the app has one, it gets the translator, the notifier and the shared context in its constructor like any other store.
+- **Nothing outside React can import this store.** A handler or helper takes it as an argument from the component that has it. A resolver of another store takes the value it needs as a `context` key (the provider's, or the `usePalistor` options). A module-level `new Palistor()` stays right for state that holds no request data and has to be importable everywhere. On the server it is in server mode and no effect hook reaches it, so its HTML shows the defaults; in the browser it starts when its module loads, not after hydration.
+
+Result to check: "View source" shows the account's name wherever a component reads it; an edit in one component shows in every other reader at once, re-renders only the components of that field, and is still there after navigating to another page and back; the page source of a signed-out visitor shows nothing of another user.
+
+Source: `cube/ssr/usePalistor.test.tsx` ("usePalistor: one store handed down through a React context", "two components with the same config get different stores", "an options object is read once too", "the provider's values are in the constructor", "new Palistor() outside the hook is not held: in the browser its constructor starts it"), `cube/react/nodeProps.test.tsx` ("a node handed down as a prop, level after level"), `cube/types.ts` (`UseForm`), `cube/palistor.ts` (constructor: `initialData`, `hold`), `cube/react/usePalistor.ts`.
+
 ### Know when the store starts
 
 `usePalistor` builds the store held: a render starts nothing, in the browser as on the server. An effect calls `store.start()` once the component has committed.
@@ -304,9 +398,25 @@ export function CustomersView({ customers }) {
   customersStore.proxy.customers.setItems(customers.map((c) => c.id));
 ```
 
-Correct: `const store = usePalistor(() => ({ config, initialData: { customers } }))` in the Client Component, as in Setup. A module-level store stays fine for state that holds no request data.
+Correct: `const store = usePalistor(() => ({ config, initialData: { customers } }))` in the Client Component, as in Setup. When the whole app has to share the store, create it in a provider the layout renders ("Share one store across the app"). A module-level store stays fine for state that holds no request data.
 
 Why: `initialData` is accepted by the constructor only, and `usePalistor` builds one store per component instance. Source: `cube/palistor.ts` (constructor), `cube/ssr/usePalistor.test.tsx` ("two components with the same config get different stores").
+
+### HIGH — `usePalistor` called in every component that needs the shared store
+
+Wrong — it reads like "the app's store", but the header and the page each build their own:
+
+```text
+export function useAppStore() {
+  return usePalistor(() => ({ config: appConfig, initialData: { account } }));   // a new store per caller
+}
+```
+
+The server's HTML and the hydration look right, since every copy starts from the same data. Then an edit in one component never reaches another, and a page's copy is gone when the page unmounts.
+
+Correct: call `usePalistor` once, in a provider the layout renders. The entry of each client subtree reads the store from a React context and hands nodes down as props, as in "Share one store across the app".
+
+Why: the hook keeps the store in the component instance that called it; the config is not a key. Source: `cube/ssr/usePalistor.test.tsx` ("two components with the same config get different stores", "every reader below the provider has the same store: a write through one shows in the other, and the page changing keeps it").
 
 ### HIGH — Translator, notifier or context applied through an effect
 
