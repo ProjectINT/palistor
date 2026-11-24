@@ -14,11 +14,11 @@ A `filter` block on `defineList` holds the filter controls of one list. The cont
 | `role: { value: "", apply: "manual" }` | Manual field (server or client) | Nothing until `filter.apply()`: the value is a draft (manual mode, below) |
 | `$all: (row, filterValues) => boolean` | Block option | Extra in-memory rule over all filter values, run after the `where` rules. It runs only in a block that has a client field: give a field that only `$all` reads `where: () => true` |
 | `$toParams: (filterValues, context) => unknown` | Block option | Builds `ctx.filter.params` yourself |
-| `$apply: "manual"` | Block option | Every field of the block is a manual field, unless it declares `apply: "auto"` |
+| `$apply: "manual"` | Block option | Every non-derived field of the block is a manual field, unless it declares `apply: "auto"` |
 
 A field object accepts the usual leaf options too (`label`, `placeholder`, `formatter`, `isVisible`, …). Its computed options receive the filter's own values.
 
-The block is typed loosely, so its callbacks get no parameter types from `TEntity`: annotate `where`, `$all`, `$toParams` and derived `value` parameters yourself.
+The block is typed loosely: `where` and a derived `value` get no parameter types, so annotate their parameters yourself or a `strict` project fails with TS7006. `$all` and `$toParams` are typed (`row: TEntity`, `filterValues: Record<string, unknown>`): leave their parameters unannotated or use `Record<string, unknown>`, because a narrower interface for the filter values fails with TS2322.
 
 ## Example
 
@@ -84,9 +84,9 @@ function CarRow({ car }: { car: PalistorRef<Car> }) {
 | --- | --- |
 | `filter.<field>` | A field proxy: `value`, `onValueChange`, `label`, … Spread it into an adapter like a form field. |
 | `filter.values` | Plain snapshot of all filter values, derived fields included. In manual mode: the drafts. |
-| `filter.set(patch)` | Write several fields at once: one notification, one request, no debounce. A manual field takes the value as its draft. |
-| `filter.reset()` | Back to the declared defaults (as drafts in manual mode). |
-| `filter.clear(field?)` | Empty one field or all of them: `""`, `[]`, `false` or `null`, by the type of the default (as drafts in manual mode). |
+| `filter.set(patch)` | Write several fields at once: one notification, no debounce, and one request when an automatic server field changed. A manual field takes the value as its draft and requests nothing. |
+| `filter.reset()` | Back to the declared defaults (as drafts for manual fields). |
+| `filter.clear(field?)` | Empty one field or all of them: `""`, `[]`, `false` or `null`, by the type of the default (as drafts for manual fields). |
 | `filter.isActive` | Some non-derived field is non-empty (by its applied value in manual mode). |
 | `filter.activeCount` | How many such fields. |
 | `filter.isPending` | A debounced change is waiting to send its request. |
@@ -198,17 +198,17 @@ function CustomerItem({ customer }: { customer: PalistorRef<Customer> }) {
 
 - The draft is what `filter.<field>.value`, its input and `filter.values` show. Everything that acts on the list reads the applied value: the client projection (`where`, `$all`), `ctx.filter.values`, `params` and `key`, `$toParams`, the page key, `isActive`, `activeCount` and `filter.applied`.
 - Typing in a manual field sends nothing, leaves the rows as they are and does not re-render a component that reads only the rows.
-- `apply()` is one notification and at most one request: none when every draft equals its applied value. A paginated list goes back to its first page. A debounced change of an automatic field that is still pending goes into the same request, and its debounce stops.
+- `apply()` is one notification and at most one request: none when every draft equals its applied value, and none when only client (`where`) fields moved — the loaded rows are filtered again. When the request changes, a paginated list goes back to its first page. A debounced change of an automatic field that is still pending goes into the same request, and its debounce stops; an `apply()` with no draft to apply does nothing, and that debounce runs on.
 - `revert()` writes the applied values back into the fields (no `formatter`, no `onChange`) and sends nothing.
-- `isDraft` compares like `dirty`: `null` equals `undefined`, arrays and objects by content.
-- `set`, `reset` and `clear` write drafts only. A "Clear all" button is `clear()` then `apply()`, a chip's ✕ is `clear("role")` then `apply()`: one request each.
+- `isDraft` compares like `dirty`: `null` equals `undefined`; arrays and objects compare by their JSON text, so key order counts.
+- `set`, `reset` and `clear` write the manual fields as drafts; a field with `apply: "auto"` changes at once and sends its own request. A chip's ✕ on a manual field is `clear("role")` then `apply()`: one request. A "Clear all" is `clear()` then `apply()`, which is two requests when the block has a non-empty automatic server field (`quick` above): `clear()` sends the first one at once, with the old applied values of the manual fields. To clear only the manual fields in one request, call `filter.set({ search: "", role: "" })` then `apply()`.
 - A field with `apply: "auto"` in a manual block keeps its own `debounce` and sends its request by itself; that request carries the applied values of the manual fields, not their drafts. `apply: "manual"` on one field makes only that field manual in an automatic block.
 - A derived field's `value` is computed from the drafts; `filter.applied` and the list compute it from the applied values.
-- With `initialData` nothing is requested until the first `apply()` that changes a value.
-- `useForm(props.filter)` type-checks: a filter panel gets `list.filter!` as a `FilterProxyNode` prop, like a field.
+- With `initialData`, typing in a manual field requests nothing. The first request comes from an `apply()` that changes a server field's applied value, or from an automatic field's own change.
+- `useForm(props.filter)` type-checks: a filter panel gets `list.filter!` as a `FilterProxyNode` prop, like a field. Its fields come through an index signature typed `any`, so `f.role.value` is not checked: give a child input a typed prop (`FieldProxyNode<string>`, as `TextField` above).
 - A block built in a separate variable needs `as const`: otherwise `$apply` widens to `string` and `defineList` rejects the block (TS2322).
 
-Source: `cube/core/filter.ts` (`effective`, `apply`, `revert`, `isDraft`, `check`), `cube/core/filterApply.test.ts`, `cube/react/filterApply.react.test.tsx` ("the plan's filter panel", "apply mode + useForm precision"), `cube/types.ts` (`UseForm`), `store/store/types.ts` (`FilterBlock.$apply`, `FilterFieldConfig.apply`, `FilterProxyNode`); `as const`: authoring type check.
+Source: `cube/core/filter.ts` (`effective`, `apply`, `revert`, `isDraft`, `check`), `cube/core/filterApply.test.ts`, `cube/react/filterApply.react.test.tsx` ("the plan's filter panel", "apply mode + useForm precision"), `cube/types.ts` (`UseForm`), `store/store/types.ts` (`FilterBlock.$apply`, `FilterFieldConfig.apply`, `FilterProxyNode`), `cube/core/config.ts` (`isDirtyValue`); `as const`: authoring type check; `clear()` + `apply()` next to a non-empty automatic field (two resolver runs) and the `initialData` cases: release-audit probe.
 
 ## Constraints
 
@@ -226,9 +226,8 @@ Other limits:
 - A `filter` block on a list nested inside a row is ignored with a console warning.
 - Filter values are not persisted by `usePersist`. `$persist` is accepted and has no effect.
 - With `fieldMapping`, filter field configs are written and read in the mapped names, like form fields. A mapping that renames a prop to a list key such as `values` or `filter` throws when the store is created.
-- Manual mode exists in the package entry `"palistor"` only: the legacy implementation behind `palistor/store/*` rejects `$apply` as an unknown option.
 
-Source for the manual-mode rules: `cube/core/filter.ts` (`normalize`, `FILTER_BUILTINS`), `cube/core/filterApply.test.ts` ("dead or invalid apply config throws at construction"), `cube/index.ts`.
+Source for the manual-mode rules: `cube/core/filter.ts` (`normalize`, `FILTER_BUILTINS`), `cube/core/filterApply.test.ts` ("dead or invalid apply config throws at construction").
 
 ## Common mistakes
 
@@ -274,7 +273,7 @@ Wrong: a "Clear all" button that calls `filter.clear()` on a manual block.
 
 Correct: `filter.clear()` then `filter.apply()`.
 
-Why: in manual mode the three write drafts only; the rows, the request and `isActive` follow `apply()`. Source: `cube/core/filterApply.test.ts` ("set() writes the drafts and requests nothing; apply() sends them", "clear() writes the drafts; clear() + apply() is one request").
+Why: in manual mode the three write the manual fields as drafts; the rows, the request and `isActive` follow `apply()`. A field with `apply: "auto"` changes at once, so in a block that has one, see the "Clear all" rule above. Source: `cube/core/filterApply.test.ts` ("set() writes the drafts and requests nothing; apply() sends them", "clear() writes the drafts; clear() + apply() is one request").
 
 ### MEDIUM — A field that only `$all` reads
 

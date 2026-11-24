@@ -104,7 +104,7 @@ How it runs:
 - `onError` is the notification channel (a toast through `useNotifier`); `list.error` is the state to render. Use both. Next to `notify`, `onError` gets `t`, the store's translator, for the message; the declared type lacks it, so read it through the cast shown in [list API](references/list-api.md).
 - `map` passes `(row, index, id)`. Use `id` as the React key.
 - A row field is a field proxy like `form.email`: spread it into the adapter from the `palistor` skill (`<Input {...u.name} />`) or bind it by hand as above.
-- Callbacks inside `defineList<TEntity>` (template rules, `resolver`, `onError`) take their parameter types from `TEntity`. A `filter` block and a separate edit template do not: annotate their callback parameters, or a `strict` project fails with TS7006.
+- Callbacks inside `defineList<TEntity>` (template rules, `resolver`, `onError`) take their parameter types from `TEntity`. A `filter` block's `where` and derived `value`, and a separate edit template, do not: annotate those parameters, or a `strict` project fails with TS7006.
 
 Source for the `usePalistor` and `onError` rules: `cube/ssr/usePalistor.test.tsx` ("the render starts nothing and reads what a server render reads; the effect starts everything once"), `cube/core/resolve.test.ts` ("onError gets the store's translator").
 
@@ -228,7 +228,7 @@ Before adding per-field loaders, forcing the loader to run again, or handling th
 
 ### Filter the rows
 
-Declare a `filter` block on the list. A field with `where` filters the loaded rows in memory; any other field is sent to the resolver in `ctx.filter.params` and re-fetches the list when it changes.
+Declare a `filter` block on the list. A field with `where` filters the loaded rows in memory; any other non-derived field is sent to the resolver in `ctx.filter.params` and re-fetches the list when it changes (on `filter.apply()` in manual mode).
 
 ```tsx
 import { defineList, Palistor, useForm } from "palistor";
@@ -270,7 +270,7 @@ import { defineList, Palistor, useForm } from "palistor";
 import type { PalistorList, SortProxyNode } from "palistor";
 
 interface Product { id: string; title: string; price: number }
-type ProductKey = keyof Product & string; // with nested groups: SortKey<Product>
+type ProductKey = keyof Product & string; // with object fields: SortKey<Product>
 
 const products = defineList<Product>({
   template: { id: { value: "" }, title: { value: "" }, price: { value: 0 } },
@@ -291,7 +291,7 @@ function SortHeader({ sort, column, children }: { sort: SortProxyNode<ProductKey
 ```
 
 - In the browser the order is a snapshot: an edited row stays in place and an added row goes last until the next sort action, load or `sort.refresh()`.
-- A paginated list (or one with `$server: true`) is sorted by its server: the resolver sends `ctx.sort.by`, and each sort change is one request for the first page.
+- A paginated list (or one with `$server: true`) is sorted by its server: the resolver sends `ctx.sort.by`, and each sort change is one request (a paginated list starts over at its first page).
 
 Before adding a sort, choosing what sorts, paging a sorted list in memory, sorting a server-rendered or HeroUI table, or sorting on the server, read [sorting](references/sorting.md).
 

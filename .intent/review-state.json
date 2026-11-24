@@ -35,7 +35,7 @@
       ]
     },
     "skill:skills/palistor-lists/SKILL.md": {
-      "fingerprint": "d7a8e8b04cb9b8a1254d95cd4ecbd7e807e29cfddc02982d2d328e73bc41be20",
+      "fingerprint": "6e7ab54ee040226a25ebbfdbc6c334be3d21dd2e3c59419ed1b022a1e826df34",
       "snapshot": {
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
         "cube/core/filter.ts": "7980c046fb034b6abc63762056712d41c6faf9f18fc2658cd36117d220effb14",
@@ -50,21 +50,21 @@
         "cube/react/useForm.ts": "78c489fcd1635d45a6af39a7852227bc505f1602da6c60dccc24e5cbea85efa3",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor-lists/SKILL.md": "0b3ffeff7f90455f34ee016f0ab8fd5adb76a95725516c7fce97e918c4e397fd",
+        "skills/palistor-lists/SKILL.md": "2ef77e4aaaec78cca01ade7189c97a855eb9ce3c0163fe262b4d5f90012d303d",
         "skills/palistor-lists/references/entity-editing.md": "e145b654f3d67b60af057c861c4e2213523fdd658c4284691faa3f0d51ee7fa6",
-        "skills/palistor-lists/references/filtering.md": "cc6190daf9428c547c718534967db7c96a8e8de47e35140006d54bbe40b77f6e",
+        "skills/palistor-lists/references/filtering.md": "4698cf6168e483ef245c2942aa1dc50f6012c70aadc704fbcd4a945501444e6a",
         "skills/palistor-lists/references/list-api.md": "e508e01ac35a6f7650889764024ecb5e7d39d2936ca18493cd4bb8f2259edca4",
-        "skills/palistor-lists/references/pagination.md": "22c3c70a31da9bb30a1233bbecc3ce5dea4c0c215bace444a005ce9f5a501055",
-        "skills/palistor-lists/references/sorting.md": "e46ae6ab748b1abeca1d4ef4a88dde4a71fbfbd5dbc8489b05de13122ce9f046",
+        "skills/palistor-lists/references/pagination.md": "b9f330ca612b6253ee677284968ae563e1367f3dccea8e92ce7d8ab081737635",
+        "skills/palistor-lists/references/sorting.md": "9ef6e3ec63c0b4933890fe28ccd5fe07f40c0e39a9d00c81299fdd3cae332eb0",
         "store/defineList.ts": "eae2bba663a061e24e0b0db54e19f6e38fc0085833bf53780bd6ecc7ae6e2dda",
         "store/pagination/types.ts": "3e3ef8e8f7928b9ca1822746c40ed5fca13fe67a8c9e9cd240a14240b95e2118",
         "store/store/types.ts": "d1cab747a9a44216a05c6de19cf9d57199dedea031afa31d99a77534050afef8"
       },
-      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
-      "outcome": "no-change",
-      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
+      "head": "7572329899a34b8399a0ea5e33a59f9051cc1f01",
+      "outcome": "updated",
+      "reason": "Release audit of 0.1.1-cube.3 (skill_spec.md, batch 7): eleven statements in sorting.md, filtering.md, pagination.md and SKILL.md corrected against cube/** (legacy-entry claims removed, dirOf, re-render with memo, dotted keys need { by } in a typed template, compare and staleTime caveats, manual-mode set/clear with an automatic field, $all/$toParams typing, initialData, keepPreviousData pager, persist restore and flush conditions); queryKey caveat added for server filter and sort.",
       "evidence": [
-        "Changed: skills/palistor-lists/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
+        "cube/core/filter.ts (setFields, issue, apply), cube/core/sort.ts (dirOf, parse, comparator), cube/core/pagination.ts (computeKey, retrigger, ensureFamily, hasNextPage, hasPrevPage, seed), cube/core/persist.ts (save, fetchingPage), cube/core/config.ts (isDirtyValue), cube/exports/store/store.ts, store/store/types.ts (FilterBlock, TemplateConfig), cube/react/sort.react.test.tsx (memo row); release-audit probes (queryKey: 0 requests for filter.set and sort.toggle); strict compile of 74 fences; intent validate."
       ]
     },
     "skill:skills/palistor/SKILL.md": {
@@ -106,7 +106,7 @@
       ]
     },
     "planning:skills/_artifacts": {
-      "fingerprint": "cf0c7f463f9681baf3d8ff5572ba4c0fab7879cc80c32e1a6ae0c5391c1c2ff9",
+      "fingerprint": "8d283ea686ab2eff013da4c171abf90ba1c48e4adba3735ac27735587bea4f9f",
       "snapshot": {
         "cube/core/config.ts": "835df88b1f5e75ba07c3dbfef16886eb330f2d2de8985ca67011651e704c4703",
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
@@ -136,18 +136,18 @@
         "cube/types.ts": "5e14db630cb76b45576626f187ae6ef765684872f831d5d72ff89afbaf19cb65",
         "index.ts": "e89f0234c4483f7829d788d27c56245ffca8f03cc50e9eec808cbf6f922add63",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/_artifacts/domain_map.yaml": "c14cd1f2d21b27ccd29e31f6c29256e98d72bf1998c5f56e70c4a5d0413ddb32",
-        "skills/_artifacts/skill_spec.md": "69ae6ceb63e825951cdd1b5cf66ec8c5a5fcd4d477b2cf5cc2689a891e399e2d",
+        "skills/_artifacts/domain_map.yaml": "76689b45c9f59af0555af04e46e5f32146763d5ef31a0f32856be166b68a702e",
+        "skills/_artifacts/skill_spec.md": "2db365b83c1169e2cf5f59c67bc16e73704a40995af80dc73b5c5c5b4d5bb0c1",
         "skills/_artifacts/skill_tree.yaml": "50e4deacd84f9f766eee29c47989c680ec50b4d96263a854ffa063e417915983",
         "skills/palistor-field-mapping/SKILL.md": "268a428c651e50397b397e39f71eba4aa2f6a217dbd7f0223021b054ab17ed54",
         "skills/palistor-flows/SKILL.md": "c3f5b31a70db303b985bd36c64b5cc2e99d541d66314fa8fade6a6c2973e45c5",
         "skills/palistor-flows/references/flow-api.md": "cb851933afdb9924fc92098cdbed18b67365f8372b83c1ab215b39a028ebb0c9",
-        "skills/palistor-lists/SKILL.md": "0b3ffeff7f90455f34ee016f0ab8fd5adb76a95725516c7fce97e918c4e397fd",
+        "skills/palistor-lists/SKILL.md": "2ef77e4aaaec78cca01ade7189c97a855eb9ce3c0163fe262b4d5f90012d303d",
         "skills/palistor-lists/references/entity-editing.md": "e145b654f3d67b60af057c861c4e2213523fdd658c4284691faa3f0d51ee7fa6",
-        "skills/palistor-lists/references/filtering.md": "cc6190daf9428c547c718534967db7c96a8e8de47e35140006d54bbe40b77f6e",
+        "skills/palistor-lists/references/filtering.md": "4698cf6168e483ef245c2942aa1dc50f6012c70aadc704fbcd4a945501444e6a",
         "skills/palistor-lists/references/list-api.md": "e508e01ac35a6f7650889764024ecb5e7d39d2936ca18493cd4bb8f2259edca4",
-        "skills/palistor-lists/references/pagination.md": "22c3c70a31da9bb30a1233bbecc3ce5dea4c0c215bace444a005ce9f5a501055",
-        "skills/palistor-lists/references/sorting.md": "e46ae6ab748b1abeca1d4ef4a88dde4a71fbfbd5dbc8489b05de13122ce9f046",
+        "skills/palistor-lists/references/pagination.md": "b9f330ca612b6253ee677284968ae563e1367f3dccea8e92ce7d8ab081737635",
+        "skills/palistor-lists/references/sorting.md": "9ef6e3ec63c0b4933890fe28ccd5fe07f40c0e39a9d00c81299fdd3cae332eb0",
         "skills/palistor-ssr/SKILL.md": "3ad871026400269d8ac183da1eefea03667afdb6b473979fc9561dc259b55fed",
         "skills/palistor/SKILL.md": "e46ae04d57382989b62193376eb455bf22e23df36397490f71b1082dffcc5391",
         "skills/palistor/references/async-resolve.md": "02dd1ce2b253b4a06c6125206bc9c265e54cf72cc4e2825d9866cee2049d600e",
@@ -165,11 +165,11 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "d1cab747a9a44216a05c6de19cf9d57199dedea031afa31d99a77534050afef8"
       },
-      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
-      "outcome": "no-change",
-      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
+      "head": "7572329899a34b8399a0ea5e33a59f9051cc1f01",
+      "outcome": "updated",
+      "reason": "Batch 7 recorded: domain_map.yaml header and three gaps (queryKey drops filter and sort, groups in a typed template, Clear all next to an automatic field); skill_spec.md Remaining Gaps rows, the version row resolved at 7572329, and the Batch 7 section; skill_tree.yaml unchanged because no skill, reference or source was added.",
       "evidence": [
-        "Changed: skills/palistor-field-mapping/SKILL.md, skills/palistor-flows/SKILL.md, skills/palistor-lists/SKILL.md, skills/palistor-ssr/SKILL.md, skills/palistor/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
+        "skills/_artifacts/domain_map.yaml, skills/_artifacts/skill_spec.md (Batch 7), skills/_artifacts/skill_tree.yaml (unchanged)."
       ]
     },
     "skill:skills/palistor-ssr/SKILL.md": {

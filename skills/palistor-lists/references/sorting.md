@@ -14,7 +14,7 @@ import { defineList, Palistor, useForm } from "palistor";
 import type { PalistorList, PalistorRef, SortProxyNode } from "palistor";
 
 interface Product { id: string; title: string; price: number; rating: number | null }
-type ProductKey = keyof Product & string; // a flat entity; with nested groups use SortKey<Product>
+type ProductKey = keyof Product & string; // a flat entity; with object fields use SortKey<Product>
 declare function fetchProducts(): Promise<Product[]>;
 
 const products = defineList<Product>({
@@ -68,10 +68,10 @@ How it runs:
 - `toggle(key)` steps none → ascending → descending → back to the `$default` state (no sort without one: the list's own order). Another key starts at ascending. When descending is itself the `$default` state, the next step is ascending, so a `$default` on the same key does not get stuck.
 - `items`, `map`, `length` and iteration follow the sort; `map`'s `index` is the position on screen. `getById`, `getValues()`, `dirty`, `store.getValues()` and the submit payload keep the list's own order. With a client filter, the filter narrows the sorted rows and keeps their order.
 - A client sort calls no resolver: a sort change requests nothing, and the resolver's `ctx.sort.by` is empty.
-- Re-rendering: a header that calls `useForm(sort)` re-renders when the sort state changes; the list component re-renders when the order of its rows changes; a row re-renders for its own values only. A sort change that leaves the order as it was re-renders the headers alone.
+- Re-rendering: a header that calls `useForm(sort)` re-renders when the sort state changes. When the order changes, the list component re-renders, and with it the headers and every row component, unless the row is wrapped in `React.memo` (the row node is the same object from render to render, so `memo` keeps unchanged rows out). A value edit re-renders that row only. A sort change that leaves the order as it was re-renders the headers alone.
 - The sort is outside the form: not in `getValues()`, the submit payload or a persisted draft, and `store.reset()` keeps it. `sort.reset()` returns to `$default`, `sort.clear()` to no sort.
 
-Source: `cube/core/sort.test.ts` ("toggle", "a projection over the membership", "the resolver", "outside the form"), `cube/react/sort.react.test.tsx` ("a sortable table: who re-renders"), `cube/core/listCube.ts` (`visibleIds`).
+Source: `cube/core/sort.test.ts` ("toggle", "a projection over the membership", "the resolver", "outside the form"), `cube/react/sort.react.test.tsx` ("a sortable table: who re-renders", with a `memo` row), `cube/core/listCube.ts` (`visibleIds`).
 
 ## Choose the sortable fields
 
@@ -108,20 +108,25 @@ export const orders = defineList<Order>({
   },
 });
 
-// A block declared on its own: `SortBlock<T>`; a leaf in a group is a dotted path.
+// A block declared on its own: `SortBlock<T>`. A field inside an object field is a dotted path, sorted with `by`.
 interface Customer { id: string; name: string; address: { city: string } }
-export const customerSort: SortBlock<Customer> = { $default: "address.city", "address.city": true, name: true };
+export const customerSort: SortBlock<Customer> = {
+  $default: "address.city",
+  "address.city": { by: (row: Customer) => row.address.city },
+  name: true,
+};
 ```
 
 - With `defineList<TEntity>` every key of the block must be a sort key of the entity (`SortKey<TEntity>`), also for a `{ by }` or `{ compare }` field whose value is computed: name it after the entity field it stands for. The runtime would accept any name; the types do not (TS2353).
 - `id` is always sortable when the block names it, with or without an `id` leaf in the template.
-- Calling `toggle`, `set`, `dirOf` or `onSortChange` with a key that does not sort throws `unknown sort key`.
+- A dotted key such as `"address.city"` names a leaf in a template group. A typed `defineList<TEntity>` template cannot declare a group (TS2353), so there an object field is one leaf holding the object (`address: { value: { city: "" } }`), and a client value sort `"address.city": true` throws when the store is created: it is not a template leaf. Sort such a field with `{ by }`, as `customerSort` does.
+- Calling `toggle`, `set` or `onSortChange` with a key that does not sort throws `unknown sort key`; `dirOf` returns `null` for it.
 
 These throw when the store is created: an unknown `$` option, `$default` by a key that does not sort, a value sort (`true`) by a key that is not a template leaf (client class), `by` together with `compare`, an unknown field option, a field value other than `true` or an object, an invalid `$locale`, and an option of the other class (`by`, `compare` or `$locale` on a server list, `param` on a client list, `$server: true` without a resolver, `$server: false` on a paginated list). Source: `cube/core/sort.ts` (`parse`), `cube/core/sort.test.ts` ("config that can never apply throws when the store is created"), `cube/core/sortServer.test.ts` ("a server sort's block"), `store/store/types.ts` (`SortBlock`, `SortKey`).
 
 ## How values compare
 
-These rules are the client class's; a server sorts by its own rules.
+These rules are the client class's, for a value sort and a `{ by }` field; a server sorts by its own rules. A `{ compare }` function gets the two rows and decides everything itself, empty values included; descending still negates its result, and ties keep the list's order.
 
 - Numbers as numbers; `false` before `true`; a `Date` returned by `by` by time.
 - Strings through `Intl.Collator` with `numeric: true` and `sensitivity: "base"`: "Item 2" before "Item 10", case and accents ignored.
@@ -265,21 +270,22 @@ export const orders = defineList<Order>({
 
 - `ctx.sort` is `{ by: [{ key, param, dir }], key }`, first entry first; `param` is the key unless the field declares `{ param }`. It is `{ by: [], key: "" }` while nothing is sorted, for a client sort and on a list without a block. The package's `ListResolveContext` types `sort` as always present.
 - The list shows the rows in the order the resolver returned them and never reorders them itself: `sort.refresh()` does nothing here. To fetch again, call `list.reload()`.
-- A sort change is one request. A paginated list puts the sort into its query key: it starts over at the first page; with `keepPreviousData` the old rows stay on screen with `isPreviousData`; with `maxCachedQueries` above 1 a sort whose first page is still cached is shown without a request; an `infinite` window goes back to its first page. Presses in quick succession on a paginated list fetch once each, and only the last answer is shown. A plain `$server: true` list runs its resolver again; changes while a run is in flight cause one more run, with the latest sort.
+- A sort change is one request. A paginated list puts the sort into its query key: it starts over at its first page (`initialPage`); with `keepPreviousData` the old rows stay on screen with `isPreviousData`; with `maxCachedQueries` above 1 a sort whose first page is still cached, and within `staleTime`, is shown without a request; an `infinite` window goes back to its first page. Presses in quick succession on a paginated list fetch once each, and only the last answer is shown. A plain `$server: true` list runs its resolver again; changes while a run is in flight cause one more run, with the latest sort.
 - Setting the sort the list already has requests nothing. A list that has not loaded yet requests nothing for a sort change; its first load sends the current sort.
 - Without a server sort (nothing sorted), `ctx.queryKey` and `ctx.page.queryKey` are what a list without a sort block gets.
 - With a server filter: a sort change while a filter field's `debounce` is running carries the pending value in the same request, and the debounce then sends nothing (`filter.isPending` stays `true` until it runs out). There is no public way to group a filter change and a sort change: `filter.set(…)` or `filter.apply()` followed by `sort.toggle(…)` in one handler is two requests (on a paginated list the second replaces the first; a plain list runs once more after the first run lands).
 - `initialData` answers the sort the store starts with: the rows must already be in the `$default` order. There is no request after construction, and the first sort change is one request. See the `palistor-ssr` skill.
 - The sort state is never persisted. A window saved by `usePersist` under another sort is not restored for a store that starts at `$default`: it fetches.
+- A custom `pagination.queryKey` replaces the whole automatic key, the sort included: a sort change then sends no request, and the rows keep their old order under the new header. Do not combine a server sort with `queryKey`.
 
-Source: `cube/core/sort.ts` (header, `serverKey`, `request`, `launch`, `markIssued`, `check`), `cube/core/pagination.ts` (`SORT_DEP`, `commitKeys`, `invalidate`, `keyFromPairs`, `retrigger`), `cube/core/resolve.ts` (`invalidate`), `cube/core/listCube.ts` (`resolveContext`), `cube/core/restore.ts`, `cube/core/sortServer.test.ts`, `cube/ssr/initialDataLists.test.tsx` ("initialData: a paginated list with a server sort"); two requests for a filter change and a sort change in one handler, and one request per quick press on a paginated list: authoring probe.
+Source: `cube/core/sort.ts` (header, `serverKey`, `request`, `launch`, `markIssued`, `check`), `cube/core/pagination.ts` (`SORT_DEP`, `commitKeys`, `invalidate`, `keyFromPairs`, `retrigger`), `cube/core/resolve.ts` (`invalidate`), `cube/core/listCube.ts` (`resolveContext`), `cube/core/restore.ts`, `cube/core/sortServer.test.ts`, `cube/ssr/initialDataLists.test.tsx` ("initialData: a paginated list with a server sort"); `queryKey`: `cube/core/pagination.ts` (`computeKey`) and a release-audit probe; two requests for a filter change and a sort change in one handler, and one request per quick press on a paginated list: authoring probe.
 
 ## Typing
 
 - `list.sort` is typed optional: `list.sort!` on a list that declares the block.
-- A header prop: `SortProxyNode<keyof Product & string>` for a flat entity, `SortProxyNode<SortKey<Product>>` when the entity has nested groups (their leaves are dotted paths, and the group name is not a key). An untyped `SortProxyNode` accepts any list's sort.
+- A header prop: `SortProxyNode<keyof Product & string>` for a flat entity, `SortProxyNode<SortKey<Product>>` when the entity has object fields (their fields are dotted paths, and the object field's own name is not a key). An untyped `SortProxyNode` accepts any list's sort.
 - `useForm(sort)` returns the same type. Take `sort` from a `useForm` result: a raw `store.proxy.products.sort` throws `useForm: received a raw store proxy node`, as any raw node.
-- Inside `defineList<TEntity>` the `by` and `compare` rows and the resolver's `ctx` are typed from `TEntity`; a resolver declared outside takes `ctx: ListResolveContext`.
+- Inside `defineList<TEntity>` the `by` and `compare` rows are typed from `TEntity`, and the resolver's `ctx` has `sort` as always present; a resolver declared outside takes `ctx: ListResolveContext`.
 - `SortBlock<T>`, `SortKey<T>`, `SortDirection`, `SortRequest` and `SortProxyNode<K>` are exported from `"palistor"`.
 
 Source: `store/store/types.ts` (`SortProxyNode`, `SortKey`, `ListProxyNode.sort`, `ListResolveContextWithSort`), `cube/index.ts`, `cube/types.ts` (`UseForm`), `cube/react/sort.react.test.tsx` (type checks, "a raw list.sort from store.proxy is refused").
@@ -290,9 +296,8 @@ Source: `store/store/types.ts` (`SortProxyNode`, `SortKey`, `ListProxyNode.sort`
 - Root lists only: a `sort` block on a list nested in a row is ignored with a console warning.
 - The sort state is not persisted and has no slot in `initialData`: set the starting sort with `$default`.
 - A `fieldMapping` leaves the block as written: its keys and options are not field props.
-- The legacy implementation behind `palistor/store/*` has no sort: `defineList` drops the block there and `list.sort` is `undefined`. The package entry `"palistor"` sorts.
 
-Source: `cube/core/sort.ts` (`warnNestedSorts`, header comment), `cube/core/sort.test.ts` ("a sort on a nested (per-entity) list is ignored with a warning", "fieldMapping"), `cube/index.ts` (the sorting divergence), `store/defineList.ts`.
+Source: `cube/core/sort.ts` (`warnNestedSorts`, header comment), `cube/core/sort.test.ts` ("a sort on a nested (per-entity) list is ignored with a warning", "fieldMapping").
 
 ## Common mistakes
 
@@ -324,7 +329,7 @@ Why: the header changes and a request goes out, but the rows come back in the sa
 
 Wrong: relying on a client-sorted list to re-order itself after an inline edit, a realtime `store.set` or a `list.add`.
 
-Correct: call `list.sort.refresh()` (a "Re-sort" button, or after a batch of updates), or let the next sort action or resolve order the rows.
+Correct: call `list.sort!.refresh()` (a "Re-sort" button, or after a batch of updates), or let the next sort action or resolve order the rows.
 
 Why: the order is a snapshot: an edit moves nothing and a new row goes last until the next recompute, so a row can sit out of place under a ▲ header. Source: `cube/core/sort.test.ts` ("a value edit in the sorted column moves nothing and keeps the items array; refresh() puts the row in place", "add: the new row goes to the end; a toggle puts it in place").
 
@@ -344,7 +349,7 @@ Correct: ISO strings or timestamps in the rows; a `by` that builds the `Date` wh
 
 Why: the registry stores a `Date` as `{}`: every row compares equal and the column keeps the list's order. Source: `cube/core/sort.test.ts` (comment on "dates by time…"), authoring probe (above).
 
-### MEDIUM — A header prop typed with `keyof` on an entity with groups
+### MEDIUM — A header prop typed with `keyof` on an entity with object fields
 
 Wrong: `sort: SortProxyNode<keyof Customer & string>` where `Customer` has `address: { city: string }`.
 

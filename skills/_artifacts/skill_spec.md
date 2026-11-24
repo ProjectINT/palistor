@@ -200,10 +200,13 @@ Decisions that belong to the maintainer. None blocks the skills; each states wha
 | `palistor-lists` | A `{ by }` / `{ compare }` sort field must be named after an entity leaf in the types (TS2353), any name works at run time. The sorting reference teaches the workaround | open |
 | `palistor-lists` | Library or guidance? With `keepPreviousData` the pager already shows the new query's counts ("Page 1 of 0" over the previous rows); `usePersist` hydrates after the store has started, so a persisted window costs one request. Both documented as they are | open |
 | `palistor-lists` | Batch 6 statements resting on authoring probes or third-party code, not on a named test: `Date` stored as `{}`, `$all` without a `where` field, `$toParams` not the request identity, the `usePersist` request, `setScrollAnchor`, the `keepPreviousData` pager, one request per quick press on a paginated server sort, two requests for filter + sort in one handler, `as const` for `$apply`, HeroUI rejecting a custom row (`@react-stately/collections`) | open |
+| `palistor-lists` | A custom `pagination.queryKey` replaces the whole key, so the server filter and the server sort never reach it: a filter change or a sort change sends no request and the rows stay (`cube/core/pagination.ts`, `computeKey`; release-audit probe, batch 7). Looks like a library defect; `pagination.md` and `sorting.md` warn against the combination | open |
+| `palistor-lists` | A typed `defineList<TEntity>` template cannot declare a group (TS2353), so a dotted sort key (`"address.city"`) works there only as `{ by }`; a client value sort on it throws at construction. `sorting.md` teaches the `by` form. Should typed templates accept groups? | open |
+| `palistor-lists` | In a manual filter block with a non-empty automatic server field, `clear()` then `apply()` is two requests, the first with the old applied values. `filtering.md` documents it and the one-request form. Library or guidance? | open |
 | `palistor-ssr` | A list resolve cannot declare a context dependency: `ListResolveConfig` has `deps` but no `contextDeps`, and a paginated list ignores `contextDeps`. A list that got `initialData` therefore does not reload on a context change; the skill recommends a `key` on the component or `list.reload()` | open |
 | `palistor-ssr` | Statements without a test in `cube/ssr`: `suspense: true` without a `<Suspense>` boundary fails the server render (authoring probe); Next.js sends the fallback without logging because of the digest (comment on `clientOnly`, checked against Next 16; the tests assert the digest, not Next's reaction); a group with `resolve` that got `initialValues` still resolves (authoring probe, order of `seed` and `applyInitialData` in the constructor) | open |
 | `palistor-ssr` | `metadata.library_version` is `0.1.0-cube.0` (the current `package.json` version), but the published `0.1.0-cube.0` has no SSR API. The release that first ships SSR sets the version (`AGENTS.md`, "Releasing") | resolved at `a0fc80b` (release `0.1.0-cube.1`): `intent validate --set-version 0.1.0-cube.1` set the five skills and the "Targets" line. Reopened in another form by batch 3, next row |
-| all | Batch 3 describes behavior of the working tree after `0.1.0-cube.1` (Stage 5а), while `metadata.library_version` and the "Targets palistor v…" line still say `0.1.0-cube.1`. The tagged `v0.1.0-cube.1` starts a `usePalistor` store in its constructor and lacks the other changes. The release that ships Stage 5а must set the version (`AGENTS.md`, "Releasing", step 4) | open. At batch 4 `package.json` is `0.1.1-cube.1` (commit `69dc215`, "🔖 0.1.1-cube.1") while the five skills and the "Targets" line still say `0.1.0-cube.1`: the version step was not part of that commit |
+| all | Batch 3 describes behavior of the working tree after `0.1.0-cube.1` (Stage 5а), while `metadata.library_version` and the "Targets palistor v…" line still say `0.1.0-cube.1`. The tagged `v0.1.0-cube.1` starts a `usePalistor` store in its constructor and lacks the other changes. The release that ships Stage 5а must set the version (`AGENTS.md`, "Releasing", step 4) | resolved at `7572329` ("🔖 0.1.1-cube.3"): `intent validate --set-version 0.1.1-cube.3` set the five skills and the "Targets" line. Before that, at batch 4 `package.json` was `0.1.1-cube.1` (commit `69dc215`, "🔖 0.1.1-cube.1") while the five skills and the "Targets" line still say `0.1.0-cube.1`: the version step was not part of that commit |
 | `palistor-ssr`, `palistor` | Plain Node cannot import the package entry: `dist/index.js` re-exports `./cube/index` without a file extension, so `node -e 'import("palistor")'` fails with `ERR_MODULE_NOT_FOUND` (observed on the `0.1.1-cube.1` tarball by the consumer session of batch 4 and reproduced). A bundler or Vite resolves it, so Next.js and a Vitest `node` environment work. "Run a store without a browser" (`palistor-ssr`) and the no-`window` rule (`palistor`) name "a Node script" next to a test: decide whether the build gets extensions (or a bundle) or the skills say "a script run through a bundler or a TypeScript runner". The skills are unchanged | open |
 | `palistor-ssr` | Should the library ship the app-wide store's plumbing (a typed `createStoreContext`-like helper, or `<StoreProvider store>`)? `experiments/SsrPlan.md` ("Что не делаем") left it out: a typed context in the app is a few lines, and a library provider would add an untyped lookup. The skill and the README teach the app's own context (batch 4). Revisit if the rollout on the consumers shows the same lines repeated | open |
 | `palistor-ssr` | The `/ssr` routes of `app-demo` (the code the README's "SSR & Next.js" section links to) hand the whole `store` to their child blocks, which call `useForm(store).x`; the README and the skills teach a node as a prop since batch 5. The demo was out of scope of that batch: decide whether to align it | open |
@@ -840,3 +843,51 @@ written) and `palistor-flows` (none of its sources changed).
   their line counts by extending existing lines.
 - The release leftovers of batches 3–5 still stand: `intent validate --set-version` and the "Targets
   palistor v…" line.
+
+### Batch 7 — 2026-11-24: release audit of `0.1.1-cube.3`
+
+The maintainer asked, before publishing `0.1.1-cube.3`, to check that the skills match the implemented
+SortPlan. Two auditors without the authoring conversation read the batch 6 guidance (`sorting.md`, the
+manual-mode section of `filtering.md`, the corrected `pagination.md` / `list-api.md` statements and the
+matching `SKILL.md` passages) against `cube/**`, with probes. Every finding below was re-checked in the
+code before an edit, the `queryKey` one also by a probe of its own. Source revision: `7572329`.
+Planning records: `domain_map.yaml` gains the header line and three `gaps`; this file gains the three
+"Remaining Gaps" rows, the resolved version row and this section; `skill_tree.yaml` is unchanged (no
+skill, reference or source added or moved).
+
+#### Guidance changed
+
+| Where | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `filtering.md`, manual mode | `set` / `reset` / `clear` "write drafts only"; "Clear all" = `clear()` + `apply()`, one request | Manual fields take drafts; an `apply: "auto"` field changes at once and requests. "Clear all" next to a non-empty automatic field is two requests; one-request form `set({ manual fields })` + `apply()` | `cube/core/filter.ts` (`setFields`, `issue`, `apply`); probe |
+| `filtering.md` and `sorting.md`, limits | "The legacy implementation behind `palistor/store/*` rejects `$apply`" / "has no sort" | Removed: every published entry runs Cube (`./store/store` re-exports `Palistor` from `cube/index.ts`) | `package.json` `exports`, `cube/exports/store/store.ts` |
+| `filtering.md`, typing | Annotate `where`, `$all`, `$toParams`, derived `value` | Annotate `where` and derived `value`; `$all` / `$toParams` are typed, and a narrower filter-values interface fails with TS2322 | `store/store/types.ts` (`FilterBlock`); type check |
+| `filtering.md`, members and rules | `set()` "one request"; `apply()` always re-keys a paginated list; `initialData`: nothing until an `apply()` that changes a value; `isDraft` "by content"; `FilterProxyNode` "like a field" | `set()` requests only for an automatic server field; an `apply()` that moved only `where` fields re-filters without a request, and a no-op `apply()` leaves a pending debounce running; with `initialData` an automatic field's change also requests; `isDraft` compares JSON text (key order counts); the panel's fields are `any` | `cube/core/filter.ts`, `cube/core/config.ts` (`isDirtyValue`), `store/store/types.ts`; probes |
+| `pagination.md` | `keepPreviousData`: `hasNextPage` / `hasPrevPage` `false`, `page` the first page; restore condition names values, context and sort; `flush()` unconditional; `queryKey` without a caveat | `page` = `initialPage`, `hasNextPage` `true` in `infinite`, `hasPrevPage` `true` when `initialPage` > `base`; the applied filter joins the restore condition (it is not persisted); a stale restored window is refetched after paint; `flush()` writes nothing while a page fetch is in flight; `queryKey` drops filter and sort from the key | `cube/core/pagination.ts` (`ensureFamily`, `hasNextPage`, `hasPrevPage`, `seed`, `computeKey`), `cube/core/persist.ts` (`save`, `fetchingPage`); probes |
+| `sorting.md` | `dirOf` throws on an unknown key; "a row re-renders for its own values only"; dotted keys for groups, `"address.city": true` in a `SortBlock<Customer>`; comparison rules for every column; a cached sort shown regardless of `staleTime`; resolver `ctx` "typed from `TEntity`"; `list.sort.refresh()` | `dirOf` returns `null`; rows re-render with the table unless wrapped in `React.memo`; a typed template cannot declare a group, so a dotted key uses `{ by }` (example changed); `{ compare }` decides empties itself; cached and within `staleTime`; `ctx.sort` always present; `list.sort!.refresh()`; `queryKey` caveat in the server section | `cube/core/sort.ts` (`dirOf`, `parse`, `comparator`), `cube/react/sort.react.test.tsx` (the `memo` row), `cube/core/pagination.ts` (`retrigger`, `isFresh`, `computeKey`); probes and type checks |
+| `palistor-lists/SKILL.md` | Every filter callback needs annotations; "any other field … re-fetches when it changes"; "one request for the first page"; "nested groups" | The same corrections in short form | as above |
+
+Verified unchanged by the audit: the rest of `sorting.md` (toggle cycle, construction errors, comparison
+defaults, snapshot moments, server request rules, SSR `$locale`, typing exports), the rest of the
+manual-mode section (draft vs applied reads, `revert()`, automatic-mode no-ops, spread, construction
+errors, `as const`), and `list-api.md`. Not changed on purpose: resolver callbacks such as
+`resolver: async (values, store, ctx) =>` stay unannotated in examples. `ListResolver<TEntity>` types
+them from context, and the strict compile below reports no TS7006 for them; the `AGENTS.md` rule is about
+callbacks without a contextual type.
+
+#### Check outcomes
+
+| Check | Result |
+| --- | --- |
+| CI `test` job in a clean worktree outside `palirent` at `7572329` | `build`, `intent validate`, `typecheck:skills`, `typecheck:cube` pass; `test:skills` 58 pass + 17 expected fail; `test:cube` 1290; `npm test` 2234 |
+| Strict compile of every `ts` / `tsx` fence of the five skills | 74 fences, compiled with Intent's options and with `strict: true` against the built package (HeroUI types from `app-demo`); no strict-only diagnostic, before and after the edits |
+| `intent validate` | 5 skill files pass |
+| `npm pack --dry-run` | 648 files: `dist`, the READMEs, `skills/palistor*/**`; nothing from `skills/_artifacts`, `tests/` or `.intent/`; the repo `dist` equals a clean build file for file |
+| Task checks | unchanged: no recommended pattern changed, the corrections narrow statements |
+| Fresh consumer session | not run for this batch |
+
+#### Remaining work
+
+- The three new rows in "Remaining Gaps": `queryKey` drops filter and sort; groups in a typed template;
+  "Clear all" next to an automatic field.
+- Statements resting on release-audit probes, not on named tests, join the batch 6 row of that kind.

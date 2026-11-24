@@ -9,8 +9,10 @@
 #       updated 2026-11-24 (batch 5: a node as a prop on every level, the field overload of useForm;
 #       verified against the working tree on 69dc215, package.json 0.1.1-cube.1),
 #       updated 2026-11-24 (batch 6: list sorting, client and server class, and the filter's Apply
-#       mode; verified at c239cd8, package.json 0.1.1-cube.2)
-# Status: draft (the six batches were authored by an agent; not yet reviewed by the maintainer)
+#       mode; verified at c239cd8, package.json 0.1.1-cube.2),
+#       updated 2026-11-24 (batch 7: release audit of the batch 6 guidance against cube/**; verified
+#       at 7572329, package.json 0.1.1-cube.3)
+# Status: draft (the seven batches were authored by an agent; not yet reviewed by the maintainer)
 #
 # failure_modes list the mistake, its priority and evidence. The wrong and correct
 # patterns and the mechanism live in one place only: the skill file named in
@@ -815,4 +817,16 @@ gaps:
   - skill: palistor-lists
     question: "No fresh consumer-agent session for the extended lists-server-list and no description-activation run for batch 6."
     context: "Fresh consumer sessions ran once each for lists-sortable-table (6 of 6 checks) and lists-filter-panel (5 of 5) on 2026-11-24; see skill_spec.md, batch 6, check outcomes. Whether an agent that only has the skills completes the extended lists-server-list, and whether the new palistor-lists prompts in tests/skills/discovery.md load the skill, is unverified."
+    status: open
+  - skill: palistor-lists
+    question: "A custom pagination.queryKey drops the server filter and the server sort from the query key."
+    context: "computeKey returns config.queryKey(values, context) and nothing else (cube/core/pagination.ts), so the $filter and $sort pseudo-deps never reach the key; invalidate() then re-keys to the same key and retrigger() returns without a fetch. Release-audit probe (batch 7) on a paginated list with queryKey: () => [\"fixed\"]: a filter.set and a sort.toggle each sent no request and the rows stayed unfiltered and unsorted (the same list without queryKey: one request each). Looks like a library defect: the callback receives (values, context) only, so it cannot add them itself. pagination.md and sorting.md warn against combining queryKey with a server filter or sort."
+    status: open
+  - skill: palistor-lists
+    question: "A typed defineList<TEntity> template cannot declare a group, so a dotted sort key works only with { by }."
+    context: "TemplateConfig<TEntity> maps every key to a leaf ConfigNode (store/store/types.ts), so `address: { city: { value: \"\" } }` fails with TS2353; the object-valued leaf `address: { value: { city: \"\" } }` compiles, but then a client value sort \"address.city\": true throws at construction (not a template leaf, cube/core/sort.ts parse), while SortKey<TEntity> offers \"address.city\" and rejects \"address\". sorting.md teaches \"address.city\": { by: (row) => row.address.city } (type check and release-audit probe). Decide whether typed templates should accept groups."
+    status: open
+  - skill: palistor-lists
+    question: "In a manual filter block with a non-empty automatic server field, a \"Clear all\" (clear() then apply()) is two requests."
+    context: "setFields writes the automatic field and issues at once (cube/core/filter.ts setFields, issue); apply() issues again. The first request carries the old applied values of the manual fields (release-audit probe: two resolver runs, the first with role still applied). filtering.md documents it and the one-request form filter.set({ manual fields }) then apply(). Library or guidance: should clear()/reset() in a manual block defer the automatic fields' request to the following apply() in the same tick?"
     status: open
