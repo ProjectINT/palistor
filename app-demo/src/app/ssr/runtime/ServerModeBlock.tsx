@@ -6,10 +6,11 @@ import type { PalistorList } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { track } from "../shared/events";
+import { Flag } from "../shared/ui";
 import type { Build, Release } from "./backend";
 import { BuildRow, ReleaseRow } from "./lists";
 import { heldConfig } from "./runtimeConfig";
-import { Button, Chip, Note, Panel } from "./ui";
+import { Button, Note, Panel } from "./ui";
 
 /**
  * Block 1. A store in server mode starts nothing by itself. A store made
@@ -69,8 +70,8 @@ function HeldReleases({ releases }: { releases: PalistorList<Release> }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <Chip name="loading" value={String(list.loading)} testId="runtime-held-releases-loading" />
-        <Chip name="resolveStatus" value={list.resolveStatus} testId="runtime-held-releases-status" />
+        <Flag name="loading" value={list.loading} testId="runtime-held-releases-loading" />
+        <Flag name="resolveStatus" value={list.resolveStatus} testId="runtime-held-releases-status" />
       </div>
       {list.length === 0 ? (
         <Note>{t("lists.noRows")}</Note>
@@ -92,8 +93,8 @@ function HeldBuilds({ builds }: { builds: PalistorList<Build> }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <Chip name="loading" value={String(list.loading)} testId="runtime-held-builds-loading" />
-        <Chip name="resolveStatus" value={list.resolveStatus} testId="runtime-held-builds-status" />
+        <Flag name="loading" value={list.loading} testId="runtime-held-builds-loading" />
+        <Flag name="resolveStatus" value={list.resolveStatus} testId="runtime-held-builds-status" />
       </div>
       {list.length === 0 ? (
         <Note>{t("lists.noRows")}</Note>

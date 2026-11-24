@@ -1,110 +1,82 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePersist } from "@palistor/react/usePersist";
-import { localStorageDriver, sessionStorageDriver } from "@palistor/store/persist";
-import { paymentStore } from "@/config/appConfig";
-import { Button } from "@/components/Button";
+import { useState } from "react";
+import { Button } from "@heroui/react";
+
 import { Section } from "@/modules/shared/Section";
+import { DRAFT, DRAFT_DRIVERS, type DraftStorage } from "./constants";
 
-const PERSIST_KEY = "payment-form-demo";
-const PERSIST_PICK = ["email", "phone", "name"] as const;
+interface PersistControlsProps {
+  /** Where `usePersist` (in PaymentForm) keeps the draft. */
+  storage: DraftStorage;
+  onStorageChange: (storage: DraftStorage) => void;
+  /** Writes the draft now, without waiting for the debounce: `store.persist.flush()`. */
+  onSave: () => Promise<void>;
+  /** Removes the saved draft: `store.persist.clear()`. */
+  onClear: () => Promise<void>;
+}
 
-export function PersistControls() {
-  const [storageType, setStorageType] = useState<"local" | "session">("local");
-  const driver = storageType === "local" ? localStorageDriver : sessionStorageDriver;
+/** Shows what the draft holds and drives it. Reads the storage, not the form. */
+export function PersistControls({ storage, onStorageChange, onSave, onClear }: PersistControlsProps) {
+  // The stored snapshot, read on demand.
+  const [saved, setSaved] = useState<string | null>(null);
+  const other: DraftStorage = storage === "localStorage" ? "sessionStorage" : "localStorage";
 
-  // usePersist with pick and toggleable driver
-  usePersist(paymentStore, {
-    key: PERSIST_KEY,
-    driver,
-    pick: [...PERSIST_PICK],
-    debounce: 300,
-  });
+  const show = async (from: DraftStorage = storage) => setSaved(await DRAFT_DRIVERS[from].getItem(DRAFT.key));
 
-  const [savedPreview, setSavedPreview] = useState<string | null>(null);
-
-  // Read what's currently saved in storage
-  const readSaved = () => {
-    if (typeof window === "undefined") return;
-    const storage = storageType === "local" ? localStorage : sessionStorage;
-    setSavedPreview(storage.getItem(PERSIST_KEY));
+  const save = async () => {
+    await onSave();
+    await show();
   };
 
-  // Update preview when storage type changes
-  useEffect(() => {
-    readSaved();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageType]);
-
-  const handleFlush = async () => {
-    await paymentStore.persist.flush();
-    readSaved();
+  const clear = async () => {
+    await onClear();
+    setSaved(null);
   };
 
-  const handleClear = async () => {
-    await paymentStore.persist.clear();
-    setSavedPreview(null);
+  const switchStorage = () => {
+    onStorageChange(other);
+    void show(other);
   };
-
-  const handleToggleDriver = () => {
-    setStorageType((prev) => (prev === "local" ? "session" : "local"));
-  };
-
-  const previewFormatted = (() => {
-    if (!savedPreview) return null;
-    try {
-      return JSON.stringify(JSON.parse(savedPreview), null, 2);
-    } catch {
-      return savedPreview;
-    }
-  })();
 
   return (
     <Section title="Persist Controls">
       <div className="space-y-4">
-        {/* Driver toggle + info */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
             <span>Storage:</span>
-            <span className="font-mono text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-              {storageType === "local" ? "localStorage" : "sessionStorage"}
+            <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+              {storage}
             </span>
           </div>
-          <Button variant="flat" size="sm" onPress={handleToggleDriver}>
-            Switch to {storageType === "local" ? "sessionStorage" : "localStorage"}
+          <Button variant="flat" size="sm" onPress={switchStorage}>
+            Switch to {other}
           </Button>
         </div>
 
-        {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
-          <Button variant="flat" color="primary" size="sm" onPress={handleFlush}>
+          <Button variant="flat" color="primary" size="sm" onPress={save}>
             Force Save
           </Button>
-          <Button variant="flat" color="danger" size="sm" onPress={handleClear}>
+          <Button variant="flat" color="danger" size="sm" onPress={clear}>
             Clear Saved
           </Button>
-          <Button variant="flat" size="sm" onPress={readSaved}>
+          <Button variant="flat" size="sm" onPress={() => show()}>
             View Saved
           </Button>
         </div>
 
-        {/* Saved data preview */}
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-          <div className="px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              Saved data ({PERSIST_KEY})
-            </span>
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">
-              pick: [email, phone, name]
-            </span>
+        <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+          <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-800/60">
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Saved data ({DRAFT.key})</span>
+            <span className="text-xs text-zinc-400 dark:text-zinc-500">pick: [{DRAFT.pick.join(", ")}]</span>
           </div>
-          {previewFormatted ? (
-            <pre className="p-3 text-xs font-mono text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 overflow-auto max-h-36 whitespace-pre-wrap break-all">
-              {previewFormatted}
+          {saved ? (
+            <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-all bg-white p-3 font-mono text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+              {pretty(saved)}
             </pre>
           ) : (
-            <div className="p-3 text-xs text-zinc-400 dark:text-zinc-500 italic">
+            <div className="p-3 text-xs italic text-zinc-400 dark:text-zinc-500">
               Nothing saved yet — click View Saved or Force Save
             </div>
           )}
@@ -112,10 +84,18 @@ export function PersistControls() {
 
         <p className="text-xs text-zinc-400 dark:text-zinc-500">
           💡 <code className="font-mono">usePersist</code> with <code className="font-mono">pick</code>,{" "}
-          <code className="font-mono">flush()</code>, <code className="font-mono">clear()</code>,{" "}
-          driver toggle localStorage ↔ sessionStorage
+          <code className="font-mono">flush()</code>, <code className="font-mono">clear()</code>, driver toggle
+          localStorage ↔ sessionStorage
         </p>
       </div>
     </Section>
   );
+}
+
+function pretty(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
 }

@@ -1057,7 +1057,7 @@ function CarFilters() {
 
 ### Pagination
 
-> 🔗 **Source:** [modules/lists-demo/OrdersPagedSection.tsx](./app-demo/src/modules/lists-demo/OrdersPagedSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
+> 🔗 **Source:** [modules/lists-demo/OrdersSection.tsx](./app-demo/src/modules/lists-demo/OrdersSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
 
 A list fetches **one page at a time** and caches every page it has seen. Add a `pagination` block to
 `resolve` — its presence is the only switch. The resolver gets the page request as `ctx.page` and
@@ -1432,7 +1432,7 @@ Mappable keys: `value`, `label`, `placeholder`, `description`, `isRequired`, `is
 
 ## Persist
 
-> 🔗 **Source:** [modules/payment-form/PersistControls.tsx](./app-demo/src/modules/payment-form/PersistControls.tsx) · **Live result:** [Demo → Payment Form](https://projectint.github.io/palistor/#form)
+> 🔗 **Source:** [modules/payment-form/PaymentForm.tsx](./app-demo/src/modules/payment-form/PaymentForm.tsx) (`usePersist`), [PersistControls.tsx](./app-demo/src/modules/payment-form/PersistControls.tsx) · **Live result:** [Demo → Payment Form](https://projectint.github.io/palistor/#form)
 
 Autosave form state to any storage.
 
@@ -1600,7 +1600,7 @@ The exported type `ResolveErrorContext` still declares only `{ notify }`. Where 
 
 ## Store context
 
-> 🔗 **Source:** [modules/lists-demo/StoreContextSection.tsx](./app-demo/src/modules/lists-demo/StoreContextSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
+> 🔗 **Source:** [modules/lists-demo/ListsDemo.tsx](./app-demo/src/modules/lists-demo/ListsDemo.tsx) (`useStoreContext`), [StoreContextSection.tsx](./app-demo/src/modules/lists-demo/StoreContextSection.tsx) · **Live result:** [Demo → Lists & entities](https://projectint.github.io/palistor/#lists)
 
 Non-reactive data (account id, tenant, tokens…) available as `store.context` to the callbacks that receive the store: resolvers, `onSubmit`, `onEnter` / `onReady` (a filter's `$toParams` gets it as its second argument). It is not part of the form — it does not appear in `getValues()`, submit payloads or persisted state.
 

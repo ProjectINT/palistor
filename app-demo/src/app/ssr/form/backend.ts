@@ -108,7 +108,7 @@ function takeFailure(endpoint: FailingEndpoint): boolean {
 }
 
 /** What a failed fake request rejects with. */
-export const SIMULATED_FAILURE = "503 Service Unavailable (simulated)";
+const SIMULATED_FAILURE = "503 Service Unavailable (simulated)";
 
 // ─── Fake endpoints (browser only) ───────────────────────────────────────────
 // Counted under "form.profile", "form.activity" and "form.announcement".

@@ -6,10 +6,11 @@ import { useForm, usePalistor } from "@palistor";
 import type { PalistorList } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
+import { Flag, Skeleton } from "../shared/ui";
 import type { Build, Release } from "./backend";
 import { BuildRow, ReleaseRow } from "./lists";
 import { clientConfig } from "./runtimeConfig";
-import { Button, Chip, Note, Panel, Skeleton } from "./ui";
+import { Button, Note, Panel } from "./ui";
 
 /**
  * Block 2. The same lists with the default `server` option: server mode
@@ -62,7 +63,7 @@ function Builds({ builds }: { builds: PalistorList<Build> }) {
   // hydrates without a mismatch. The hook's effect then starts the run.
   return (
     <>
-      <Chip name="loading" value={String(list.loading)} testId="runtime-client-builds-loading" />
+      <Flag name="loading" value={list.loading} testId="runtime-client-builds-loading" />
       {list.loading ? (
         <Skeleton testId="runtime-client-builds-skeleton" rows={3} />
       ) : (

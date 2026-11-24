@@ -165,11 +165,9 @@
     "stateTitle": "Состояние формы",
     "valuesTitle": "Значения",
     "fieldsTitle": "Поля",
-    "errorsTitle": "Ошибки",
-    "metaTitle": "Мета",
     "dirty": "Изменено",
     "submitting": "Отправка",
-    "showErrors": "Показать ошибки"
+    "showErrors": "Ошибки показаны"
   },
   "sections": {
     "paymentType": "Способ оплаты",
@@ -186,7 +184,8 @@
     "comment": "Комментарий"
   },
   "hooksDemo": {
-    "title": "Демонстрация хуков для отдельных полей"
+    "title": "Подписки на отдельные поля",
+    "description": "Каждая карточка получает одно поле paymentStore пропсом и вызывает useForm(field): она перерисовывается только при изменении этого поля. Измените поля на вкладке «Форма оплаты» и вернитесь."
   },
   "storeContext": {
     "title": "Демо useStoreContext",
@@ -195,7 +194,7 @@
     "currentContext": "Текущий контекст",
     "switchAccount": "Сменить accountId:",
     "switchTenant": "Сменить tenant:",
-    "resolverNote": "Резольвер пользователей читает store.context.accountId при каждом вызове. Смените аккаунт выше и нажмите ↻ Обновить список."
+    "resolverNote": "Резольвер пользователей читает store.context.accountId, поэтому смена аккаунта сама перезапускает его — список Users перезагрузится. tenant не читает ни один резольвер: его смена ничего не запрашивает."
   },
   "onChange": {
     "lastModified": "Последнее изменение email:",

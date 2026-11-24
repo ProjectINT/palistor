@@ -165,11 +165,9 @@
     "stateTitle": "Form State",
     "valuesTitle": "Values",
     "fieldsTitle": "Fields",
-    "errorsTitle": "Errors",
-    "metaTitle": "Meta",
     "dirty": "Dirty",
     "submitting": "Submitting",
-    "showErrors": "Show Errors"
+    "showErrors": "Errors shown"
   },
   "sections": {
     "paymentType": "Payment Method",
@@ -186,7 +184,8 @@
     "comment": "Comment"
   },
   "hooksDemo": {
-    "title": "Individual Hooks Demo"
+    "title": "Field-level subscriptions",
+    "description": "Each card gets one field of paymentStore as a prop and calls useForm(field): it re-renders only when that field changes. Edit the fields on the Payment Form tab and come back."
   },
   "storeContext": {
     "title": "useStoreContext Demo",
@@ -195,7 +194,7 @@
     "currentContext": "Current Context",
     "switchAccount": "Switch accountId:",
     "switchTenant": "Switch tenant:",
-    "resolverNote": "The users resolver reads store.context.accountId on each call. Change the account above and hit ↻ Refresh List to see it in action."
+    "resolverNote": "The users resolver reads store.context.accountId, so switching the account re-runs it by itself — watch the Users list reload. No resolver reads tenant: switching it requests nothing."
   },
   "onChange": {
     "lastModified": "Last email change:",

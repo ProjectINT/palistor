@@ -1,54 +1,41 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/Input";
-import { Select, type SelectOption } from "@/components/Select";
+import { useForm } from "@palistor";
+import type { FieldProxyNode } from "@palistor";
 
+import { SelectField } from "@/components/SelectField";
+import { TextField } from "@/components/TextField";
+import type { Country } from "@/config/appConfig";
 import { Section } from "@/modules/shared/Section";
-import { COUNTRY_OPTIONS, CITIES_BY_COUNTRY } from "../constants";
-import { usePaymentForm, type Country } from "@/config/appConfig";
+import { CITIES, COUNTRIES } from "../constants";
 
-export function AddressSection() {
+interface AddressSectionProps {
+  country: FieldProxyNode<Country | "">;
+  city: FieldProxyNode<string>;
+  shippingCost: FieldProxyNode<number>;
+}
+
+export function AddressSection({ country, city, shippingCost }: AddressSectionProps) {
   const t = useTranslations();
-  const form = usePaymentForm();
-
-  const country = form.country.value as Country | undefined;
-
-  const countryOptions: SelectOption[] = COUNTRY_OPTIONS.map((option) => ({
-    value: option.value,
-    label: option.label,
-  }));
-
-  const cityOptions: SelectOption[] = country ? (CITIES_BY_COUNTRY[country] ?? []).map((option) => ({
-    value: option.value,
-    label: option.label,
-  })) : [];
+  const countries = COUNTRIES.map((value) => ({ value, label: t(`countries.${value}`) }));
 
   return (
     <Section title={t("sections.address")}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Select
-          options={countryOptions}
-          renderLabel={(option: SelectOption) => t(option.label)}
-          selectedKeys={form.country.value ? [form.country.value] : []}
-          onSelectionChange={(keys: Set<string>) => {
-            const value = Array.from(keys)[0] as "" | Country;
-            form.country.value = value;
-          }}
-          {...form.country}
-        />
-        <Select
-          {...form.city}
-          options={cityOptions}
-          renderLabel={(option: SelectOption) => t(option.label)}
-          selectedKeys={form.city.value ? [form.city.value] : []}
-          onSelectionChange={(keys: Set<string>) => {
-            const value = Array.from(keys)[0] as string;
-            form.city.value = value;
-          }}
-        />
-        <Input {...form.shippingCost} />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <SelectField field={country} options={countries} />
+        <CityField city={city} country={country} />
+        <TextField field={shippingCost} />
       </div>
     </Section>
   );
+}
+
+/** The city select: its options follow the country. */
+function CityField({ city, country }: { city: FieldProxyNode<string>; country: FieldProxyNode<Country | ""> }) {
+  const t = useTranslations();
+  const { value } = useForm(country);
+  const cities = value ? CITIES[value].map((c) => ({ value: c, label: t(`cities.${c}`) })) : [];
+
+  return <SelectField field={city} options={cities} />;
 }

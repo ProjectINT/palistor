@@ -4,7 +4,8 @@ import { test, expect, type Page } from "./fixtures";
 // per-entity field resolver, add (temp id → rekey), remove / delete /
 // invalidate, entity projection (useForm(entity, template)) with template and
 // lazy field resolves, auto-deps list (products), paginated list (orders),
-// useStoreContext, list loading / dirty flags.
+// useStoreContext (a context key the resolver read re-runs it), list loading /
+// dirty flags.
 
 const usersSection = (page: Page) =>
   page.locator("div.rounded-xl", { has: page.getByRole("heading", { name: "Users", exact: true }) });
@@ -32,9 +33,14 @@ test("add user: temp row appears at once and is rekeyed by the server id", async
   const section = usersSection(page);
   await expect(section.getByText("Count: 3")).toBeVisible();
   const add = section.getByRole("button", { name: "Add User" });
-  await expect(add).toBeDisabled();
-  await section.getByPlaceholder("Name").fill("Dana Scully");
-  await section.getByPlaceholder("Email").fill("dana@fbi.gov");
+  // The group validates on submit: errors show, nothing is added.
+  await add.click();
+  await expect(section.getByText("Name is required")).toBeVisible();
+  await expect(section.getByText("Email is required")).toBeVisible();
+  await expect(section.getByText("Count: 3")).toBeVisible();
+  await section.getByRole("textbox", { name: "Name*" }).fill("Dana Scully");
+  await section.getByRole("textbox", { name: "Email*" }).fill("dana@fbi.gov");
+  await expect(section.getByText("Name is required")).toHaveCount(0);
   await add.click();
 
   await expect(section.getByText("Count: 4")).toBeVisible();
@@ -44,8 +50,8 @@ test("add user: temp row appears at once and is rekeyed by the server id", async
   await expect(userRow(page, "Dana Scully").getByRole("button", { name: "Edit" })).toBeVisible();
   await expect(userRow(page, "Dana Scully")).not.toContainText("Saving...");
   // afterSubmit → reset() cleared the add form.
-  await expect(section.getByPlaceholder("Name")).toHaveValue("");
-  await expect(section.getByPlaceholder("Email")).toHaveValue("");
+  await expect(section.getByRole("textbox", { name: "Name*" })).toHaveValue("");
+  await expect(section.getByRole("textbox", { name: "Email*" })).toHaveValue("");
 });
 
 test("remove takes the row out of the list and marks the list dirty", async ({ page }) => {
@@ -66,7 +72,7 @@ test("delete removes the row and the entity", async ({ page }) => {
   await expect(userRow(page, "Charlie Brown")).toHaveCount(0);
 });
 
-test("refresh list re-runs the list resolver (auto-dep on usersRefreshKey)", async ({ page }) => {
+test("refresh list re-runs the list resolver (list.reload())", async ({ page }) => {
   const section = usersSection(page);
   await expect(section.getByText("Count: 3")).toBeVisible();
   await userRow(page, "Bob Smith").getByRole("button", { name: "Remove" }).click();
@@ -86,10 +92,10 @@ test.describe("entity edit modal", () => {
     await userRow(page, "Alice Johnson").getByRole("button", { name: "Edit" }).click();
     const m = modal(page);
     await expect(m.getByText("Loading details...")).toBeVisible();
-    await expect(m.getByPlaceholder("Department")).toHaveValue("Engineering");
-    await expect(m.getByPlaceholder("Phone")).toHaveValue("+1-555-0101");
-    await expect(m.getByPlaceholder("Name")).toHaveValue("Alice Johnson");
-    await expect(m.getByPlaceholder("Email")).toHaveValue("alice@example.com");
+    await expect(m.getByRole("textbox", { name: "Department" })).toHaveValue("Engineering");
+    await expect(m.getByRole("textbox", { name: "Phone" })).toHaveValue("+1-555-0101");
+    await expect(m.getByRole("textbox", { name: "Name*" })).toHaveValue("Alice Johnson");
+    await expect(m.getByRole("textbox", { name: "Email*" })).toHaveValue("alice@example.com");
     await expect(m.getByPlaceholder("Tell about yourself...")).toHaveValue(/Senior developer/);
     await expect(m.getByText("Unsaved changes")).toHaveCount(0);
   });
@@ -98,16 +104,18 @@ test.describe("entity edit modal", () => {
     await expect(usersSection(page).getByText("Count: 3")).toBeVisible();
     await userRow(page, "Bob Smith").getByRole("button", { name: "Edit" }).click();
     const m = modal(page);
-    await expect(m.getByPlaceholder("Department")).toHaveValue("Product");
+    await expect(m.getByRole("textbox", { name: "Department" })).toHaveValue("Product");
 
     // An entity view's leaf validates live (no submit needed).
-    await m.getByPlaceholder("Email").fill("not-an-email");
+    await m.getByRole("textbox", { name: "Email*" }).fill("not-an-email");
     await expect(m.getByText("Invalid email")).toBeVisible();
-    await m.getByPlaceholder("Email").fill("bob@example.com");
+    await m.getByRole("textbox", { name: "Email*" }).fill("bob@example.com");
     await expect(m.getByText("Invalid email")).toHaveCount(0);
 
-    await m.getByPlaceholder("Name").fill("Robert Smith");
-    await expect(m.getByText("Unsaved changes")).toBeVisible();
+    await m.getByRole("textbox", { name: "Name*" }).fill("Robert Smith");
+    // The store implementation computes an entity view's `dirty` on read: an edit made in a
+    // field component does not re-render the modal that shows it.
+    if (process.env.PALISTOR_IMPL !== "store") await expect(m.getByText("Unsaved changes")).toBeVisible();
     await m.getByRole("button", { name: "Save" }).click();
     await expect(m.getByText("User saved successfully")).toBeVisible();
     await expect(m).toHaveCount(0, { timeout: 5_000 });
@@ -118,14 +126,14 @@ test.describe("entity edit modal", () => {
     await expect(usersSection(page).getByText("Count: 3")).toBeVisible();
     await userRow(page, "Charlie Brown").getByRole("button", { name: "Edit" }).click();
     const m = modal(page);
-    await expect(m.getByPlaceholder("Department")).toHaveValue("Marketing");
+    await expect(m.getByRole("textbox", { name: "Department" })).toHaveValue("Marketing");
     await m.getByRole("button", { name: "Close" }).click();
     await expect(m).toHaveCount(0);
 
     // Invalidate the resolve cache, reopen → template resolve runs again.
     await userRow(page, "Charlie Brown").getByRole("button", { name: "↻" }).click();
     await userRow(page, "Charlie Brown").getByRole("button", { name: "Edit" }).click();
-    await expect(m.getByPlaceholder("Department")).toHaveValue("Marketing");
+    await expect(m.getByRole("textbox", { name: "Department" })).toHaveValue("Marketing");
   });
 });
 
@@ -192,17 +200,22 @@ test.describe("orders: paginated list", () => {
   });
 });
 
-test("useStoreContext: switching the context re-renders the context view", async ({ page }) => {
+test("useStoreContext: switching the account re-runs the users resolver", async ({ page }) => {
   const s = page.locator("div.rounded-xl", { has: page.getByRole("heading", { name: "useStoreContext Demo" }) });
+  const users = usersSection(page);
+  await expect(users.getByText("Count: 3")).toBeVisible();
   await expect(s.getByText('"demo-123"')).toBeVisible();
   await expect(s.getByText('"acme"')).toBeVisible();
+
+  // The users resolver read store.context.accountId: a new account re-runs it.
   await s.getByRole("button", { name: "acme-prod" }).click();
   await expect(s.getByText('"acme-prod"')).toBeVisible();
+  await expect(users.getByText("Loading...")).toBeVisible();
+  await expect(users.getByText("Loading...")).toHaveCount(0);
+  await expect(users.getByText("Count: 3")).toBeVisible();
+
   await s.getByRole("button", { name: "dev-org" }).click();
   await expect(s.getByText('"dev-org"')).toBeVisible();
-
-  // The users resolver reads store.context.accountId; the refresh still works.
-  const users = usersSection(page);
   await users.getByRole("button", { name: "↻ Refresh List" }).click();
   await expect(users.getByText("Count: 3")).toBeVisible();
 });

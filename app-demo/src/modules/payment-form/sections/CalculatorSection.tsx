@@ -1,21 +1,26 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import type { FieldProxyNode } from "@palistor";
 
+import { TextField } from "@/components/TextField";
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/appConfig";
-import { Input } from "@/components/Input";
 
-export function CalculatorSection() {
+interface CalculatorSectionProps {
+  price: FieldProxyNode<number>;
+  quantity: FieldProxyNode<number>;
+  total: FieldProxyNode<number>;
+}
+
+export function CalculatorSection({ price, quantity, total }: CalculatorSectionProps) {
   const t = useTranslations();
-  const form = usePaymentForm();
 
   return (
     <Section title={t("sections.calculator")}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Input {...form.price} />
-        <Input {...form.quantity} />
-        <Input {...form.total} />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <TextField field={price} />
+        <TextField field={quantity} />
+        <TextField field={total} />
       </div>
     </Section>
   );

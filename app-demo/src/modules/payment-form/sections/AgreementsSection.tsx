@@ -1,32 +1,24 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Checkbox } from "@/components/Checkbox";
+import type { FieldProxyNode } from "@palistor";
 
+import { CheckboxField } from "@/components/CheckboxField";
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/appConfig";
 
-export function AgreementsSection() {
+interface AgreementsSectionProps {
+  agreeTerms: FieldProxyNode<boolean>;
+  newsletter: FieldProxyNode<boolean>;
+}
+
+export function AgreementsSection({ agreeTerms, newsletter }: AgreementsSectionProps) {
   const t = useTranslations();
-  const form = usePaymentForm();
 
   return (
     <Section title={t("sections.agreements")}>
       <div className="space-y-3">
-        <Checkbox
-          {...form.agreeTerms}
-          isSelected={Boolean(form.agreeTerms.value)}
-          onChange={(e) => { form.agreeTerms.value = e.target.checked; }}
-        >
-          {form.agreeTerms.label}
-        </Checkbox>
-        <Checkbox
-          {...form.newsletter}
-          isSelected={Boolean(form.newsletter.value)}
-          onChange={(e) => { form.newsletter.value = e.target.checked; }}
-        >
-          {form.newsletter.label}
-        </Checkbox>
+        <CheckboxField field={agreeTerms} />
+        <CheckboxField field={newsletter} />
       </div>
     </Section>
   );

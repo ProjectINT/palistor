@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
 import type { PalistorEntityProxy, PalistorList, PalistorRef } from "@palistor";
 
+import { buttonClass } from "../shared/ui";
 import type { Member, Team, TeamRow } from "./backend";
 import { teamsConfig } from "./catalogConfig";
 
@@ -33,11 +34,7 @@ export function Teams({ teams }: { teams: Team[] }) {
   return (
     <div className="space-y-4">
       <TeamCards teams={form.teams} />
-      <button
-        data-testid="ssr-catalog-teams-reset"
-        onClick={() => store.reset()}
-        className="px-3 py-1.5 rounded-lg text-sm bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-      >
+      <button data-testid="ssr-catalog-teams-reset" onClick={() => store.reset()} className={buttonClass("neutral")}>
         ↺ {t("reset")}
       </button>
     </div>
@@ -78,7 +75,7 @@ function Members({ members, heading }: { members: PalistorList<Member>; heading:
   const list = useForm(members);
   const [draft, setDraft] = useState("");
 
-  const add = (event: React.FormEvent) => {
+  const add = (event: FormEvent) => {
     event.preventDefault();
     const name = draft.trim();
     if (!name) return;
@@ -121,7 +118,7 @@ function Members({ members, heading }: { members: PalistorList<Member>; heading:
           type="submit"
           data-testid="ssr-catalog-team-add"
           disabled={!draft.trim()}
-          className="px-2 py-1 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className={buttonClass("primary")}
         >
           {t("add")}
         </button>

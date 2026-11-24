@@ -1,30 +1,25 @@
+import type { TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
-import type { FormConfig, TranslateFn } from "@palistor";
 
-export const computed: Pick<FormConfig<PaymentFormValues>, 'price' | 'quantity' | 'total'> = {
+// An input yields a string: store the number the field is typed as.
+const toNumber = (raw: unknown) => Number(raw) || 0;
+
+/** A computed field: `total` follows `price` and `quantity`. */
+export const computed = {
   price: {
-    types: {
-      dataType: "Number" as const,
-      type: "number"
-    },
     value: 100,
     label: (t: TranslateFn) => t("form.price"),
     placeholder: (t: TranslateFn) => t("form.pricePlaceholder"),
+    formatter: toNumber,
   },
+
   quantity: {
-    types: {
-      dataType: "Number" as const,
-      type: "number"
-    },
     value: 1,
     label: (t: TranslateFn) => t("form.quantity"),
+    formatter: toNumber,
   },
+
   total: {
-    types: {
-      dataType: "Number" as const,
-      type: "number"
-    },
-    // Computed value — calculated automatically
     value: (values: PaymentFormValues) => values.price * values.quantity,
     label: (t: TranslateFn) => t("form.total"),
     isReadOnly: true,

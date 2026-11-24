@@ -57,7 +57,7 @@ export function Counter({ event, testId, label }: { event: string; testId: strin
  * How many times `event` was tracked in this tab. The server snapshot — also
  * used by the render that hydrates the server's HTML — is 0.
  */
-export function useEventCount(event: string): number {
+function useEventCount(event: string): number {
   return useSyncExternalStore(
     subscribeEvents,
     () => eventCount(event),

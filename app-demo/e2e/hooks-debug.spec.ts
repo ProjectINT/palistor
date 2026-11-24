@@ -43,8 +43,8 @@ test("hooks tab shows the email error after a failed submit", async ({ page, ope
 });
 
 test("debug panel shows both stores' values", async ({ page, openTab }) => {
-  // Lists resolve lazily on first read through a proxy; the debug panel reads
-  // getValues() only, so load them on the lists tab first.
+  // Lists resolve lazily on the first read through useForm: load them on the
+  // lists tab, so the panel's counts and dumps hold the rows from the start.
   await openTab("lists");
   await expect(page.getByText("Count: 3")).toBeVisible();
   await expect(page.getByText("Total: 4 products")).toBeVisible();

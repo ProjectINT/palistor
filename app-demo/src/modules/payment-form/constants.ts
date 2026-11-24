@@ -1,40 +1,19 @@
-import type { Country } from "@/config/appConfig";
+import { localStorageDriver, sessionStorageDriver } from "@palistor";
+import type { AccountType, Country, CryptoNetwork, PaymentType } from "@/config/appConfig";
 
-export const PAYMENT_TYPE_OPTIONS = [
-  { value: "card", label: "paymentTypes.card" },
-  { value: "bank", label: "paymentTypes.bank" },
-  { value: "crypto", label: "paymentTypes.crypto" },
-] as const;
-
-export const CRYPTO_NETWORK_OPTIONS = [
-  { value: "ethereum", label: "networks.ethereum" },
-  { value: "bitcoin", label: "networks.bitcoin" },
-  { value: "tron", label: "networks.tron" },
-] as const;
-
-export const ACCOUNT_TYPE_OPTIONS = [
-  { value: "personal", label: "accountTypes.personal" },
-  { value: "business", label: "accountTypes.business" },
-] as const;
-
-export const COUNTRY_OPTIONS = [
-  { value: "ru", label: "countries.ru" },
-  { value: "us", label: "countries.us" },
-  { value: "de", label: "countries.de" },
-] as const;
-
-export const CITIES_BY_COUNTRY: Record<Country, { value: string; label: string }[]> = {
-  ru: [
-    { value: "moscow", label: "cities.moscow" },
-    { value: "spb", label: "cities.spb" },
-    { value: "kazan", label: "cities.kazan" },
-  ],
-  us: [
-    { value: "newyork", label: "cities.newyork" },
-    { value: "losangeles", label: "cities.losangeles" },
-  ],
-  de: [
-    { value: "berlin", label: "cities.berlin" },
-    { value: "munich", label: "cities.munich" },
-  ],
+// Select options; each value's label is a message key: `paymentTypes.${value}`, `cities.${city}`, …
+export const PAYMENT_TYPES: readonly PaymentType[] = ["card", "bank", "crypto"];
+export const CRYPTO_NETWORKS: readonly CryptoNetwork[] = ["ethereum", "bitcoin", "tron"];
+export const ACCOUNT_TYPES: readonly AccountType[] = ["personal", "business"];
+export const COUNTRIES: readonly Country[] = ["ru", "us", "de"];
+export const CITIES: Record<Country, readonly string[]> = {
+  ru: ["moscow", "spb", "kazan"],
+  us: ["newyork", "losangeles"],
+  de: ["berlin", "munich"],
 };
+
+/** The draft of the form: its storage key and the top-level fields it keeps. */
+export const DRAFT = { key: "payment-form-demo", pick: ["email", "phone", "name"] };
+
+export const DRAFT_DRIVERS = { localStorage: localStorageDriver, sessionStorage: sessionStorageDriver };
+export type DraftStorage = keyof typeof DRAFT_DRIVERS;

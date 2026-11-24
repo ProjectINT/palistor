@@ -1,33 +1,20 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Select, type SelectOption } from "@/components/Select";
+import type { FieldProxyNode } from "@palistor";
 
+import { SelectField } from "@/components/SelectField";
+import type { PaymentType } from "@/config/appConfig";
 import { Section } from "@/modules/shared/Section";
-import { PAYMENT_TYPE_OPTIONS } from "../constants";
-import { usePaymentForm, type PaymentType } from "@/config/appConfig";
+import { PAYMENT_TYPES } from "../constants";
 
-export function PaymentTypeSection() {
+export function PaymentTypeSection({ paymentType }: { paymentType: FieldProxyNode<PaymentType> }) {
   const t = useTranslations();
-  const form = usePaymentForm();
-
-  const options: SelectOption[] = PAYMENT_TYPE_OPTIONS.map((option) => ({
-    value: option.value,
-    label: option.label,
-  }));
+  const options = PAYMENT_TYPES.map((value) => ({ value, label: t(`paymentTypes.${value}`) }));
 
   return (
     <Section title={t("sections.paymentType")}>
-      <Select
-        options={options}
-        renderLabel={(option: SelectOption) => t(option.label)}
-        selectedKeys={form.paymentType.value ? [form.paymentType.value] : []}
-        onSelectionChange={(keys: Set<string>) => {
-          const value = Array.from(keys)[0] as PaymentType;
-          form.paymentType.value = value;
-        }}
-        {...form.paymentType}
-      />
+      <SelectField field={paymentType} options={options} />
     </Section>
   );
 }

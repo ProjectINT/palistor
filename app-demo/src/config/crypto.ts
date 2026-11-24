@@ -1,35 +1,24 @@
-import type { PaymentFormValues } from "./types";
-import type { FormConfig, TranslateFn } from "@palistor";
+import type { TranslateFn } from "@palistor";
+import type { CryptoNetwork, PaymentFormValues } from "./types";
 
-export const crypto: Pick<FormConfig<PaymentFormValues>, 'cryptoWallet' | 'cryptoNetwork'> = {
+const byCrypto = (values: PaymentFormValues) => values.paymentType === "crypto";
+
+/** Cryptocurrency fields: required and validated only when they are shown. */
+export const crypto = {
   cryptoWallet: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
     value: "",
     label: (t: TranslateFn) => t("form.cryptoWallet"),
     placeholder: (t: TranslateFn) => t("form.cryptoWalletPlaceholder"),
-    isVisible: (values: PaymentFormValues) => values.paymentType === "crypto",
-    isRequired: (values: PaymentFormValues) => values.paymentType === "crypto",
-    dependencies: ["paymentType"],
-    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
-      if (values.paymentType !== "crypto") return;
-      if (value.length < 20) {
-        return t("validation.cryptoWalletInvalid");
-      }
-    },
+    isVisible: byCrypto,
+    isRequired: byCrypto,
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) =>
+      byCrypto(values) && value.length < 20 ? t("validation.cryptoWalletInvalid") : undefined,
   },
 
   cryptoNetwork: {
-    types: {
-      dataType: "String" as const,
-      type: "CryptoNetwork"
-    },
-    value: "ethereum",
+    value: "ethereum" as CryptoNetwork,
     label: (t: TranslateFn) => t("form.cryptoNetwork"),
-    isVisible: (values: PaymentFormValues) => values.paymentType === "crypto",
-    isRequired: (values: PaymentFormValues) => values.paymentType === "crypto",
-    dependencies: ["paymentType"],
+    isVisible: byCrypto,
+    isRequired: byCrypto,
   },
 };

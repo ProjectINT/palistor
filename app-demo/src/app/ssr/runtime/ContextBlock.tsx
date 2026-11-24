@@ -7,9 +7,10 @@ import type { PalistorProxy } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { track } from "../shared/events";
+import { Flag, Skeleton } from "../shared/ui";
 import { REGIONS, type Mirror as MirrorValues, type Region } from "./backend";
 import { mirrorConfig } from "./runtimeConfig";
-import { Button, Chip, Note, Row, Skeleton } from "./ui";
+import { Button, Note, Row } from "./ui";
 
 /**
  * Block 4. A nested <PalistorProvider> adds `region` to the page's context
@@ -72,8 +73,8 @@ function Mirror() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">usePalistorContext()</span>
-        <Chip name="workspace" value={String(context.workspace)} testId="runtime-context-workspace" />
-        <Chip name="region" value={String(context.region)} testId="runtime-context-region" />
+        <Flag name="workspace" value={String(context.workspace)} testId="runtime-context-workspace" />
+        <Flag name="region" value={String(context.region)} testId="runtime-context-region" />
       </div>
 
       <MirrorStatus mirror={form.mirror} />
@@ -88,7 +89,7 @@ function MirrorStatus({ mirror }: { mirror: PalistorProxy<MirrorValues> }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <Chip name="loading" value={String(m.loading)} testId="runtime-mirror-loading" />
+        <Flag name="loading" value={m.loading} testId="runtime-mirror-loading" />
       </div>
 
       {m.loading ? (

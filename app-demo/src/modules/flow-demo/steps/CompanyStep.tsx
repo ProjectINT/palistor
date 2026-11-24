@@ -1,29 +1,27 @@
 "use client";
 
-import { Input } from "@/components/Input";
-import { Select, type SelectOption } from "@/components/Select";
-import { TEAM_SIZE_OPTIONS } from "@/config/flow";
+import { useForm } from "@palistor";
+import type { PalistorProxy } from "@palistor";
 
-/**
- * Step 3 — the company details. Exists in the flow only for the Enterprise
- * plan (the step's `isVisible`). For Free / Pro `nextStep()` skips it, and
- * the user never lands here.
- */
-export function CompanyStep({ step }: { step: any }) {
-  const options: SelectOption[] = TEAM_SIZE_OPTIONS;
+import { SelectField, type SelectOption } from "@/components/SelectField";
+import { TextField } from "@/components/TextField";
+import type { CompanyValues, TeamSize } from "@/config/flow";
+
+const TEAM_SIZE_OPTIONS: ReadonlyArray<SelectOption<TeamSize>> = [
+  { value: "1-10", label: "1–10 people" },
+  { value: "11-50", label: "11–50 people" },
+  { value: "51-200", label: "51–200 people" },
+  { value: "200+", label: "200+ people" },
+];
+
+/** Rendered only for the Enterprise plan: the step's isVisible hides it for the others. */
+export function CompanyStep({ step }: { step: PalistorProxy<CompanyValues> }) {
+  const company = useForm(step);
 
   return (
     <div className="space-y-4">
-      <Input {...step.companyName} />
-      <Select
-        options={options}
-        selectedKeys={step.teamSize.value ? [step.teamSize.value] : []}
-        onSelectionChange={(keys: "all" | Set<React.Key>) => {
-          const value = Array.from(keys as Set<React.Key>)[0] as string;
-          step.teamSize.value = value;
-        }}
-        {...step.teamSize}
-      />
+      <TextField field={company.companyName} />
+      <SelectField field={company.teamSize} options={TEAM_SIZE_OPTIONS} />
     </div>
   );
 }

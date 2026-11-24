@@ -3,15 +3,15 @@
 import { useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
-import type { FieldProxyNode, PalistorList, PalistorProxy, PalistorRef } from "@palistor";
+import type { PalistorList, PalistorProxy, PalistorRef } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { SsrShell } from "../shared/SsrShell";
+import { Flag, SelectField, TextField, buttonClass } from "../shared/ui";
 import { ROLES, isFailNextArmed, setFailNext, subscribeFailures } from "./backend";
 import type { Activity, Announcement, FailingEndpoint, Profile, UserOption } from "./backend";
 import { DraftBlock } from "./DraftBlock";
 import { profileConfig } from "./formConfig";
-import { Flag, INPUT_CLASS, LABEL_CLASS, TextField, buttonClass } from "./ui";
 
 export interface FormViewProps {
   /** The options of the user selector. */
@@ -59,7 +59,14 @@ export function FormView({ users, userId, profile, activity, announcement }: For
         hint={t("deps.hint")}
         footer={<Counter event="form.activity" testId="ssr-form-activity-requests" />}
       >
-        <Dependencies userId={form.userId} activity={form.activity} users={users} />
+        <div className="space-y-4">
+          <SelectField
+            field={form.userId}
+            testId="ssr-form-user"
+            options={users.map((user) => ({ value: user.id, label: user.name }))}
+          />
+          <ActivityList activity={form.activity} />
+        </div>
       </Block>
 
       <Block
@@ -95,7 +102,11 @@ function ProfileForm({ profile }: { profile: PalistorProxy<Profile> }) {
         <TextField field={p.email} testId="ssr-form-email" type="email" />
       </div>
 
-      <RoleField field={p.role} />
+      <SelectField
+        field={p.role}
+        testId="ssr-form-role"
+        options={ROLES.map((role) => ({ value: role, label: t(`roles.${role}`) }))}
+      />
 
       <TextField field={p.bio} testId="ssr-form-bio" multiline />
 
@@ -112,70 +123,7 @@ function ProfileForm({ profile }: { profile: PalistorProxy<Profile> }) {
   );
 }
 
-function RoleField({ field }: { field: FieldProxyNode<string> }) {
-  const t = useTranslations("ssr.form");
-  const role = useForm(field);
-
-  return (
-    <label className="block">
-      <span className={LABEL_CLASS}>{role.label}</span>
-      <select
-        data-testid="ssr-form-role"
-        value={role.value}
-        onChange={(e) => role.onValueChange(e.target.value)}
-        className={INPUT_CLASS}
-      >
-        {ROLES.map((value) => (
-          <option key={value} value={value}>
-            {t(`roles.${value}`)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 // ─── 2. Declared dependencies and reload() ───────────────────────────────────
-
-/** Lays out two nodes of the form and reads neither: the user selector and the list that depends on it. */
-function Dependencies({
-  userId,
-  activity,
-  users,
-}: {
-  userId: FieldProxyNode<string>;
-  activity: PalistorList<Activity>;
-  users: UserOption[];
-}) {
-  return (
-    <div className="space-y-4">
-      <UserField field={userId} users={users} />
-      <ActivityList activity={activity} />
-    </div>
-  );
-}
-
-function UserField({ field, users }: { field: FieldProxyNode<string>; users: UserOption[] }) {
-  const userId = useForm(field);
-
-  return (
-    <label className="block">
-      <span className={LABEL_CLASS}>{userId.label}</span>
-      <select
-        data-testid="ssr-form-user"
-        value={userId.value}
-        onChange={(e) => userId.onValueChange(e.target.value)}
-        className={INPUT_CLASS}
-      >
-        {users.map((user) => (
-          <option key={user.id} value={user.id}>
-            {user.name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 function ActivityList({ activity }: { activity: PalistorList<Activity> }) {
   const t = useTranslations("ssr.form.deps");

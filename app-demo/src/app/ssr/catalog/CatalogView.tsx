@@ -6,6 +6,7 @@ import type { PagedResult, PalistorList, PalistorRef } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { SsrShell } from "../shared/SsrShell";
+import { Skeleton, Spinner, buttonClass } from "../shared/ui";
 import type { Milestone, Paper, Talk, Team } from "./backend";
 import { catalogConfig } from "./catalogConfig";
 import { Teams } from "./Teams";
@@ -88,16 +89,7 @@ function Papers({ papers }: { papers: PalistorList<Paper> }) {
         ))}
       </ul>
 
-      <Pager
-        testId="ssr-catalog-papers"
-        page={list.page!}
-        pageCount={list.pageCount!}
-        hasPrev={list.hasPrevPage!}
-        hasNext={list.hasNextPage!}
-        busy={list.isFetching!}
-        onPage={(n) => list.setPage!(n)}
-        numbered
-      >
+      <Pager testId="ssr-catalog-papers" list={papers} numbered>
         <span data-testid="ssr-catalog-papers-total">{t("papers.total", { count: list.total ?? 0 })}</span>
       </Pager>
     </div>
@@ -140,10 +132,10 @@ function Milestones({ milestones }: { milestones: PalistorList<Milestone> }) {
             data-testid="ssr-catalog-milestones-more"
             disabled={list.isFetchingNextPage}
             onClick={() => list.loadMore!()}
-            className={BUTTON}
+            className={buttonClass("neutral")}
           >
             {t("more")}
-            {list.isFetchingNextPage && <Spinner testId="ssr-catalog-milestones-busy" />}
+            {list.isFetchingNextPage && <Spinner testId="ssr-catalog-milestones-busy" className="ml-2" />}
           </button>
         ) : (
           <span data-testid="ssr-catalog-milestones-end">{t("end")}</span>
@@ -178,15 +170,7 @@ function Talks({ talks }: { talks: PalistorList<Talk> }) {
   // Reading `isInitialLoading` asks for the list, like `loading` does: it is
   // true in the server's HTML (the store there holds the run back) and in the
   // browser's first render, so both draw the skeleton.
-  if (list.isInitialLoading) {
-    return (
-      <div data-testid="ssr-catalog-talks-skeleton" className="space-y-1">
-        {Array.from({ length: list.pageSize! }, (_, i) => (
-          <div key={i} className="h-11 rounded-lg bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
+  if (list.isInitialLoading) return <Skeleton testId="ssr-catalog-talks-skeleton" rows={list.pageSize} />;
 
   return (
     <div className="space-y-3">
@@ -195,15 +179,7 @@ function Talks({ talks }: { talks: PalistorList<Talk> }) {
           <TalkRow key={id} talk={talk} />
         ))}
       </ul>
-      <Pager
-        testId="ssr-catalog-talks"
-        page={list.page!}
-        pageCount={list.pageCount!}
-        hasPrev={list.hasPrevPage!}
-        hasNext={list.hasNextPage!}
-        busy={list.isFetching!}
-        onPage={(n) => list.setPage!(n)}
-      />
+      <Pager testId="ssr-catalog-talks" list={talks} />
     </div>
   );
 }
@@ -224,38 +200,38 @@ function TalkRow({ talk }: { talk: PalistorRef<Talk> }) {
   );
 }
 
-// ─── Shared bits ─────────────────────────────────────────────────────────────
+// ─── Pager (blocks 1 and 3) ──────────────────────────────────────────────────
 
-const BUTTON =
-  "px-3 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors";
-
-/** Prev / [page numbers] / Next and "Page x of y". Navigation waits while a page is loading. */
-function Pager({
+/**
+ * Prev / [page numbers] / Next and "Page x of y" for the paginated list it is
+ * handed. Navigation waits while a page is loading.
+ */
+function Pager<Row extends Paper | Talk>({
   testId,
-  page,
-  pageCount,
-  hasPrev,
-  hasNext,
-  busy,
-  onPage,
+  list: node,
   numbered = false,
   children,
 }: {
   testId: string;
-  page: number;
-  pageCount: number;
-  hasPrev: boolean;
-  hasNext: boolean;
-  busy: boolean;
-  onPage: (page: number) => void;
+  list: PalistorList<Row>;
   numbered?: boolean;
   children?: React.ReactNode;
 }) {
   const t = useTranslations("ssr.catalog");
+  // The paging members are typed optional: present because the list declares `resolve.pagination`.
+  const list = useForm(node);
+  const page = list.page!;
+  const pageCount = list.pageCount!;
+  const busy = list.isFetching!;
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-      <button data-testid={`${testId}-prev`} disabled={!hasPrev || busy} onClick={() => onPage(page - 1)} className={BUTTON}>
+      <button
+        data-testid={`${testId}-prev`}
+        disabled={!list.hasPrevPage || busy}
+        onClick={() => list.setPage!(page - 1)}
+        className={buttonClass("neutral")}
+      >
         ← {t("prev")}
       </button>
       {numbered &&
@@ -265,27 +241,23 @@ function Pager({
             data-testid={`${testId}-page-${n}`}
             aria-current={n === page ? "page" : undefined}
             disabled={busy}
-            onClick={() => onPage(n)}
-            className={`${BUTTON} font-mono ${n === page ? "ring-2 ring-blue-500" : ""}`}
+            onClick={() => list.setPage!(n)}
+            className={`${buttonClass("neutral")} font-mono ${n === page ? "ring-2 ring-blue-500" : ""}`}
           >
             {n}
           </button>
         ))}
-      <button data-testid={`${testId}-next`} disabled={!hasNext || busy} onClick={() => onPage(page + 1)} className={BUTTON}>
+      <button
+        data-testid={`${testId}-next`}
+        disabled={!list.hasNextPage || busy}
+        onClick={() => list.setPage!(page + 1)}
+        className={buttonClass("neutral")}
+      >
         {t("next")} →
       </button>
       <span data-testid={`${testId}-status`}>{t("pageOf", { page, count: pageCount })}</span>
       {busy && <Spinner testId={`${testId}-busy`} />}
       {children && <span className="ml-auto">{children}</span>}
     </div>
-  );
-}
-
-function Spinner({ testId }: { testId: string }) {
-  return (
-    <span
-      data-testid={testId}
-      className="ml-2 inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin align-middle"
-    />
   );
 }

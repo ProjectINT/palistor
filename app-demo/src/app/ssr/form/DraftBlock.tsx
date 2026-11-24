@@ -5,9 +5,9 @@ import { localStorageDriver, useForm, usePalistor, usePersist } from "@palistor"
 import type { PalistorProxy } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
+import { Flag, TextField, buttonClass } from "../shared/ui";
 import type { Announcement } from "./backend";
 import { draftConfig } from "./formConfig";
-import { Flag, TextField, buttonClass } from "./ui";
 
 /** The localStorage key of the draft (e2e/ssr-form.spec.ts reads it). */
 const DRAFT_KEY = "palistor-ssr-form-draft";

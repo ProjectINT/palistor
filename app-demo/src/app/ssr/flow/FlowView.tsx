@@ -2,10 +2,11 @@
 
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
-import type { ConfigProxy, FieldProxyNode, PalistorProxy, StepStatus } from "@palistor";
+import type { ConfigProxy, PalistorProxy, StepStatus } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
 import { SsrShell } from "../shared/SsrShell";
+import { SelectField, Skeleton, TextField, buttonClass } from "../shared/ui";
 import { MENTORS, type Profile, type Slot, type Team } from "./backend";
 import { flowConfig } from "./flowConfig";
 
@@ -13,6 +14,8 @@ import { flowConfig } from "./flowConfig";
 // and a field are typed by their values.
 type OnboardingFlow = ConfigProxy<typeof flowConfig>["onboarding"];
 type BookingFlow = ConfigProxy<typeof flowConfig>["booking"];
+
+const MENTOR_OPTIONS = MENTORS.map((name) => ({ value: name, label: name }));
 
 /**
  * The client side of /ssr/flow. It renders on the server into HTML and again
@@ -66,8 +69,7 @@ export function FlowView({ profile }: { profile: Profile }) {
 function Onboarding({ flow }: { flow: OnboardingFlow }) {
   const t = useTranslations("ssr.flow");
   const onboarding = useForm(flow);
-  const current = onboarding.steps.current;
-  const last = onboarding.currentStepIndex === onboarding.steps.length - 1;
+  const { steps, currentStepKey } = onboarding;
 
   return (
     <div>
@@ -75,31 +77,24 @@ function Onboarding({ flow }: { flow: OnboardingFlow }) {
       <StepIndicator
         testId="flow-onboarding-steps"
         steps={[
-          { key: "profile", label: t("steps.profile"), status: onboarding.steps.profile.status },
-          { key: "team", label: t("steps.team"), status: onboarding.steps.team.status },
+          { key: "profile", label: t("steps.profile"), status: steps.profile.status },
+          { key: "team", label: t("steps.team"), status: steps.team.status },
         ]}
       />
 
       <div
         data-testid="flow-onboarding-step"
-        data-step={onboarding.currentStepKey}
+        data-step={currentStepKey}
         data-loading={String(onboarding.loading)}
-        className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-4"
+        className={STEP_CLASS}
       >
         {/* Only the active step is rendered: reading a field of a step that was never entered would wake its resolve.
             Handing a step down reads nothing of it. */}
-        {onboarding.currentStepKey === "profile" && <ProfileStep step={onboarding.steps.profile} />}
-        {onboarding.currentStepKey === "team" && <TeamStep step={onboarding.steps.team} />}
+        {currentStepKey === "profile" && <ProfileStep step={steps.profile} />}
+        {currentStepKey === "team" && <TeamStep step={steps.team} />}
       </div>
 
-      <FlowNav
-        testId="flow-onboarding"
-        canGoBack={onboarding.canGoBack}
-        onBack={() => onboarding.back()}
-        // step.submit() validates the step; its onSubmit calls nextStep() (flowConfig.ts).
-        next={last ? null : { disabled: current.loading || current.submitting, onClick: () => void current.submit() }}
-        history={onboarding.history}
-      />
+      <FlowNav testId="flow-onboarding" flow={flow} />
     </div>
   );
 }
@@ -120,35 +115,13 @@ function TeamStep({ step }: { step: PalistorProxy<Team> }) {
   const team = useForm(step);
 
   // Entered in the browser: the resolver runs once; a later entry finds the result cached.
-  if (team.loading) return <StepSkeleton testId="flow-team-skeleton" label={t("team.loading")} />;
+  if (team.loading) return <Skeleton testId="flow-team-skeleton" label={t("team.loading")} />;
 
   return (
     <div className="space-y-3">
-      <MentorField field={team.mentor} />
+      <SelectField testId="flow-team-mentor" field={team.mentor} options={MENTOR_OPTIONS} />
       <TextField testId="flow-team-channel" field={team.channel} />
     </div>
-  );
-}
-
-function MentorField({ field }: { field: FieldProxyNode<string> }) {
-  const mentor = useForm(field);
-
-  return (
-    <label className="block">
-      <span className={LABEL_CLASS}>{mentor.label}</span>
-      <select
-        data-testid="flow-team-mentor"
-        value={mentor.value}
-        onChange={(e) => mentor.onValueChange(e.target.value)}
-        className={INPUT_CLASS}
-      >
-        {MENTORS.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
@@ -157,36 +130,29 @@ function MentorField({ field }: { field: FieldProxyNode<string> }) {
 function Booking({ flow }: { flow: BookingFlow }) {
   const t = useTranslations("ssr.flow");
   const booking = useForm(flow);
-  const current = booking.steps.current;
-  const last = booking.currentStepIndex === booking.steps.length - 1;
+  const { steps, currentStepKey } = booking;
 
   return (
     <div>
       <StepIndicator
         testId="flow-booking-steps"
         steps={[
-          { key: "slot", label: t("steps.slot"), status: booking.steps.slot.status },
-          { key: "notes", label: t("steps.notes"), status: booking.steps.notes.status },
+          { key: "slot", label: t("steps.slot"), status: steps.slot.status },
+          { key: "notes", label: t("steps.notes"), status: steps.notes.status },
         ]}
       />
 
       <div
         data-testid="flow-booking-step"
-        data-step={booking.currentStepKey}
+        data-step={currentStepKey}
         data-loading={String(booking.loading)}
-        className="rounded-lg border border-zinc-100 dark:border-zinc-800 p-4"
+        className={STEP_CLASS}
       >
-        {booking.currentStepKey === "slot" && <SlotStep step={booking.steps.slot} />}
-        {booking.currentStepKey === "notes" && <NotesStep step={booking.steps.notes} />}
+        {currentStepKey === "slot" && <SlotStep step={steps.slot} />}
+        {currentStepKey === "notes" && <NotesStep step={steps.notes} />}
       </div>
 
-      <FlowNav
-        testId="flow-booking"
-        canGoBack={booking.canGoBack}
-        onBack={() => booking.back()}
-        next={last ? null : { disabled: current.loading || current.submitting, onClick: () => void current.submit() }}
-        history={booking.history}
-      />
+      <FlowNav testId="flow-booking" flow={flow} />
     </div>
   );
 }
@@ -196,8 +162,8 @@ function SlotStep({ step }: { step: PalistorProxy<Slot> }) {
   const slot = useForm(step);
 
   // Server mode holds the active step's resolve: `loading` is already true in the
-  // server's HTML, and in the browser's first render the run is in flight.
-  if (slot.loading) return <StepSkeleton testId="flow-slot-skeleton" label={t("slot.loading")} />;
+  // server's HTML, and in the browser's first render the run is about to start.
+  if (slot.loading) return <Skeleton testId="flow-slot-skeleton" label={t("slot.loading")} />;
 
   return (
     <dl data-testid="flow-slot-content" className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -219,9 +185,7 @@ function NotesStep({ step }: { step: PalistorProxy<{ topic: string }> }) {
 
 // ─── Pieces ──────────────────────────────────────────────────────────────────
 
-const LABEL_CLASS = "block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1";
-const INPUT_CLASS =
-  "w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 read-only:bg-zinc-50 read-only:text-zinc-500 dark:read-only:bg-zinc-900 dark:read-only:text-zinc-400";
+const STEP_CLASS = "rounded-lg border border-zinc-100 dark:border-zinc-800 p-4";
 
 /** onEnter, onReady and resolver calls of one step (counted in flowConfig.ts and backend.ts). */
 function StepCounters({ step, label }: { step: string; label: string }) {
@@ -277,21 +241,12 @@ function StepIndicator({
   );
 }
 
-/** Back / Next and the visit path (`flow.history`). `next: null` on the last step. */
-function FlowNav({
-  testId,
-  canGoBack,
-  onBack,
-  next,
-  history,
-}: {
-  testId: string;
-  canGoBack: boolean;
-  onBack: () => void;
-  next: { disabled: boolean; onClick: () => void } | null;
-  history: readonly string[];
-}) {
+/** Back / Next and the visit path (`flow.history`) of the flow it is handed. */
+function FlowNav({ testId, flow }: { testId: string; flow: OnboardingFlow | BookingFlow }) {
   const t = useTranslations("ssr.flow");
+  const nav = useForm(flow);
+  const current = nav.steps.current;
+  const last = nav.currentStepIndex === nav.steps.length - 1;
 
   return (
     <div className="mt-4 space-y-3">
@@ -299,75 +254,33 @@ function FlowNav({
         <button
           type="button"
           data-testid={`${testId}-back`}
-          disabled={!canGoBack}
-          onClick={onBack}
-          className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          disabled={!nav.canGoBack}
+          onClick={() => nav.back()}
+          className={buttonClass("neutral")}
         >
           {t("back")}
         </button>
-        {next ? (
+        {last ? (
+          <span className="text-sm text-zinc-400 dark:text-zinc-500">{t("lastStep")}</span>
+        ) : (
           <button
             type="button"
             data-testid={`${testId}-next`}
-            disabled={next.disabled}
-            onClick={next.onClick}
-            className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={current.loading || current.submitting}
+            // step.submit() validates the step; its onSubmit calls nextStep() (flowConfig.ts).
+            onClick={() => void current.submit()}
+            className={buttonClass("primary")}
           >
             {t("next")}
           </button>
-        ) : (
-          <span className="text-sm text-zinc-400 dark:text-zinc-500">{t("lastStep")}</span>
         )}
       </div>
       <p className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
         <span className="font-mono">flow.history:</span>
         <span data-testid={`${testId}-history`} className="font-mono text-zinc-600 dark:text-zinc-400">
-          {history.join(" → ")}
+          {nav.history.join(" → ")}
         </span>
       </p>
     </div>
-  );
-}
-
-function StepSkeleton({ testId, label }: { testId: string; label: string }) {
-  return (
-    <div data-testid={testId} aria-busy="true" className="space-y-2">
-      <p className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-        {label}
-      </p>
-      {[0, 1].map((i) => (
-        <div key={i} className="h-10 rounded-lg bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
-      ))}
-    </div>
-  );
-}
-
-/** One field of a step: its own useForm, so a keystroke re-renders this component alone. */
-function TextField({ testId, field }: { testId: string; field: FieldProxyNode<string> }) {
-  const f = useForm(field);
-  const error = f.errorMessage;
-
-  return (
-    <label className="block">
-      <span className={LABEL_CLASS}>
-        {f.label}
-        {f.isRequired && <span className="text-red-500"> *</span>}
-      </span>
-      <input
-        data-testid={testId}
-        value={f.value}
-        onChange={(e) => f.onValueChange(e.target.value)}
-        readOnly={f.isReadOnly}
-        placeholder={f.placeholder}
-        aria-invalid={error ? true : undefined}
-        className={INPUT_CLASS}
-      />
-      {error && (
-        <span data-testid={`${testId}-error`} className="mt-1 block text-xs text-red-600 dark:text-red-400">
-          {error}
-        </span>
-      )}
-    </label>
   );
 }

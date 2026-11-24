@@ -1,27 +1,22 @@
-import type { PaymentFormValues } from "./types";
-import type { FormConfig, TranslateFn } from "@palistor";
+import type { TranslateFn } from "@palistor";
+import type { AccountType, PaymentFormValues } from "./types";
 
-export const accountType: Pick<FormConfig<PaymentFormValues>, 'accountType' | 'companyName'> = {
+const isBusiness = (values: PaymentFormValues) => values.accountType === "business";
+
+/** A field that is required only while another field has a certain value. */
+export const accountType = {
   accountType: {
-    types: {
-      dataType: "String" as const,
-      type: "AccountType"
-    },
-    value: "personal" as const,
+    value: "personal" as AccountType,
     label: (t: TranslateFn) => t("form.accountType"),
-    dependencies: [] as const,
   },
 
   companyName: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
     value: "",
     label: (t: TranslateFn) => t("form.companyName"),
     placeholder: (t: TranslateFn) => t("form.companyNamePlaceholder"),
-    isVisible: (values: PaymentFormValues) => values.accountType === "business",
-    isRequired: (values: PaymentFormValues) => values.accountType === "business",
-    dependencies: ["accountType"] as const,
+    isVisible: isBusiness,
+    isRequired: isBusiness,
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) =>
+      isBusiness(values) && !value.trim() ? t("validation.companyRequired") : undefined,
   },
-}
+};

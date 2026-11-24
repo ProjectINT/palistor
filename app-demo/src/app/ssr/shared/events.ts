@@ -3,8 +3,8 @@
 // blocks and read by the e2e specs.
 //
 // Browser only in practice: a store in server mode runs no resolver, so the
-// server never counts anything, and `useEvents` reads 0 there and in the render
-// that hydrates the server's HTML.
+// server never counts anything, and <Counter> (Block.tsx) reads 0 there and in
+// the render that hydrates the server's HTML.
 
 const counts = new Map<string, number>();
 const listeners = new Set<() => void>();

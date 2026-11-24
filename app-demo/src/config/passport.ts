@@ -1,124 +1,57 @@
-/**
- * Config for the nested passport field
- * Demonstrates a nested structure + the group submit pipeline
- */
+import type { TranslateFn } from "@palistor";
+import type { PassportValues, PaymentFormValues } from "./types";
 
-import type { FormConfig, TranslateFn } from "@palistor";
-import type { PaymentFormValues } from "./types";
-
-// Mock API — simulates saving the passport on the server
-async function mockSavePassport(_values: { id: string | null; number: string; issueDate: string; expiryDate: string }): Promise<void> {
+/** A mock server: answers in 0.8 s and fails one save in five. */
+async function savePassport(passport: PassportValues): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 800));
-  if (Math.random() < 0.2) {
-    throw new Error("Server error: failed to save passport");
-  }
+  if (Math.random() < 0.2) throw new Error(`Server error: failed to save passport ${passport.number}`);
 }
 
-export const passport: FormConfig<PaymentFormValues> = {
+/**
+ * A nested group with a submit of its own (the "Save Passport" button). The
+ * group's flags see its parent's values (the whole form); the callbacks of the
+ * fields inside see the group's values only.
+ */
+export const passport = {
   passport: {
-    nested: true,
-    isVisible: (values: PaymentFormValues) => values.paymentType === "bank", // Shown only for bank transfers
-    
-    id: {
-      value: null,
-      isVisible: false, // Hidden field
-    },
-    
+    isVisible: (values: PaymentFormValues) => values.paymentType === "bank",
+
+    // The server's record id: sent with the payload, no input shows it.
+    id: { value: "" },
+
     number: {
       value: "",
       label: (t: TranslateFn) => t("form.passport.number"),
       placeholder: (t: TranslateFn) => t("form.passport.numberPlaceholder"),
       isRequired: true,
-      validate: (value: string, _values: PaymentFormValues, t: TranslateFn) => {
-        if (!value || value.length < 6) {
-          return t("form.passport.numberTooShort");
-        }
-        return undefined;
-      },
-      types: {
-        dataType: "String" as const,
-        type: "text"
-      }
+      validate: (value: string, _values: PassportValues, t: TranslateFn) =>
+        value.length < 6 ? t("form.passport.numberTooShort") : undefined,
     },
-    
+
     issueDate: {
       value: "",
       label: (t: TranslateFn) => t("form.passport.issueDate"),
       isRequired: true,
-      validate: (value: string, _values: PaymentFormValues, t: TranslateFn) => {
-        if (!value) {
-          return t("validation.required");
-        }
-        // Check the date is not in the future
-        const date = new Date(value);
-        if (date > new Date()) {
-          return t("form.passport.issueDateFuture");
-        }
-        return undefined;
+      validate: (value: string, _values: PassportValues, t: TranslateFn) => {
+        if (!value) return t("validation.required");
+        if (new Date(value) > new Date()) return t("form.passport.issueDateFuture");
       },
-      types: {
-        dataType: "String" as const,
-        type: "date"
-      }
     },
-    
+
     expiryDate: {
       value: "",
       label: (t: TranslateFn) => t("form.passport.expiryDate"),
-      validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
+      // Reads its sibling: `values.issueDate`, not `values.passport.issueDate`.
+      validate: (value: string, values: PassportValues, t: TranslateFn) => {
         if (!value) return undefined;
-        
-        // Check the date is not in the past
-        const date = new Date(value);
-        if (date < new Date()) {
-          return t("form.passport.expiryDatePast");
-        }
-        
-        // Check the issue date precedes the expiry date. A nested field's
-        // functions receive its group's values: `values.issueDate`, not
-        // `values.passport.issueDate`.
-        const groupValues = values as unknown as PaymentFormValues["passport"];
-        if (groupValues.issueDate) {
-          const issueDate = new Date(groupValues.issueDate);
-          if (date <= issueDate) {
-            return t("form.passport.expiryDateBeforeIssue");
-          }
-        }
-        
-        return undefined;
+        const expiry = new Date(value);
+        if (expiry < new Date()) return t("form.passport.expiryDatePast");
+        if (values.issueDate && expiry <= new Date(values.issueDate)) return t("form.passport.expiryDateBeforeIssue");
       },
-      dependencies: ["passport.issueDate"], // A dependency on another nested field!
-      types: {
-        dataType: "String" as const,
-        type: "date"
-      }
     },
 
-    // -------------------------------------------------------------------------
-    // Group Submit Pipeline (Phase 5 Demo)
-    // -------------------------------------------------------------------------
-
-    // Preprocess values before submission — strip spaces from passport number
-    beforeSubmit: (values: any) => ({
-      ...values,
-      number: String(values.number ?? "").replace(/\s/g, ""),
-    }),
-
-    // Mock async save to server
-    onSubmit: async (passportValues: any) => {
-      await mockSavePassport(passportValues);
-    },
-
-    // Called after successful submit — `ctx.reset()` resets the group if needed
-    afterSubmit: (_result: any, _ctx: any) => {
-      // Optional: _ctx.reset() to clear after save
-    },
-
-    // Custom reset — clears dates but keeps the id
-    reset: (defaults: any) => ({
-      ...defaults,
-      issueDate: "",
-      expiryDate: "",
-    }),
-  } as any
+    // The request gets the number without spaces; the field keeps what was typed.
+    beforeSubmit: (values: PassportValues) => ({ ...values, number: values.number.replace(/\s/g, "") }),
+    onSubmit: (values: PassportValues) => savePassport(values),
+  },
 };

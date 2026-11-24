@@ -1,50 +1,58 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { UsersListSection } from "./UsersListSection";
-import { ProductsListSection } from "./ProductsListSection";
-import { OrdersPagedSection } from "./OrdersPagedSection";
-import { ListStatsPanel } from "./ListStatsPanel";
-import { StoreContextSection } from "./StoreContextSection";
+import { useForm, useStoreContext } from "@palistor";
 
+import { catalogStore, initialCatalogContext } from "@/config/catalog/catalogConfig";
+import type { CatalogContext } from "@/config/catalog/types";
+import { ListStatsPanel } from "./ListStatsPanel";
+import { OrdersSection } from "./OrdersSection";
+import { ProductsSection } from "./ProductsSection";
+import { StoreContextSection } from "./StoreContextSection";
+import { UsersSection } from "./UsersSection";
+import { Card } from "./ui";
+
+/**
+ * The Lists & Entities tab. The only component here that sees `catalogStore`:
+ * it hands every section the nodes it shows, and each component below works
+ * on the node its parent gave it — a list, a row, a group or a field.
+ */
 export function ListsDemo() {
   const t = useTranslations();
+  // Only navigates: reads no state, so no edit below re-renders the tab.
+  const form = useForm(catalogStore);
+
+  // App data the resolvers read (store.context), not form state: kept next to the store.
+  const [context, setContext] = useState<CatalogContext>(initialCatalogContext);
+  useStoreContext(catalogStore, context);
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6">
-        <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          {t("catalog.users")}
-        </h2>
-        <UsersListSection />
-      </div>
+      <Card title={t("catalog.users")}>
+        <UsersSection
+          users={form.users}
+          addUser={form.addUser}
+          onDelete={(id) => catalogStore.delete(id)}
+          onInvalidate={(id) => catalogStore.invalidate(id)}
+        />
+      </Card>
 
-      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6">
-        <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          {t("catalog.products")}
-        </h2>
-        <ProductsListSection />
-      </div>
+      <Card title={t("catalog.products")}>
+        <ProductsSection products={form.products} category={form.categoryFilter} />
+      </Card>
 
-      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6">
-        <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-          {t("catalog.orders")}
-        </h2>
-        <OrdersPagedSection />
-      </div>
+      <Card title={t("catalog.orders")}>
+        <OrdersSection orders={form.orders} search={form.searchQuery} />
+      </Card>
 
-      {/* useStoreContext demo */}
-      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 p-6">
-        <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
-          {t("storeContext.title")}
-        </h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-          {t("storeContext.subtitle")}
-        </p>
-        <StoreContextSection />
-      </div>
+      <Card title={t("storeContext.title")} subtitle={t("storeContext.subtitle")}>
+        <StoreContextSection context={context} onChange={(patch) => setContext((current) => ({ ...current, ...patch }))} />
+      </Card>
 
-      <ListStatsPanel />
+      <Card title="List Stats">
+        <ListStatsPanel users={form.users} products={form.products} />
+      </Card>
     </div>
   );
 }

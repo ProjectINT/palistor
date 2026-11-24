@@ -1,57 +1,46 @@
-import type { FormConfig, TranslateFn } from "@palistor";
+import type { TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
 
-export const contacts: Pick<FormConfig<PaymentFormValues>, 'email' | 'phone' | 'name'> = {
-  email: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
-    value: "",
-    label: (t: TranslateFn) => t("form.email"),
-    placeholder: (t: TranslateFn) => t("form.emailPlaceholder"),
-    isRequired: true,
-    dependencies: [],
-    validate: (value: string, _values: PaymentFormValues, t: TranslateFn) => {
-      if (!value.includes("@")) {
-        return t("validation.email");
-      }
-    },
-    onChange: async () => {
-      return { lastModified: Date.now() };
-    },
-  },
+/** "15551234567" → "+1 (555) 123-45-67", built up as the digits are typed. */
+function formatPhone(raw: unknown): string {
+  const d = String(raw).replace(/\D/g, "").slice(0, 11);
+  if (d.length === 0) return "";
+  if (d.length <= 1) return `+${d}`;
+  if (d.length <= 4) return `+${d[0]} (${d.slice(1)}`;
+  if (d.length <= 7) return `+${d[0]} (${d.slice(1, 4)}) ${d.slice(4)}`;
+  if (d.length <= 9) return `+${d[0]} (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+  return `+${d[0]} (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}`;
+}
 
-  phone: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
-    value: "",
-    label: (t: TranslateFn) => t("form.phone"),
-    placeholder: (t: TranslateFn) => t("form.phonePlaceholder"),
-    dependencies: [],
-    formatter: (value) => {
-      // A simple phone formatter
-      const digits = String(value).replace(/\D/g, "").slice(0, 11);
-      if (digits.length === 0) return "";
-      if (digits.length <= 1) return `+${digits}`;
-      if (digits.length <= 4) return `+${digits.slice(0, 1)} (${digits.slice(1)}`;
-      if (digits.length <= 7) return `+${digits.slice(0, 1)} (${digits.slice(1, 4)}) ${digits.slice(4)}`;
-      if (digits.length <= 9) return `+${digits.slice(0, 1)} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-      return `+${digits.slice(0, 1)} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
-    },
-  },
-
+export const contacts = {
   name: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
     value: "",
     label: (t: TranslateFn) => t("form.name"),
     placeholder: (t: TranslateFn) => t("form.namePlaceholder"),
     isRequired: true,
-    dependencies: [],
+    // Without `validate` an empty required field reports the bare "required".
+    validate: (value: string, _values: PaymentFormValues, t: TranslateFn) =>
+      value.trim() ? undefined : t("validation.required"),
   },
+
+  email: {
+    value: "",
+    label: (t: TranslateFn) => t("form.email"),
+    placeholder: (t: TranslateFn) => t("form.emailPlaceholder"),
+    isRequired: true,
+    validate: (value: string, _values: PaymentFormValues, t: TranslateFn) =>
+      value.includes("@") ? undefined : t("validation.email"),
+    // Runs after every write of the field; the returned patch goes to the form.
+    onChange: async () => ({ lastModified: Date.now() }),
+  },
+
+  phone: {
+    value: "",
+    label: (t: TranslateFn) => t("form.phone"),
+    placeholder: (t: TranslateFn) => t("form.phonePlaceholder"),
+    formatter: formatPhone,
+  },
+
+  /** When the email last changed: written by `email.onChange`, has no input. */
+  lastModified: { value: 0 },
 };

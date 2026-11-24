@@ -49,7 +49,7 @@ export const test = base.extend<Fixtures>({
     await use(async (tab) => {
       await page.goto(`./#${tab}`);
       await waitForHydration(page);
-      // The hash is applied in an effect after hydration: wait for the tab.
+      // The prerendered HTML shows the default tab; the hash takes over after hydration.
       await expect(page.getByRole("button", { name: TAB_LABELS[tab], exact: true })).toHaveClass(/border-blue-500/);
     });
   },
@@ -143,6 +143,7 @@ export function statePreview(page: Page): Locator {
 }
 
 /** Parse the JSON shown in a `<pre>`. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- assertions walk the parsed JSON freely
 export async function readJson<T = any>(pre: Locator): Promise<T> {
   return JSON.parse((await pre.textContent()) ?? "null") as T;
 }

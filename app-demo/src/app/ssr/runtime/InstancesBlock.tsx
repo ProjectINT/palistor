@@ -2,9 +2,10 @@
 
 import { useTranslations } from "next-intl";
 import { useForm, usePalistor } from "@palistor";
-import type { FieldProxyNode, PalistorProxy } from "@palistor";
+import type { PalistorProxy } from "@palistor";
 
 import { Block, Counter } from "../shared/Block";
+import { TextField } from "../shared/ui";
 import type { Teammate } from "./backend";
 import { teammateConfig } from "./runtimeConfig";
 import { Button, Panel } from "./ui";
@@ -24,9 +25,6 @@ export function InstancesBlock({ teammates }: { teammates: Teammate[] }) {
     </Block>
   );
 }
-
-const INPUT =
-  "w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-zinc-100";
 
 function TeammateCard({ teammate }: { teammate: Teammate }) {
   // A store per instance: this card's props go into this card's constructor,
@@ -57,8 +55,8 @@ function TeammateFields({ teammate, prefix }: { teammate: PalistorProxy<Omit<Tea
 
   return (
     <>
-      <CardField field={card.name} testId={`${prefix}-name`} />
-      <CardField field={card.role} testId={`${prefix}-role`} />
+      <TextField field={card.name} testId={`${prefix}-name`} />
+      <TextField field={card.role} testId={`${prefix}-role`} />
       <div className="flex items-center justify-between gap-2">
         <span
           data-testid={`${prefix}-dirty`}
@@ -74,16 +72,5 @@ function TeammateFields({ teammate, prefix }: { teammate: PalistorProxy<Omit<Tea
         </Button>
       </div>
     </>
-  );
-}
-
-function CardField({ field, testId }: { field: FieldProxyNode<string>; testId: string }) {
-  const f = useForm(field);
-
-  return (
-    <label className="block">
-      <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">{f.label}</span>
-      <input data-testid={testId} value={f.value} onChange={(e) => f.onValueChange(e.target.value)} className={INPUT} />
-    </label>
   );
 }

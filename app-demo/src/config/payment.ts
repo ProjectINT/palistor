@@ -1,35 +1,27 @@
-import type { PaymentType, PaymentFormValues } from "./types";
-import type { FormConfig, TranslateFn } from "@palistor";
+import type { TranslateFn } from "@palistor";
+import type { PaymentFormValues, PaymentType } from "./types";
 
-export const payment: Pick<FormConfig<PaymentFormValues>, 'paymentType' | 'amount'> = {
+/** The payment method, which every card / bank / crypto field depends on, and the fields all methods share. */
+export const payment = {
   paymentType: {
-    types: {
-      dataType: "String" as const,
-      type: "PaymentType"
-    },
     value: "card" as PaymentType,
     label: (t: TranslateFn) => t("form.paymentType"),
-    // Recomputed only when it changes itself
-    dependencies: [],
   },
-  // --------------------------------------------------------------------------
-  // Amount — a shared field
-  // --------------------------------------------------------------------------
-  
+
   amount: {
-    types: {
-      dataType: "Number" as const,
-      type: "number"
-    },
     value: 0,
     label: (t: TranslateFn) => t("form.amount"),
     placeholder: (t: TranslateFn) => t("form.amountPlaceholder"),
     isRequired: true,
-    dependencies: [],
-    validate: (value: number, _values: PaymentFormValues, t: TranslateFn) => {
-      if (value <= 0) {
-        return t("validation.amountMin", { min: 1 });
-      }
-    },
+    // An input yields a string: store the number the field is typed as.
+    formatter: (raw: unknown) => Number(raw) || 0,
+    validate: (value: number, _values: PaymentFormValues, t: TranslateFn) =>
+      value <= 0 ? t("validation.amountMin", { min: 1 }) : undefined,
+  },
+
+  comment: {
+    value: "",
+    label: (t: TranslateFn) => t("form.comment"),
+    placeholder: (t: TranslateFn) => t("form.commentPlaceholder"),
   },
 };

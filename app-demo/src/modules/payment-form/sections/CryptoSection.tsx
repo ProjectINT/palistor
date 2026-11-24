@@ -1,37 +1,29 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/Input";
-import { Select, type SelectOption } from "@/components/Select";
+import type { FieldProxyNode } from "@palistor";
 
-import { Section } from "@/modules/shared/Section";
-import { CRYPTO_NETWORK_OPTIONS } from "../constants";
-import { usePaymentForm, type CryptoNetwork } from "@/config/appConfig";
+import { SelectField } from "@/components/SelectField";
+import { TextField } from "@/components/TextField";
+import type { CryptoNetwork } from "@/config/appConfig";
+import { CRYPTO_NETWORKS } from "../constants";
+import { BranchSection } from "./BranchSection";
 
-export function CryptoSection() {
+interface CryptoSectionProps {
+  cryptoWallet: FieldProxyNode<string>;
+  cryptoNetwork: FieldProxyNode<CryptoNetwork>;
+}
+
+export function CryptoSection({ cryptoWallet, cryptoNetwork }: CryptoSectionProps) {
   const t = useTranslations();
-  const form = usePaymentForm();
-
-  const options: SelectOption[] = CRYPTO_NETWORK_OPTIONS.map((option) => ({
-    value: option.value,
-    label: option.label,
-  }));
+  const options = CRYPTO_NETWORKS.map((value) => ({ value, label: t(`networks.${value}`) }));
 
   return (
-    <Section title={t("sections.crypto")}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input {...form.cryptoWallet} />
-        <Select
-          {...form.cryptoNetwork}
-          options={options}
-          renderLabel={(option: SelectOption) => t(option.label)}
-          selectedKeys={form.cryptoNetwork.value ? [form.cryptoNetwork.value] : []}
-          onSelectionChange={(keys: Set<string>) => {
-            const value = Array.from(keys)[0] as CryptoNetwork;
-            form.cryptoNetwork.value = value;
-          }}
-        />
+    <BranchSection title={t("sections.crypto")} shownWith={cryptoWallet}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <TextField field={cryptoWallet} />
+        <SelectField field={cryptoNetwork} options={options} />
       </div>
-    </Section>
+    </BranchSection>
   );
 }

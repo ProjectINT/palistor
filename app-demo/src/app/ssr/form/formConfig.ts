@@ -12,9 +12,9 @@ import type { Activity } from "./backend";
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 /**
- * What `onError` gets next to the error on Cube: the notifier and the store's
- * current translator. The declared `ResolveErrorContext` is still the store
- * implementation's (`{ notify }`) and gets `t` in 0.1, hence the cast below.
+ * What `onError` gets next to the error: the store's notifier and its current
+ * translator. The exported `ResolveErrorContext` declares only `notify` so far,
+ * hence the cast below.
  */
 type ErrorContext = ResolveErrorContext & { t: TranslateFn };
 
@@ -50,7 +50,7 @@ export const profileConfig = {
     bio: { value: "", label: (t: TranslateFn) => t("ssr.form.profile.bio") },
   },
 
-  // A list has reload(), resolveStatus and error on its node; a group has neither.
+  // A list has reload(), resolveStatus and error on its node; a group has none of them.
   activity: defineList<Activity>({
     template: { id: { value: "" }, title: { value: "" }, date: { value: "" } },
     resolve: {

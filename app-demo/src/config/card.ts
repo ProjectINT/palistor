@@ -1,75 +1,47 @@
+import type { TranslateFn } from "@palistor";
 import type { PaymentFormValues } from "./types";
-import type { FormConfig, TranslateFn } from "@palistor";
 
-export const card: Pick<FormConfig<PaymentFormValues>, 'cardNumber' | 'cardExpiry' | 'cardCvv'> = {
+const byCard = (values: PaymentFormValues) => values.paymentType === "card";
+
+const digits = (raw: unknown, max: number) => String(raw).replace(/\D/g, "").slice(0, max);
+
+/**
+ * Card fields. Hidden fields are still validated on submit, so each one
+ * repeats the visibility predicate in `isRequired` and in `validate`.
+ */
+export const card = {
   cardNumber: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
     value: "",
     label: (t: TranslateFn) => t("form.cardNumber"),
     placeholder: (t: TranslateFn) => t("form.cardNumberPlaceholder"),
-    isVisible: (values: PaymentFormValues) => values.paymentType === "card",
-    isRequired: (values: PaymentFormValues) => values.paymentType === "card",
-    dependencies: ["paymentType"] as const,
-    // Formatter — inserts a space every 4 digits
-    formatter: (value) => {
-      const digits = String(value).replace(/\D/g, "").slice(0, 16);
-      return digits.replace(/(.{4})/g, "$1 ").trim();
-    },
-    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
-      if (values.paymentType !== "card") return;
-      const digits = value.replace(/\D/g, "");
-      if (digits.length < 16) {
-        return t("validation.cardNumberInvalid");
-      }
-    },
+    isVisible: byCard,
+    isRequired: byCard,
+    // "4111111111111111" → "4111 1111 1111 1111"
+    formatter: (raw: unknown) => digits(raw, 16).replace(/(.{4})/g, "$1 ").trim(),
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) =>
+      byCard(values) && digits(value, 16).length < 16 ? t("validation.cardNumberInvalid") : undefined,
   },
+
   cardExpiry: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
     value: "",
     label: (t: TranslateFn) => t("form.cardExpiry"),
     placeholder: (t: TranslateFn) => t("form.cardExpiryPlaceholder"),
-    isVisible: (values: PaymentFormValues) => values.paymentType === "card",
-    isRequired: (values: PaymentFormValues) => values.paymentType === "card",
-    dependencies: ["paymentType"] as const,
-    formatter: (value) => {
-      const digits = String(value).replace(/\D/g, "").slice(0, 4);
-      if (digits.length >= 2) {
-        return digits.slice(0, 2) + "/" + digits.slice(2);
-      }
-      return digits;
-    },
-    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
-      if (values.paymentType !== "card") return;
-      const digits = value.replace(/\D/g, "");
-      if (digits.length < 4) {
-        return t("validation.cardExpiryInvalid");
-      }
-    },
+    isVisible: byCard,
+    isRequired: byCard,
+    // "1229" → "12/29"
+    formatter: (raw: unknown) => digits(raw, 4).replace(/^(\d{2})(?=\d)/, "$1/"),
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) =>
+      byCard(values) && digits(value, 4).length < 4 ? t("validation.cardExpiryInvalid") : undefined,
   },
 
   cardCvv: {
-    types: {
-      dataType: "String" as const,
-      type: "string"
-    },
     value: "",
     label: (t: TranslateFn) => t("form.cardCvv"),
     placeholder: (t: TranslateFn) => t("form.cardCvvPlaceholder"),
-    isVisible: (values: PaymentFormValues) => values.paymentType === "card",
-    isRequired: (values: PaymentFormValues) => values.paymentType === "card",
-    dependencies: ["paymentType"] as const,
-    formatter: (value) => String(value).replace(/\D/g, "").slice(0, 3),
-    validate: (value: string, values: PaymentFormValues, t: TranslateFn) => {
-      if (values.paymentType !== "card") return;
-      if (value.length < 3) {
-        return t("validation.cardCvvInvalid");
-      }
-    },
+    isVisible: byCard,
+    isRequired: byCard,
+    formatter: (raw: unknown) => digits(raw, 3),
+    validate: (value: string, values: PaymentFormValues, t: TranslateFn) =>
+      byCard(values) && value.length < 3 ? t("validation.cardCvvInvalid") : undefined,
   },
 };

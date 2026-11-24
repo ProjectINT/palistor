@@ -1,40 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { NextIntlClientProvider } from "next-intl";
 
-import en from "../../messages/en.json";
-import ru from "../../messages/ru.json";
+import { DEFAULT_LOCALE, MESSAGES, TIME_ZONE, readLocale } from "@/i18n/locale";
 
-const MESSAGES = { en, ru } as const;
-type Locale = keyof typeof MESSAGES;
-
-const DEFAULT_LOCALE: Locale = "en";
-
-function readLocale(): Locale {
-  if (typeof document === "undefined") return DEFAULT_LOCALE;
-  const match = document.cookie.match(/(?:^|;\s*)NEXT_LOCALE=(ru|en)/);
-  return (match?.[1] as Locale | undefined) ?? DEFAULT_LOCALE;
-}
+// The locale changes only through a reload (switchLocale): nothing to subscribe to.
+const subscribe = () => () => {};
 
 /**
- * Client-side i18n provider used for the static export (GitHub Pages).
- *
- * The build has no server, so the locale can't be resolved from a cookie at
- * request time. We bundle both message sets and resolve the locale on the
- * client after mount — the first render uses DEFAULT_LOCALE so it matches the
- * prerendered HTML (no hydration mismatch), then we adopt the stored locale.
- * The LocaleSwitcher keeps working via its cookie + reload flow.
+ * next-intl for the static export: both message sets are bundled, and the
+ * locale comes from a cookie on the client. The prerendered HTML is in the
+ * default locale; the server snapshot keeps the hydrating render on it, then
+ * React renders again in the saved one.
  */
 export function IntlProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
-
-  useEffect(() => {
-    setLocale(readLocale());
-  }, []);
+  const locale = useSyncExternalStore(subscribe, readLocale, () => DEFAULT_LOCALE);
 
   return (
-    <NextIntlClientProvider locale={locale} messages={MESSAGES[locale]}>
+    <NextIntlClientProvider locale={locale} messages={MESSAGES[locale]} timeZone={TIME_ZONE}>
       {children}
     </NextIntlClientProvider>
   );

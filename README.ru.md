@@ -1055,7 +1055,7 @@ function CarFilters() {
 
 ### Пагинация
 
-> 🔗 **Исходник:** [modules/lists-demo/OrdersPagedSection.tsx](./app-demo/src/modules/lists-demo/OrdersPagedSection.tsx) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
+> 🔗 **Исходник:** [modules/lists-demo/OrdersSection.tsx](./app-demo/src/modules/lists-demo/OrdersSection.tsx) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
 
 Список загружает **по одной странице** и кэширует каждую увиденную. Добавьте блок `pagination` в
 `resolve` — его наличие и есть единственный переключатель. Резолвер получает запрос страницы как
@@ -1432,7 +1432,7 @@ function EmailField() {
 
 ## Persist
 
-> 🔗 **Код:** [modules/payment-form/PersistControls.tsx](./app-demo/src/modules/payment-form/PersistControls.tsx) · **Живой результат:** [Демо → Форма оплаты](https://projectint.github.io/palistor/#form)
+> 🔗 **Код:** [modules/payment-form/PaymentForm.tsx](./app-demo/src/modules/payment-form/PaymentForm.tsx) (`usePersist`), [PersistControls.tsx](./app-demo/src/modules/payment-form/PersistControls.tsx) · **Живой результат:** [Демо → Форма оплаты](https://projectint.github.io/palistor/#form)
 
 Автосохранение состояния формы в любое хранилище.
 
@@ -1600,7 +1600,7 @@ const users = defineList<User>({
 
 ## Контекст store
 
-> 🔗 **Код:** [modules/lists-demo/StoreContextSection.tsx](./app-demo/src/modules/lists-demo/StoreContextSection.tsx) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
+> 🔗 **Код:** [modules/lists-demo/ListsDemo.tsx](./app-demo/src/modules/lists-demo/ListsDemo.tsx) (`useStoreContext`), [StoreContextSection.tsx](./app-demo/src/modules/lists-demo/StoreContextSection.tsx) · **Живой результат:** [Демо → Списки и сущности](https://projectint.github.io/palistor/#lists)
 
 Нереактивные данные (id аккаунта, tenant, токены…), доступные как `store.context` в колбэках, которые получают store: в резолверах, `onSubmit`, `onEnter` / `onReady` (`$toParams` фильтра получает контекст вторым аргументом). Не является частью формы — не попадает в `getValues()`, submit-payload и persist.
 

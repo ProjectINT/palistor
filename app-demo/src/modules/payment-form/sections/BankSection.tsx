@@ -1,21 +1,25 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/Input";
+import type { FieldProxyNode } from "@palistor";
 
-import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/appConfig";
+import { TextField } from "@/components/TextField";
+import { BranchSection } from "./BranchSection";
 
-export function BankSection() {
+interface BankSectionProps {
+  bankAccount: FieldProxyNode<string>;
+  bankBik: FieldProxyNode<string>;
+}
+
+export function BankSection({ bankAccount, bankBik }: BankSectionProps) {
   const t = useTranslations();
-  const form = usePaymentForm();
 
   return (
-    <Section title={t("sections.bankTransfer")}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input {...form.bankAccount} />
-        <Input {...form.bankBik} />
+    <BranchSection title={t("sections.bankTransfer")} shownWith={bankAccount}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <TextField field={bankAccount} />
+        <TextField field={bankBik} />
       </div>
-    </Section>
+    </BranchSection>
   );
 }

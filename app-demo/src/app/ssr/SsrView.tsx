@@ -8,6 +8,7 @@ import type { FieldProxyNode, PalistorList, PalistorProxy, PalistorRef } from "@
 import type { Engineer, Project, Summary as SummaryValues } from "./backend";
 import { Block, Counter } from "./shared/Block";
 import { SsrShell } from "./shared/SsrShell";
+import { INPUT_CLASS, LABEL_CLASS, Skeleton, Spinner } from "./shared/ui";
 import { ssrConfig } from "./ssrConfig";
 
 /**
@@ -109,21 +110,16 @@ function SearchField({ field, busy }: { field: FieldProxyNode<string>; busy: boo
 
   return (
     <label className="block">
-      <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+      <span className={LABEL_CLASS}>
         {search.label}
-        {busy && (
-          <span
-            data-testid="ssr-engineers-busy"
-            className="ml-2 inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin align-middle"
-          />
-        )}
+        {busy && <Spinner testId="ssr-engineers-busy" className="ml-2" />}
       </span>
       <input
         data-testid="ssr-engineers-search"
         value={search.value}
         onChange={(e) => search.onValueChange(e.target.value)}
         placeholder={search.placeholder}
-        className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100"
+        className={INPUT_CLASS}
       />
     </label>
   );
@@ -152,15 +148,7 @@ function Projects({ projects }: { projects: PalistorList<Project> }) {
 
   // Reading `loading` asks for the list: it is `true` in the server's HTML and
   // in the browser's first render, so both draw the skeleton.
-  if (list.loading) {
-    return (
-      <div data-testid="ssr-projects-skeleton" className="space-y-1">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="h-11 rounded-lg bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
+  if (list.loading) return <Skeleton testId="ssr-projects-skeleton" rows={3} />;
 
   return (
     <ul data-testid="ssr-projects-rows" className="space-y-1">

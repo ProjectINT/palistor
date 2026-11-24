@@ -1,18 +1,17 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/Input";
+import type { FieldProxyNode } from "@palistor";
 
+import { TextField } from "@/components/TextField";
 import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/appConfig";
 
-export function CommentSection() {
+export function CommentSection({ comment }: { comment: FieldProxyNode<string> }) {
   const t = useTranslations();
-  const form = usePaymentForm();
-  
+
   return (
     <Section title={t("sections.comment")}>
-      <Input {...form.comment} />
+      <TextField field={comment} />
     </Section>
   );
 }

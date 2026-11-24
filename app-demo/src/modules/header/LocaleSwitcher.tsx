@@ -1,8 +1,13 @@
 "use client";
 
-import { Button } from "@/components/Button";
+import { Button } from "@heroui/react";
 
-type Locale = "ru" | "en";
+import type { Locale } from "@/i18n/locale";
+
+const OPTIONS: ReadonlyArray<{ locale: Locale; label: string }> = [
+  { locale: "ru", label: "🇷🇺 RU" },
+  { locale: "en", label: "🇺🇸 EN" },
+];
 
 interface LocaleSwitcherProps {
   locale: Locale;
@@ -12,22 +17,17 @@ interface LocaleSwitcherProps {
 export function LocaleSwitcher({ locale, onLocaleChange }: LocaleSwitcherProps) {
   return (
     <div className="flex gap-2">
-      <Button
-        color={locale === "ru" ? "primary" : "default"}
-        variant={locale === "ru" ? "solid" : "flat"}
-        size="sm"
-        onPress={() => onLocaleChange("ru")}
-      >
-        🇷🇺 RU
-      </Button>
-      <Button
-        color={locale === "en" ? "primary" : "default"}
-        variant={locale === "en" ? "solid" : "flat"}
-        size="sm"
-        onPress={() => onLocaleChange("en")}
-      >
-        🇺🇸 EN
-      </Button>
+      {OPTIONS.map((option) => (
+        <Button
+          key={option.locale}
+          size="sm"
+          color={option.locale === locale ? "primary" : "default"}
+          variant={option.locale === locale ? "solid" : "flat"}
+          onPress={() => onLocaleChange(option.locale)}
+        >
+          {option.label}
+        </Button>
+      ))}
     </div>
   );
 }

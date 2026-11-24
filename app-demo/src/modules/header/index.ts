@@ -1,5 +1,4 @@
 export { DemoHeader } from "./DemoHeader";
 export { LocaleSwitcher } from "./LocaleSwitcher";
-export { TabNavigation, TABS, type TabType } from "./TabNavigation";
-export { ThemeSwitcher } from "./ThemeSwitcher";
+export type { Tab } from "./tabs";
 export { useTabRouting } from "./useTabRouting";

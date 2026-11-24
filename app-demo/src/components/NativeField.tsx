@@ -1,48 +1,22 @@
+import type { HTMLInputTypeAttribute } from "react";
+import type { ApplyFieldMapping, FieldProxyNode } from "@palistor";
+
+import type { uiFieldMapping } from "@/config/fieldMapping";
+
+/** A string field under the names of `uiFieldMapping`: exactly what `{...form.email}` carries. */
+export type NativeFieldProps = ApplyFieldMapping<FieldProxyNode<string>, typeof uiFieldMapping> & {
+  type?: HTMLInputTypeAttribute;
+};
+
 /**
- * NativeField — deliberately knows NOTHING about Palistor.
- *
- * A styled input in the MUI / native-HTML spirit: it accepts props
- * `required` / `disabled` / `readOnly` / `error` / `helperText` / `helpText`
- * — the very names `fieldMapping` renames Palistor's internal properties
- * into. So it can be rendered with a plain spread:
- *
- *   <NativeField {...form.email} />
- *
- * No `required={form.email.isRequired}` adapters — the spread matches
- * one-to-one.
+ * The one adapter for text fields of the mapped store. Its props already use
+ * the input's names, so a call site is a plain spread: `<NativeField {...form.email} />`.
+ * What a rename cannot do happens here: `onValueChange` from the change event,
+ * one hint out of two texts, `aria-invalid` from `error`.
  */
-
-export interface NativeFieldProps {
-  // Palistor properties that are not renamed
-  label?: string;
-  value?: string;
-  placeholder?: string;
-  onValueChange?: (v: string) => void;
-  isVisible?: boolean;
-  // renamed via fieldMapping (MUI / native style)
-  required?: boolean;
-  disabled?: boolean;
-  readOnly?: boolean;
-  error?: boolean;
-  helperText?: string;
-  helpText?: string;
-  // leftover spread keys (dirty, loading, componentProps…) — ignored
-  [key: string]: unknown;
-}
-
-export function NativeField({
-  label,
-  value = "",
-  placeholder,
-  onValueChange,
-  isVisible = true,
-  required,
-  disabled,
-  readOnly,
-  error,
-  helperText,
-  helpText,
-}: NativeFieldProps) {
+export function NativeField(props: NativeFieldProps) {
+  const { isVisible, label, value, onValueChange, placeholder, type = "text" } = props;
+  const { required, disabled, readOnly, error, helperText, helpText } = props;
   if (!isVisible) return null;
 
   return (
@@ -55,13 +29,14 @@ export function NativeField({
       )}
 
       <input
-        type="text"
+        type={type}
         value={value}
         placeholder={placeholder}
+        required={required}
         disabled={disabled}
         readOnly={readOnly}
         aria-invalid={error || undefined}
-        onChange={(e) => onValueChange?.(e.target.value)}
+        onChange={(e) => onValueChange(e.target.value)}
         className={`
           w-full rounded-lg border px-3 py-2 text-sm bg-white dark:bg-zinc-800
           text-zinc-900 dark:text-zinc-100 outline-none transition-colors
@@ -74,8 +49,8 @@ export function NativeField({
         `}
       />
 
-      {/* helperText (from errorMessage) takes priority, otherwise helpText (from description) */}
-      {error && helperText ? (
+      {/* The error replaces the help text while the field is invalid. */}
+      {error ? (
         <span className="block text-xs text-red-500 mt-1">{helperText}</span>
       ) : helpText ? (
         <span className="block text-xs text-zinc-400 dark:text-zinc-500 mt-1">{helpText}</span>

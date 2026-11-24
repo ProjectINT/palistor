@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 
+import { switchLocale } from "@/i18n/locale";
 import { LocaleSwitcher } from "@/modules/header";
 
 /** The routes of the SSR demo, in nav order. Each one is a `page.cube.tsx` (Cube only). */
@@ -36,13 +37,6 @@ export function SsrShell({
   const pathname = usePathname();
   const current = pathname.replace(/\/+$/, "") || "/";
 
-  // The demo is a static export: the locale lives in a cookie, read by the
-  // root layout's IntlProvider after mount (providers/IntlProvider.tsx).
-  const changeLocale = (next: "ru" | "en") => {
-    document.cookie = `NEXT_LOCALE=${next}; path=/; max-age=31536000`;
-    window.location.reload();
-  };
-
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8 px-4">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -52,7 +46,7 @@ export function SsrShell({
               <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">{t("title")}</h1>
               <p className="text-zinc-600 dark:text-zinc-400 mt-1">{subtitle}</p>
             </div>
-            <LocaleSwitcher locale={locale as "ru" | "en"} onLocaleChange={changeLocale} />
+            <LocaleSwitcher locale={locale} onLocaleChange={switchLocale} />
           </div>
 
           <nav data-testid="ssr-nav" className="mt-4 flex flex-wrap gap-1 border-b border-zinc-200 dark:border-zinc-800">

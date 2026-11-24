@@ -1,62 +1,49 @@
-
-
 export type PaymentType = "card" | "bank" | "crypto";
 export type AccountType = "personal" | "business";
 export type CryptoNetwork = "ethereum" | "bitcoin" | "tron";
 export type Country = "ru" | "us" | "de";
 
+/** The `passport` group: what its fields' callbacks receive as `values`. */
+export interface PassportValues {
+  id: string;
+  number: string;
+  issueDate: string;
+  expiryDate: string;
+}
+
+/** The payment form: what the callbacks of its top-level fields receive as `values`. */
 export interface PaymentFormValues {
-  // Payment type
   paymentType: PaymentType;
-  
-  // Card
+  amount: number;
+  comment: string;
+
   cardNumber: string;
   cardExpiry: string;
   cardCvv: string;
-  
-  // Bank
+
   bankAccount: string;
   bankBik: string;
-  
-  // Crypto
+  passport: PassportValues;
+
   cryptoWallet: string;
   cryptoNetwork: CryptoNetwork;
-  
-  // Shared
-  amount: number;
-  comment: string;
-  
-  // Contacts
+
+  name: string;
   email: string;
   phone: string;
-  name: string;
-  
-  // Account type
+  lastModified: number;
+
   accountType: AccountType;
   companyName: string;
-  
-  // Shipping address
+
   country: Country | "";
   city: string;
   shippingCost: number;
-  
-  // Checkboxes
+
   agreeTerms: boolean;
   newsletter: boolean;
-  
-  // Calculator
+
   price: number;
   quantity: number;
   total: number;
-  
-  // Passport — a nested field
-  passport: {
-    id: string | null;
-    number: string;
-    issueDate: string;
-    expiryDate: string;
-  };
-
-  // onChange demo
-  lastModified: number;
 }

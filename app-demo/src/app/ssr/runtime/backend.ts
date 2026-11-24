@@ -48,13 +48,10 @@ const RELEASES: Release[] = [
 const LATENCY: Record<Region, number> = { "eu-west": 18, "us-east": 92, "ap-south": 164 };
 
 // ─── Fake endpoints (browser only) ───────────────────────────────────────────
-// Counted synchronously, inside the resolver call. A usePalistor store calls
-// its resolvers only after the component has committed (store.start() in the
-// hook's effect), so a counter never moves under a render in progress. Before
-// that, an eager resolver ran from the constructor, during the render: a count
-// landing in the middle of a client navigation's (interruptible) render made
-// React render the page again from scratch, the uncommitted component had lost
-// its store, and a second one repeated the request.
+// Counted synchronously, inside the resolver call. That is safe because a
+// usePalistor store calls its resolvers only after its component has committed
+// (store.start() in the hook's effect): a counter never moves under a render in
+// progress, which would make React throw that render away and start over.
 
 /** Blocks 1 and 2 count the same endpoint under their own names ("runtime.held.builds", "runtime.client.builds"). */
 export const fetchBuilds = (counter: string, delay: number): Promise<Build[]> =>

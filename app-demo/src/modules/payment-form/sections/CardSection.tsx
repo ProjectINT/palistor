@@ -1,24 +1,29 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/Input";
+import type { FieldProxyNode } from "@palistor";
 
-import { Section } from "@/modules/shared/Section";
-import { usePaymentForm } from "@/config/appConfig";
+import { TextField } from "@/components/TextField";
+import { BranchSection } from "./BranchSection";
 
-export function CardSection() {
+interface CardSectionProps {
+  cardNumber: FieldProxyNode<string>;
+  cardExpiry: FieldProxyNode<string>;
+  cardCvv: FieldProxyNode<string>;
+}
+
+export function CardSection({ cardNumber, cardExpiry, cardCvv }: CardSectionProps) {
   const t = useTranslations();
-  const form = usePaymentForm();
 
   return (
-    <Section title={t("sections.cardDetails")}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <BranchSection title={t("sections.cardDetails")} shownWith={cardNumber}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="md:col-span-3">
-          <Input {...form.cardNumber} />
+          <TextField field={cardNumber} />
         </div>
-        <Input {...form.cardExpiry} />
-        <Input {...form.cardCvv} />
+        <TextField field={cardExpiry} />
+        <TextField field={cardCvv} />
       </div>
-    </Section>
+    </BranchSection>
   );
 }

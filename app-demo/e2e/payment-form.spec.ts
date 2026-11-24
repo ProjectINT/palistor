@@ -1,6 +1,6 @@
 import { test, expect, selectOption, statePreview, readJson, waitForHydration, forceMockFailures, clickForAlert } from "./fixtures";
 
-// Tab "Payment Form": one global store (appStore) — visibility and
+// Tab "Payment Form": one module-level store (paymentStore) — visibility and
 // requiredness branches, formatters, setter cascade, computed values,
 // onChange, nested group submit, form submit/reset/setValues, persist.
 
@@ -183,9 +183,8 @@ test.describe("nested passport group", () => {
     await expect(page.getByRole("heading", { name: "Passport Information" })).toBeVisible();
   });
 
-  // A group's isInvalid is its own computed flag (from a group-level
-  // validate), not an aggregate of its children: the passport has none, so
-  // "Save Passport" stays enabled and validation runs inside submit().
+  // "Save Passport" is never gated on validity (a group's isInvalid is not an
+  // aggregate of its children): validation runs inside submit().
   test("dirty state and group reset", async ({ page }) => {
     const number = page.getByRole("textbox", { name: /^Passport Number/ });
     await expect(page.getByText("dirty=false")).toBeVisible();
