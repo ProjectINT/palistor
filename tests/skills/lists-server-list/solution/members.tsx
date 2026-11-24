@@ -1,10 +1,17 @@
 import { defineList, Palistor, useForm } from "palistor";
-import type { PalistorRef } from "palistor";
+import type { PalistorRef, SortProxyNode } from "palistor";
 import { createMember, fetchMembers, type Member } from "./api";
 
 const members = defineList<Member>({
   template: { id: { value: "" }, name: { value: "" } },
-  resolve: { resolver: async () => fetchMembers() },
+  // The API returns the first 50 in the requested order, so it sorts: `$server: true`.
+  sort: { $server: true, name: true },
+  resolve: {
+    resolver: async (values, store, ctx) => {
+      const sort = ctx.sort.by[0]; // empty while unsorted
+      return fetchMembers(sort ? { by: "name", dir: sort.dir } : undefined);
+    },
+  },
 });
 
 export const membersStore = new Palistor({ config: { members } });
@@ -28,31 +35,47 @@ export function MembersScreen() {
   // This read starts the lazy load, so it sits above every early return.
   const count = list.length;
 
+  let body;
   if (list.resolveStatus === "error") {
-    return (
+    body = (
       <div>
         <p>Could not load members</p>
         <button onClick={list.reload}>Retry</button>
       </div>
     );
+  } else if (list.resolveStatus !== "resolved") {
+    // "idle" on the first render, then "pending" (also while a new sort loads): not an empty list yet.
+    body = <p>Loading members…</p>;
+  } else {
+    body = (
+      <>
+        {count === 0 ? (
+          <p>No members yet</p>
+        ) : (
+          <ul>
+            {list.map((member, index, id) => (
+              <MemberRow key={id} member={member} />
+            ))}
+          </ul>
+        )}
+        <button onClick={addMember}>Add member</button>
+      </>
+    );
   }
-  // "idle" on the first render, then "pending": not an empty list yet.
-  if (list.resolveStatus !== "resolved") return <p>Loading members…</p>;
 
   return (
     <div>
-      {count === 0 ? (
-        <p>No members yet</p>
-      ) : (
-        <ul>
-          {list.map((member, index, id) => (
-            <MemberRow key={id} member={member} />
-          ))}
-        </ul>
-      )}
-      <button onClick={addMember}>Add member</button>
+      <SortByName sort={list.sort!} />
+      {body}
     </div>
   );
+}
+
+function SortByName({ sort }: { sort: SortProxyNode<keyof Member & string> }) {
+  const s = useForm(sort);
+  const dir = s.dirOf("name");
+  // Each toggle is one request: the resolver sends ctx.sort to the API.
+  return <button onClick={() => s.toggle("name")}>Name{dir === "asc" ? " ▲" : dir === "desc" ? " ▼" : ""}</button>;
 }
 
 function MemberRow({ member }: { member: PalistorRef<Member> }) {

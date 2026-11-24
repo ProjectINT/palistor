@@ -11,6 +11,8 @@ export interface MembersModule {
 
 interface Call {
   method: string;
+  /** The query of a GET: `sort` and `dir` (null when absent). */
+  sort: { sort: string | null; dir: string | null };
   body: unknown;
   /** Answer this request (inside act, so the screen settles before the next assertion). */
   respond(status: number, json: unknown): Promise<void>;
@@ -26,10 +28,12 @@ const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 /** A server the check answers by hand: every `fetch` waits for `respond`. */
 async function withScreen(mod: MembersModule, run: (calls: Call[]) => Promise<void>): Promise<void> {
   const calls: Call[] = [];
-  vi.stubGlobal("fetch", (_url: string, init?: RequestInit) =>
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
     new Promise((resolve) => {
+      const query = new URL(url, "http://members.test").searchParams;
       calls.push({
         method: init?.method ?? "GET",
+        sort: { sort: query.get("sort"), dir: query.get("dir") },
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
         respond: (status, json) =>
           act(async () => {
@@ -127,6 +131,33 @@ export const checks: Checks<MembersModule> = {
 
       await waitFor(() => expect(names()).toEqual(["Ada", "Linus"]));
       expect(storeMembers(mod)).toEqual(ADA_AND_LINUS);
+    }),
+
+  "the Name button asks the API to sort: one request per click, rows in the API's order": (mod) =>
+    withScreen(mod, async (calls) => {
+      await loaded(calls);
+      expect(calls[0].sort).toEqual({ sort: null, dir: null });
+      const nameButton = () => screen.getByRole("button", { name: /^name/i });
+
+      fireEvent.click(nameButton());
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[1]).toMatchObject({ method: "GET", sort: { sort: "name", dir: "asc" } });
+      await calls[1].respond(200, ADA_AND_LINUS);
+      await waitFor(() => expect(names()).toEqual(["Ada", "Linus"]));
+
+      fireEvent.click(nameButton());
+      await waitFor(() => expect(calls).toHaveLength(3));
+      expect(calls[2].sort).toEqual({ sort: "name", dir: "desc" });
+      await calls[2].respond(200, [ADA_AND_LINUS[1], ADA_AND_LINUS[0]]);
+      await waitFor(() => expect(names()).toEqual(["Linus", "Ada"]));
+
+      fireEvent.click(nameButton());
+      await waitFor(() => expect(calls).toHaveLength(4));
+      expect(calls[3].sort).toEqual({ sort: null, dir: null }); // the server's own order again
+      await calls[3].respond(200, [ADA_AND_LINUS[1], ADA_AND_LINUS[0]]);
+      await waitFor(() => expect(names()).toEqual(["Linus", "Ada"])); // as the server sent them
+      await act(() => settle());
+      expect(calls).toHaveLength(4);
     }),
 
   "typing in a row changes that member in the store": (mod) =>

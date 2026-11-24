@@ -205,7 +205,7 @@ export function useOrdersStore(firstPage: { rows: Order[]; count: number }) {
 
 Rules the types do not show:
 
-- **The data must answer the request the store would send now**: the initial filter values, the first page, this context. The store files the rows under its current query and does not check them; a later filter or page change sends a request as usual.
+- **The data must answer the request the store would send now**: the initial filter values, the first page, this context, and for a server-sorted list the `$default` sort. The store files the rows under its current query and does not check them; a later filter, sort or page change sends a request as usual. A list sorted in the browser orders the rows itself, by `$default`, on both sides: give its `sort` block a `$locale`, or the two may order non-ASCII strings differently (`palistor-lists`, sorting reference).
 - **Only declared dependencies exist until the first real run.** No resolver has run in the browser, so its reads are unknown. A resolve that got data re-runs on a path in `resolve.deps`, on a key in `contextDeps` (group and field resolves; a paginated list ignores it), on a server filter field of the list, and on the list's `reload()`; a paginated list fetches its other pages as usual. A group has no `reload()` (nor `resolveStatus` or `error`: a list has all three), so a group that started from `initialData` is re-run by its declared `deps` and `contextDeps` only. A form value or context key the resolver merely reads does not re-run it: list the value in `deps`. After one real run the usual automatic tracking is back.
 - **Only `initialData` and a restored draft fill a nested list from its owner's row.** A nested array in a row that a list's resolver returns is not a nested list's membership: that list is filled by its own resolver, by `add` / `setItems`, or by `initialData`. This is the one place where `initialData` leaves more than the resolver's result would.
 - **The context must be there from the start too**: in the `usePalistor` options or the provider. A `contextDeps` key that arrives after mount is a change and re-runs the resolver right after hydration.
@@ -465,9 +465,9 @@ Why: automatic tracking records what a run read, and no run has happened in the 
 
 Wrong: the Server Component fetches page 2 or rows filtered by a search param, while the store starts on its first page with default filter values.
 
-Correct: fetch on the server with exactly what a new store starts with: its first page (`pagination.initialPage`), the default values of its filter fields, the same `context`.
+Correct: fetch on the server with exactly what a new store starts with: its first page (`pagination.initialPage`), the default values of its filter fields, its `$default` sort, the same `context`.
 
-Why: the rows are filed under the store's current query without a check, and that query counts as already requested. The screen shows rows that do not match its controls, and no request corrects them until a control changes. Source: `cube/core/pagination.ts` (`accept`), `cube/ssr/initialDataLists.test.tsx` ("no request right after construction; a filter change is one request for the first page").
+Why: the rows are filed under the store's current query without a check, and that query counts as already requested. The screen shows rows that do not match its controls, and no request corrects them until a control changes. Source: `cube/core/pagination.ts` (`accept`), `cube/ssr/initialDataLists.test.tsx` ("no request right after construction; a filter change is one request for the first page", "the data answers `$default`: no request after construction; a sort change is one request for the first page").
 
 ### MEDIUM — Rows without `id`
 

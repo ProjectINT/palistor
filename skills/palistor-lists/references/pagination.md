@@ -32,6 +32,7 @@ export const orders = defineList<Order>({
 ```
 
 - `ctx.page` is `{ page, pageSize, offset, cursor?, queryKey }`.
+- `ctx.sort` is `{ by: [{ key, param, dir }], key }`, empty (`by: []`) while nothing is sorted. With a `sort` block a paginated list is sorted by its server: send `ctx.sort.by` with the request, see [sorting](sorting.md), "Server-side sorting".
 - Return `{ items, total?, nextCursor?, hasMore? }`. `total` drives `pageCount`, `total` and `hasNextPage`. Without it return `hasMore`, or a bare array: the list then assumes there is a next page while pages come back full.
 - In `cursor` and `infinite` modes an explicit `nextCursor: null` means "this was the last page": `hasNextPage` is `false`, `loadMore()` and `nextPage()` request nothing, and in `cursor` mode neither do `setPage(next)` and `prefetch(next)`. The `null` wins over `total`, over `hasMore: true` and over a full page. A page without the field (`undefined`) says nothing and the rule above decides. So a feed that continues by `offset` must leave `nextCursor` out, not send `null`. Source: `cube/core/pagination.test.ts` ("nextCursor: null ends the feed (cursor and infinite)"), `cube/core/pagination.ts` (`pastEnd`, `hasNextPage`).
 - Take the offset, page size and cursor from `ctx.page` only. Do not keep a page number of your own.
@@ -97,7 +98,7 @@ All of them are typed optional, because they exist only on a paginated list. Pas
 | `hasNextPage`, `hasPrevPage` | Not affected by local adds. `hasNextPage` is `false` after a page that came with `nextCursor: null` (`cursor` / `infinite`). |
 | `isFetching` | Some page of the current query is being fetched. `list.loading` is the same signal plus the first fetch that is about to start. |
 | `isInitialLoading` | Nothing to show and a fetch is running or about to start: choose a skeleton over a spinner. `true` from the first read; reading it starts the lazy first fetch, as reading the rows or `loading` does (`isFetching` does not). |
-| `isPreviousData` | With `keepPreviousData`: the rows on screen belong to the previous query. |
+| `isPreviousData` | With `keepPreviousData`: the rows on screen belong to the previous query, while `page`, `pageCount`, `total` and `hasNextPage` already describe the new one (Query key). |
 | `setPage(n)`, `nextPage()`, `prevPage()` | Cached and fresh: synchronous. Otherwise one fetch; the previous rows stay until it lands. |
 | `prefetch(n)` | Fetch a page into the cache without showing it. |
 | `setPageSize(n)` | Clear the cache and fetch the first page once. |
@@ -110,9 +111,10 @@ All of them are typed optional, because they exist only on a paginated list. Pas
 
 ## Query key
 
-The query is identified by what the resolver read: form values, `store.context` keys and the list's server filter fields.
+The query is identified by what the resolver read: form values, `store.context` keys, the list's server filter fields (their applied values, for a manual filter) and its sort.
 
-- When one of them changes, the cached pages belong to another query: the list returns to the first page and fetches it once. The rows are cleared at once (`isInitialLoading` is `true`) unless `keepPreviousData: true`.
+- When one of them changes (`filter.apply()` and a sort change included), the cached pages belong to another query: the list returns to the first page and fetches it once. The rows are cleared at once (`isInitialLoading` is `true`) unless `keepPreviousData: true`.
+- With `keepPreviousData` the previous query's rows stay on screen (`isPreviousData: true`), but the pager already describes the new query, which has no answer yet: `page` is the first page, `pageCount` is `0`, `total` is `undefined`, `hasNextPage` and `hasPrevPage` are `false`. Source: `cube/core/pagination.ts` (`ensureFamily`, `pageCount`, `total`); authoring probe.
 - Writing the same value back is a no-op.
 - `maxCachedQueries` above 1 keeps earlier queries, so switching back to a previous filter is served from the cache.
 - `resolve.deps` seeds the key before the first run; it is rarely needed.
@@ -148,7 +150,8 @@ A wrong `pageSize`, `base`, `mode` or `persist.maxPages` throws when the store i
 
 ## Persist, Suspense, nested lists
 
-- With `usePersist` the current page is restored without a request, but only when the saved query matches the live values and context. With `persist: "window"`, call `list.setScrollAnchor(id)` for the first visible row and read `list.scrollAnchor` after a reload to restore the scroll position.
+- A saved window is restored without a request when two conditions hold: the saved query matches the live values, context and sort (the sort itself is never saved, so a window saved under another sort is not restored for a store that starts at `$default`), and the hydration lands before the list's first fetch starts. The second holds when `await store.persist.enable(…)` has resolved before anything reads the list (or before `store.start()`). `usePersist` hydrates in an effect, after the read in the render and after `usePalistor` has started the store, so with it the first page is requested once and the restored window then replaces it. Source: `cube/contract/sliceG/pagination.test.ts` (E1: `await persist.enable` first, then the read: zero requests), `cube/core/persist.ts` (`hydrate` awaits the driver), `cube/react/usePersist.ts`, `cube/core/sortServer.test.ts` ("a persisted window"); authoring probe (`usePalistor` + `usePersist`, and a module-level store + `usePersist`: one request each, the saved page shown after it).
+- With `persist: "window"`, call `list.setScrollAnchor(id)` for the first visible row and read `list.scrollAnchor` after a reload to restore the scroll position. `setScrollAnchor` changes no tracked state and notifies nothing: the anchor is written with the next store change, so before an immediate reload or navigation call `store.persist.flush()`. Source: `cube/core/pagination.ts` (`setScrollAnchor`), `cube/contract/sliceG/pagination.phase2.test.ts` (J1: `setScrollAnchor` then `persist.flush()`); authoring probe (no listener call, nothing stored until the flush).
 - Restored unconfirmed rows keep the list dirty. `list.pendingAdds` names them and `list.discardPendingAdds()` removes them. Give temporary rows an id that starts with `_tmp_` (the format `add()` generates), so a restored list can tell them from server rows.
 - `resolve.options.suspense: true` suspends only while the list has nothing to show (the first page, or a new query without `keepPreviousData`). Page changes and `loadMore` keep the rows on screen. In a server render the boundary's fallback is sent and the list renders in the browser.
 - To render the first page on the server from rows a Server Component fetched, pass it to the store as `initialData` — an array, or `{ items, total, nextCursor, hasMore }` as the resolver returns it; `nextCursor: null` there makes the first page the whole feed (`cube/core/pagination.test.ts`, "a first page given as initialData with nextCursor: null is a complete feed"). Read the `palistor-ssr` skill first: the rows must answer the query the store would send.
@@ -171,6 +174,14 @@ Wrong: `if (list.loading) return <Spinner />;` on a paginated list.
 Correct: `list.isInitialLoading` for the empty first load; show `list.isFetching` as a small indicator next to the pager and keep rendering the rows.
 
 Why: on a paginated list `loading` is `true` during every page fetch, including a background refetch. The previous rows are still on screen then, and hiding them makes the table blink on each page change. Source: `cube/contract/sliceG/pagination.test.ts` (A3), `cube/core/listCube.ts` (`loading`).
+
+### MEDIUM — "Page N of M" from a new query while the previous rows are shown
+
+Wrong: `<span>Page {list.page} of {list.pageCount}</span>` and `Total: {list.total}` on a list with `keepPreviousData: true`.
+
+Correct: while `list.isPreviousData` is `true`, or while `list.total` is `undefined`, render a pager without the count ("Page 1", or the previous text dimmed).
+
+Why: the kept rows belong to the previous query, but `page`, `pageCount` and `total` already describe the new one, which has no answer yet: the pager reads "Page 1 of 0" over rows of another page. Source: `cube/core/pagination.ts` (`ensureFamily` moves the page and the family at the key change, `pageCount`, `total`); authoring probe.
 
 ### MEDIUM — Calling an optional pagination method directly
 

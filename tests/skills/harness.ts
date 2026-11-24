@@ -12,6 +12,9 @@ type Importer = () => Promise<unknown>;
  * - `solution` — every check passes.
  * - `mistake`  — the checks named in `rejects` FAIL (`it.fails`): the grader
  *   demonstrably catches the mistake the skill warns about.
+ * - `mistakes` — optional further wrong solutions (one file each in
+ *   `mistake/`), each with the checks it must fail, for a task that covers
+ *   more than one entry of the skill's Common Mistakes.
  * - `subject`  — a consumer agent's output, graded by the same checks. Pass
  *   `import.meta.glob("./subject/<file>")`: nothing runs while the folder is
  *   absent.
@@ -25,19 +28,22 @@ export function gradeTask<M>(options: {
   solution: Importer;
   mistake: Importer;
   rejects: readonly (keyof Checks<M> & string)[];
+  mistakes?: ReadonlyArray<{ name: string; load: Importer; rejects: readonly (keyof Checks<M> & string)[] }>;
   subject?: Record<string, Importer>;
 }): void {
-  const { checks, solution, mistake, rejects, subject = {} } = options;
+  const { checks, solution, mistake, rejects, mistakes = [], subject = {} } = options;
 
   const fresh = (importer: Importer) => async () => {
     vi.resetModules();
     return (await importer()) as M;
   };
 
-  for (const name of rejects) {
-    if (!(name in checks)) throw new Error(`gradeTask: unknown check "${name}" in rejects`);
+  for (const list of [rejects, ...mistakes.map((m) => m.rejects)]) {
+    for (const name of list) {
+      if (!(name in checks)) throw new Error(`gradeTask: unknown check "${name}" in rejects`);
+    }
+    if (list.length === 0) throw new Error("gradeTask: name at least one check the mistake must fail");
   }
-  if (rejects.length === 0) throw new Error("gradeTask: name at least one check the mistake must fail");
 
   describe("reference solution", () => {
     const load = fresh(solution);
@@ -52,6 +58,15 @@ export function gradeTask<M>(options: {
       it.fails(name, async () => checks[name](await load()));
     }
   });
+
+  for (const extra of mistakes) {
+    describe(`mistake is rejected: ${extra.name}`, () => {
+      const load = fresh(extra.load);
+      for (const name of extra.rejects) {
+        it.fails(name, async () => checks[name](await load()));
+      }
+    });
+  }
 
   const subjects = Object.entries(subject);
   if (subjects.length > 0) {

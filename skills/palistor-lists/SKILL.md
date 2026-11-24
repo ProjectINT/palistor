@@ -5,20 +5,21 @@ description: >
   table, list or grid of rows loaded from an API with loading, error, empty and
   retry states; adding, removing or inline-editing rows; optimistic rows whose
   temporary id is later replaced by the server id; a detail or edit form for one
-  record; search and filter controls over the rows, server-side or in memory; or
-  page-by-page, load-more and cursor pagination. Covers defineList, list and row
-  (entity) proxies, useForm on a row, store.set / rekey / delete / invalidate,
-  list filter blocks and resolve.pagination. Requires the palistor skill for
-  config, store and useForm basics. Step-by-step wizards belong to
-  palistor-flows; renaming field props for a UI kit belongs to
-  palistor-field-mapping; rendering the list on the server in Next.js belongs to
-  palistor-ssr.
+  record; sorting the rows by a clicked column header, in the browser or by the
+  API; search and filter controls over the rows, server-side or in memory,
+  applied as the user types or with an Apply button; or page-by-page, load-more
+  and cursor pagination. Covers defineList, list and row (entity) proxies,
+  useForm on a row, store.set / rekey / delete / invalidate, list filter and sort
+  blocks and resolve.pagination. Requires the palistor skill for config, store
+  and useForm basics. Step-by-step wizards belong to palistor-flows; renaming
+  field props for a UI kit belongs to palistor-field-mapping; rendering the list
+  on the server in Next.js belongs to palistor-ssr.
 metadata:
   purpose: 'Teaches how to model collections in Palistor: declaring a typed list
     with defineList, rendering and editing its rows through entity proxies,
     loading it with a resolver (loading, error, reload), mutating membership
     (add, remove, temporary ids and rekey), editing one entity through a
-    separate template, and filtering or paginating the list.'
+    separate template, and filtering, sorting or paginating the list.'
   type: sub-skill
   library: palistor
   library_version: '0.1.1-cube.2'
@@ -27,6 +28,7 @@ sources:
   - 'ProjectINT/palistor:cube/core/listCube.ts'
   - 'ProjectINT/palistor:cube/core/registry.ts'
   - 'ProjectINT/palistor:cube/core/filter.ts'
+  - 'ProjectINT/palistor:cube/core/sort.ts'
   - 'ProjectINT/palistor:cube/core/pagination.ts'
   - 'ProjectINT/palistor:cube/core/resolve.ts'
   - 'ProjectINT/palistor:cube/core/node.ts'
@@ -48,7 +50,7 @@ Read the `palistor` skill first. This skill assumes its config → store → `us
 
 ## Setup
 
-A list is one config node: `defineList<TEntity>({ template, resolve?, filter? })`. The template is the set of field rules shared by every row. Rows are stored once, in an entity registry keyed by `id`; a list holds ids, so the same row can appear in several lists and forms.
+A list is one config node: `defineList<TEntity>({ template, resolve?, filter?, sort? })`. The template is the set of field rules shared by every row. Rows are stored once, in an entity registry keyed by `id`; a list holds ids, so the same row can appear in several lists and forms.
 
 ```tsx
 import { defineList, Palistor, useForm } from "palistor";
@@ -256,7 +258,42 @@ export function CarFilters() {
 }
 ```
 
-Before choosing between server and client fields, shaping request params, or reading counts of a filtered list, read [filtering](references/filtering.md).
+Before choosing between server and client fields, shaping request params, reading counts of a filtered list, or building a filter panel with Apply and Cancel buttons (`$apply: "manual"`), read [filtering](references/filtering.md).
+
+### Sort the rows
+
+Declare a `sort` block. `sort: true` makes every template field sortable; a header calls `sort.toggle(key)` (none → ascending → descending → back), and `items` / `map` follow the order.
+
+```tsx
+import type { ReactNode } from "react";
+import { defineList, Palistor, useForm } from "palistor";
+import type { PalistorList, SortProxyNode } from "palistor";
+
+interface Product { id: string; title: string; price: number }
+type ProductKey = keyof Product & string; // with nested groups: SortKey<Product>
+
+const products = defineList<Product>({
+  template: { id: { value: "" }, title: { value: "" }, price: { value: 0 } },
+  sort: true, // a list without pagination sorts in the browser: no request
+});
+export const store = new Palistor({ config: { products } });
+
+export function ProductsHead({ products }: { products: PalistorList<Product> }) {
+  const sort = useForm(products).sort!; // typed optional: present because the block is declared
+  return <tr><SortHeader sort={sort} column="title">Title</SortHeader><SortHeader sort={sort} column="price">Price</SortHeader></tr>;
+}
+
+function SortHeader({ sort, column, children }: { sort: SortProxyNode<ProductKey>; column: ProductKey; children: ReactNode }) {
+  const s = useForm(sort); // re-renders on a sort change, not on a row edit
+  const dir = s.dirOf(column);
+  return <th aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}><button onClick={() => s.toggle(column)}>{children}</button></th>;
+}
+```
+
+- In the browser the order is a snapshot: an edited row stays in place and an added row goes last until the next sort action, load or `sort.refresh()`.
+- A paginated list (or one with `$server: true`) is sorted by its server: the resolver sends `ctx.sort.by`, and each sort change is one request for the first page.
+
+Before adding a sort, choosing what sorts, paging a sorted list in memory, sorting a server-rendered or HeroUI table, or sorting on the server, read [sorting](references/sorting.md).
 
 ### Paginate the list
 
@@ -418,11 +455,12 @@ Mistakes specific to entity templates, filters and pagination are listed in the 
 
 ## Completion
 
-1. Run `npx tsc --noEmit` in the project. A list API reported as missing means the list was declared as a raw array; a missing `id` means the template is incomplete; an error on `list.filter` or on a pagination member means the optional typing was not handled (`list.filter!`, `list.setPage?.(2)`); TS7006 means a `where` or edit-template callback lacks parameter types.
+1. Run `npx tsc --noEmit` in the project. A list API reported as missing means the list was declared as a raw array; a missing `id` means the template is incomplete; an error on `list.filter`, `list.sort` or on a pagination member means the optional typing was not handled (`list.filter!`, `list.sort!`, `list.setPage?.(2)`); TS7006 means a `where` or edit-template callback lacks parameter types.
 2. Load the screen with a working API: the first paint shows the loading state, never the empty state, and the rows appear after the resolver settles.
 3. Make the resolver fail once: the error state appears, the retry control calls `list.reload()`, and the rows appear after a successful run.
 4. Add and remove a row: it appears and disappears without a request, `list.dirty` follows, and after `store.rekey` the row keeps its place under the new id.
 5. Edit a row: only that row re-renders. If the whole list re-renders, a row component is missing its own `useForm(row)`.
+6. Sorting: a header click orders every row, not only the page on screen (a client sort requests nothing; a server sort sends one request). With an Apply panel: typing requests nothing, Apply sends one request.
 
 If a check fails, find the symptom in Common Mistakes before changing the config.
 
@@ -430,6 +468,7 @@ If a check fails, find the symptom in Common Mistakes before changing the config
 
 - Read [list API](references/list-api.md) when you need the full member list of a list, a row or a row field, the store's entity methods, the typing helpers, or lists nested inside a row (how they get their rows, `dirty`, reset).
 - Read [entity editing](references/entity-editing.md) when a row needs a separate edit form, per-row or per-field loading, or its own submit.
-- Read [filtering](references/filtering.md) when the list needs search or filter controls.
+- Read [filtering](references/filtering.md) when the list needs search or filter controls, including a panel applied with a button.
+- Read [sorting](references/sorting.md) when the rows are sorted by a column, in the browser or by the server.
 - Read [pagination](references/pagination.md) when the list is loaded page by page, with load-more, or by cursor.
 - Read the `palistor-ssr` skill when the list must be rendered on the server (Next.js App Router): rows a Server Component already fetched, no request from the store on the server, no second request after hydration.

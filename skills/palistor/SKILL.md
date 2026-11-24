@@ -345,7 +345,7 @@ Outside render (event handlers, effects, non-React code) use the store itself:
 
 | The task involves | Read |
 | --- | --- |
-| A table or list of same-shaped items, add/remove rows, a list loaded from an API, filters, pagination | `palistor-lists` |
+| A table or list of same-shaped items, add/remove rows, a list loaded from an API, filters, sorting by a column, pagination | `palistor-lists` |
 | A wizard, onboarding, checkout or any Next/Back sequence of steps | `palistor-flows` |
 | Inputs from a UI kit or in-house inputs with other prop names (`required`, `error`, `helperText`) | `palistor-field-mapping` |
 | The form or list must be in the server-rendered HTML (Next.js App Router): data fetched by a Server Component, translated labels, no hydration mismatch. Or a server-rendered app needs one store for all its pages (the signed-in user, a cart) | `palistor-ssr` |

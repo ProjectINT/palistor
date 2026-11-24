@@ -146,8 +146,9 @@ the field's `formatter`.
 | `PersistDriver`, `PersistOptions` | Draft storage contracts |
 | `Unsubscribe` | Return type of `subscribeGlobal` |
 
-List and entity types (`PalistorRef`, `PalistorList`, `InferEntity`, `TemplateConfig`, `ListResolver`)
-are covered by the `palistor-lists` skill, flow types (`FlowProxyNode`, `FlowStepProxy`, …) by
+List and entity types (`PalistorRef`, `PalistorList`, `InferEntity`, `TemplateConfig`, `ListResolver`,
+and `FilterProxyNode` / `SortProxyNode`, the props of a filter panel and a sort header that `useForm`
+also accepts) are covered by the `palistor-lists` skill, flow types (`FlowProxyNode`, `FlowStepProxy`, …) by
 `palistor-flows`, and `FieldMapping` / `ApplyFieldMapping` by `palistor-field-mapping`.
 
 ## Typical errors

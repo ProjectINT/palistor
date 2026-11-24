@@ -11,8 +11,9 @@ a description and test fresh phrasings separately.
 
 **Status: not run.** These prompts were written with the skills on 2026-11-15 (`palistor-ssr`: on
 2026-11-23, when the descriptions of `palistor` and `palistor-lists` also got a pointer to it; its
-prompt 5 and the fourth "should not load" on 2026-11-24, with the app-wide store task); no
-activation run has been recorded yet.
+prompt 5 and the fourth "should not load" on 2026-11-24, with the app-wide store task;
+`palistor-lists` prompts 4–6 on 2026-11-24, when its description gained sorting and the Apply
+panel); no activation run has been recorded yet.
 
 ## palistor
 
@@ -35,6 +36,9 @@ Should load:
 1. "Add a customers table to the dashboard: fetch from /api/customers, show a spinner, an error with a retry button, and let me rename a customer inline."
 2. "The 'Add row' button should show the new invoice line immediately and swap in the real id once the POST returns."
 3. "Add search and 'only active' filtering plus Next/Previous pages to the orders list built with `defineList`."
+4. "Clicking a column header in the products table should sort the rows; a second click reverses, a third goes back to the original order."
+5. "Our customer filters hit the API on every keystroke. Let people pick a search and a role first and press Apply (or Enter), with a Cancel that restores what was applied."
+6. "The orders table is paged by the API — sorting by amount has to happen on the server, not only on the visible page."
 
 Should not load:
 

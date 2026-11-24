@@ -87,10 +87,12 @@ skills:
       records: a table, list or grid of rows loaded from an API with loading,
       error, empty and retry states; adding, removing or inline-editing rows;
       optimistic rows whose temporary id is later replaced by the server id; a
-      detail or edit form for one record; search and filter controls over the
-      rows, server-side or in memory; or page-by-page, load-more and cursor
-      pagination. Covers defineList, list and row (entity) proxies, useForm on a
-      row, store.set / rekey / delete / invalidate, list filter blocks and
+      detail or edit form for one record; sorting the rows by a clicked column
+      header, in the browser or by the API; search and filter controls over the
+      rows, server-side or in memory, applied as the user types or with an Apply
+      button; or page-by-page, load-more and cursor pagination. Covers
+      defineList, list and row (entity) proxies, useForm on a row, store.set /
+      rekey / delete / invalidate, list filter and sort blocks and
       resolve.pagination. Requires the palistor skill for config, store and
       useForm basics. Step-by-step wizards belong to palistor-flows; renaming
       field props for a UI kit belongs to palistor-field-mapping; rendering the
@@ -104,6 +106,7 @@ skills:
       - ProjectINT/palistor:cube/core/listCube.ts
       - ProjectINT/palistor:cube/core/registry.ts
       - ProjectINT/palistor:cube/core/filter.ts
+      - ProjectINT/palistor:cube/core/sort.ts
       - ProjectINT/palistor:cube/core/pagination.ts
       - ProjectINT/palistor:cube/core/resolve.ts
       - ProjectINT/palistor:cube/core/node.ts
@@ -120,11 +123,12 @@ skills:
       - references/filtering.md
       - references/list-api.md
       - references/pagination.md
+      - references/sorting.md
     purpose: "Teaches how to model collections in Palistor: declaring a typed list
       with defineList, rendering and editing its rows through entity proxies,
       loading it with a resolver (loading, error, reload), mutating membership
       (add, remove, temporary ids and rekey), editing one entity through a
-      separate template, and filtering or paginating the list."
+      separate template, and filtering, sorting or paginating the list."
   - name: palistor-flows
     slug: palistor-flows
     domain: flows

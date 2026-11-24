@@ -20,7 +20,7 @@ behavior into the config instead of component state, and record the constraints 
 | Skill | Type | Domain | What it covers | Failure modes |
 | --- | --- | --- | --- | --- |
 | `palistor` | core | forms | Mental model (config → store → `useForm` → spread), a component tree that mirrors the config (a node as a prop on every level, a group or a single field), fields and groups, validation, visibility, computed values, submit / reset, group resolve (`onError` with `notify` and `t`), persist, i18n, notifications, store context (hooks and constructor options), `store.start()` and the no-`window` rule, typing, routing to the other skills | 14 |
-| `palistor-lists` | sub-skill | lists | `defineList`, list and row proxies, list resolve (loading / error / reload), add / remove / temporary ids / rekey, editing a row through a separate template, lists nested in rows (how they get their rows, `dirty` up the chain, reset), filtering, pagination (`nextCursor: null` ends a feed) | 28 |
+| `palistor-lists` | sub-skill | lists | `defineList`, list and row proxies, list resolve (loading / error / reload), add / remove / temporary ids / rekey, editing a row through a separate template, lists nested in rows (how they get their rows, `dirty` up the chain, reset), filtering (since batch 6 also the Apply mode: drafts and applied values), sorting (since batch 6: the client class with its snapshot order, the server class with `ctx.sort`), pagination (`nextCursor: null` ends a feed) | 41 |
 | `palistor-flows` | sub-skill | flows | `defineFlow` / `defineStep`, navigation, branching through step `isVisible`, per-step and final validation, step lifecycle, persisted navigation, typing; first-step entry by kind of store (`new Palistor()`: constructor, `usePalistor`: after the first commit) | 13 |
 | `palistor-field-mapping` | sub-skill | ui-integration | The field spread, one adapter per input kind, `fieldMapping` / `defineFieldMapping`, single vocabulary, typing mapped props, limits of renaming | 11 |
 | `palistor-ssr` | sub-skill | server-rendering | `usePalistor` (a store per component instance), one store for the whole app (the hook called once in a layout provider; the entry of each client subtree reads it from a React context, nodes go down as props), `PalistorProvider` / `usePalistorContext`, the constructor options `initialData`, `translator`, `notifier`, `server`, what restarts a resolve that got `initialData`, server mode and `store.start()`, when a `usePalistor` store starts (held until its component has committed; `server: true` as the manual mode), `loading` and Suspense in a server render and in the browser's first render, `usePersist` over `initialData` | 9 |
@@ -49,7 +49,7 @@ and the mechanism are written once, in the file named in the last column.
 | 13 | Expecting the group's own values in resolver | MEDIUM | cube/core/resolve.ts (execute) | `references/async-resolve.md` |
 | 14 | Waiting for a resolve that never starts (until batch 2: "…that nothing reads") | MEDIUM | cube/core/node.ts (groupNode), cube/core/resolve.ts (touch, start), cube/ssr/serverMode.test.tsx ("store.start()", "server: false in Node behaves like the client"), cube/ssr/usePalistor.test.tsx ("the render starts nothing and reads what a server render reads; the effect starts everything once", "server: true is the manual mode: the hook starts nothing, store.start() does") | `references/async-resolve.md` |
 
-### palistor-lists (28 failure modes)
+### palistor-lists (41 failure modes)
 
 | # | Mistake | Priority | Source | Documented in |
 | --- | --- | --- | --- | --- |
@@ -74,13 +74,26 @@ and the mechanism are written once, in the file named in the last column.
 | 19 | Filtering rows in the component | MEDIUM | cube/contract/sliceE/filteringExample.port.test.ts | `references/filtering.md` |
 | 20 | Expecting store.reset() to clear the filters | MEDIUM | cube/contract/sliceE/filtering.test.ts (C1, F3) | `references/filtering.md` |
 | 21 | Using list.length as the number of loaded rows | MEDIUM | cube/contract/sliceE/filtering.test.ts (C2, E2), cube/core/listCube.ts | `references/filtering.md` |
-| 22 | Ignoring ctx.page | HIGH | cube/contract/sliceG/pagination.test.ts (A1, B1) | `references/pagination.md` |
-| 23 | Replacing the rows with a spinner on list.loading | HIGH | cube/contract/sliceG/pagination.test.ts (A3), cube/core/listCube.ts (loading) | `references/pagination.md` |
-| 24 | Calling an optional pagination method directly | MEDIUM | store/store/types.ts (ListProxyNode) | `references/pagination.md` |
-| 25 | Jumping to a page that does not exist | MEDIUM | cube/core/pagination.ts (setPage, pastEnd), cube/core/pagination.test.ts ("cursor: the page that came with nextCursor: null has no next one; nextPage, setPage and prefetch request nothing") | `references/pagination.md` |
-| 26 | Using total to decide whether more rows exist | MEDIUM | cube/contract/sliceG/pagination.test.ts (A2, D7), cube/core/pagination.ts (hasNextPage), cube/core/pagination.test.ts ("infinite: null wins over a total and a hasMore that say there is more") | `references/pagination.md` |
-| 27 | Reading the list's own rows inside its resolver | MEDIUM | cube/contract/sliceG/pagination.test.ts (F7) | `references/pagination.md` |
-| 28 | Mapping a field prop onto a pagination name | MEDIUM | cube/contract/sliceG/pagination.test.ts (F1) | `references/pagination.md` |
+| 22 | An Apply button over automatic fields | HIGH | cube/contract/sliceE/filtering.test.ts (D2, D4), cube/core/filterApply.test.ts ("typing in a manual field", "apply()", "revert()") | `references/filtering.md` |
+| 23 | A draft and an applied copy kept by hand | MEDIUM | cube/core/filter.ts (constructor: a field without `where` is a server field), cube/contract/sliceE/filtering.test.ts (C1, D2) | `references/filtering.md` |
+| 24 | Expecting set, reset or clear to change the rows in manual mode | MEDIUM | cube/core/filterApply.test.ts ("set() writes the drafts and requests nothing; apply() sends them", "clear() writes the drafts; clear() + apply() is one request") | `references/filtering.md` |
+| 25 | A field that only $all reads | MEDIUM | cube/core/filter.ts (`hasClient`), cube/core/listCube.ts (`visibleIds`), cube/contract/sliceE/filtering.test.ts (E3); authoring probe | `references/filtering.md` |
+| 26 | Ignoring ctx.page | HIGH | cube/contract/sliceG/pagination.test.ts (A1, B1) | `references/pagination.md` |
+| 27 | Replacing the rows with a spinner on list.loading | HIGH | cube/contract/sliceG/pagination.test.ts (A3), cube/core/listCube.ts (loading) | `references/pagination.md` |
+| 28 | "Page N of M" from a new query while the previous rows are shown | MEDIUM | cube/core/pagination.ts (`ensureFamily`, `pageCount`, `total`); authoring probe | `references/pagination.md` |
+| 29 | Calling an optional pagination method directly | MEDIUM | store/store/types.ts (ListProxyNode) | `references/pagination.md` |
+| 30 | Jumping to a page that does not exist | MEDIUM | cube/core/pagination.ts (setPage, pastEnd), cube/core/pagination.test.ts ("cursor: the page that came with nextCursor: null has no next one; nextPage, setPage and prefetch request nothing") | `references/pagination.md` |
+| 31 | Using total to decide whether more rows exist | MEDIUM | cube/contract/sliceG/pagination.test.ts (A2, D7), cube/core/pagination.ts (hasNextPage), cube/core/pagination.test.ts ("infinite: null wins over a total and a hasMore that say there is more") | `references/pagination.md` |
+| 32 | Reading the list's own rows inside its resolver | MEDIUM | cube/contract/sliceG/pagination.test.ts (F7) | `references/pagination.md` |
+| 33 | Mapping a field prop onto a pagination name | MEDIUM | cube/contract/sliceG/pagination.test.ts (F1) | `references/pagination.md` |
+| 34 | Sorting rows in the component | HIGH | cube/core/listCube.ts (`visibleIds`), cube/core/sort.test.ts ("comparison by value", "the client filter narrows the sorted rows and keeps their order") | `references/sorting.md` |
+| 35 | Sorting in the browser what only the server has | HIGH | cube/core/sort.ts (`parse`), cube/core/sortServer.test.ts ("a server sort's block") | `references/sorting.md` |
+| 36 | A server-sorted list whose resolver ignores ctx.sort | HIGH | cube/core/sortServer.test.ts ("a server sort never reorders the loaded rows itself"), cube/core/sort.ts (`resort`) | `references/sorting.md` |
+| 37 | Expecting an edited or added row to move into place | HIGH | cube/core/sort.test.ts ("the order is a snapshot"), cube/react/sort.react.test.tsx | `references/sorting.md` |
+| 38 | No $locale on a client-sorted list rendered on the server | MEDIUM | cube/ssr/sortLocale.test.tsx | `references/sorting.md` |
+| 39 | Date objects in a sorted column | MEDIUM | cube/core/sort.test.ts (comment on "dates by time…"); authoring probe | `references/sorting.md` |
+| 40 | A header prop typed with keyof on an entity with groups | MEDIUM | store/store/types.ts (`SortKey`); authoring type check | `references/sorting.md` |
+| 41 | A computed column named after no entity field | MEDIUM | store/store/types.ts (`SortBlock`), cube/core/sort.ts (`parse`) | `references/sorting.md` |
 
 ### palistor-flows (13 failure modes)
 
@@ -125,7 +138,7 @@ and the mechanism are written once, in the file named in the last column.
 | 3 | Server data passed as initialValues | HIGH | cube/palistor.ts (constructor), cube/core/restore.ts, cube/ssr/initialData.test.tsx ("the data is applied over initialValues") | `SKILL.md` |
 | 4 | Expecting new props to replace the store's data | HIGH | cube/ssr/usePalistor.test.tsx ("an options object is read once too", "options passed as an object are followed too: context, translator and notifier, nothing else") | `SKILL.md` |
 | 5 | A resolver dependency that is not declared | HIGH | cube/ssr/initialDataDeps.test.ts ("does not restart on a value or a context key it did not declare, before its first real run") | `SKILL.md` |
-| 6 | Server data that answers another request | HIGH | cube/core/pagination.ts (accept), cube/ssr/initialDataLists.test.tsx ("no request right after construction; a filter change is one request for the first page") | `SKILL.md` |
+| 6 | Server data that answers another request | HIGH | cube/core/pagination.ts (accept), cube/ssr/initialDataLists.test.tsx ("no request right after construction; a filter change is one request for the first page", since batch 6 also "the data answers `$default`: no request after construction; a sort change is one request for the first page") | `SKILL.md` |
 | 7 | Rows without id | MEDIUM | cube/ssr/initialData.test.tsx ("a row without an id is reported once per list") | `SKILL.md` |
 | 8 | Waiting for a resolver where there is no window | MEDIUM | cube/ssr/serverMode.test.tsx ("construction starts nothing", "store.start()") | `SKILL.md` |
 | 9 | `usePalistor` called in every component that needs the shared store (in the file it follows mistake 1) | HIGH | cube/ssr/usePalistor.test.tsx ("two components with the same config get different stores", "every reader below the provider has the same store: a write through one shows in the other, and the page changing keeps it") | `SKILL.md` |
@@ -143,6 +156,8 @@ and the mechanism are written once, in the file named in the last column.
 | Automatic dependency tracking vs `initialData` | `palistor`, `palistor-lists` ↔ `palistor-ssr` | "Nothing to declare" holds for a resolver that has run. A resolve that got `initialData` has not: until its first real run only `deps`, `contextDeps`, filter fields and the list's `reload()` restart it (a group has no `reload()`) |
 | A store that starts in its constructor vs a store that starts after the commit | `palistor`, `palistor-lists`, `palistor-flows` ↔ `palistor-ssr` | "Starts when the store is created" holds for `new Palistor()` in the browser. A `usePalistor` store is held until its component has committed: an agent that expects a called resolver, `resolveStatus: "pending"` or `onEnter` inside the first render, or that lifts the hook above a `<Suspense>` boundary to save requests, follows a rule that no longer exists |
 | `initialData` vs a resolver's result for nested lists | `palistor-lists` ↔ `palistor-ssr` | `initialData` (and a restored draft) fills the lists nested in rows; a list's resolver does not. An agent that returns nested arrays from the outer resolver gets empty nested lists |
+| A client sort's snapshot vs a client filter's live projection | `palistor-lists` | The filter follows row edits at once; the client sort keeps its order until a sort action, a load, `setItems` or `sort.refresh()`. An agent that expects the sort to follow edits ships a ▲ column out of order; one that re-sorts in the component sorts one page only and loses the stable order |
+| Draft vs applied values in a manual filter | `palistor-lists` | `filter.<field>.value` and `filter.values` are drafts; the rows, `ctx.filter`, `isActive`, `activeCount` and `filter.applied` follow the applied values; `set` / `reset` / `clear` write drafts. Chips built from `filter.values`, or a Clear button without `apply()`, disagree with the rows |
 
 ## Cross-References
 
@@ -161,7 +176,7 @@ and the mechanism are written once, in the file named in the last column.
 | Skill | References | Why they are separate |
 | --- | --- | --- |
 | `palistor` | `config-options`, `proxy-api`, `async-resolve`, `integrations`, `typescript` | Dense surfaces and conditional tasks (loading data, drafts, i18n, typing) that the common path does not need |
-| `palistor-lists` | `list-api`, `entity-editing`, `filtering`, `pagination` | Each is an independent sub-task with its own vocabulary and mistakes |
+| `palistor-lists` | `list-api`, `entity-editing`, `filtering`, `pagination`, `sorting` (batch 6) | Each is an independent sub-task with its own vocabulary and mistakes. `SKILL.md` keeps one short pattern per sub-task with a reading condition (474 lines after batch 6) |
 | `palistor-flows` | `flow-api` | Full member tables, exported types, lifecycle and reset rules |
 | `palistor-field-mapping` | — | Fits in one file |
 | `palistor-ssr` | — | Fits in one file (387 lines after batch 3, 484 after batch 4, 497 after batch 5); the per-node shapes of `initialData` are one table. The next addition needs a reference file: the limit is 500 lines |
@@ -180,7 +195,11 @@ Decisions that belong to the maintainer. None blocks the skills; each states wha
 | all | The package is also published to GitHub Packages as `@projectint/palistor`; every example imports from `"palistor"` | open |
 | `palistor-lists` | The JSDoc of `ConfigNode.resolve` says a template field resolver starts after the list resolver; the contract test shows it is lazy only. The skill follows the test | open |
 | `palistor-lists` | A paginated list logs `pagination invariant: window ordinal 1 … has no cached page` on every query-key change (looks like a runtime defect; the skill does not mention it) | resolved in Cube, 2026-11-24 (batch 3): the warning is no longer logged for a query-key change (a server filter, `deps`), from any page, nor after a failed first page; it stays for a window the pager holds for loaded. Evidence: `cube/core/pagination.ts` (`project`), `cube/core/pagination.test.ts` ("a window page that is not cached yet is not an invariant violation"); `cube/ssr/initialDataDeps.test.ts` and `cube/ssr/initialDataLists.test.tsx` assert that nothing is warned. The skills never mentioned the warning, so no guidance changed |
-| `palistor-lists` | Not probed at runtime, documented from README, types and contract-test titles: persistence round-trip, `scrollAnchor`, `keepPreviousData`, `maxPages`, `gcTime`, `revalidateOnHydrate`, list Suspense, nested-list pagination | open |
+| `palistor-lists` | Not probed at runtime, documented from README, types and contract-test titles: persistence round-trip, `scrollAnchor`, `keepPreviousData`, `maxPages`, `gcTime`, `revalidateOnHydrate`, list Suspense, nested-list pagination | open. Batch 6 probed the persisted window (restored without a request only when `await store.persist.enable()` resolves before the list's first fetch; `usePersist` requests the first page once), `setScrollAnchor` (notifies nothing; written with the next change or `persist.flush()`) and `keepPreviousData` (`page` / `pageCount` / `total` already describe the new query) and corrected `pagination.md`. Still unprobed: `maxPages`, `gcTime`, `revalidateOnHydrate`, list Suspense, nested-list pagination |
+| `palistor-lists` | No public way to group a filter change and a sort change: `filter.set` / `filter.apply()` followed by `sort.toggle()` in one handler is two requests (the core groups them only inside its internal batch). Expose `store.batch(fn)` or a combined action? The sorting reference states the two requests | open |
+| `palistor-lists` | A `{ by }` / `{ compare }` sort field must be named after an entity leaf in the types (TS2353), any name works at run time. The sorting reference teaches the workaround | open |
+| `palistor-lists` | Library or guidance? With `keepPreviousData` the pager already shows the new query's counts ("Page 1 of 0" over the previous rows); `usePersist` hydrates after the store has started, so a persisted window costs one request. Both documented as they are | open |
+| `palistor-lists` | Batch 6 statements resting on authoring probes or third-party code, not on a named test: `Date` stored as `{}`, `$all` without a `where` field, `$toParams` not the request identity, the `usePersist` request, `setScrollAnchor`, the `keepPreviousData` pager, one request per quick press on a paginated server sort, two requests for filter + sort in one handler, `as const` for `$apply`, HeroUI rejecting a custom row (`@react-stately/collections`) | open |
 | `palistor-ssr` | A list resolve cannot declare a context dependency: `ListResolveConfig` has `deps` but no `contextDeps`, and a paginated list ignores `contextDeps`. A list that got `initialData` therefore does not reload on a context change; the skill recommends a `key` on the component or `list.reload()` | open |
 | `palistor-ssr` | Statements without a test in `cube/ssr`: `suspense: true` without a `<Suspense>` boundary fails the server render (authoring probe); Next.js sends the fallback without logging because of the digest (comment on `clientOnly`, checked against Next 16; the tests assert the digest, not Next's reaction); a group with `resolve` that got `initialValues` still resolves (authoring probe, order of `seed` and `applyInitialData` in the constructor) | open |
 | `palistor-ssr` | `metadata.library_version` is `0.1.0-cube.0` (the current `package.json` version), but the published `0.1.0-cube.0` has no SSR API. The release that first ships SSR sets the version (`AGENTS.md`, "Releasing") | resolved at `a0fc80b` (release `0.1.0-cube.1`): `intent validate --set-version 0.1.0-cube.1` set the five skills and the "Targets" line. Reopened in another form by batch 3, next row |
@@ -733,3 +752,91 @@ all five skills (no task was added, so `tests/skills/discovery.md` is unchanged 
   addition to either moves a section into a reference file first.
 - The release leftovers of batches 3 and 4 still stand: `intent validate --set-version` and the
   "Targets palistor v…" line.
+
+### Batch 6 — 2026-11-24: list sorting (client and server class) and the filter's Apply mode
+
+- **Source revision:** branch `cube-architecture` at `c239cd8`; `package.json` version `0.1.1-cube.2`.
+  Source changes of this batch: `6e831a5` (list sorting, client class: `cube/core/sort.ts`, the `sort`
+  block, `list.sort`, `useForm(sort)`), `06aa4ae` (filter `$apply: "manual"`: drafts and applied values,
+  `apply()` / `revert()` / `isDraft` / `applied`, `useForm(filter)` typed) and `c239cd8` (server class:
+  `ctx.sort`, `$sort` in the page key, one request per sort change, `invalidate()` inside a batch).
+  Types in `store/store/types.ts` (`SortBlock`, `SortFieldConfig`, `SortProxyNode`, `SortKey`,
+  `SortRequest`, `FilterBlock.$apply`, `FilterFieldConfig.apply`, `FilterProxyNode` members,
+  `ListResolveContextWithSort`), exported by `cube/index.ts`. Tooling: `@tanstack/intent` 0.5.6,
+  TypeScript 5.9.3.
+- **Input:** `experiments/SortPlan.md` (intent and the user-facing examples: «Как это выглядит для
+  пользователя», decisions 1–15, «Этап 1/2/3 → Skills», «Этап 5»), facts reported by the implementers,
+  and six gaps the demo authors of `/lists` hit in the guidance. The plan and the reports were treated as
+  hints; every statement was checked against `cube/**` and its tests.
+- **Evidence:** `cube/core/sort.ts`, `cube/core/sort.test.ts`, `cube/core/sortServer.test.ts`,
+  `cube/react/sort.react.test.tsx`, `cube/ssr/sortLocale.test.tsx`, `cube/ssr/initialDataLists.test.tsx`
+  (section E), `cube/core/filter.ts`, `cube/core/filterApply.test.ts`,
+  `cube/react/filterApply.react.test.tsx`, `cube/core/pagination.ts`, `cube/core/resolve.ts`,
+  `cube/core/listCube.ts`, `cube/core/restore.ts`, `cube/core/persist.ts`, `cube/react/usePersist.ts`,
+  `cube/contract/sliceE/filtering.test.ts`, `cube/contract/sliceG/pagination*.test.ts`; throwaway probe
+  tests under `tests/skills/` (removed): `$all` without `where`, `$toParams` and the request identity,
+  the persisted window under `usePersist` / `usePalistor`, `setScrollAnchor`, the `keepPreviousData`
+  pager, a `Date` in a row, two requests for filter + sort in one handler, quick presses on a paginated
+  server sort, and type checks (`as const` for `$apply`, `useForm(filter)`, `SortProxyNode` typing, a
+  computed column's name). The HeroUI row rule: `@react-stately/collections` `CollectionBuilder` in
+  `app-demo/node_modules` (`@heroui/table` 2.2.30) and `app-demo/src/app/lists/orders/OrdersView.tsx`.
+
+#### Decisions
+
+| Decision | Reason |
+| --- | --- |
+| Sorting lives in a new reference `palistor-lists/references/sorting.md`, with one short pattern ("Sort the rows") and a reading condition in `SKILL.md`; no new skill | Sorting is a sub-task of building a table with a list, like filtering and pagination; a developer looking for it starts from the list. The plan asked for exactly this layout |
+| One reference for both classes: the client class first (the base case is the header click), the server class in its own section | The block, `list.sort` and the header are the same; who sorts is decided by `resolve.pagination` / `$server`. The server section replaced the placeholder written while `c239cd8` was in progress |
+| The Apply mode goes into `filtering.md` as its own section, presented as the replacement of the hand-written `search` / `appliedSearch` pair | The plan's motivating consumer code (`admin-stores.ts`); the mistake that a task check can reject is the automatic-fields panel, so that is the HIGH entry and the hand-written pair a MEDIUM one |
+| The six demo gaps are fixed where the guidance was wrong or silent, each against the code (`$all`, `$toParams`, persisted window, `setScrollAnchor`, `keepPreviousData`, HeroUI rows). Where the behavior looks like a library question (pager counts under `keepPreviousData`, `usePersist` costing a request, no public batch), the guidance states the behavior and "Remaining Gaps" records the question | No library code was changed (outside the batch's scope); a library gap is not presented as a feature |
+| `palistor-lists`: description gains sorting (browser or API) and the Apply panel; `metadata.purpose` gains one word, "sorting" (`…filtering, sorting or paginating the list`) | Keep purpose and activation scope aligned (Intent's purpose contract). The previous purpose is otherwise preserved verbatim; the maintainer should confirm the one-word change |
+| `palistor-lists` `sources` gains `cube/core/sort.ts`; `palistor-ssr` keeps its sources | `sort.ts` holds the behavior the reference describes. The SSR skill only routes to the sorting reference (`$default` order of `initialData`, `$locale`); `restore.ts` and `pagination.ts`, already its sources, carry the `initialData` side |
+| `tests/skills/harness.ts` accepts optional extra mistakes (`mistakes: [{ name, load, rejects }]`) | `lists-server-list` now covers two entries of Common Mistakes (an empty-looking failed list, a client sort of a server-limited list); existing tasks are unchanged |
+| `metadata.library_version`, the "Targets palistor v…" line and the version fields of the planning records untouched | Release step (`AGENTS.md`, "Releasing") |
+
+#### Guidance changed
+
+| Where | Before | After | Evidence |
+| --- | --- | --- | --- |
+| `palistor-lists/references/sorting.md` (new) | — | Header-click base case (`sort: true`, `SortHeader` with `useForm(sort)`); block grammar and construction errors; comparison defaults; the snapshot rule and `refresh()`; paging a sorted list in memory; `$locale` under SSR; HeroUI `sortDescriptor` / `onSortChange` and the `TableRow` + cell-component rule; server-side sorting (`ctx.sort`, request identity, filter interplay, `initialData`, persistence); typing; limits; 8 Common Mistakes | see Evidence above |
+| `palistor-lists/references/filtering.md` | `$all` "always runs"; no Apply mode | `$all` runs only with a `where` field (`where: () => true` idiom); `$toParams` is not the request identity; members `apply` / `revert` / `isDraft` / `applied`; section "Apply with a button (manual mode)"; manual-mode constraints and reserved names; 4 Common Mistakes | `cube/core/filter.ts`, `cube/core/filterApply.test.ts`, `cube/react/filterApply.react.test.tsx`, `cube/contract/sliceE/filtering.test.ts` (E3), probes |
+| `palistor-lists/references/pagination.md` | "With `usePersist` the current page is restored without a request"; `isPreviousData` row silent on the pager | `ctx.sort` in the resolver contract; the sort and `filter.apply()` in the query key; `keepPreviousData` pager values; the two conditions of a request-free restore (`await persist.enable()` before the first fetch; `usePersist` costs one request); `setScrollAnchor` needs the next change or `persist.flush()`; 1 Common Mistake | `cube/core/pagination.ts`, `cube/core/persist.ts`, `cube/contract/sliceG/pagination.test.ts` (E1), `pagination.phase2.test.ts` (J1), `cube/core/sortServer.test.ts`, probes |
+| `palistor-lists/references/list-api.md` | — | `sort` key and member, `ctx.sort` in the resolver row, `items` order under a sort, `getValues()` order, `FilterProxyNode` / `SortProxyNode` / `SortKey` typing rows | `store/store/types.ts`, `cube/core/sort.test.ts` ("getById, getValues(), dirty…") |
+| `palistor-lists/SKILL.md` | — | Description and purpose (above); `sort?` in the Setup sentence; pattern "Sort the rows" with a reading condition; the Apply panel in the filtering pointer; completion step 6; `list.sort!` in completion step 1; reference list | as above |
+| `palistor-ssr/SKILL.md` | "The data must answer… the initial filter values, the first page, this context" | Adds the `$default` sort of a server-sorted list and `$locale` for a client-sorted one (routing to the sorting reference); the mistake "Server data that answers another request" names the `$default` sort and cites the new SSR test | `cube/ssr/initialDataLists.test.tsx` (section E), `cube/ssr/sortLocale.test.tsx` |
+| `palistor/SKILL.md` | Routing row without sorting | Routing row names "sorting by a column" | — |
+| `palistor/references/typescript.md` | — | `FilterProxyNode` / `SortProxyNode` (accepted by `useForm`) routed to `palistor-lists` | `cube/types.ts` (`UseForm`) |
+
+Verified unchanged: `palistor-field-mapping` (its source `cube/core/mapping.ts` changed in `6e831a5`
+only to pass a list's `sort` block through unmapped, `FieldMap.listOptions`; the skill's rules on what a
+mapping renames are unaffected, and the sorting reference states that a mapping leaves the block as
+written) and `palistor-flows` (none of its sources changed).
+
+#### Check outcomes
+
+| Check | Result |
+| --- | --- |
+| `npm exec --no -- intent validate skills` | 5 skill files pass |
+| Strict compile of the examples | Every `ts` / `tsx` fence of `palistor-lists` (`SKILL.md` and its five references) compiles with `tests/skills/tsconfig.json` (`strict: true`) against the package entry (a typed stub for `@heroui/react`); the four `expect-error` fences fail with exactly their declared codes (TS2353, TS2741, TS2339, TS2722). Temporary files, removed after the run |
+| Task check `tests/skills/lists-sortable-table` (new) | 6 checks pass on the reference solution; the mistake (page sliced, then sorted in a `useMemo`) fails its 2 named checks. Graded as a subject it fails 5 of 6, the first because page 1 holds the five rows of the server's page 1 re-ordered |
+| Task check `tests/skills/lists-filter-panel` (new) | 5 checks pass on the reference solution; the mistake (automatic fields with `debounce`, Apply calls `refetch`) fails its 2 named checks (graded as a subject: a request after typing) |
+| Task check `tests/skills/lists-server-list` (extended) | 7 checks pass (one new: the Name button asks the API to sort, one request per click); the original mistake still fails its check; the new mistake `mistake/members-client-sort.tsx` (a client sort, no `$server`) fails the new check |
+| `npm run typecheck:skills` | pass |
+| `npm run test:skills` | 9 task checks: 58 checks pass on the reference solutions, 17 named checks fail on the mistakes as expected |
+| Sizes | `palistor-lists/SKILL.md` 474 lines, `palistor/SKILL.md` 498, `palistor-ssr/SKILL.md` 497 (limit 500) |
+| Fresh consumer session for `lists-sortable-table` and `lists-filter-panel` | run once each on 2026-11-24, both passed: 6 of 6 and 5 of 5 checks on the agents' files. Setup as in batch 4: the candidate tarball (`npm pack` of the working tree with `c239cd8` and these skills) unpacked as `node_modules/palistor` of a scratch project outside the repository, a strict `tsconfig.json`, `intent install` there, the fixture and `task.md`; one Claude Code subagent per task (general-purpose, no authoring conversation) with the plain task. Observed in both: `intent list`, then `intent load palistor#palistor` and `palistor#palistor-lists`; the table agent read `references/sorting.md` and `list-api.md` and sliced its pages from `list.items`; the panel agent read `references/filtering.md` ("Apply with a button") and `pagination.md` and declared `$apply: "manual"`. Both type-checked with `tsc --noEmit` under `strict`. Limits: the subagents ran on the authoring machine and were told, not forced, to stay inside the scratch project; one run is one observation, not a reliability figure; no run without the skills for comparison |
+| Fresh consumer session for the extended `lists-server-list` | not run. Unverified |
+| Description activation (`tests/skills/discovery.md`, `palistor-lists` prompts 4–6 added) | the prompts were not run. One observation from the two consumer sessions above: given `task.md`, both agents chose `palistor-lists` from the `intent list` descriptions |
+
+#### Remaining work
+
+- Maintainer review of `sorting.md`, the manual-mode section, the corrected pagination statements and
+  the one-word change of the `palistor-lists` purpose.
+- A fresh consumer session on the extended `lists-server-list` task check, and an activation run of the new prompts.
+- The library questions recorded in "Remaining Gaps" (no public batch, computed column naming, pager
+  counts under `keepPreviousData`, the `usePersist` request) and tests in `cube/**` for the statements
+  that rest on authoring probes.
+- `palistor/SKILL.md` and `palistor-ssr/SKILL.md` are still within 3 lines of the limit; batch 6 kept
+  their line counts by extending existing lines.
+- The release leftovers of batches 3–5 still stand: `intent validate --set-version` and the "Targets
+  palistor v…" line.

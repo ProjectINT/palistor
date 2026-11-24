@@ -10,6 +10,7 @@ tests/skills/<task>/
   fixture/        starting files a consumer agent edits
   solution/       reference solution (same file names as fixture/)
   mistake/        plausible wrong solution: one entry of the skill's Common Mistakes
+                  (a task that covers two entries keeps a second file here, wired through `mistakes`)
   grade.ts(x)     the assertions — observable behavior, including the error path
   task.test.tsx   wires solution / mistake / subject into gradeTask (harness.ts)
 ```

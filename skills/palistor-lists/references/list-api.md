@@ -1,6 +1,6 @@
 # List API reference
 
-Members of a list, of a row and of a row field, the store's entity methods, the typing helpers, and lists nested inside a row. For filter and pagination members see [filtering](filtering.md) and [pagination](pagination.md).
+Members of a list, of a row and of a row field, the store's entity methods, the typing helpers, and lists nested inside a row. For filter, sort and pagination members see [filtering](filtering.md), [sorting](sorting.md) and [pagination](pagination.md).
 
 ## Declaring a list
 
@@ -29,13 +29,14 @@ export const users = defineList<User>({
 | Key | Meaning |
 | --- | --- |
 | `template` | One leaf config per entity key. `id` is required. Leaf options are the same as for a form field (`validate`, `formatter`, `label`, `isVisible`, …). |
-| `resolve.resolver(values, store, ctx)` | Returns the rows (each with `id`). `values` are the form values without the list's filter, `store.context` is the store context, `ctx` carries `ctx.filter` and, on a paginated list, `ctx.page`. |
+| `resolve.resolver(values, store, ctx)` | Returns the rows (each with `id`). `values` are the form values without the list's filter, `store.context` is the store context, `ctx` carries `ctx.filter`, `ctx.sort` (empty unless the server sorts) and, on a paginated list, `ctx.page`. |
 | `resolve.onError(error, { notify, t })` | Called when the resolver throws. Optional on a list. `notify` is the store's notifier; `t` is its current translator (the key comes back when there is none), so the message needs no hook. A paginated list, a row field and an edit template get the same two. `(error, { notify }) => notify("…")` needs no annotation; `t` is not in the declared type yet, hence the cast above. |
 | `resolve.deps` | Extra dependency paths. Values the resolver reads are tracked automatically. |
 | `resolve.options.lazy` | `true` (default): start on the first read. `false`: start without a read, when the store is created (in a store made with `usePalistor`: after the component's first commit). |
 | `resolve.options.suspense` | `true`: `items`, `length`, `map` and `values` throw the pending promise for React `<Suspense>`. In a server render there is no run to wait for: the boundary's fallback is sent and the list renders in the browser. In a store made with `usePalistor` the browser's first render is an empty list without an error, then the fallback, then the rows (the `palistor-ssr` skill). |
 | `resolve.pagination` | Page cache, see [pagination](pagination.md). |
 | `filter` | Filter block, see [filtering](filtering.md). Root lists only. |
+| `sort` | Sort block, see [sorting](sorting.md). Root lists only. |
 
 Template rules:
 
@@ -52,7 +53,7 @@ Read through `useForm(store).users`, or through `store.proxy.users` outside Reac
 
 | Member | Type | Meaning |
 | --- | --- | --- |
-| `items` | `ReadonlyArray<row>` | The rows in order. Reading it starts a lazy resolve. |
+| `items` | `ReadonlyArray<row>` | The rows in the order shown (sorted, then filtered, when the list has those blocks). Reading it starts a lazy resolve. |
 | `length` | `number` | Number of rows shown. Starts a lazy resolve. |
 | `map(fn)` | `(row, index, id) => R` | Render entry point. Starts a lazy resolve. |
 | `[Symbol.iterator]` | | `for (const row of list)`. Rows from iteration work with the two-argument `useForm` only. |
@@ -66,7 +67,8 @@ Read through `useForm(store).users`, or through `store.proxy.users` outside Reac
 | `remove(id)` | `void` | Take the row out of this list. The entity stays in the registry. |
 | `setItems(ids)` | `void` | Replace the membership with rows that are already in the registry. Duplicates collapse to the first occurrence. |
 | `getById(id)` | row or `undefined` | Find a row of this list. The result works with the two-argument `useForm` only. |
-| `getValues()` | `Array<Record<string, unknown>>` | Plain copy of all rows. |
+| `getValues()` | `Array<Record<string, unknown>>` | Plain copy of all rows, in the list's own order (not the sorted one). |
+| `sort` | `SortProxyNode` (typed optional) | Sort controls of a list with a `sort` block: `toggle`, `set`, `clear`, `reset`, `refresh`, `dirOf`, `by` / `key` / `dir` / `keys`, `sortDescriptor`, `onSortChange`. See [sorting](sorting.md). |
 
 `loading`, `error` and `resolveStatus` are never renamed by `fieldMapping`.
 
@@ -118,7 +120,7 @@ store.invalidate("u3"); // forget that u3's edit templates were loaded
 
 ## Lists and the rest of the form
 
-- `store.getValues()` and the submit payload contain each list as an array of plain rows. Under a client filter they contain all rows, not the visible ones.
+- `store.getValues()` and the submit payload contain each list as an array of plain rows. Under a client filter they contain all rows, not the visible ones, and under a sort the list's own order. The filter and sort state are not in them.
 - `store.submit()` does not validate rows. Validate a row with `row.submit()` or read `isInvalid` on its fields.
 - `store.setValues({ users: [...] })` ignores the list key. Change membership through the list.
 - `store.reset()` keeps the membership and the rows of a root list. On a paginated list it rolls back local adds and removes. Nested lists return to their loaded rows (last section). It sends no request.
@@ -134,7 +136,9 @@ store.invalidate("u3"); // forget that u3's edit templates were loaded
 | `InferEntity<T>` | The entity type of a `PalistorRef<T>`. |
 | `ListResolver<TEntity>` | Type of a resolver declared outside `defineList`. |
 | `TemplateConfig<TEntity>` | Type of a template declared outside `defineList`. |
-| `ListResolveContext` | Type of the resolver's third argument. |
+| `ListResolveContext` | Type of the resolver's third argument (`filter`, `sort`, `queryKey`, `page?`); `sort` is always present. |
+| `FilterProxyNode` | Prop type of a filter panel: `{ filter: FilterProxyNode }`, then `useForm(filter)`. See [filtering](filtering.md). |
+| `SortProxyNode<K>`, `SortKey<TEntity>` | Prop type of a sort header (`SortProxyNode<SortKey<Product>>`), then `useForm(sort)`. See [sorting](sorting.md). |
 | `ListProxyNode<TItem>` | The list members above. |
 
 ```tsx

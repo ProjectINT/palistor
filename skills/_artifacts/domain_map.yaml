@@ -7,8 +7,10 @@
 #       updated 2026-11-24 (batch 4: one store for the whole app; verified at 69dc215, package.json
 #       0.1.1-cube.1),
 #       updated 2026-11-24 (batch 5: a node as a prop on every level, the field overload of useForm;
-#       verified against the working tree on 69dc215, package.json 0.1.1-cube.1)
-# Status: draft (the five batches were authored by an agent; not yet reviewed by the maintainer)
+#       verified against the working tree on 69dc215, package.json 0.1.1-cube.1),
+#       updated 2026-11-24 (batch 6: list sorting, client and server class, and the filter's Apply
+#       mode; verified at c239cd8, package.json 0.1.1-cube.2)
+# Status: draft (the six batches were authored by an agent; not yet reviewed by the maintainer)
 #
 # failure_modes list the mistake, its priority and evidence. The wrong and correct
 # patterns and the mechanism live in one place only: the skill file named in
@@ -152,13 +154,15 @@ skills:
     description: "A developer needs a collection of same-shaped records in a palistor screen: load, render, add, remove and edit rows, edit one record in its own form, filter and paginate."
     type: sub-skill
     covers:
-      - "defineList<TEntity>({ template, resolve, filter })"
+      - "defineList<TEntity>({ template, resolve, filter, sort })"
       - "list proxy: items, map, length, loading, error, resolveStatus, reload, add, remove, setItems, getById, getValues, dirty"
       - "entity (row) proxies and useForm(row) / useForm(row, templateSelector)"
       - "store.set / rekey / delete / invalidate; temporary ids"
       - "row validation and row submit"
       - "template field resolve and template resolve"
-      - "filter block: server and client fields, where, param, debounce, $all, $toParams, list.filter controls"
+      - "filter block: server and client fields, where, param, debounce, $all (runs only with a where field), $toParams (not the request identity), list.filter controls"
+      - "filter Apply mode: $apply: \"manual\" / apply per field, drafts vs applied values, filter.apply() / revert() / isDraft / applied, useForm(props.filter)"
+      - "sort block: sort: true or named fields (true, { by }, { compare }, { param }), $default, $locale, $server; list.sort (toggle, set, clear, reset, refresh, dirOf, sortDescriptor / onSortChange); the client order as a snapshot; the server class (ctx.sort, one request per change, $sort in the page key); SortProxyNode / SortKey typing"
       - "resolve.pagination: paged, infinite, cursor; page cache; PagedResult and ctx.page; nextCursor: null ends a cursor / infinite feed"
       - "lists nested in a row: filled by their own resolver, add / setItems or initialData (not by the outer resolver); dirty goes up to the owner row, its list and the form; store.reset() returns them to the loaded rows and requests nothing"
       - "list onError(error, { notify, t }): the cast form inside defineList"
@@ -169,6 +173,9 @@ skills:
       - "Edit one entity through a separate template with its own validation and submit"
       - "Filter a list with server and client filter fields"
       - "Paginate a list (paged, infinite or cursor mode)"
+      - "Sort a table by a clicked column header in the browser (client class), including client-side pages and a Re-sort after edits"
+      - "Sort a paginated or first-N list on the server (ctx.sort, $server: true)"
+      - "Build a filter panel with Apply and Cancel over a server list (manual mode)"
     reference_candidates:
       - topic: "list API"
         reason: "full list, row and row-field surfaces, store entity methods, typing helpers"
@@ -178,6 +185,8 @@ skills:
         reason: "filter block vocabulary and server/client field rules"
       - topic: "pagination"
         reason: "three modes, more than 20 list members, cache and persistence options"
+      - topic: "sorting"
+        reason: "block grammar, two classes (browser and server), the snapshot rule, comparison defaults, $locale under SSR, React Aria tables"
     failure_modes:
       - mistake: "Treating a failed or not-yet-started list as empty"
         priority: HIGH
@@ -284,6 +293,26 @@ skills:
         status: active
         source: "cube/contract/sliceE/filtering.test.ts (C2, E2), cube/core/listCube.ts"
         documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "An Apply button over automatic fields"
+        priority: HIGH
+        status: active
+        source: "cube/contract/sliceE/filtering.test.ts (D2, D4), cube/core/filterApply.test.ts (\"typing in a manual field\", \"apply()\", \"revert()\"); task check tests/skills/lists-filter-panel"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "A draft and an applied copy kept by hand"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/filter.ts (constructor: a field without where is a server field), cube/contract/sliceE/filtering.test.ts (C1, D2)"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "Expecting set, reset or clear to change the rows in manual mode"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/filterApply.test.ts (\"set() writes the drafts and requests nothing; apply() sends them\", \"clear() writes the drafts; clear() + apply() is one request\")"
+        documented_in: skills/palistor-lists/references/filtering.md
+      - mistake: "A field that only $all reads"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/filter.ts (hasClient), cube/core/listCube.ts (visibleIds), cube/contract/sliceE/filtering.test.ts (E3); authoring probe"
+        documented_in: skills/palistor-lists/references/filtering.md
       - mistake: "Ignoring ctx.page"
         priority: HIGH
         status: active
@@ -293,6 +322,11 @@ skills:
         priority: HIGH
         status: active
         source: "cube/contract/sliceG/pagination.test.ts (A3), cube/core/listCube.ts (loading)"
+        documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "\"Page N of M\" from a new query while the previous rows are shown"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/pagination.ts (ensureFamily, pageCount, total); authoring probe"
         documented_in: skills/palistor-lists/references/pagination.md
       - mistake: "Calling an optional pagination method directly"
         priority: MEDIUM
@@ -319,6 +353,46 @@ skills:
         status: active
         source: "cube/contract/sliceG/pagination.test.ts (F1)"
         documented_in: skills/palistor-lists/references/pagination.md
+      - mistake: "Sorting rows in the component"
+        priority: HIGH
+        status: active
+        source: "cube/core/listCube.ts (visibleIds), cube/core/sort.test.ts (\"comparison by value\", \"the client filter narrows the sorted rows and keeps their order\"); task check tests/skills/lists-sortable-table"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "Sorting in the browser what only the server has"
+        priority: HIGH
+        status: active
+        source: "cube/core/sort.ts (parse), cube/core/sortServer.test.ts (\"a server sort's block\"); task check tests/skills/lists-server-list"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "A server-sorted list whose resolver ignores ctx.sort"
+        priority: HIGH
+        status: active
+        source: "cube/core/sortServer.test.ts (\"a server sort never reorders the loaded rows itself\"), cube/core/sort.ts (resort)"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "Expecting an edited or added row to move into place"
+        priority: HIGH
+        status: active
+        source: "cube/core/sort.test.ts (\"the order is a snapshot\"), cube/react/sort.react.test.tsx; task check tests/skills/lists-sortable-table"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "No $locale on a client-sorted list rendered on the server"
+        priority: MEDIUM
+        status: active
+        source: "cube/ssr/sortLocale.test.tsx"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "Date objects in a sorted column"
+        priority: MEDIUM
+        status: active
+        source: "cube/core/sort.test.ts (comment on \"dates by time…\"); authoring probe"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "A header prop typed with keyof on an entity with groups"
+        priority: MEDIUM
+        status: active
+        source: "store/store/types.ts (SortKey); authoring type check"
+        documented_in: skills/palistor-lists/references/sorting.md
+      - mistake: "A computed column named after no entity field"
+        priority: MEDIUM
+        status: active
+        source: "store/store/types.ts (SortBlock), cube/core/sort.ts (parse)"
+        documented_in: skills/palistor-lists/references/sorting.md
   - name: palistor-flows
     slug: palistor-flows
     domain: flows
@@ -543,7 +617,7 @@ skills:
       - mistake: "Server data that answers another request"
         priority: HIGH
         status: active
-        source: "cube/core/pagination.ts (accept), cube/ssr/initialDataLists.test.tsx (\"no request right after construction; a filter change is one request for the first page\")"
+        source: "cube/core/pagination.ts (accept), cube/ssr/initialDataLists.test.tsx (\"no request right after construction; a filter change is one request for the first page\", \"the data answers `$default`: no request after construction; a sort change is one request for the first page\")"
         documented_in: skills/palistor-ssr/SKILL.md
       - mistake: "Rows without id"
         priority: MEDIUM
@@ -594,6 +668,15 @@ tensions:
     description: "initialData (and a restored draft) fills the lists nested in rows from the rows; a list's resolver does not."
     implication: "An agent that returns nested arrays from the outer list's resolver gets empty nested lists that fetch on their first read."
 
+  - name: "A client sort's snapshot vs a client filter's live projection"
+    skills: [palistor-lists]
+    description: "A client filter follows row edits at once (a row that stops matching disappears); a client sort is a snapshot: an edited row stays in place and an added row goes last until a sort action, a load, setItems or sort.refresh()."
+    implication: "An agent that expects the sort to behave like the filter ships a table whose ▲ column is out of order after inline edits or realtime updates; one that re-sorts in the component to fix it loses the stable order and sorts one page only."
+  - name: "Draft values vs applied values in a manual filter"
+    skills: [palistor-lists]
+    description: "In manual mode filter.<field>.value and filter.values show the drafts; the rows, ctx.filter, isActive, activeCount and filter.applied follow the applied values; set / reset / clear write drafts."
+    implication: "An agent that reads filter.values to show the active filters, or calls clear() alone for a Clear button, shows chips and counts that do not match the rows."
+
 cross_references:
   - from: palistor
     to: palistor-lists
@@ -621,7 +704,7 @@ cross_references:
     reason: "Rendering on the server: usePalistor and PalistorProvider replace the module-level store and the effect hooks; the no-`window` rule, store.start() and the moment a usePalistor store starts are detailed there."
   - from: palistor-lists
     to: palistor-ssr
-    reason: "Rows a Server Component fetched go to the list through initialData (nested lists included); the first page of a paginated list, the declared-dependency limit and the held first render of a usePalistor store are documented there."
+    reason: "Rows a Server Component fetched go to the list through initialData (nested lists included); the first page of a paginated list, the declared-dependency limit and the held first render of a usePalistor store are documented there. A server-sorted list's initialData answers $default; a client-sorted list needs $locale (sorting reference)."
   - from: palistor-flows
     to: palistor-ssr
     reason: "A wizard rendered on the server enters no step until the browser, and in a usePalistor store not before the component's first commit; a step whose data came as initialData gets onReady right after onEnter."
@@ -662,7 +745,7 @@ gaps:
     status: resolved
   - skill: palistor-lists
     question: "Pagination and filter options not probed at runtime: persistence round-trip, scrollAnchor, keepPreviousData, maxPages, gcTime, revalidateOnHydrate, list Suspense, nested-list pagination."
-    context: "Documented from the README, the public types and contract-test titles only."
+    context: "Documented from the README, the public types and contract-test titles only. Batch 6 probed three of them and corrected the guidance: the persisted window (restored without a request only when `await store.persist.enable()` resolves before the list's first fetch; with usePersist one request goes out first), setScrollAnchor (notifies nothing, written with the next change or persist.flush()), keepPreviousData (page, pageCount, total already describe the new query). Still unprobed: maxPages, gcTime, revalidateOnHydrate, list Suspense, nested-list pagination."
     status: open
   - skill: palistor-flows
     question: "defineStep narrows inline defaults to literals (value: \"\" is typed as \"\")."
@@ -713,3 +796,23 @@ gaps:
     context: "A list's resolver does not fill the nested lists of its rows (cube/core/listCube.ts, applyResolved; authoring probe: the nested list stays idle and empty, and its own resolver runs on the first read); a draft restored by usePersist fills nested lists (cube/core/restore.ts, restoreItemLists; authoring probe); a nested list's reload() clears dirty along the chain (authoring probe). The first one is also stated in palistor-ssr."
     status: resolved
     resolution: "Tests added before handoff of the same batch (2026-11-24): cube/contract/sliceC/entityListResolve.test.ts (\"a root list's resolver and the lists nested in its rows\", both implementations); cube/contract/sliceF/entityListPersist.test.ts (\"round-trip: a reload restores the root and per-entity lists\"); cube/core/listDirty.test.tsx (\"the nested list's reload() makes its rows the baseline: the chain is clean again\"). Cited in skills/palistor-lists/references/list-api.md."
+  - skill: palistor-lists
+    question: "There is no public way to group a filter change and a sort change into one request."
+    context: "filter.set(…) or filter.apply() followed by sort.toggle(…) in one handler is two requests (a paginated list supersedes the first, a plain $server list runs once more after it lands). The core groups them inside its own batch (cube/core/resolve.ts and cube/core/pagination.ts, `invalidate` inside a batch; cube/core/sortServer.test.ts uses the internal hub.batch), but no API exposes it. The sorting reference states the two requests (authoring probe). Decide whether to expose a batch (store.batch(fn)) or a combined action."
+    status: open
+  - skill: palistor-lists
+    question: "A sort field with { by } or { compare } must be named after an entity leaf in the types; the runtime accepts any name."
+    context: "SortBlockFields<TEntity> maps SortKey<TEntity> only (store/store/types.ts); parse() needs a leaf only for a value sort (cube/core/sort.ts). The sorting reference teaches naming the column after the field it stands for (TS2353 otherwise). A wider key type for computed columns would remove the workaround."
+    status: open
+  - skill: palistor-lists
+    question: "Two pagination behaviors that guidance now warns about could be library changes instead."
+    context: "With keepPreviousData, page / pageCount / total describe the new query while the previous rows are shown (a pager reads \"Page 1 of 0\"); usePersist hydrates in an effect after the store has started, so a persisted window is requested once before it is restored. Both documented as they are (pagination reference, authoring probes); decide whether the pager should keep the previous counts and whether usePersist should hold the start until hydration."
+    status: open
+  - skill: palistor-lists
+    question: "Statements of batch 6 that rest on authoring probes or third-party code, not on a named test."
+    context: "A `Date` in a row is stored as `{}` (sort.test.ts has a comment, no assertion); `$all` never runs without a `where` field and such a field is a server field; `$toParams` output is not the request identity; usePersist requests the first page before the restore; setScrollAnchor notifies nothing; keepPreviousData pager values; quick presses on a paginated server-sorted list fetch once each; filter + sort in one handler are two requests; a `$apply` block in a variable needs `as const` (type check); HeroUI rejects a custom row component (@react-stately/collections CollectionBuilder, @heroui/table 2.2.30 in app-demo). Adding tests in cube/** would turn these into contract."
+    status: open
+  - skill: palistor-lists
+    question: "No fresh consumer-agent session for the extended lists-server-list and no description-activation run for batch 6."
+    context: "Fresh consumer sessions ran once each for lists-sortable-table (6 of 6 checks) and lists-filter-panel (5 of 5) on 2026-11-24; see skill_spec.md, batch 6, check outcomes. Whether an agent that only has the skills completes the extended lists-server-list, and whether the new palistor-lists prompts in tests/skills/discovery.md load the skill, is unverified."
+    status: open
