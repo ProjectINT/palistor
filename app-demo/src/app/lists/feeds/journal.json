@@ -1,0 +1,182 @@
+[
+  {
+    "id": "entry-01",
+    "at": "2026-11-02T06:30:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.18.0 started by the release bot"
+  },
+  {
+    "id": "entry-02",
+    "at": "2026-11-02T19:53:00.000Z",
+    "level": "info",
+    "message": "Database migration 0142 applied"
+  },
+  {
+    "id": "entry-03",
+    "at": "2026-11-03T09:16:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.18.0 finished in 6 min"
+  },
+  {
+    "id": "entry-04",
+    "at": "2026-11-03T21:39:00.000Z",
+    "level": "warning",
+    "message": "p95 latency of /search above 800 ms"
+  },
+  {
+    "id": "entry-05",
+    "at": "2026-11-04T11:02:00.000Z",
+    "level": "info",
+    "message": "Autoscaler added two web nodes"
+  },
+  {
+    "id": "entry-06",
+    "at": "2026-11-05T00:25:00.000Z",
+    "level": "info",
+    "message": "p95 latency of /search back to normal"
+  },
+  {
+    "id": "entry-07",
+    "at": "2026-11-05T12:48:00.000Z",
+    "level": "info",
+    "message": "Nightly backup completed (41 GB)"
+  },
+  {
+    "id": "entry-08",
+    "at": "2026-11-06T02:11:00.000Z",
+    "level": "warning",
+    "message": "The API gateway certificate expires in 14 days"
+  },
+  {
+    "id": "entry-09",
+    "at": "2026-11-06T14:34:00.000Z",
+    "level": "info",
+    "message": "API gateway certificate renewed"
+  },
+  {
+    "id": "entry-10",
+    "at": "2026-11-07T03:57:00.000Z",
+    "level": "error",
+    "message": "Payment webhook endpoint returned 502 for 3 minutes"
+  },
+  {
+    "id": "entry-11",
+    "at": "2026-11-07T17:20:00.000Z",
+    "level": "info",
+    "message": "Payment webhooks replayed: 128 events delivered"
+  },
+  {
+    "id": "entry-12",
+    "at": "2026-11-08T05:43:00.000Z",
+    "level": "info",
+    "message": "Feature flag \"bulk-edit\" enabled for staff"
+  },
+  {
+    "id": "entry-13",
+    "at": "2026-11-08T19:06:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.18.1 started by the release bot"
+  },
+  {
+    "id": "entry-14",
+    "at": "2026-11-09T08:29:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.18.1 finished in 5 min"
+  },
+  {
+    "id": "entry-15",
+    "at": "2026-11-09T20:52:00.000Z",
+    "level": "warning",
+    "message": "Log volume disk usage at 85 percent"
+  },
+  {
+    "id": "entry-16",
+    "at": "2026-11-10T10:15:00.000Z",
+    "level": "info",
+    "message": "Old logs rotated: disk usage at 52 percent"
+  },
+  {
+    "id": "entry-17",
+    "at": "2026-11-10T22:38:00.000Z",
+    "level": "info",
+    "message": "Read replica promoted in a planned failover drill"
+  },
+  {
+    "id": "entry-18",
+    "at": "2026-11-11T12:01:00.000Z",
+    "level": "info",
+    "message": "Failover drill finished: 38 s of read-only mode"
+  },
+  {
+    "id": "entry-19",
+    "at": "2026-11-12T01:24:00.000Z",
+    "level": "error",
+    "message": "Email provider rejected 2 percent of messages"
+  },
+  {
+    "id": "entry-20",
+    "at": "2026-11-12T13:47:00.000Z",
+    "level": "info",
+    "message": "Transactional email switched to the backup provider"
+  },
+  {
+    "id": "entry-21",
+    "at": "2026-11-13T03:10:00.000Z",
+    "level": "info",
+    "message": "Nightly backup completed (42 GB)"
+  },
+  {
+    "id": "entry-22",
+    "at": "2026-11-13T15:33:00.000Z",
+    "level": "warning",
+    "message": "Queue \"exports\" has 1,200 waiting jobs"
+  },
+  {
+    "id": "entry-23",
+    "at": "2026-11-14T04:56:00.000Z",
+    "level": "info",
+    "message": "Two extra export workers started"
+  },
+  {
+    "id": "entry-24",
+    "at": "2026-11-14T18:19:00.000Z",
+    "level": "info",
+    "message": "Queue \"exports\" drained"
+  },
+  {
+    "id": "entry-25",
+    "at": "2026-11-15T06:42:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.19.0 started by the release bot"
+  },
+  {
+    "id": "entry-26",
+    "at": "2026-11-15T20:05:00.000Z",
+    "level": "error",
+    "message": "Deploy 4.19.0 health check failed on 1 of 8 nodes"
+  },
+  {
+    "id": "entry-27",
+    "at": "2026-11-16T09:28:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.19.0 rolled back automatically"
+  },
+  {
+    "id": "entry-28",
+    "at": "2026-11-16T21:51:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.19.1 started by the release bot"
+  },
+  {
+    "id": "entry-29",
+    "at": "2026-11-17T11:14:00.000Z",
+    "level": "info",
+    "message": "Deploy 4.19.1 finished in 7 min"
+  },
+  {
+    "id": "entry-30",
+    "at": "2026-11-17T23:37:00.000Z",
+    "level": "info",
+    "message": "Nightly backup completed (43 GB)"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "acc-northwind",
+    "name": "Northwind Traders",
+    "city": "Seattle"
+  },
+  {
+    "id": "acc-contoso",
+    "name": "Contoso Ltd",
+    "city": "Lisbon"
+  },
+  {
+    "id": "acc-fabrikam",
+    "name": "Fabrikam Inc",
+    "city": "Oslo"
+  },
+  {
+    "id": "acc-tailspin",
+    "name": "Tailspin Toys",
+    "city": "Prague"
+  }
+]

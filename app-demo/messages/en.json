@@ -3,6 +3,8 @@
     "title": "Palistor Demo",
     "subtitle": "Form testing stand",
     "ssrLink": "SSR demo →",
+    "listsLinkHint": "Sorting, a filter panel with an Apply button and every pagination mode, each on a page of its own:",
+    "listsLink": "Lists demo →",
     "tabs": {
       "payment": "Payment Form",
       "flow": "Flow Wizard",
@@ -389,6 +391,207 @@
         "waiting": "No region yet: the resolve waits for its contextDeps.",
         "host": "Mirror",
         "latency": "Latency, ms"
+      }
+    }
+  },
+  "lists": {
+    "title": "Lists",
+    "back": "← Back to the demo",
+    "nav": {
+      "products": "Products",
+      "orders": "Orders",
+      "customers": "Customers",
+      "feeds": "Feed & journal"
+    },
+    "products": {
+      "subtitle": "A list that holds all its rows sorts and filters them in the browser, without a request. A click on a column header sorts the products; the search and the filters narrow them on the client. The favorites are the same entities in a second list.",
+      "block": {
+        "title": "Products",
+        "hint": "One list, loaded once by its resolver; it holds all its rows, so it sorts and filters them itself and the resolver is not called again. A column header steps through ascending, descending and the server's order (sort: true): numbers as numbers, text with \"2\" before \"10\" and case ignored, empty ratings last both ways, equal values in the server's order. The order is taken when you sort: a price edited in a row keeps its place and an added row stays at the bottom until the next header click or \"Re-sort\". The search, the category, the in-stock toggle and the price range are client fields of the list's filter block; they narrow the sorted rows and keep their order. One $all rule checks the price against both bounds (a reversed range is read the other way round); the price after \"Shown\" is a derived field. An edited price is written to the entity, which Favorites shows too."
+      },
+      "columns": {
+        "title": "Title",
+        "price": "Price",
+        "category": "Category",
+        "inStock": "In stock",
+        "createdAt": "Added",
+        "rating": "Rating"
+      },
+      "filter": {
+        "search": "Search",
+        "searchPlaceholder": "Part of a title, for example: lamp",
+        "category": "Category",
+        "allCategories": "All categories",
+        "inStock": "In stock only",
+        "minPrice": "Price from",
+        "maxPrice": "Price to",
+        "priceRange": "Price",
+        "active": "Active filters",
+        "removeChip": "Remove the filter: {label}",
+        "preset": "Lighting in stock up to 100",
+        "reset": "Reset filters"
+      },
+      "shown": "Shown: {shown} of {total}",
+      "add": "Add row",
+      "resort": "Re-sort",
+      "newTitle": "New product",
+      "favorite": "Add to favorites",
+      "unfavorite": "Remove from favorites",
+      "empty": "No product matches the filters.",
+      "loadFailed": "Could not load the products.",
+      "retry": "Retry",
+      "favorites": {
+        "title": "Favorites",
+        "hint": "A second list over the same entities. Its resolver returns the saved favorites; ☆ in a product row adds one more with favorites.add(id), so the row is shared, not copied: a price edited here shows in the table and the other way round. ↑ and ↓ reorder through setItems. dirty compares the membership with the last loaded one; the rows' values take no part. \"Restore saved\" calls reload(): the saved membership and order come back, and so do the saved rows' values. store.reset() would not do this: it keeps the membership of a root list.",
+        "empty": "No favorites. ☆ in a product row adds one.",
+        "up": "Move up",
+        "down": "Move down",
+        "remove": "Remove from favorites",
+        "reset": "Restore saved",
+        "loadFailed": "Could not load the favorites.",
+        "retry": "Retry"
+      }
+    },
+    "orders": {
+      "subtitle": "A paginated list holds one page at a time, so the server sorts and filters it: a click on a column header, a search or a status change is one request for the first page.",
+      "title": "Orders",
+      "hint": "A HeroUI table over a paginated list. A click on a column header sorts on the server; the search and the status are server filter fields: the search sends its request {debounce} ms after the last keystroke, the status at once. Each change is one request for page 1, and the old rows stay, dimmed, until the new page lands.",
+      "search": "Search",
+      "searchPlaceholder": "Order number or customer",
+      "status": "Status",
+      "statuses": {
+        "all": "All statuses",
+        "pending": "Pending",
+        "paid": "Paid",
+        "shipped": "Shipped",
+        "delivered": "Delivered",
+        "cancelled": "Cancelled"
+      },
+      "columns": {
+        "number": "Order",
+        "customer": "Customer",
+        "createdAt": "Created",
+        "status": "Status",
+        "amount": "Amount"
+      },
+      "loading": "Loading the orders…",
+      "empty": "No orders match the filter",
+      "loadFailed": "Could not load the orders",
+      "retry": "Retry",
+      "prev": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {count}",
+      "pageOfUnknown": "Page {page} of …",
+      "total": "{count, plural, one {# order} other {# orders}}",
+      "pageSize": "Rows per page",
+      "refresh": "Refresh page",
+      "requests": "Requests to /api/orders",
+      "lastRequest": "Last request",
+      "tips": {
+        "sort": "Click a column header: the server sorts by it, one request for page 1. A second click reverses the order, a third one goes back to newest first; a sort seen a moment ago comes from the cache.",
+        "prefetch": "Hover over Next: the next page is fetched in advance (prefetch), so the click shows it at once.",
+        "refresh": "Refresh page fetches the page on screen again, and only that page: invalidate(page), one request.",
+        "pageSize": "Rows per page: setPageSize clears the cached pages and loads page 1 once.",
+        "cache": "The pages of the last three queries stay cached (maxCachedQueries): clear the search, pick the previous status or go back to the previous sort, and the rows come back without a request.",
+        "stale": "A cached page stays fresh for {seconds} s (staleTime). Open a page you saw longer ago: it shows at once, and is fetched again in the background."
+      }
+    },
+    "customers": {
+      "subtitle": "The filter panel is a draft: the list and its requests change only when you press Apply. Each customer's invoices are a list nested in the row, with a pager of its own.",
+      "customers": {
+        "title": "Customers",
+        "hint": "A paginated server list, 8 rows a page, with a filter in \"Apply\" mode ($apply: \"manual\"). The panel's fields are a draft: choosing or typing there changes no row and sends no request; Apply (or Enter in the city field) sends one, from page 1, and Cancel brings the fields back. The quick search is the exception (apply: \"auto\"): one request once you stop typing, with the applied panel values, never the draft. The chips show what the list is filtered by; ✕ removes one with one request. The backend does not get the filter values as they are: the block's $toParams builds its query — the search trimmed and sent as q, an empty value left out. The line under the filters is the last request the backend received.",
+        "quick": {
+          "label": "Quick search",
+          "placeholder": "Name, email or city"
+        },
+        "pending": "Waiting for you to stop typing…",
+        "lastRequest": "Last request",
+        "noRequest": "none yet",
+        "columns": {
+          "name": "Name",
+          "email": "Email",
+          "role": "Role",
+          "status": "Status",
+          "city": "City"
+        },
+        "roles": {
+          "admin": "Admin",
+          "manager": "Manager",
+          "agent": "Agent",
+          "viewer": "Viewer"
+        },
+        "statuses": {
+          "active": "Active",
+          "trial": "Trial",
+          "suspended": "Suspended"
+        },
+        "total": "{count, plural, =0 {No customers} one {# customer} other {# customers}}",
+        "empty": "No customer matches the filters.",
+        "error": "Could not load the customers.",
+        "retry": "Retry",
+        "panel": {
+          "title": "Filters",
+          "badge": "{count, plural, one {# filter applied} other {# filters applied}}",
+          "draft": "Not applied yet",
+          "anyRole": "Any role",
+          "anyStatus": "Any status",
+          "cityPlaceholder": "Part of a city name; Enter applies",
+          "apply": "Apply",
+          "cancel": "Cancel",
+          "remove": "Remove the filter {filter}"
+        }
+      },
+      "invoices": {
+        "title": "Customer invoices",
+        "hint": "Each account owns its invoices: a list nested in the row, paginated per row. Every account has its own pager, its own page cache and its own requests: paging one account leaves the others where they are, and a page seen before comes from that account's cache without a request.",
+        "requests": "Requests for this account",
+        "total": "{count, plural, =0 {No invoices} one {# invoice} other {# invoices}}",
+        "empty": "No invoices.",
+        "statuses": {
+          "paid": "paid",
+          "open": "open",
+          "overdue": "overdue"
+        }
+      },
+      "pager": {
+        "prev": "Prev",
+        "next": "Next",
+        "pageOf": "Page {page} of {count}"
+      }
+    },
+    "feeds": {
+      "subtitle": "Two ways to page without page numbers: a feed that loads more at the bottom, and a journal that walks forward and back by cursor, under Suspense.",
+      "feed": {
+        "title": "Feed",
+        "hint": "An infinite list: Load more appends the next page with one request, nextCursor: null from the server ends the feed, and maxPages keeps at most {max} pages on screen. Newest / Oldest is a server sort: one request, and the window starts over at the first page. The window and the first visible post are saved in this browser: reload the page and both come back from storage, scrolled to where you were. The order is not saved: a window saved under Oldest is not reused, the reload starts at Newest.",
+        "loading": "Loading the feed…",
+        "more": "Load more",
+        "end": "You've reached the end of the feed.",
+        "page": "Page {page}",
+        "shown": "{count} posts on screen · {pages, plural, one {page {first}} other {pages {first}–{last}}}",
+        "dropped": "{count, plural, one {# older page} other {# older pages}} left the window (maxPages: {max})",
+        "saved": "The window and the reading position are saved in localStorage.",
+        "clear": "Clear saved window",
+        "sort": {
+          "label": "Order:",
+          "newest": "Newest first",
+          "oldest": "Oldest first"
+        }
+      },
+      "journal": {
+        "title": "Journal",
+        "hint": "Cursor mode: one page at a time. Forward fetches the next page; Back is always served from the cache, and so is Forward to a page already visited. The list has suspense: true, so its first load shows the Suspense fallback.",
+        "loading": "Loading the journal…",
+        "prev": "Back",
+        "next": "Forward",
+        "page": "Page {page}",
+        "cached": "{count, plural, one {# page} other {# pages}} in the cache",
+        "levels": {
+          "info": "info",
+          "warning": "warning",
+          "error": "error"
+        }
       }
     }
   }

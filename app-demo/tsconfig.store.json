@@ -19,5 +19,5 @@
   // Cube-only routes (`page.cube.tsx`, see next.config.ts) and everything they
   // import must stay out of the store type-check. `exclude` replaces the base
   // list, hence node_modules is repeated.
-  "exclude": ["node_modules", "src/app/ssr"]
+  "exclude": ["node_modules", "src/app/ssr", "src/app/lists"]
 }

@@ -1,0 +1,266 @@
+[
+  {
+    "id": "inv-1001",
+    "accountId": "acc-northwind",
+    "number": "INV-1001",
+    "issued": "2026-11-02",
+    "amount": 2579.37,
+    "status": "open"
+  },
+  {
+    "id": "inv-1002",
+    "accountId": "acc-northwind",
+    "number": "INV-1002",
+    "issued": "2026-10-10",
+    "amount": 2958.74,
+    "status": "overdue"
+  },
+  {
+    "id": "inv-1003",
+    "accountId": "acc-northwind",
+    "number": "INV-1003",
+    "issued": "2026-09-17",
+    "amount": 3337.11,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1004",
+    "accountId": "acc-northwind",
+    "number": "INV-1004",
+    "issued": "2026-08-25",
+    "amount": 3716.48,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1005",
+    "accountId": "acc-northwind",
+    "number": "INV-1005",
+    "issued": "2026-08-02",
+    "amount": 4095.85,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1006",
+    "accountId": "acc-northwind",
+    "number": "INV-1006",
+    "issued": "2026-07-10",
+    "amount": 4474.22,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1007",
+    "accountId": "acc-northwind",
+    "number": "INV-1007",
+    "issued": "2026-06-17",
+    "amount": 4853.59,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1008",
+    "accountId": "acc-northwind",
+    "number": "INV-1008",
+    "issued": "2026-05-25",
+    "amount": 632.96,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1009",
+    "accountId": "acc-northwind",
+    "number": "INV-1009",
+    "issued": "2026-05-02",
+    "amount": 1011.33,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1010",
+    "accountId": "acc-northwind",
+    "number": "INV-1010",
+    "issued": "2026-04-09",
+    "amount": 1390.7,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1011",
+    "accountId": "acc-contoso",
+    "number": "INV-1011",
+    "issued": "2026-10-28",
+    "amount": 1769.07,
+    "status": "open"
+  },
+  {
+    "id": "inv-1012",
+    "accountId": "acc-contoso",
+    "number": "INV-1012",
+    "issued": "2026-10-05",
+    "amount": 2148.44,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1013",
+    "accountId": "acc-contoso",
+    "number": "INV-1013",
+    "issued": "2026-09-12",
+    "amount": 2527.81,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1014",
+    "accountId": "acc-contoso",
+    "number": "INV-1014",
+    "issued": "2026-08-20",
+    "amount": 2906.18,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1015",
+    "accountId": "acc-contoso",
+    "number": "INV-1015",
+    "issued": "2026-07-28",
+    "amount": 3285.55,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1016",
+    "accountId": "acc-contoso",
+    "number": "INV-1016",
+    "issued": "2026-07-05",
+    "amount": 3664.92,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1017",
+    "accountId": "acc-contoso",
+    "number": "INV-1017",
+    "issued": "2026-06-12",
+    "amount": 4043.29,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1018",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1018",
+    "issued": "2026-10-23",
+    "amount": 4422.66,
+    "status": "open"
+  },
+  {
+    "id": "inv-1019",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1019",
+    "issued": "2026-09-30",
+    "amount": 4801.03,
+    "status": "overdue"
+  },
+  {
+    "id": "inv-1020",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1020",
+    "issued": "2026-09-07",
+    "amount": 580.4,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1021",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1021",
+    "issued": "2026-08-15",
+    "amount": 959.77,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1022",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1022",
+    "issued": "2026-07-23",
+    "amount": 1338.14,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1023",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1023",
+    "issued": "2026-06-30",
+    "amount": 1717.51,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1024",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1024",
+    "issued": "2026-06-07",
+    "amount": 2096.88,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1025",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1025",
+    "issued": "2026-05-15",
+    "amount": 2475.25,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1026",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1026",
+    "issued": "2026-04-22",
+    "amount": 2854.62,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1027",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1027",
+    "issued": "2026-03-30",
+    "amount": 3233.99,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1028",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1028",
+    "issued": "2026-03-07",
+    "amount": 3612.36,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1029",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1029",
+    "issued": "2026-02-12",
+    "amount": 3991.73,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1030",
+    "accountId": "acc-fabrikam",
+    "number": "INV-1030",
+    "issued": "2026-01-20",
+    "amount": 4370.1,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1031",
+    "accountId": "acc-tailspin",
+    "number": "INV-1031",
+    "issued": "2026-10-18",
+    "amount": 4749.47,
+    "status": "open"
+  },
+  {
+    "id": "inv-1032",
+    "accountId": "acc-tailspin",
+    "number": "INV-1032",
+    "issued": "2026-09-25",
+    "amount": 528.84,
+    "status": "paid"
+  },
+  {
+    "id": "inv-1033",
+    "accountId": "acc-tailspin",
+    "number": "INV-1033",
+    "issued": "2026-09-02",
+    "amount": 907.21,
+    "status": "paid"
+  }
+]

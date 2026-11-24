@@ -20,7 +20,7 @@ npm run dev       # http://localhost:3001/palistor/
 | `npm run dev` | Dev server on :3001, on the Cube core (the package entry) |
 | `npm run dev:store` | Dev server on :3002, on the legacy `store` implementation (`PALISTOR_IMPL=store`, `tsconfig.store.json`) |
 | `npm run test:e2e` | Playwright suite (`e2e/`) on Cube; starts the dev server if none runs |
-| `npm run test:e2e:store` | The same suite on `store`; the `/ssr` specs are skipped there |
+| `npm run test:e2e:store` | The same suite on `store`; the `/ssr` and `/lists` specs are skipped there |
 | `npm run build` | Static export to `out/` (`basePath: /palistor`), as GitHub Pages serves it |
 | `npm run lint` | ESLint over the app and the specs |
 
@@ -46,6 +46,20 @@ The `/ssr` routes ([`src/app/ssr/`](src/app/ssr)) render on the server in the Ap
 and hands it to a client view that builds its store with `usePalistor`. They need the Cube core: on
 `store` the `.cube.tsx` extension is not a page extension, so the routes do not exist there
 ([`next.config.ts`](next.config.ts)).
+
+The `/lists` routes ([`src/app/lists/`](src/app/lists)) show the list features one page each, built the same
+way as `/ssr` (a `page.cube.tsx` Server Component, a client view with `usePalistor`, Cube only; the Lists
+tab links to them on Cube):
+
+| Route | Shows | View |
+| --- | --- | --- |
+| `/lists` | Products: one load, then a client-side sort (`sort: true`, a header per column through `useForm(list.sort)`: ascending / descending / server order, `aria-sort`, an order snapshot that "Re-sort" — `sort.refresh()` — takes again after an edit or an add) and a filter block of client fields only (`where`, `$all` over a price range, a derived field), chips with `clear(field)`, `reset()`, a `set()` preset, `isActive` / `activeCount`, "N of M" from `fullLength`, inline price edit and a local add; Favorites: the same entities in a second list (`add(id)`, `setItems` reorder, `dirty`, `reload()` to restore the saved membership) | [`ProductsView.tsx`](src/app/lists/ProductsView.tsx), [`productsConfig.ts`](src/app/lists/productsConfig.ts) |
+| `/lists/orders` | Orders: a paginated server list in a HeroUI `Table`; server sort on the column headers (`sort` block with `$default` and `param`, `ctx.sort`, the table's `sortDescriptor` / `onSortChange`); a server filter with a debounced search and a status, renamed for the request by `param`, with `filter.isPending`; `prefetch` on hovering Next, `setPageSize`, Refresh page (`invalidate(page)`), `keepPreviousData` (`isPreviousData`), `maxCachedQueries: 3`, `staleTime` | [`orders/OrdersView.tsx`](src/app/lists/orders/OrdersView.tsx) |
+| `/lists/customers` | Customers: a paginated server list with a filter in "Apply" mode (`$apply: "manual"`: a draft panel, Apply / Cancel, a badge and chips of the applied filters), a debounced quick search that applies itself, the request built by `$toParams`; each account's invoices as a list nested in the row, paginated per row | [`customers/CustomersView.tsx`](src/app/lists/customers/CustomersView.tsx) |
+| `/lists/feeds` | Feed: an `infinite` list with Load more, the end through `nextCursor: null`, `maxPages`, a server sort Newest / Oldest (`sort: { $default: "-createdAt" }`, `ctx.sort`; a change is one request and starts the window over at page 1), and its window and scroll anchor saved with `usePersist` (`persist: "window"`, `setScrollAnchor`; the sort is not saved, so a window saved under Oldest is not reused); Journal: `cursor` mode, Back from the cache, `suspense: true` under `<Suspense>`. One store per block | [`feeds/FeedsView.tsx`](src/app/lists/feeds/FeedsView.tsx), [`feeds/feedsConfig.ts`](src/app/lists/feeds/feedsConfig.ts) |
+
+The shared frame (title, nav, locale switch) is [`src/app/lists/shared/ListsShell.tsx`](src/app/lists/shared/ListsShell.tsx);
+the specs are `e2e/lists-*.spec.ts` (`e2e/lists.spec.ts` covers the Lists tab) and skip themselves on `store`.
 
 ## How the components connect to a store
 

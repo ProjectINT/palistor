@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useForm, useStoreContext } from "@palistor";
 
@@ -12,6 +13,10 @@ import { ProductsSection } from "./ProductsSection";
 import { StoreContextSection } from "./StoreContextSection";
 import { UsersSection } from "./UsersSection";
 import { Card } from "./ui";
+
+// The /lists routes are built on the Cube implementation only, like /ssr: the
+// same build-time flag as the header's /ssr link (next.config.ts).
+const HAS_LISTS_DEMO = process.env.NEXT_PUBLIC_PALISTOR_SSR_DEMO === "1";
 
 /**
  * The Lists & Entities tab. The only component here that sees `catalogStore`:
@@ -29,6 +34,15 @@ export function ListsDemo() {
 
   return (
     <div className="space-y-6">
+      {HAS_LISTS_DEMO && (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 rounded-xl px-4 py-3">
+          {t("demo.listsLinkHint")}{" "}
+          <Link href="/lists" className="font-medium text-blue-600 dark:text-blue-400 hover:underline">
+            {t("demo.listsLink")}
+          </Link>
+        </p>
+      )}
+
       <Card title={t("catalog.users")}>
         <UsersSection
           users={form.users}
