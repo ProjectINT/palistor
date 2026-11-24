@@ -3,39 +3,39 @@
   "baseline": "d6fdee2545f2c090eac90793a7be44abded59eac",
   "items": {
     "skill:skills/palistor-field-mapping/SKILL.md": {
-      "fingerprint": "d5b051de399e359d7864006792abb25bbb10a71cba5e2b7a2be98e5556291a87",
+      "fingerprint": "9a2f47eba3c948d3f77fa7da130c07b519891242ef2fa6900bb3f0552f2aa9e5",
       "snapshot": {
         "cube/core/mapping.ts": "2edbb168f58b193d0c1e8500416e5832cf8a4ccb3ab75823eedef7090f8f2816",
-        "skills/palistor-field-mapping/SKILL.md": "9401427fa0c7c7263b7b18751f78a578ef1a41f5253da142a182a62c0c7aff5d",
+        "skills/palistor-field-mapping/SKILL.md": "268a428c651e50397b397e39f71eba4aa2f6a217dbd7f0223021b054ab17ed54",
         "store/constants.ts": "f890cabc82298b55061c8b7271afe8d52e6fe0941b72828f2091e2fc9b8d9f1b",
         "store/defineFieldMapping.ts": "388c9c0a9e79cbb66894ee765cc8b81fd1c46013787e2fbc255eba6df4efc998"
       },
-      "head": "617edd100fa27e187038447e364434ba0887f659",
+      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
       "outcome": "no-change",
-      "reason": "cube/core/mapping.ts changed in 6e831a5 only to pass a list's `sort` block through normalization unmapped (FieldMap.listOptions: its keys are leaf paths, its values sort options, not field-state props). The skill's rules (single vocabulary, what a mapping renames, reserved list keys, no value conversion) are unaffected; the sorting reference of palistor-lists states that a mapping leaves the block as written.",
+      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
       "evidence": [
-        "git show 6e831a5 -- cube/core/mapping.ts; cube/core/sort.test.ts (\"fieldMapping: leaves the sort block as it is\"); intent validate skills: pass. Source: 6e831a5 (client sort), 06aa4ae (filter $apply), c239cd8 (server sort); HEAD 617edd1 adds app-demo only (review-ignored)."
+        "Changed: skills/palistor-field-mapping/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
       ]
     },
     "skill:skills/palistor-flows/SKILL.md": {
-      "fingerprint": "e33794102a9ce3a891184961a111dd56c85175197c76837b0bcf61bfb2d07b34",
+      "fingerprint": "dfc7da4b9143c6a36cf53f3a56c13eeead7822d37f6c1d45c094f0820bac5ea4",
       "snapshot": {
         "cube/core/flow.ts": "c4b4b0fa8aa0f75cb39f7917493886e2c55105ac23361b00a10f387f475bab1c",
         "cube/defineFlow.ts": "2268691db49dda8b28488d025448775dfd6c70288d33f4de156100e54d3b765b",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
-        "skills/palistor-flows/SKILL.md": "6024538e09b94ad8c313552fe96aedad755824d397c53d1d318b003d9c98e699",
+        "skills/palistor-flows/SKILL.md": "c3f5b31a70db303b985bd36c64b5cc2e99d541d66314fa8fade6a6c2973e45c5",
         "skills/palistor-flows/references/flow-api.md": "cb851933afdb9924fc92098cdbed18b67365f8372b83c1ab215b39a028ebb0c9",
         "store/flow/defineFlow.ts": "bce9fd63ae7627282aeeb80fb6ecf5f37f7cc47968cecae5d19e6b5b3f4c4f81"
       },
-      "head": "7cbc02d2d0c8038343de800d6f1cf3937d882099",
+      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
       "outcome": "no-change",
-      "reason": "Release bump to 0.1.1-cube.2 only: intent validate --set-version rewrote metadata.library_version (and the \"Targets palistor\" line in skills/palistor/SKILL.md); guidance unchanged, no source change since the last recorded review.",
+      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
       "evidence": [
-        "git diff limited to library_version/Targets lines; intent validate passed 5/5; npm run typecheck:skills and npm run test:skills green (46 passed, 12 expected fail)."
+        "Changed: skills/palistor-flows/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
       ]
     },
     "skill:skills/palistor-lists/SKILL.md": {
-      "fingerprint": "038426e80414c3e72ffb9a41ed67cda87aee05768585c386836771c9864bc995",
+      "fingerprint": "d7a8e8b04cb9b8a1254d95cd4ecbd7e807e29cfddc02982d2d328e73bc41be20",
       "snapshot": {
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
         "cube/core/filter.ts": "7980c046fb034b6abc63762056712d41c6faf9f18fc2658cd36117d220effb14",
@@ -50,7 +50,7 @@
         "cube/react/useForm.ts": "78c489fcd1635d45a6af39a7852227bc505f1602da6c60dccc24e5cbea85efa3",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor-lists/SKILL.md": "1a9a1bae6a9134c02a41b88717bdb759ca046e693fa1dcce57d2f1dc21451ebe",
+        "skills/palistor-lists/SKILL.md": "0b3ffeff7f90455f34ee016f0ab8fd5adb76a95725516c7fce97e918c4e397fd",
         "skills/palistor-lists/references/entity-editing.md": "e145b654f3d67b60af057c861c4e2213523fdd658c4284691faa3f0d51ee7fa6",
         "skills/palistor-lists/references/filtering.md": "cc6190daf9428c547c718534967db7c96a8e8de47e35140006d54bbe40b77f6e",
         "skills/palistor-lists/references/list-api.md": "e508e01ac35a6f7650889764024ecb5e7d39d2936ca18493cd4bb8f2259edca4",
@@ -60,15 +60,15 @@
         "store/pagination/types.ts": "3e3ef8e8f7928b9ca1822746c40ed5fca13fe67a8c9e9cd240a14240b95e2118",
         "store/store/types.ts": "d1cab747a9a44216a05c6de19cf9d57199dedea031afa31d99a77534050afef8"
       },
-      "head": "617edd100fa27e187038447e364434ba0887f659",
-      "outcome": "updated",
-      "reason": "New guidance for list sorting (client class: sort block, list.sort, snapshot order, refresh, $locale, HeroUI; server class: ctx.sort, one request per change, $sort in the page key, initialData answers $default, no persistence) in the new references/sorting.md and a 'Sort the rows' pattern; the filter Apply mode (drafts vs applied values, apply/revert/isDraft/applied, constraints) in references/filtering.md; corrections: $all runs only with a where field, $toParams is not the request identity, a persisted window is restored without a request only when hydration lands before the first fetch (usePersist costs one request), setScrollAnchor needs the next change or persist.flush(), keepPreviousData pager values; list-api rows for sort/ctx.sort/typing; description gains sorting and the Apply panel, purpose gains 'sorting', sources gain cube/core/sort.ts.",
+      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
+      "outcome": "no-change",
+      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
       "evidence": [
-        "cube/core/sort.ts, cube/core/sort.test.ts, cube/core/sortServer.test.ts, cube/react/sort.react.test.tsx, cube/ssr/sortLocale.test.tsx, cube/core/filter.ts, cube/core/filterApply.test.ts, cube/react/filterApply.react.test.tsx, cube/core/pagination.ts, cube/core/persist.ts, cube/contract/sliceE/filtering.test.ts (E3), cube/contract/sliceG/pagination.test.ts (E1), pagination.phase2.test.ts (J1); authoring probes (removed). intent validate skills: 5 skill files pass; npm run typecheck:skills: pass; npm run test:skills: 9 task checks, 58 pass on reference solutions, 17 named checks fail on mistakes as expected (new lists-sortable-table 6+2, new lists-filter-panel 5+2, lists-server-list extended 7+2); strict compile (strict: true) of every ts/tsx fence of palistor-lists: pass, expect-error fences give their declared codes. Fresh consumer session: not run (unverified); description activation: not run. Source: 6e831a5 (client sort), 06aa4ae (filter $apply), c239cd8 (server sort); HEAD 617edd1 adds app-demo only (review-ignored)."
+        "Changed: skills/palistor-lists/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
       ]
     },
     "skill:skills/palistor/SKILL.md": {
-      "fingerprint": "e9bee887b4db96c5fd9e206fb0971caa95164fa8664e72e32b2dec91e0c86295",
+      "fingerprint": "06f9fde14de116ea1a5f7da38524d9370cbc7faf38cc88cfc1af37d223f10a81",
       "snapshot": {
         "cube/core/config.ts": "835df88b1f5e75ba07c3dbfef16886eb330f2d2de8985ca67011651e704c4703",
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
@@ -87,7 +87,7 @@
         "cube/types.ts": "5e14db630cb76b45576626f187ae6ef765684872f831d5d72ff89afbaf19cb65",
         "index.ts": "e89f0234c4483f7829d788d27c56245ffca8f03cc50e9eec808cbf6f922add63",
         "react/useForm.ts": "01f4afc6605ad34e9f26cbccc43f7488fc26c6db066256fd79624a084eaff94f",
-        "skills/palistor/SKILL.md": "e3a14f7a0672dde2b9c0062eee5709ca9c9aa8e53135acd20d61ca67d160b689",
+        "skills/palistor/SKILL.md": "e46ae04d57382989b62193376eb455bf22e23df36397490f71b1082dffcc5391",
         "skills/palistor/references/async-resolve.md": "02dd1ce2b253b4a06c6125206bc9c265e54cf72cc4e2825d9866cee2049d600e",
         "skills/palistor/references/config-options.md": "b93f57bdda71385a371e683a70c3e9a4c06d1677b86ffe4796bf96716f1f34cf",
         "skills/palistor/references/integrations.md": "5531b9a2a7dfa4d66cd9a59784ef275bfd23d5e4878eb898de62ee733af075fe",
@@ -98,15 +98,15 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "d1cab747a9a44216a05c6de19cf9d57199dedea031afa31d99a77534050afef8"
       },
-      "head": "617edd100fa27e187038447e364434ba0887f659",
-      "outcome": "updated",
-      "reason": "Core sources changed for sorting and the Apply mode (config ListConfig sort, node SORT_STATE_KEYS / isDraft / applied in STATE_KEYS, useForm tracking of the sort node, UseForm overloads for a sort node and a filter node, new exported types). The core skill only routes lists: its routing row now names sorting by a column, and typescript.md routes FilterProxyNode / SortProxyNode (both accepted by useForm) to palistor-lists. Its own rules (config, store, useForm on a group or a field, resolve, persist) are unaffected. Line count unchanged (498).",
+      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
+      "outcome": "no-change",
+      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
       "evidence": [
-        "cube/types.ts (UseForm), cube/index.ts, cube/core/node.ts, cube/react/useForm.ts; intent validate skills: pass. Source: 6e831a5 (client sort), 06aa4ae (filter $apply), c239cd8 (server sort); HEAD 617edd1 adds app-demo only (review-ignored)."
+        "Changed: skills/palistor/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
       ]
     },
     "planning:skills/_artifacts": {
-      "fingerprint": "89a3e0241f97c01fbe15424cd3e58554bbc3be1838da6e45d78b74b1b39f0c29",
+      "fingerprint": "cf0c7f463f9681baf3d8ff5572ba4c0fab7879cc80c32e1a6ae0c5391c1c2ff9",
       "snapshot": {
         "cube/core/config.ts": "835df88b1f5e75ba07c3dbfef16886eb330f2d2de8985ca67011651e704c4703",
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
@@ -139,17 +139,17 @@
         "skills/_artifacts/domain_map.yaml": "c14cd1f2d21b27ccd29e31f6c29256e98d72bf1998c5f56e70c4a5d0413ddb32",
         "skills/_artifacts/skill_spec.md": "69ae6ceb63e825951cdd1b5cf66ec8c5a5fcd4d477b2cf5cc2689a891e399e2d",
         "skills/_artifacts/skill_tree.yaml": "50e4deacd84f9f766eee29c47989c680ec50b4d96263a854ffa063e417915983",
-        "skills/palistor-field-mapping/SKILL.md": "9401427fa0c7c7263b7b18751f78a578ef1a41f5253da142a182a62c0c7aff5d",
-        "skills/palistor-flows/SKILL.md": "6024538e09b94ad8c313552fe96aedad755824d397c53d1d318b003d9c98e699",
+        "skills/palistor-field-mapping/SKILL.md": "268a428c651e50397b397e39f71eba4aa2f6a217dbd7f0223021b054ab17ed54",
+        "skills/palistor-flows/SKILL.md": "c3f5b31a70db303b985bd36c64b5cc2e99d541d66314fa8fade6a6c2973e45c5",
         "skills/palistor-flows/references/flow-api.md": "cb851933afdb9924fc92098cdbed18b67365f8372b83c1ab215b39a028ebb0c9",
-        "skills/palistor-lists/SKILL.md": "1a9a1bae6a9134c02a41b88717bdb759ca046e693fa1dcce57d2f1dc21451ebe",
+        "skills/palistor-lists/SKILL.md": "0b3ffeff7f90455f34ee016f0ab8fd5adb76a95725516c7fce97e918c4e397fd",
         "skills/palistor-lists/references/entity-editing.md": "e145b654f3d67b60af057c861c4e2213523fdd658c4284691faa3f0d51ee7fa6",
         "skills/palistor-lists/references/filtering.md": "cc6190daf9428c547c718534967db7c96a8e8de47e35140006d54bbe40b77f6e",
         "skills/palistor-lists/references/list-api.md": "e508e01ac35a6f7650889764024ecb5e7d39d2936ca18493cd4bb8f2259edca4",
         "skills/palistor-lists/references/pagination.md": "22c3c70a31da9bb30a1233bbecc3ce5dea4c0c215bace444a005ce9f5a501055",
         "skills/palistor-lists/references/sorting.md": "e46ae6ab748b1abeca1d4ef4a88dde4a71fbfbd5dbc8489b05de13122ce9f046",
-        "skills/palistor-ssr/SKILL.md": "67eba4e3ecfd8cb0bfe74b16c412f39c45b48414c02893a067fd4bca157c72ed",
-        "skills/palistor/SKILL.md": "e3a14f7a0672dde2b9c0062eee5709ca9c9aa8e53135acd20d61ca67d160b689",
+        "skills/palistor-ssr/SKILL.md": "3ad871026400269d8ac183da1eefea03667afdb6b473979fc9561dc259b55fed",
+        "skills/palistor/SKILL.md": "e46ae04d57382989b62193376eb455bf22e23df36397490f71b1082dffcc5391",
         "skills/palistor/references/async-resolve.md": "02dd1ce2b253b4a06c6125206bc9c265e54cf72cc4e2825d9866cee2049d600e",
         "skills/palistor/references/config-options.md": "b93f57bdda71385a371e683a70c3e9a4c06d1677b86ffe4796bf96716f1f34cf",
         "skills/palistor/references/integrations.md": "5531b9a2a7dfa4d66cd9a59784ef275bfd23d5e4878eb898de62ee733af075fe",
@@ -165,15 +165,15 @@
         "store/store/palistor.ts": "e60967a11853dcae933f2b55b4961077de538bedfab3bb56eceeed9032d0e4bf",
         "store/store/types.ts": "d1cab747a9a44216a05c6de19cf9d57199dedea031afa31d99a77534050afef8"
       },
-      "head": "73689bdd8fce08b444e0854df9519771e8fb6566",
-      "outcome": "updated",
-      "reason": "Planning records only: batch 6 check outcomes in skill_spec.md now state that fresh consumer sessions ran on 2026-11-24 for lists-sortable-table (6 of 6 checks) and lists-filter-panel (5 of 5), with the setup and limits; the open gap in domain_map.yaml is narrowed to the extended lists-server-list and description activation. No skill text changed. Evidence: tests/skills/lists-sortable-table and tests/skills/lists-filter-panel graded as subject with npm run test:skills.",
+      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
+      "outcome": "no-change",
+      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
       "evidence": [
-        "Changed: skills/_artifacts/domain_map.yaml, skills/_artifacts/skill_spec.md at 73689bdd8fce08b444e0854df9519771e8fb6566"
+        "Changed: skills/palistor-field-mapping/SKILL.md, skills/palistor-flows/SKILL.md, skills/palistor-lists/SKILL.md, skills/palistor-ssr/SKILL.md, skills/palistor/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
       ]
     },
     "skill:skills/palistor-ssr/SKILL.md": {
-      "fingerprint": "ae81fde8d41cda349aefd09254f347dba79f5b0f09d12cc58abaa04b25b2a417",
+      "fingerprint": "754f593729893a05c21ed9606e43d29138d2cc7736ef418b32057735c1ce27ae",
       "snapshot": {
         "cube/core/cube.ts": "b8358be268e239c384d0d99ddd4c85242a4d6ffc4a6840cd2dffa10285e5dbfc",
         "cube/core/flow.ts": "c4b4b0fa8aa0f75cb39f7917493886e2c55105ac23361b00a10f387f475bab1c",
@@ -187,13 +187,13 @@
         "cube/react/provider.tsx": "53aeb679ea77ad335ecd25591a54f02babc0f08bcfbb23193243051d10c2e6d9",
         "cube/react/usePalistor.ts": "846a7cf818b815330b2a457e42bce781cf208e9a3daaeb7da081686749ed110e",
         "cube/types.ts": "5e14db630cb76b45576626f187ae6ef765684872f831d5d72ff89afbaf19cb65",
-        "skills/palistor-ssr/SKILL.md": "67eba4e3ecfd8cb0bfe74b16c412f39c45b48414c02893a067fd4bca157c72ed"
+        "skills/palistor-ssr/SKILL.md": "3ad871026400269d8ac183da1eefea03667afdb6b473979fc9561dc259b55fed"
       },
-      "head": "617edd100fa27e187038447e364434ba0887f659",
-      "outcome": "updated",
-      "reason": "Sources changed for sorting (restore.ts marks the $default server sort as answered by initialData; listCube.resolveContext and pagination add the sort to the request identity; resolve/hub batch invalidation). The rule 'the data must answer the request the store would send now' now names the $default sort of a server-sorted list and $locale for a client-sorted one (routing to the sorting reference); the mistake 'Server data that answers another request' names the $default sort and cites the new SSR test. No other SSR rule changed: server mode, the held first render, Suspense and the initialData shapes are untouched by these commits. Line count unchanged (497).",
+      "head": "edd62f9e66ee35407894285d05cc2a6731068ae5",
+      "outcome": "no-change",
+      "reason": "Release-only change for 0.1.1-cube.3: metadata.library_version on the five skills and the 'Targets palistor v' line in skills/palistor/SKILL.md; no guidance text changed. The guidance was reviewed against the sources of this version (6e831a5, 06aa4ae, c239cd8) in the review recorded with edd62f9; npm run typecheck:skills and npm run test:skills pass (58 checks, 17 expected failures).",
       "evidence": [
-        "cube/core/restore.ts (sort.markIssued), cube/ssr/initialDataLists.test.tsx (section E: \"the data answers `$default`…\"), cube/ssr/sortLocale.test.tsx; intent validate skills: 5 skill files pass; npm run typecheck:skills: pass; npm run test:skills: 9 task checks, 58 pass on reference solutions, 17 named checks fail on mistakes as expected (new lists-sortable-table 6+2, new lists-filter-panel 5+2, lists-server-list extended 7+2); strict compile (strict: true) of every ts/tsx fence of palistor-lists: pass, expect-error fences give their declared codes. Fresh consumer session: not run (unverified); description activation: not run. Source: 6e831a5 (client sort), 06aa4ae (filter $apply), c239cd8 (server sort); HEAD 617edd1 adds app-demo only (review-ignored)."
+        "Changed: skills/palistor-ssr/SKILL.md at edd62f9e66ee35407894285d05cc2a6731068ae5"
       ]
     },
     "source:cube/core/index.ts": {

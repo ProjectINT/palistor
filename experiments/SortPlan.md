@@ -479,6 +479,10 @@ Skills: раздел о ручном режиме в `references/filtering.md`; 
 
 ### Этап 6. Пререлиз и обкатка
 
+**Статус (2026-11-24): пререлиз подготовлен, не опубликован; обкатка не начата.** Сделано по процедуре «Releasing»: версия `0.1.1-cube.3` в `package.json` и `package-lock.json`; `intent validate --set-version 0.1.1-cube.3` и строка «Targets palistor v0.1.1-cube.3»; `maintainer sync`; исходы проверки, вызванной только сменой версии, записаны; `maintainer check` — 0 ожидающих; `npm pack --dry-run` — 648 файлов, из skills только `skills/palistor*/**` (включая `sorting.md`), ничего из `skills/_artifacts`, `tests/` и `.intent/`. Коммит `🔖 0.1.1-cube.3`. Не сделано: `npm publish --tag cube`, тег `v0.1.1-cube.3`, `git push` — это действия владельца или по его подтверждению.
+
+Что выяснилось про шаги 2 и 3: оба потребителя (`palirent` и `saas-starter`) стоят на `palistor` 0.0.32 из npm. Перевод `CustomersTable` и `admin-stores.ts` на `sort` и `$apply` — это заодно переход с 0.0.x на 0.1 по разделу «Migrating to 0.1» README, а не только переписывание двух файлов. У `palirent` в рабочем дереве `main` есть незакоммиченные изменения.
+
 Решено владельцем 2026-11-24: публикуем сразу, следующей версией — `0.1.1-cube.3` под dist-tag `cube`, как только зелёный гейт Этапа 5.
 
 1. Пререлиз `0.1.1-cube.3` под dist-tag `cube` по процедуре «Releasing» из `AGENTS.md` (`intent validate --set-version`, строка «Targets palistor v…», `npm pack --dry-run`).

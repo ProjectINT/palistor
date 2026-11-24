@@ -9,11 +9,11 @@ description: >
   API; search and filter controls over the rows, server-side or in memory,
   applied as the user types or with an Apply button; or page-by-page, load-more
   and cursor pagination. Covers defineList, list and row (entity) proxies,
-  useForm on a row, store.set / rekey / delete / invalidate, list filter and sort
-  blocks and resolve.pagination. Requires the palistor skill for config, store
-  and useForm basics. Step-by-step wizards belong to palistor-flows; renaming
-  field props for a UI kit belongs to palistor-field-mapping; rendering the list
-  on the server in Next.js belongs to palistor-ssr.
+  useForm on a row, store.set / rekey / delete / invalidate, list filter and
+  sort blocks and resolve.pagination. Requires the palistor skill for config,
+  store and useForm basics. Step-by-step wizards belong to palistor-flows;
+  renaming field props for a UI kit belongs to palistor-field-mapping; rendering
+  the list on the server in Next.js belongs to palistor-ssr.
 metadata:
   purpose: 'Teaches how to model collections in Palistor: declaring a typed list
     with defineList, rendering and editing its rows through entity proxies,
@@ -22,7 +22,7 @@ metadata:
     separate template, and filtering, sorting or paginating the list.'
   type: sub-skill
   library: palistor
-  library_version: '0.1.1-cube.2'
+  library_version: '0.1.1-cube.3'
 sources:
   - 'ProjectINT/palistor:cube/defineList.ts'
   - 'ProjectINT/palistor:cube/core/listCube.ts'
