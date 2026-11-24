@@ -152,8 +152,10 @@ function restoreList(hub: Hub, list: ListCube, value: unknown, ctx: Restore) {
   list.restore(ids);
   if (nested) for (const [id, row] of items) restoreItemLists(hub, list.view(id), row, ctx);
   if (!ctx.result) return;
-  // The rows answer the filter's current server values: a change of those issues, their return does not.
+  // The rows answer the filter's current server values and the current (`$default`) sort:
+  // a change of those issues, their return does not.
   list.filter?.markIssued();
+  list.sort?.markIssued();
   accept(list, ctx);
 }
 

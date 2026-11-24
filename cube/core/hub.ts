@@ -128,6 +128,9 @@ export class Hub {
     if (this.own === 0) this.userEpoch++;
   }
 
+  /** Inside a batch: the notification cycle (gates, resolve re-checks) comes when the outermost one returns. */
+  get batching(): boolean { return this.depth > 0; }
+
   /** Runs fn as one change: subscribers are notified once, after it returns. */
   batch<T>(fn: () => T): T {
     this.depth++;

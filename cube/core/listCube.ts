@@ -1,6 +1,6 @@
 import { childKeys, hasLists, isLeafConfig, type CubeConfig, type ListConfig, type Values } from "./config";
 import { Cube, registerList } from "./cube";
-import { FilterCube, warnNestedFilters } from "./filter";
+import { FilterCube, stableStringify, warnNestedFilters } from "./filter";
 import type { Hub } from "./hub";
 import type { PublicNode } from "./node";
 import { Pager } from "./pagination";
@@ -401,15 +401,18 @@ export class ListCube extends Cube {
   /**
    * The resolver's third argument: the filter at launch (store passed it
    * always, empty without a block) and the sort (always; empty without a
-   * server sort). `queryKey` is the filter's server key, as before.
+   * server sort). `queryKey` is the request identity: the filter's server key
+   * as before, both keys once a server sort is set.
    */
   resolveContext(): unknown {
-    const { filter, queryKey } = this.filter?.launch() ?? { filter: { values: {}, params: undefined, key: "" }, queryKey: "" };
-    return { filter, sort: this.sortRequest(), queryKey };
+    const { filter } = this.filter?.launch() ?? { filter: { values: {}, params: undefined, key: "" } };
+    const sort = this.sortRequest();
+    const queryKey = sort.key ? stableStringify({ filter: filter.key, sort: sort.key }) : filter.key;
+    return { filter, sort, queryKey };
   }
 
-  /** `ctx.sort` of a resolver run (a paginated list's too). */
-  sortRequest(): SortRequest { return this.sort?.request() ?? { by: [], key: "" }; }
+  /** `ctx.sort` of a resolver run being launched (a paginated list's too): the server sort's key becomes the issued one. */
+  sortRequest(): SortRequest { return this.sort?.launch() ?? { by: [], key: "" }; }
 
   override snapshotValue() {
     track(this);

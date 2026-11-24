@@ -68,6 +68,8 @@ export class ResolveState implements Resolving {
   private waiting = false;
   /** invalidate() during a run: start again once it lands. */
   private rerun = false;
+  /** invalidate() inside a batch: handled at its notification cycle, so one batch is one run. */
+  private invalidated = false;
   /**
    * initialData gave the result and no flow entry has met it yet: the step's
    * first entry fires onReady (flow.ts). It survives a restart by a dependency,
@@ -133,11 +135,20 @@ export class ResolveState implements Resolving {
   }
 
   /**
-   * An outside request for fresh data (a list filter's server key moved): run
-   * now, or right after the run in flight. User-driven, so it is not counted
-   * against the restart cap (store counted it and went silent after 10 searches).
+   * An outside request for fresh data (a list filter's server key or its
+   * server sort moved): run now, or right after the run in flight.
+   * User-driven, so it is not counted against the restart cap (store counted
+   * it and went silent after 10 searches). Inside a batch it waits for the
+   * batch's notification cycle: what else the batch changes (a sort next to
+   * filter.apply()) goes into the same run.
    */
   invalidate() {
+    const hub = this.primary.hub;
+    if (hub.batching) {
+      this.invalidated = true;
+      hub.touch();
+      return;
+    }
     if (this.status === "pending") this.rerun = true;
     else this.start();
   }
@@ -148,6 +159,10 @@ export class ResolveState implements Resolving {
    * are met.
    */
   checkDeps() {
+    if (this.invalidated) {
+      this.invalidated = false;
+      return this.invalidate();
+    }
     if (this.waiting) {
       if (this.contextReady()) this.start();
       return;
@@ -218,6 +233,7 @@ export class ResolveState implements Resolving {
     this.promise = null;
     this.waiting = false;
     this.rerun = false;
+    this.invalidated = false;
     this.seeded = true;
     this.epoch = hub.userEpoch;
     this.settle(obs);
@@ -243,6 +259,7 @@ export class ResolveState implements Resolving {
     this.autoRuns = 0;
     this.waiting = false;
     this.rerun = false;
+    this.invalidated = false;
     this.seeded = false;
     this.bump();
   }
@@ -258,6 +275,7 @@ export class ResolveState implements Resolving {
     const run = {};
     this.run_ = run;
     this.rerun = false;
+    this.invalidated = false; // this run reads everything a pending invalidate() asked for
     this.status = "pending";
     this.error = null;
     // A list resolve has no optimistic placeholder and no retry, as in store.

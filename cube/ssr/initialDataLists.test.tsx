@@ -11,6 +11,8 @@
  *  C. A server filter: the data answers the filter's current values, so
  *     nothing is requested after construction; a change is one request.
  *  D. The first page under server render and hydration.
+ *  E. A server sort: the data answers `$default` (SortPlan Stage 2), so
+ *     nothing is requested after construction; a sort change is one request.
  *
  * None of this warns: a query-key change projects the new key's empty family
  * right before its first page is requested, which is not a "pagination
@@ -153,6 +155,8 @@ interface PagedOptions {
   filter?: boolean;
   /** Debounce of `q`, ms. */
   debounce?: number;
+  /** A server sort by the row number (param `n`), `$default: "-id"`; the resolver sorts by ctx.sort. */
+  sort?: boolean;
   initialData?: unknown;
   server?: boolean;
 }
@@ -168,9 +172,10 @@ function pagedStore(opts: PagedOptions = {}) {
   const resolver = vi.fn(async (_values: any, _store: any, ctx: any) => {
     const req = ctx.page;
     const q = opts.filter ? String(ctx.filter.values.q) : "";
-    const rows = q ? ALL.filter((user) => user.name.includes(q)) : ALL;
+    let rows = q ? ALL.filter((user) => user.name.includes(q)) : ALL;
+    if (opts.sort && ctx.sort.by[0]?.dir === "desc") rows = [...rows].reverse();
     if (mode === "paged") {
-      calls.push({ page: req.page, offset: req.offset, ...(opts.filter ? { q } : {}) });
+      calls.push({ page: req.page, offset: req.offset, ...(opts.filter ? { q } : {}), ...(opts.sort ? { sort: ctx.sort.key } : {}) });
       return { items: rows.slice(req.offset, req.offset + req.pageSize), total: rows.length };
     }
     calls.push({ page: req.page, cursor: req.cursor });
@@ -184,6 +189,7 @@ function pagedStore(opts: PagedOptions = {}) {
       users: defineList<User>({
         template: { id: { value: "" }, name: { value: "" } },
         ...(opts.filter ? { filter: { q: opts.debounce ? { value: "", debounce: opts.debounce } : "" } } : {}),
+        ...(opts.sort ? { sort: { $default: "-id", id: { param: "n" } } } : {}),
         resolve: { resolver: resolver as any, pagination: { pageSize: 20, mode } as any },
       }),
     },
@@ -497,5 +503,38 @@ describe("initialData: a paginated list under server render and hydration", () =
     expect(container.querySelector("section")!.getAttribute("data-page")).toBe("2/3");
     expect(container.querySelectorAll("li")).toHaveLength(20);
     expect(server.calls).toEqual([]);
+  });
+});
+
+// ─── E. Server sort ──────────────────────────────────────────────────────────
+
+describe("initialData: a paginated list with a server sort", () => {
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => { warn = vi.spyOn(console, "warn"); });
+  afterEach(() => {
+    const warned = warn.mock.calls.map((c: unknown[]) => String(c[0]));
+    warn.mockRestore();
+    expect(warned).toEqual([]);
+  });
+
+  it("the data answers `$default`: no request after construction; a sort change is one request for the first page", async () => {
+    const newestFirst = [...ALL].reverse();
+    const { list, calls } = pagedStore({ sort: true, initialData: { users: { items: newestFirst.slice(0, 20), total: 45 } } });
+    expect(idsOf(list)).toEqual(newestFirst.slice(0, 20).map((user) => user.id));
+    expect(list.sort.by).toEqual([{ key: "id", dir: "desc" }]);
+    expect(list.resolveStatus).toBe("resolved");
+    await flush();
+    expect(calls).toEqual([]);
+
+    list.setPage(2); // the next page of the same query: fetched under the same sort
+    await flush();
+    expect(calls).toEqual([{ page: 2, offset: 20, sort: '[["n","desc"]]' }]);
+
+    list.sort.toggle("id"); // desc is the $default: the next step is asc
+    await flush();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual({ page: 1, offset: 0, sort: '[["n","asc"]]' });
+    expect(list.page).toBe(1);
+    expect(idsOf(list)).toEqual(idRange(1, 20));
   });
 });

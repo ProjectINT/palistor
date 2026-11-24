@@ -4,7 +4,8 @@
 // Store's PaginationPlan model, bound to the cube core:
 //
 //   • families  — one page cache per query key: the values the resolver read
-//                 (paths and `$context.` keys) plus the filter's server key.
+//                 (paths and `$context.` keys) plus the filter's server key
+//                 and the server sort's key (`$filter`, `$sort`).
 //                 A key change starts over at `initialPage`; `maxCachedQueries`
 //                 and `gcTime` decide how long an old family is kept.
 //   • pages     — ids per ordinal with a fetch-time baseline (`initialIds`),
@@ -156,6 +157,8 @@ export interface PersistBlob {
 const MAX_DRIFT_RUNS = 10;
 /** Pseudo dep path: the filter's server key, committed when the filter gate issues. */
 const FILTER_DEP = "$filter";
+/** Pseudo dep path: the server sort's key (sort.ts), committed when the sort gate issues; the `$filter` path step by step. */
+const SORT_DEP = "$sort";
 
 const noop = () => undefined;
 const same = (a: unknown, b: unknown) => a === b || stableStringify(a) === stableStringify(b);
@@ -169,9 +172,16 @@ const dedupe = (ids: string[]) => (ids.length < 2 ? ids.slice() : [...new Set(id
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
 const isTmpId = (id: string) => id.startsWith("_tmp_");
 
-/** The exact encoding of a query key: dep pairs sorted by path. */
+/**
+ * The exact encoding of a query key: dep pairs sorted by path. An empty
+ * `$sort` (no server sort right now) is left out, so such a key is the one
+ * the list had without a sort block — a live key, a persisted blob's
+ * `depValues` and checkDeps all encode through here.
+ */
 const keyFromPairs = (pairs: Array<[string, unknown]>) =>
-  stableStringify([...pairs].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+  stableStringify(
+    pairs.filter(([d, v]) => !(d === SORT_DEP && v === "")).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
+  );
 
 /** A bare array is `{ items }` (no precise total). */
 function normalizeResult(raw: unknown): PagedResult {
@@ -268,6 +278,10 @@ export class Pager {
   private capped = false;
   /** The filter's server key the current key is built with (moves only when the filter gate issues or a fetch launches). */
   private filterKey = "";
+  /** The server sort's key the current key is built with (moves only when the sort gate issues or a fetch launches). */
+  private sortKey = "";
+  /** invalidate() inside a batch: handled at its notification cycle, so one batch is one re-key. */
+  private invalidated = false;
   /** checkDeps: the sources the last key computation read, the family and dep count it was for. */
   private keyObs: { obs: Observer; fam: Family; size: number; opaque: boolean } | null = null;
 
@@ -375,13 +389,24 @@ export class Pager {
 
   private liveFilterKey(): string { return this.list.filter?.hasServer ? this.list.filter.serverKey() : ""; }
 
+  private hasSortDep(): boolean { return !!this.list.sort?.server; }
+
+  private liveSortKey(): string { return this.list.sort?.server ? this.list.sort.serverKey() : ""; }
+
+  /** The filter's and the sort's live keys become the ones the query key is built with. */
+  private commitKeys() {
+    this.filterKey = this.liveFilterKey();
+    this.sortKey = this.liveSortKey();
+  }
+
   /**
    * Live value at a dep path, tracked: a `$context.` key, the committed
-   * filter key, or a values path under the base group. Returns whether the
-   * read is opaque to version tracking (a group or list value).
+   * filter or sort key, or a values path under the base group. Returns
+   * whether the read is opaque to version tracking (a group or list value).
    */
   private readDep(path: string): { value: unknown; opaque: boolean } {
     if (path === FILTER_DEP) return { value: this.filterKey, opaque: false };
+    if (path === SORT_DEP) return { value: this.sortKey, opaque: false };
     if (path.startsWith("$context.")) {
       const k = path.slice(9);
       track(this.hub.contextKey(k));
@@ -397,11 +422,12 @@ export class Pager {
 
   private depValue(path: string): unknown { return untracked(() => this.readDep(path).value); }
 
-  /** The dep set the first fetch keys on: explicit `deps` plus the filter's server key. */
+  /** The dep set the first fetch keys on: explicit `deps` plus the filter's server key and the server sort's key. */
   private bootstrapDeps(): Set<string> {
     const deps = new Set<string>();
     for (const d of this.resolve.deps ?? []) if (!this.isSelf(d)) deps.add(d);
     if (this.hasFilterDep()) deps.add(FILTER_DEP);
+    if (this.hasSortDep()) deps.add(SORT_DEP);
     return deps;
   }
 
@@ -528,7 +554,7 @@ export class Pager {
    */
   private ensureFamily(now: number): { fam: Family; keyChanged: boolean } {
     const prev = this.currentFamily();
-    if (!prev) this.filterKey = this.liveFilterKey();
+    if (!prev) this.commitKeys();
     const deps = prev?.dependencies ?? this.bootstrapDeps();
     const hash = untracked(() => this.computeKey(deps));
     if (prev && this.currentQueryKey === hash) {
@@ -853,8 +879,8 @@ export class Pager {
     if (hub.held) { hub.deferred.add(this); return Promise.resolve(); }
     const resolve = this.resolve;
     const now = Date.now();
-    // A launch reads the live filter: a fetch during the filter's debounce runs (and is keyed) with it.
-    this.filterKey = this.liveFilterKey();
+    // A launch reads the live filter and sort: a fetch during the filter's debounce runs (and is keyed) with it.
+    this.commitKeys();
 
     // 1. Family + key at ISSUE time; a key that moved under us restarts at initialPage.
     const { fam, keyChanged } = this.ensureFamily(now);
@@ -892,6 +918,7 @@ export class Pager {
     for (const d of known) if (!this.isSelf(d)) eager.set(d, clone(this.depValue(d)));
 
     const filterCtx = this.list.filter?.launch().filter ?? { values: {}, params: undefined, key: "" };
+    const sortCtx = this.list.sortRequest();
     // infinite + offset: the continuation, re-checked at completion (a delete mid-flight shifts it).
     const expectedOffset = this.continuationOffset(fam, ordinal);
     const req: PageRequest = { page: ordinal, pageSize: this.pageSize, offset: expectedOffset, queryKey: fam.queryKeyHash };
@@ -925,6 +952,7 @@ export class Pager {
       for (const path of rec.keys()) if (!this.isSelf(path)) fam.dependencies.add(path);
       for (const k of ctxRec.keys()) fam.dependencies.add(`$context.${k}`);
       if (this.hasFilterDep()) fam.dependencies.add(FILTER_DEP);
+      if (this.hasSortDep()) fam.dependencies.add(SORT_DEP);
       this.keyObs = null;
     };
 
@@ -939,7 +967,7 @@ export class Pager {
           },
         });
         const store = Object.create(hub.store as object, { context: { value: context } });
-        const ctx = { filter: filterCtx, page: req, sort: this.list.sortRequest(), queryKey: fam.queryKeyHash };
+        const ctx = { filter: filterCtx, page: req, sort: sortCtx, queryKey: fam.queryKeyHash };
         const raw = await untracked(() => resolve.resolver(values, store, ctx));
 
         return hub.batch(() => {
@@ -1166,11 +1194,24 @@ export class Pager {
   /** list.reload(): refetch(). */
   reload() { void this.refetch(); }
 
-  /** The filter gate issued: the new server key becomes part of the query key. User-driven, not counted. */
+  /**
+   * The filter or the sort gate issued: the new server keys become part of
+   * the query key (both: a sort change carries a filter value whose debounce
+   * has not run out, and the other way round). User-driven, not counted.
+   * Inside a batch it waits for the batch's notification cycle, so everything
+   * the batch changed (a sort next to filter.apply()) is one re-key.
+   */
   invalidate() {
+    if (this.hub.batching) {
+      this.invalidated = true;
+      this.hub.touch();
+      return;
+    }
+    this.invalidated = false;
     this.userAction();
-    this.filterKey = this.liveFilterKey();
+    this.commitKeys();
     this.list.filter?.markIssued();
+    this.list.sort?.markIssued();
     this.keyObs = null;
     this.retrigger();
   }
@@ -1180,6 +1221,7 @@ export class Pager {
    * keyed on has changed. A run in flight is left to its own drift check.
    */
   checkDeps() {
+    if (this.invalidated && !this.disposed) return this.invalidate();
     if (this.disposed || this.capped || (this.status !== "resolved" && this.status !== "error")) return;
     const fam = this.currentFamily();
     if (!fam) return;
@@ -1626,7 +1668,7 @@ export class Pager {
     this.isStaleFromStorage = false;
     this.scrollAnchor = null;
     this.keyObs = null;
-    this.filterKey = this.liveFilterKey();
+    this.commitKeys();
     const settle = (status: ResolveStatus) => { this.status = status; this.promise = null; this.error = null; };
 
     if (!this.trusted(restored, blob)) {
@@ -1724,7 +1766,7 @@ export class Pager {
    * fetched as usual. The rows are fresh: `revalidateOnHydrate` does not apply.
    */
   accept(raw: unknown) {
-    this.filterKey = this.liveFilterKey();
+    this.commitKeys();
     const { fam } = this.ensureFamily(Date.now());
     const ordinal = this.config.initialPage;
     const req: PageRequest = { page: ordinal, pageSize: this.pageSize, offset: this.continuationOffset(fam, ordinal), queryKey: fam.queryKeyHash };
@@ -1735,8 +1777,10 @@ export class Pager {
     this.status = "resolved";
     this.promise = null;
     this.error = null;
-    // The rows answer the filter's current server values: the gate compares the next change against them.
+    // The rows answer the filter's current server values and the current sort (`$default`):
+    // the gates compare the next change against them.
     this.list.filter?.markIssued();
+    this.list.sort?.markIssued();
     this.changed();
   }
 

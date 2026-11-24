@@ -10,9 +10,14 @@
 //     joins the membership goes to the end, one that leaves is taken out, and
 //     a value edit moves nothing: no value is compared.
 //   • server class (`resolve.pagination`, or `$server: true`): the resolver
-//     sorts; the list shows the rows in the order they came. The state lives
-//     here; what reaches the resolver (ctx.sort, the request identity) is
-//     Stage 2 of the plan.
+//     sorts; the list shows the rows in the order they came. The sort reaches
+//     it as ctx.sort (`{ by: [{ key, param, dir }], key }`) and is part of the
+//     request identity, like the filter's server fields: after every
+//     notification cycle (hub.gates) a sort whose key differs from the one
+//     last launched re-issues the resolve — a plain list runs again (once
+//     after a run in flight), a paginated one changes its query key through
+//     the `$sort` pseudo-dependency and starts over at its first page.
+//     `initialData` answers the sort the store starts with (`$default`).
 //
 // Visible rows = sort(filter(membership)): the filter narrows the ordered
 // snapshot and keeps its order (ListCube.visibleIds).
@@ -20,6 +25,7 @@
 
 import { childKeys, isLeafConfig, isPlainObject, type CubeConfig, type ResolveConfig, type Values } from "./config";
 import { Cube } from "./cube";
+import { stableStringify } from "./filter";
 import type { Hub } from "./hub";
 import type { ListCube } from "./listCube";
 import { CUBE, type PublicNode } from "./node";
@@ -253,6 +259,10 @@ export class SortCube extends Cube {
   private orderOf: string[] | null = null;
   /** Moves when `order` is recomputed: the list's visible ids read it. */
   private readonly orderSignal = new Signal();
+  /** Server class: the key the resolver last launched with (or that initialData / a cached family answered). */
+  private issuedKey: string | null = null;
+  /** The cube's version at the last gate check: only a change of the state issues (a run starting is no reason to). */
+  private seen = 0;
   private sortNodeRef?: PublicNode;
 
   constructor(block: unknown, readonly list: ListCube, resolve: ResolveConfig | undefined, hub: Hub) {
@@ -264,6 +274,8 @@ export class SortCube extends Cube {
     this.dflt = dflt;
     this.state = dflt;
     this.collator = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
+    // Nothing to issue for a client sort, or without a resolver (a server sort requires one: parse()).
+    if (server && list.rs) hub.gates.add(this);
   }
 
   override get node(): PublicNode { return (this.sortNodeRef ??= sortNode(this)); }
@@ -295,8 +307,56 @@ export class SortCube extends Cube {
 
   protected override signature(): unknown[] { return [this.entries]; }
 
-  /** The resolver's `ctx.sort`. A client sort never reaches the resolver (SortPlan decision 11); the server class's: Stage 2. */
-  request(): SortRequest { return { by: [], key: "" }; }
+  // ── server class: the resolver context and the issue gate ────────────────
+
+  /**
+   * The sort as the server applies it, as one key — what a request is
+   * identified by: the params and directions, in order. `""` without a server
+   * sort (a client sort, or no sort at all), so the query key of a list
+   * without one stays what it was.
+   */
+  serverKey(): string {
+    if (!this.server || this.state.length === 0) return "";
+    return stableStringify(this.state.map((e) => [this.columns.get(e.key)!.param, e.dir]));
+  }
+
+  /** The resolver's `ctx.sort`, fresh for every run. A client sort never reaches the resolver (SortPlan decision 11). */
+  request(): SortRequest {
+    if (!this.server) return { by: [], key: "" };
+    const by = this.state.map((e) => ({ key: e.key, param: this.columns.get(e.key)!.param, dir: e.dir }));
+    return { by, key: this.serverKey() };
+  }
+
+  /** `ctx.sort` of a run being launched: its key becomes the issued one. */
+  launch(): SortRequest {
+    const req = this.request();
+    if (this.server) this.issuedKey = req.key;
+    return req;
+  }
+
+  /**
+   * The list shows rows that answer the current sort without a launch: a
+   * paginated list re-keyed onto a cached family, or `initialData` (which
+   * answers `$default`). The next change is compared against it.
+   */
+  markIssued() { if (this.server) this.issuedKey = this.serverKey(); }
+
+  /**
+   * After every notification cycle (hub.gates): a server sort that differs
+   * from the one last launched re-issues the list's resolve — a plain list
+   * runs again (once more after a run in flight, with the state it then
+   * has), a paginated one changes its query key and starts over at its first
+   * page (Pager.invalidate). Every change of one batch is one check, so a
+   * sort and a filter changed together are one request. A list that never
+   * ran reads the sort on its first run.
+   */
+  check() {
+    if (this.version === this.seen) return;
+    this.seen = this.version;
+    const rs = this.list.rs;
+    if (!rs || rs.status === "idle" || this.serverKey() === this.issuedKey) return;
+    rs.invalidate();
+  }
 
   // ── writes ───────────────────────────────────────────────────────────────
 
