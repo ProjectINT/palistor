@@ -12,23 +12,33 @@
 //     A row added locally stays visible until the next resolve.
 //   • derived field (`value` is a function): read-only, in neither key.
 //
+// Apply mode (`$apply: "manual"` on the block, `apply` on a field; SortPlan
+// decision 14): a manual field's value is a draft — what the field, its input
+// and `filter.values` show — and an applied value next to it. Whatever acts
+// on the list (the projection, ctx.filter, the server key, isActive,
+// activeCount) reads each field's effective value: the applied one for a
+// manual field, the current one otherwise. Typing in a manual field issues
+// nothing; `filter.apply()` moves the drafts into the applied values.
+//
 // Rules, messages and semantics follow store/filtering (FilteringPlan.md).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { isEmpty, isPlainObject, type CubeConfig, type Values } from "./config";
+import { isDirtyValue, isEmpty, isPlainObject, type CubeConfig, type Values } from "./config";
 import { Cube } from "./cube";
 import type { Hub } from "./hub";
 import type { ListCube } from "./listCube";
 import { CUBE, type PublicNode } from "./node";
-import { track, untracked } from "./track";
+import { Signal, track, untracked } from "./track";
 
 type Where = (item: unknown, value: unknown) => boolean;
 type All = (item: unknown, values: Values) => boolean;
 type ToParams = (values: Values, context: Record<string, unknown>) => unknown;
+type ApplyMode = "auto" | "manual";
 
 /** Members of `list.filter`: a field cannot take these names. */
 export const FILTER_BUILTINS: ReadonlySet<string> = new Set([
   "values", "set", "reset", "clear", "isActive", "activeCount", "isPending",
+  "apply", "revert", "isDraft", "applied",
 ]);
 
 interface FieldSpec {
@@ -41,6 +51,8 @@ interface FieldSpec {
   /** ms to delay the re-issue this field's change causes. */
   debounce?: number;
   derived: boolean;
+  /** Applied by `filter.apply()` only (its own `apply`, else the block's `$apply`). Never a derived field. */
+  manual: boolean;
   /** Declared default, kept verbatim (null included). */
   dflt: unknown;
 }
@@ -73,16 +85,23 @@ export function stableStringify(value: unknown): string {
 
 // ── the block ──────────────────────────────────────────────────────────────
 
+const isApplyMode = (v: unknown): v is ApplyMode => v === "auto" || v === "manual";
+
 /**
  * store/filtering/normalizeFilterBlock.ts: `$` keys are block options, every
  * other key is a field; a value that is not a `{ value }` object is a literal
- * default; dead config that looks live throws.
+ * default; dead config that looks live throws. `$apply` / `apply` are Cube
+ * only (store rejects `$apply` as an unknown option).
  */
 function normalize(block: Values, list: string): { fields: FieldSpec[]; all?: All; toParams?: ToParams } {
   const fields: FieldSpec[] = [];
   let all: All | undefined;
   let toParams: ToParams | undefined;
   const fail = (msg: string): never => { throw new Error(`[palistor] ${msg}`); };
+  const blockApply = block.$apply;
+  if (blockApply !== undefined && !isApplyMode(blockApply)) {
+    fail(`filter "$apply" on list "${list}" must be "manual" or "auto".`);
+  }
 
   for (const key of Object.keys(block)) {
     const raw = block[key];
@@ -91,10 +110,10 @@ function normalize(block: Values, list: string): { fields: FieldSpec[]; all?: Al
         if (typeof raw !== "function") fail(`filter "${key}" on list "${list}" must be a function.`);
         if (key === "$all") all = raw as All;
         else toParams = raw as ToParams;
-      } else if (key !== "$persist") {
-        fail(`unknown filter block option "${key}" on list "${list}" (known: $all, $toParams, $persist). Field names must not start with "$".`);
+      } else if (key !== "$persist" && key !== "$apply") {
+        fail(`unknown filter block option "${key}" on list "${list}" (known: $all, $toParams, $persist, $apply). Field names must not start with "$".`);
       }
-      continue; // $persist: accepted and ignored, as in store (its `__filters` blob is FilteringPlan Phase 2, never shipped)
+      continue; // $apply: read above. $persist: accepted and ignored, as in store (its `__filters` blob is FilteringPlan Phase 2, never shipped)
     }
     if (FILTER_BUILTINS.has(key)) {
       fail(`filter field "${key}" on list "${list}" collides with a built-in member of list.filter (${[...FILTER_BUILTINS].join(", ")}).`);
@@ -104,7 +123,7 @@ function normalize(block: Values, list: string): { fields: FieldSpec[]; all?: Al
     }
 
     const config = (isPlainObject(raw) && "value" in raw ? raw : { value: raw }) as CubeConfig;
-    const { where, param, debounce } = config as { where?: unknown; param?: unknown; debounce?: unknown };
+    const { where, param, debounce, apply } = config as { where?: unknown; param?: unknown; debounce?: unknown; apply?: unknown };
     const derived = typeof config.value === "function";
     const dead = param !== undefined ? "param" : debounce !== undefined ? "debounce" : null;
     if (where !== undefined && typeof where !== "function") fail(`filter field "${key}" on list "${list}": "where" must be a function.`);
@@ -116,23 +135,43 @@ function normalize(block: Values, list: string): { fields: FieldSpec[]; all?: Al
     }
     if (param !== undefined && typeof param !== "string") fail(`filter field "${key}" on list "${list}": "param" must be a string.`);
     if (debounce !== undefined && typeof debounce !== "number") fail(`filter field "${key}" on list "${list}": "debounce" must be a number (ms).`);
+    if (apply !== undefined && !isApplyMode(apply)) fail(`filter field "${key}" on list "${list}": "apply" must be "auto" or "manual".`);
+    if (derived && apply !== undefined) {
+      fail(`derived filter field "${key}" on list "${list}" declares "apply" — a derived field is read-only and follows the fields it is computed from, so that option can never apply.`);
+    }
+    const manual = !derived && (apply ?? blockApply) === "manual";
+    if (manual && debounce !== undefined) {
+      const why = apply === "manual" ? `declares apply: "manual"` : `follows the block's $apply: "manual"`;
+      fail(`filter field "${key}" on list "${list}" ${why} and "debounce" — typing in a manual field issues no request, so that option can never apply.`);
+    }
 
     fields.push({
-      key, config, derived,
+      key, config, derived, manual,
       where: where as Where | undefined,
       param: param as string | undefined,
       debounce: debounce as number | undefined,
       dflt: derived ? undefined : config.value,
     });
   }
+  if (blockApply === "manual" && !fields.some((f) => f.manual)) {
+    fail(`filter "$apply": "manual" on list "${list}" reaches no field — every field is derived or declares apply: "auto", so that option can never apply.`);
+  }
   return { fields, all, toParams };
 }
 
 /** A filter field: its default is kept verbatim (null included), a derived one is read-only. */
 class FilterField extends Cube {
+  /**
+   * A manual field: the value the list is filtered by, while `value` is the
+   * draft. Starts as the default; only `filter.apply()` moves it (read it
+   * through FilterCube, which tracks it).
+   */
+  applied: unknown;
+
   constructor(readonly spec: FieldSpec, readonly block: FilterCube, hub: Hub) {
     super(spec.config, block, spec.key, hub);
     if (!spec.derived) this.init(spec.dflt === undefined ? "" : spec.dflt);
+    if (spec.manual) this.applied = this.peek();
   }
 
   override write(raw: unknown) {
@@ -151,11 +190,17 @@ class FilterField extends Cube {
 export class FilterCube extends Cube {
   readonly fields: FilterField[] = [];
   readonly hasClient: boolean;
-  /** Server fields: their values are the request identity. */
+  /** Server fields: their effective values are the request identity. */
   private readonly server: FilterField[] = [];
+  /** Automatic server fields: the ones the gate watches (a keystroke in a manual field issues nothing). */
+  private readonly gated: FilterField[] = [];
+  /** Manual fields (`$apply` / `apply`): a draft and an applied value each. Empty in automatic mode. */
+  private readonly manual: FilterField[] = [];
+  /** Moves when `apply()` changes an applied value: what reads of applied values track. */
+  private readonly appliedSource = new Signal();
   private readonly all?: All;
   private readonly toParams?: ToParams;
-  /** Server field → its version at the last gate check. */
+  /** Gated field → its version at the last gate check. */
   private readonly seen = new Map<FilterField, number>();
   /** Server key the resolver last launched with. */
   private issuedKey: string | null = null;
@@ -175,12 +220,17 @@ export class FilterCube extends Cube {
       const f = new FilterField(spec, this, hub);
       this.children.set(spec.key, f);
       this.fields.push(f);
+      if (spec.manual) this.manual.push(f);
       if (spec.where) hasClient = true;
-      else if (!spec.derived) { this.server.push(f); this.seen.set(f, f.version); }
+      else if (!spec.derived) {
+        this.server.push(f);
+        if (!spec.manual) { this.gated.push(f); this.seen.set(f, f.version); }
+      }
     }
     this.hasClient = hasClient;
-    // Nothing to issue without a resolver or without server fields (an all-`where` block).
-    if (this.server.length && list.rs) hub.gates.add(this);
+    // Nothing to issue without a resolver or without automatic server fields (an all-`where`
+    // block, or every server field manual: apply() issues by itself).
+    if (this.gated.length && list.rs) hub.gates.add(this);
   }
 
   override get node(): PublicNode { return (this.filterNode ??= filterNode(this)); }
@@ -190,7 +240,7 @@ export class FilterCube extends Cube {
 
   // ── reads ────────────────────────────────────────────────────────────────
 
-  /** `filter.values`: every field, derived included; one object per change. */
+  /** `filter.values`: every field, derived included; one object per change. A manual field shows its draft. */
   current(): Values {
     return this.memo("current", () => {
       const out: Values = {};
@@ -199,16 +249,64 @@ export class FilterCube extends Cube {
     });
   }
 
-  /** Non-empty non-derived fields of both classes. */
+  /** A non-derived field's value as the list sees it: the applied one for a manual field, the current one otherwise. Tracked. */
+  private effectiveOf(f: FilterField): unknown {
+    if (!f.spec.manual) return f.value;
+    track(this.appliedSource);
+    return f.applied;
+  }
+
+  /**
+   * `filter.applied`: the values the list is filtered by — every field, a
+   * derived one computed from these values rather than from the drafts; one
+   * object per change. Without manual fields it is `current()` itself.
+   */
+  effective(): Values {
+    if (this.manual.length === 0) return this.current();
+    return this.memo("effective", () => {
+      const scope: Values = {};
+      for (const f of this.fields) {
+        if (!f.spec.derived) { scope[f.key] = this.effectiveOf(f); continue; }
+        const fn = f.config.value as (values: Values) => unknown;
+        let state: "idle" | "computing" | "done" = "idle";
+        let result: unknown;
+        Object.defineProperty(scope, f.key, {
+          enumerable: true,
+          get: () => {
+            if (state === "done") return result;
+            if (state === "computing") throw new Error("palistor/cube: computed cycle (a computed value reads itself)");
+            state = "computing";
+            result = fn(scope);
+            state = "done";
+            return result;
+          },
+        });
+      }
+      const out: Values = {};
+      for (const f of this.fields) out[f.key] = scope[f.key];
+      return out;
+    });
+  }
+
+  /** Non-empty non-derived fields of both classes, by their effective values. */
   get activeCount(): number {
     return this.memo("activeCount", () => {
       let n = 0;
-      for (const f of this.fields) if (!f.spec.derived && !isFilterEmpty(f.value)) n++;
+      for (const f of this.fields) if (!f.spec.derived && !isFilterEmpty(this.effectiveOf(f))) n++;
       return n;
     });
   }
 
   get isActive(): boolean { return this.activeCount > 0; }
+
+  /** A manual field's draft differs from its applied value (the rule `dirty` uses: objects and arrays by content). */
+  get isDraft(): boolean {
+    if (this.manual.length === 0) return false;
+    return this.memo("isDraft", () => {
+      track(this.appliedSource);
+      return this.manual.some((f) => isDirtyValue(f.value, f.applied));
+    });
+  }
 
   /** The block has fields whose values reach the resolver (a paginated list keys its pages on them). */
   get hasServer(): boolean { return this.server.length > 0; }
@@ -219,6 +317,7 @@ export class FilterCube extends Cube {
   protected override signature(): unknown[] {
     const sig: unknown[] = [this.isPending];
     for (const f of this.fields) sig.push(f.value);
+    if (this.manual.length) sig.push(this.effective(), this.isDraft);
     return sig;
   }
 
@@ -228,10 +327,11 @@ export class FilterCube extends Cube {
    * The visible ids (store's applyClientFilter): a `where` is skipped while
    * its field is empty, the rest are ANDed, `$all` runs last and always. An
    * id outside the last loaded membership (added locally) is always visible.
-   * `item` is the registry row, as store's projection object was.
+   * `item` is the registry row, as store's projection object was. Runs on the
+   * effective values: a draft keystroke does not re-run it.
    */
   project(ids: string[], loaded: string[], row: (id: string) => Values | undefined): string[] {
-    const values = this.current();
+    const values = this.effective();
     const active = this.fields.filter((f) => f.spec.where && !isFilterEmpty(values[f.key]));
     const all = this.all;
     if (active.length === 0 && !all) return ids;
@@ -247,10 +347,10 @@ export class FilterCube extends Cube {
 
   // ── server fields: the resolver context and the issue gate ───────────────
 
-  /** The list resolver's third argument; its server key becomes the issued one. */
+  /** The list resolver's third argument, from the effective values; its server key becomes the issued one. */
   launch(): { filter: { values: Values; params: unknown; key: string }; queryKey: string } {
     return untracked(() => {
-      const values = { ...this.current() };
+      const values = { ...this.effective() };
       const key = this.serverKey();
       this.issuedKey = key;
       return { filter: { values, params: this.params(values), key }, queryKey: key };
@@ -265,26 +365,27 @@ export class FilterCube extends Cube {
     return out;
   }
 
-  /** The server fields' values as one key (what a request is identified by). */
+  /** The server fields' effective values as one key (what a request is identified by). */
   serverKey(): string {
     return untracked(() => {
       const out: Values = {};
-      for (const f of this.server) out[f.key] = f.value;
+      for (const f of this.server) out[f.key] = this.effectiveOf(f);
       return stableStringify(out);
     });
   }
 
   /**
-   * After every notification cycle (hub): a server field moved → issue now,
-   * or after the longest debounce among the moved fields. An undebounced
-   * change (or set / reset / clear) issues at once and carries the debounced
-   * fields' current values: one request per list.
+   * After every notification cycle (hub): an automatic server field moved →
+   * issue now, or after the longest debounce among the moved fields. An
+   * undebounced change (or set / reset / clear) issues at once and carries
+   * the debounced fields' current values: one request per list. Manual
+   * fields are not watched: their drafts reach no request until apply().
    */
   check() {
     let delay = 0;
     let now = this.forcing;
     let moved = false;
-    for (const f of this.server) {
+    for (const f of this.gated) {
       if (f.version === this.seen.get(f)) continue;
       this.seen.set(f, f.version);
       moved = true;
@@ -308,9 +409,10 @@ export class FilterCube extends Cube {
   }
 
   /**
-   * Re-issue iff the current server key differs from the last launched one
-   * (typing and reverting inside the debounce issues nothing). A lazy list
-   * that never ran reads the current values on its first run anyway.
+   * Re-issue iff the effective server key differs from the last launched one
+   * (typing and reverting inside the debounce issues nothing, nor does typing
+   * in a manual field). A lazy list that never ran reads the effective values
+   * on its first run anyway.
    */
   private issue() {
     const rs = this.list.rs;
@@ -319,10 +421,11 @@ export class FilterCube extends Cube {
   }
 
   /**
-   * A paginated list re-keyed on the current server values without launching
-   * (a retained family served from cache): those values are what the list
-   * shows now, so the next issue compares against them. (store kept the key of
-   * the last launch: a→""→a left the list on the unfiltered family.)
+   * A paginated list re-keyed on the effective server values without launching
+   * (a retained family served from cache), or `initialData` answered them:
+   * those values are what the list shows now, so the next issue compares
+   * against them. (store kept the key of the last launch: a→""→a left the
+   * list on the unfiltered family.)
    */
   markIssued() { this.issuedKey = this.serverKey(); }
 
@@ -335,7 +438,11 @@ export class FilterCube extends Cube {
 
   // ── writes ───────────────────────────────────────────────────────────────
 
-  /** filter.set: one write, one notification; the issue it causes is immediate (debounce belongs to keystrokes). */
+  /**
+   * filter.set: one write, one notification; the issue it causes is immediate
+   * (debounce belongs to keystrokes). A manual field takes the value as its
+   * draft: only apply() brings it to the list.
+   */
   setFields(patch: Values) {
     for (const k of Object.keys(patch)) {
       if ((this.children.get(k) as FilterField | undefined)?.spec.derived) {
@@ -359,9 +466,40 @@ export class FilterCube extends Cube {
     }
     // Inside an outer batch the cycle has not run yet: take the change in here.
     // A debounced change queued before this call is not lost either.
-    for (const f of this.server) this.seen.set(f, f.version);
+    for (const f of this.gated) this.seen.set(f, f.version);
     this.stopTimer();
     this.issue();
+  }
+
+  /** Manual fields whose draft differs from the applied value. */
+  private drafted(): FilterField[] {
+    return untracked(() => this.manual.filter((f) => isDirtyValue(f.peek(), f.applied)));
+  }
+
+  /**
+   * filter.apply: the drafts become the applied values — one notification,
+   * and one request when the effective server key moved (none when nothing
+   * differs: no notification either). A paginated list goes back to its first
+   * page through the filter key. Like set(), the request carries a debounced
+   * change queued before the call, and the debounce stops.
+   */
+  apply() {
+    const moved = this.drafted();
+    if (moved.length === 0) return;
+    this.hub.batch(() => {
+      for (const f of moved) f.applied = f.peek();
+      this.appliedSource.bump();
+      this.hub.touch();
+      for (const f of this.gated) this.seen.set(f, f.version);
+      this.stopTimer();
+    });
+    this.issue();
+  }
+
+  /** filter.revert: the drafts go back to the applied values (no formatter, no onChange — as reset()); no request. */
+  revert() {
+    const moved = this.drafted();
+    if (moved.length) this.hub.batch(() => { for (const f of moved) f.assign(f.applied); });
   }
 
   /** filter.reset: back to the declared defaults (active again iff a default is non-empty). */
@@ -384,8 +522,11 @@ export class FilterCube extends Cube {
 
 /**
  * `list.filter`: the fields (leaf nodes, bindable like `form.name`) and the
- * builtins, all own enumerable keys. No list data is reachable here: the list
- * carries the rows, the filter carries the controls.
+ * builtins, all own enumerable keys — store's spread. The apply-mode members
+ * (`apply`, `revert`, `isDraft`, `applied`) are Cube only and off the spread,
+ * on every block: in automatic mode they answer as a block with nothing to
+ * apply. No list data is reachable here: the list carries the rows, the
+ * filter carries the controls.
  */
 function filterNode(f: FilterCube): PublicNode {
   const refuse = (key: string) => () => {
@@ -403,9 +544,18 @@ function filterNode(f: FilterCube): PublicNode {
     ["activeCount", () => f.activeCount],
     ["isPending", () => f.isPending],
   );
+  const hidden: Array<[string, () => unknown]> = [
+    ["apply", () => f.fn("apply", () => () => f.apply())],
+    ["revert", () => f.fn("revert", () => () => f.revert())],
+    ["isDraft", () => f.isDraft],
+    ["applied", () => f.effective()],
+  ];
   const node: PublicNode = {};
   for (const [key, get] of reads) {
     Object.defineProperty(node, key, { enumerable: true, configurable: true, get, set: refuse(key) });
+  }
+  for (const [key, get] of hidden) {
+    Object.defineProperty(node, key, { enumerable: false, configurable: true, get, set: refuse(key) });
   }
   Object.defineProperty(node, CUBE, { value: f });
   return Object.preventExtensions(node);

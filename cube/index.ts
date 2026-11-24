@@ -21,6 +21,12 @@
  * `list.sort` is undefined and `ctx.sort` is not passed. For the same reason
  * this entry exports `ListResolveContext` with `sort` required (the store's
  * `ListResolveContextWithSort`), and `useForm` takes a sort node.
+ *
+ * The same holds for the filter's apply mode (SortPlan decision 14):
+ * `$apply` / `apply` in a `filter` block and `apply()`, `revert()`, `isDraft`,
+ * `applied` on `list.filter` are typed in store/store/types.ts and run only
+ * here; the store implementation rejects `$apply` as an unknown block option.
+ * `useForm` takes a filter node too.
  */
 
 import type { FieldMapping } from "../store/store/types";
@@ -132,7 +138,7 @@ export const useNotifier = cubeUseNotifier as unknown as typeof StoreUseNotifier
 // React hooks
 // ============================================================================
 
-/** The store's overloads plus a field and a list's sort node handed down as a prop (cube/types.ts, `UseForm`). */
+/** The store's overloads plus a field, a list's sort node and a list's filter node handed down as a prop (cube/types.ts, `UseForm`). */
 export const useForm = cubeUseForm as unknown as UseForm;
 export const usePersist = cubeUsePersist as unknown as typeof StoreUsePersist;
 export const useTranslator = cubeUseTranslator as unknown as typeof StoreUseTranslator;

@@ -17,7 +17,7 @@ import type {
 } from "../store/store/types";
 import type { NotifyFn } from "../store/resolvePipeline/";
 import type { InferFlowSteps } from "../store/flow/defineFlow";
-import type { FieldProxyNode, RawStoreProxyMarker, SortProxyNode } from "../store/store/types";
+import type { FieldProxyNode, FilterProxyNode, RawStoreProxyMarker, SortProxyNode } from "../store/store/types";
 import type {
   useForm as StoreUseForm,
   _PALISTOR_ERROR__do_not_pass_store_proxy_subtree_to_useForm__call_useForm_store_first as RawNodeError,
@@ -191,8 +191,10 @@ type ForbidRawLeaf<T> = T extends RawStoreProxyMarker ? RawNodeError : T;
  * are not a `FieldProxyNode`), like a group there when the map renames a prop
  * groups have. Both work at run time.
  *
- * One more after it: a list's **sort** node (`list.sort`, a `sort` block),
- * handed down like a field — the component follows the sort state.
+ * Two more after it, handed down like a field: a list's **sort** node
+ * (`list.sort`, a `sort` block) — the component follows the sort state — and
+ * a list's **filter** node (`list.filter`, a `filter` block) — the component
+ * follows the filter's own state (`isActive`, `isDraft`, `applied`, …).
  *
  * @example
  * ```tsx
@@ -209,7 +211,8 @@ type ForbidRawLeaf<T> = T extends RawStoreProxyMarker ? RawNodeError : T;
  */
 export type UseForm = typeof StoreUseForm &
   (<T extends FieldProxyNode<any>>(input: ForbidRawLeaf<T>) => T) &
-  (<K extends string>(input: SortProxyNode<K>) => SortProxyNode<K>);
+  (<K extends string>(input: SortProxyNode<K>) => SortProxyNode<K>) &
+  ((input: FilterProxyNode) => FilterProxyNode);
 
 // ─── <PalistorProvider> ──────────────────────────────────────────────────────
 

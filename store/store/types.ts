@@ -303,7 +303,7 @@ export interface GroupProxyNode {
  */
 export interface ListResolveContext {
   filter: {
-    /** Full non-derived-included snapshot of the filter's own values (server AND client fields). */
+    /** Full non-derived-included snapshot of the filter's own values (server AND client fields); a manual field's applied value. */
     values: Record<string, unknown>;
     /** Built from SERVER fields only (per-field `param` renames, or `$toParams`). */
     params: unknown;
@@ -348,8 +348,14 @@ export type FilterFieldConfig<TEntity = Record<string, unknown>> = ConfigNode<an
   where?: (item: TEntity, value: any) => boolean;
   /** Server param name for this field's value (default: the field key). */
   param?: string;
-  /** ms to debounce the INVALIDATION this field's changes cause (never the value). */
+  /** ms to debounce the INVALIDATION this field's changes cause (never the value). Not on a manual field (throws). */
   debounce?: number;
+  /**
+   * Overrides the block's `$apply` for this field (Cube only). `"manual"`: the
+   * value is a draft that reaches the list only on `filter.apply()`;
+   * `"auto"`: applied as it changes. Not on a derived field (throws).
+   */
+  apply?: "auto" | "manual";
 };
 
 /**
@@ -366,6 +372,13 @@ export type FilterBlock<TEntity = Record<string, unknown>> = {
   $toParams?: (filterValues: Record<string, unknown>, context: Record<string, unknown>) => unknown;
   /** Persist filter values (opt-in — filters are view state). Default false. Phase 2. */
   $persist?: boolean;
+  /**
+   * Cube only (the store implementation rejects it). `"manual"`: the fields are
+   * a draft — the list and its requests follow them only on `filter.apply()`
+   * (an "Apply" button, Enter in a search box). Default `"auto"`; a field
+   * overrides it with its own `apply`.
+   */
+  $apply?: "manual" | "auto";
 };
 
 /**
@@ -376,7 +389,7 @@ export type FilterBlock<TEntity = Record<string, unknown>> = {
 export interface FilterProxyNode {
   /** Plain snapshot of the FILTER's own values (derived fields included) — never list rows. */
   readonly values: Record<string, unknown>;
-  /** Bulk write; one notify, one invalidation (flushes any pending debounce). */
+  /** Bulk write; one notify, one invalidation (flushes any pending debounce). A manual field (and so reset / clear) takes its draft only. */
   readonly set: (patch: Record<string, unknown>) => void;
   /** Back to declared defaults. */
   readonly reset: () => void;
@@ -388,6 +401,22 @@ export interface FilterProxyNode {
   readonly activeCount: number;
   /** A debounced invalidation is queued but not yet issued. */
   readonly isPending: boolean;
+  /**
+   * Cube only, manual fields (`$apply` / `apply: "manual"`): the drafts become
+   * the applied values — one notification, at most one request (none when
+   * nothing changed). A no-op in automatic mode.
+   */
+  readonly apply: () => void;
+  /** Cube only: the drafts go back to the applied values; no request. A no-op in automatic mode. */
+  readonly revert: () => void;
+  /** Cube only: a manual field's draft differs from its applied value. Always false in automatic mode. */
+  readonly isDraft: boolean;
+  /**
+   * Cube only: snapshot of the values the list is filtered by (applied for a
+   * manual field, current otherwise) — what `isActive`, `activeCount` and the
+   * resolver's `ctx.filter` follow. Equals `values` in automatic mode.
+   */
+  readonly applied: Record<string, unknown>;
   /** Filter field proxies by the author's field names. */
   readonly [field: string]: any;
 }

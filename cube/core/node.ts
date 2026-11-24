@@ -347,7 +347,7 @@ export const STATE_KEYS: ReadonlySet<string> = new Set([
   "value", "label", "placeholder", "description", "isRequired", "isReadOnly", "isDisabled", "isVisible",
   "isInvalid", "errorMessage", "dirty", "loading", "submitting", "revalidate", "values",
   "items", "length", "map", "error", "resolveStatus",
-  "fullLength", "isActive", "activeCount", "isPending", // list / list.filter
+  "fullLength", "isActive", "activeCount", "isPending", "isDraft", "applied", // list / list.filter
 ]);
 
 /**
